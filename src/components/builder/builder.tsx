@@ -136,25 +136,29 @@ export function Builder({
       is_decision: false,
       created_at: new Date().toISOString(),
     };
-    const setRoot = !rootId;
+    // Nur der ALLERERSTE Schritt wird root. Sonst NIE einen zweiten root setzen
+    // (verhinderte den Bug: verwaiste Schritte, wenn rootId kurz null war).
+    const setRoot = steps.length === 0;
     setSteps((prev) => [...prev, newStep]);
 
     let wire: { branchId: string; fromStepId: string } | null = null;
     if (setRoot) {
       setRootId(id);
     } else {
+      // Immer an einen vorhandenen Schritt anhängen: bevorzugt ein Blatt,
+      // sonst den mit höchster Position -> neuer Schritt verwaist nie.
       const hasOut = new Set(branches.map((b) => b.step_id));
-      const leaf = steps
-        .filter((s) => !hasOut.has(s.id))
-        .sort((a, b) => b.position - a.position)[0];
-      if (leaf) {
+      const fromStep =
+        steps.filter((s) => !hasOut.has(s.id)).sort((a, b) => b.position - a.position)[0] ??
+        [...steps].sort((a, b) => b.position - a.position)[0];
+      if (fromStep) {
         const branchId = crypto.randomUUID();
-        wire = { branchId, fromStepId: leaf.id };
+        wire = { branchId, fromStepId: fromStep.id };
         setBranches((prev) => [
           ...prev,
           {
             id: branchId,
-            step_id: leaf.id,
+            step_id: fromStep.id,
             label: null,
             color: null,
             target_step_id: id,
