@@ -29,12 +29,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     return NextResponse.redirect(`${origin}/login?next=/invite/${token}`);
   }
 
-  // Beitritt (idempotent).
+  // Beitritt (idempotent) – bestehende Mitgliedschaft NICHT überschreiben,
+  // sonst würde ein Inhaber beim Klick auf einen eigenen Link zu "editor" herabgestuft.
   await admin
     .from("account_members")
     .upsert(
       { account_id: inv.account_id, user_id: user.id, role: inv.role },
-      { onConflict: "account_id,user_id" },
+      { onConflict: "account_id,user_id", ignoreDuplicates: true },
     );
   if (inv.status !== "accepted") {
     await admin
