@@ -135,7 +135,7 @@ export default async function DashboardPage() {
             </section>
           ))}
 
-          <TemplateSection items={templateItems} accountSlug={account.slug} />
+          <TemplateSection items={templateItems} />
         </div>
       )}
     </main>

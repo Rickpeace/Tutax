@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -8,9 +8,9 @@ import {
   AlertTriangle,
   FileText,
   Eye,
-  Send,
-  Undo2,
+  ExternalLink,
 } from "lucide-react";
+import { HelpToggle } from "@/components/app/help-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +49,9 @@ export function TutorialCard({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [title, setTitle] = useState(tutorial.title);
 
-  const published = tutorial.status === "published";
+  // Optimistischer „Auf Hilfe-Seite"-Zustand (= veröffentlicht).
+  const [live, setLive] = useState(tutorial.status === "published");
+  useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
 
   function run(fn: () => Promise<void>, success: string) {
@@ -63,21 +65,26 @@ export function TutorialCard({
     });
   }
 
+  // Sofort umschalten, im Hintergrund veröffentlichen/zurückziehen.
+  const toggleLive = () => {
+    const next = !live;
+    setLive(next);
+    const action = next
+      ? publishTutorial(tutorial.id).then(() => undefined)
+      : unpublishTutorial(tutorial.id);
+    Promise.resolve(action).catch(() => {
+      setLive(!next);
+      toast.error("Konnte nicht speichern");
+    });
+  };
+
   return (
     <div
       className="group relative flex flex-col rounded-xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all hover:-translate-y-0.5 hover:border-primary/40"
       data-pending={pending}
     >
       <div className="mb-2 flex items-center gap-2">
-        <span
-          className={
-            published
-              ? "rounded-md bg-yes-soft px-2 py-0.5 text-xs font-bold text-yes"
-              : "rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
-          }
-        >
-          {published ? "Veröffentlicht" : "Entwurf"}
-        </span>
+        <HelpToggle on={live} onToggle={toggleLive} />
         {stale && (
           <span className="flex items-center gap-1 rounded-md bg-no-soft px-2 py-0.5 text-xs font-bold text-no">
             <AlertTriangle className="size-3" /> Prüfen
@@ -100,7 +107,7 @@ export function TutorialCard({
             <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
               <FileText className="size-4" /> Bearbeiten
             </DropdownMenuItem>
-            {published && tutorial.slug && (
+            {live && tutorial.slug && (
               <DropdownMenuItem
                 render={
                   <Link
@@ -109,30 +116,10 @@ export function TutorialCard({
                   />
                 }
               >
-                <Eye className="size-4" /> Live ansehen
+                <ExternalLink className="size-4" /> Live-Seite öffnen
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            {published ? (
-              <DropdownMenuItem
-                onClick={() =>
-                  run(() => unpublishTutorial(tutorial.id), "Zurückgezogen")
-                }
-              >
-                <Undo2 className="size-4" /> Zurückziehen
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onClick={() =>
-                  run(
-                    () => publishTutorial(tutorial.id).then(() => undefined),
-                    "Veröffentlicht",
-                  )
-                }
-              >
-                <Send className="size-4" /> Veröffentlichen
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem onClick={() => setRenameOpen(true)}>
               Umbenennen
             </DropdownMenuItem>
@@ -161,9 +148,19 @@ export function TutorialCard({
           </p>
         )}
       </Link>
-      <p className="mt-3 text-xs text-muted-foreground">
-        Geändert {relativeDe(tutorial.updated_at)}
-      </p>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Geändert {relativeDe(tutorial.updated_at)}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          nativeButton={false}
+          render={<Link href={`/app/preview/${tutorial.id}`} target="_blank" />}
+        >
+          <Eye className="size-4" /> Ansehen
+        </Button>
+      </div>
 
       {/* Umbenennen */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

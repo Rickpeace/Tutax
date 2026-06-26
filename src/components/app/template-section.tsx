@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { PencilLine, Eye, Undo2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HelpToggle } from "@/components/app/help-toggle";
 import {
   setTemplateEnabled,
   forkTemplate,
@@ -20,13 +21,7 @@ export type TemplateItem = {
   slug: string | null;
 };
 
-export function TemplateSection({
-  items,
-  accountSlug,
-}: {
-  items: TemplateItem[];
-  accountSlug: string;
-}) {
+export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const [pending, start] = useTransition();
   // Optimistischer Schalter-Zustand; synct mit Server-Daten nach Fork/Reset.
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() =>
@@ -84,26 +79,16 @@ export function TemplateSection({
             <span className="font-bold text-ink">{it.title}</span>
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggle(it.templateId)}
-                className="flex items-center gap-2 text-xs font-medium text-ink-2"
-                title="Auf der Hilfe-Seite zeigen"
-              >
-                <Switch on={!!enabledMap[it.templateId]} />
-                <span className="hidden sm:inline">Auf Hilfe-Seite</span>
-              </button>
+              <HelpToggle on={!!enabledMap[it.templateId]} onToggle={() => toggle(it.templateId)} />
 
-              {enabledMap[it.templateId] && it.slug && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  nativeButton={false}
-                  render={<Link href={`/h/${accountSlug}/${it.slug}`} target="_blank" />}
-                >
-                  <Eye className="size-4" /> Ansehen
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={`/app/preview/${it.renderId}`} target="_blank" />}
+              >
+                <Eye className="size-4" /> Ansehen
+              </Button>
 
               {it.kind === "fork" ? (
                 <>
@@ -146,13 +131,5 @@ export function TemplateSection({
         Beim Anpassen entsteht Ihre eigene Kopie („Angepasst").
       </p>
     </section>
-  );
-}
-
-function Switch({ on }: { on: boolean }) {
-  return (
-    <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-primary" : "bg-line"}`}>
-      <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
-    </span>
   );
 }
