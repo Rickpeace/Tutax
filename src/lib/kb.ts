@@ -53,6 +53,7 @@ export async function indexTutorial(
   await admin
     .from("kb_embeddings")
     .delete()
+    .eq("account_id", accountId)
     .eq("source_type", "tutorial")
     .eq("source_id", tutorialId);
 

@@ -3,9 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
-import { removeTutorialEmbeddings } from "@/lib/kb";
+import { indexTutorial } from "@/lib/kb";
 import type { Step, StepBranch } from "@/lib/types";
+
+/** Embeddings einer (account-spezifischen) Quelle entfernen. */
+async function dropEmbeddings(accountId: string, sourceId: string) {
+  await createAdminClient()
+    .from("kb_embeddings")
+    .delete()
+    .eq("account_id", accountId)
+    .eq("source_type", "tutorial")
+    .eq("source_id", sourceId)
+    .then(() => undefined, () => undefined);
+}
 
 /** Standard-Template auf der Hilfe-Seite zeigen/verbergen (Häkchen). */
 export async function setTemplateEnabled(templateId: string, enabled: boolean) {
@@ -18,6 +30,18 @@ export async function setTemplateEnabled(templateId: string, enabled: boolean) {
       { onConflict: "account_id,template_id" },
     );
   if (error) throw new Error(error.message);
+
+  // Chatbot-Wissen mitziehen: aktivierte Standard-Templates indexieren, sonst entfernen.
+  const { data: row } = await supabase
+    .from("account_templates")
+    .select("forked_tutorial_id")
+    .eq("account_id", account.id)
+    .eq("template_id", templateId)
+    .maybeSingle();
+  if (!row?.forked_tutorial_id) {
+    if (enabled) await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
+    else await dropEmbeddings(account.id, templateId);
+  }
   // Kein revalidatePath: das Dashboard aktualisiert den Schalter optimistisch (snappy).
 }
 
@@ -98,6 +122,10 @@ export async function forkTemplate(templateId: string) {
       { onConflict: "account_id,template_id" },
     );
 
+  // Chatbot-Wissen: Standard-Embeddings durch die der Kopie ersetzen.
+  await dropEmbeddings(account.id, templateId);
+  await indexTutorial(createAdminClient(), account.id, forkId).catch(() => {});
+
   revalidatePath("/app");
   redirect(`/app/tutorials/${forkId}`);
 }
@@ -108,12 +136,12 @@ export async function resetTemplate(templateId: string) {
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("account_templates")
-    .select("forked_tutorial_id")
+    .select("forked_tutorial_id, enabled")
     .eq("account_id", account.id)
     .eq("template_id", templateId)
     .single();
   if (row?.forked_tutorial_id) {
-    await removeTutorialEmbeddings(supabase, row.forked_tutorial_id).catch(() => {});
+    await dropEmbeddings(account.id, row.forked_tutorial_id);
     await supabase.from("tutorials").delete().eq("id", row.forked_tutorial_id);
   }
   await supabase
@@ -121,5 +149,9 @@ export async function resetTemplate(templateId: string) {
     .update({ forked_tutorial_id: null })
     .eq("account_id", account.id)
     .eq("template_id", templateId);
+
+  // Wieder zentrale Version: als Standard neu indexieren (wenn aktiv).
+  if (row?.enabled) await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
+
   revalidatePath("/app");
 }
