@@ -60,7 +60,7 @@ export async function POST(
     const completion = await openai().chat.completions.create({
       model: AI.models.chat,
       temperature: 0.1,
-      max_tokens: 500,
+      max_completion_tokens: 500,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: DRIFT_SYSTEM },

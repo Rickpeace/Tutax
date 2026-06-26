@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
         { role: "user", content: userContent },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 800,
+      max_completion_tokens: 800,
     });
 
     const tokens = JSON.parse(completion.choices[0].message.content ?? "{}");

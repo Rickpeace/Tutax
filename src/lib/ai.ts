@@ -8,9 +8,9 @@ import "server-only";
 export const AI = {
   openaiKey: process.env.OPENAI_API_KEY ?? "",
   models: {
-    chat: "gpt-4o-mini", // Chatbot (RAG) & Drift-Bewertung
-    vision: "gpt-4o", // CI-Analyse aus Website/og:image (§8)
-    embedding: "text-embedding-3-small", // 1536 Dimensionen (§11)
+    chat: "gpt-5.4-mini", // Chatbot (RAG), Klassifikation & Drift (gpt-4o* sind deprecated)
+    vision: "gpt-5.4-mini", // CI-Analyse + KI-Schritt-Assistent (mini kann Vision, kosteneffizient)
+    embedding: "text-embedding-3-small", // 1536 Dimensionen (Index-kompatibel)
   },
   embeddingDim: 1536,
 } as const;

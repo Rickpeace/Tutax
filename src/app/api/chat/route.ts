@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     const completion = await openai().chat.completions.create({
       model: AI.models.chat,
       temperature: 0.2,
-      max_tokens: 400,
+      max_completion_tokens: 400,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: chatSystem(account.name) },
