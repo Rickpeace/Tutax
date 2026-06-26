@@ -186,17 +186,38 @@ export async function POST(req: NextRequest) {
       /* optional */
     }
 
-    // Logo (Markenfarbe) + og:image an die Bildanalyse – aber kein SVG (Vision-Limit).
-    const visionImages = [signals.logo, signals.ogImage].filter(
-      (u): u is string => !!u && !/\.svg(\?|$)/i.test(u),
-    );
+    // Logo EINMAL selbst herunterladen (mit Browser-UA) – für Vision (Base64) und zum Speichern.
+    let logoBuf: Buffer | null = null;
+    let logoCt = "";
+    if (signals.logo) {
+      try {
+        const r = await fetch(signals.logo, {
+          signal: AbortSignal.timeout(8000),
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
+        });
+        const ct = r.headers.get("content-type") ?? "";
+        if (r.ok && ct.startsWith("image/")) {
+          const b = Buffer.from(await r.arrayBuffer());
+          if (b.length > 0 && b.length < 3_000_000) {
+            logoBuf = b;
+            logoCt = ct;
+          }
+        }
+      } catch {
+        /* Logo optional – darf die Analyse nicht stoppen */
+      }
+    }
+
+    // Vision-Bild nur als BASE64 und nur bei Raster-Format (OpenAI lädt nichts selbst -> kein 400).
+    const isRaster = /image\/(png|jpe?g|gif|webp)/i.test(logoCt);
     const userText = ciAnalysisUser({ ...signals, brandColors, cardHint });
-    const userContent: OpenAIUserContent = visionImages.length
-      ? [
-          { type: "text", text: userText },
-          ...visionImages.slice(0, 2).map((u) => ({ type: "image_url" as const, image_url: { url: u } })),
-        ]
-      : userText;
+    const userContent: OpenAIUserContent =
+      logoBuf && isRaster
+        ? [
+            { type: "text", text: userText },
+            { type: "image_url", image_url: { url: `data:${logoCt};base64,${logoBuf.toString("base64")}` } },
+          ]
+        : userText;
 
     const completion = await openai().chat.completions.create({
       model: AI.models.vision,
@@ -210,33 +231,26 @@ export async function POST(req: NextRequest) {
 
     const tokens = JSON.parse(completion.choices[0].message.content ?? "{}");
 
-    // Logo der Website holen und in den öffentlichen Bucket legen.
+    // Heruntergeladenes Logo in den öffentlichen Bucket legen (SVG ist als Anzeige ok).
     let aiLogoPath: string | null = null;
-    if (signals.logo && accountId) {
+    if (logoBuf && accountId) {
       try {
-        const imgRes = await fetch(signals.logo, { signal: AbortSignal.timeout(8000) });
-        const ct = imgRes.headers.get("content-type") ?? "";
-        if (imgRes.ok && ct.startsWith("image/")) {
-          const buf = Buffer.from(await imgRes.arrayBuffer());
-          if (buf.length > 0 && buf.length < 3_000_000) {
-            const ext = ct.includes("svg")
-              ? "svg"
-              : ct.includes("webp")
-                ? "webp"
-                : ct.includes("jpeg") || ct.includes("jpg")
-                  ? "jpg"
-                  : ct.includes("icon") || ct.includes("ico")
-                    ? "ico"
-                    : "png";
-            const path = `${accountId}/brand/ai-logo.${ext}`;
-            const { error: upErr } = await createAdminClient()
-              .storage.from("tutorial-images-public")
-              .upload(path, buf, { contentType: ct, upsert: true });
-            if (!upErr) aiLogoPath = path;
-          }
-        }
+        const ext = logoCt.includes("svg")
+          ? "svg"
+          : logoCt.includes("webp")
+            ? "webp"
+            : /jpe?g/.test(logoCt)
+              ? "jpg"
+              : /icon|ico/.test(logoCt)
+                ? "ico"
+                : "png";
+        const path = `${accountId}/brand/ai-logo.${ext}`;
+        const { error: upErr } = await createAdminClient()
+          .storage.from("tutorial-images-public")
+          .upload(path, logoBuf, { contentType: logoCt, upsert: true });
+        if (!upErr) aiLogoPath = path;
       } catch {
-        // Logo optional – Fehler ignorieren.
+        /* optional */
       }
     }
 

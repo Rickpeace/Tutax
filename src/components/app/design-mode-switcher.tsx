@@ -6,6 +6,7 @@ import { Check, Sparkles, Palette, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandPreview } from "./brand-preview";
 import { AutoCi } from "./auto-ci";
+import { AiLogoUpload } from "./ai-logo-upload";
 import { setThemeMode } from "@/app/app/settings/branding/actions";
 import { googleFontsHref } from "@/lib/theme";
 
@@ -120,6 +121,7 @@ export function DesignModeSwitcher({
             Website analysieren (Logo, Farben, Schrift, Form):
           </p>
           <AutoCi initialUrl={sourceUrl} compact />
+          <AiLogoUpload logoUrl={aiLogoUrl} />
           {hasAi &&
             (mode === "ai" ? (
               <Button variant="outline" size="sm" disabled className="w-full">
