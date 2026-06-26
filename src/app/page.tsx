@@ -92,7 +92,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mt-10 grid auto-rows-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
+        <div className="mt-10 grid gap-3 sm:auto-rows-[minmax(0,1fr)] sm:grid-cols-3">
           {/* Signature, groß */}
           <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 sm:col-span-2 sm:row-span-2">
             <div className="flex size-11 items-center justify-center rounded-xl bg-accent text-primary">
