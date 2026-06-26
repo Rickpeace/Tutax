@@ -1,0 +1,13 @@
+-- ============================================================
+-- 0008: Eskalation – wenn der Chatbot nicht weiterweiß, Verweis auf
+-- Online-Kalender / zuständige Person. Konfiguration je Kanzlei.
+-- Form (jsonb):
+-- {
+--   "enabled": true,
+--   "calendarUrl": "https://calendly.com/kanzlei",
+--   "contactName": "Team Kanzlei",
+--   "message": "Gerne helfen wir persönlich weiter.",
+--   "byCategory": { "<Kategoriename>": { "name": "...", "calendarUrl": "..." } }
+-- }
+-- ============================================================
+alter table accounts add column if not exists escalation jsonb not null default '{}'::jsonb;

@@ -10,10 +10,20 @@ import {
   ArrowRight,
   Layers,
   RotateCcw,
+  CalendarClock,
+  Mail,
+  Phone,
 } from "lucide-react";
 
 type Source = { title: string; slug: string };
-type Msg = { role: "user" | "bot"; text: string; sources?: Source[] };
+type EscMethod = { type: string; label: string; value: string };
+type Escalation = { message: string; methods: EscMethod[] };
+type Msg = {
+  role: "user" | "bot";
+  text: string;
+  sources?: Source[];
+  escalation?: Escalation | null;
+};
 
 export function ChatWidget({
   accountSlug,
@@ -83,7 +93,12 @@ export function ChatWidget({
       const data = await res.json();
       setMsgs((m) => [
         ...m,
-        { role: "bot", text: data.answer || "Es ist ein Fehler aufgetreten.", sources: data.sources },
+        {
+          role: "bot",
+          text: data.answer || "Es ist ein Fehler aufgetreten.",
+          sources: data.sources,
+          escalation: data.escalation ?? null,
+        },
       ]);
     } catch {
       setMsgs((m) => [...m, { role: "bot", text: "Es ist ein Fehler aufgetreten." }]);
@@ -180,6 +195,32 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
                 <ArrowRight className="ml-auto size-3 shrink-0" />
               </Link>
             ))}
+          </div>
+        ) : null}
+        {m.escalation?.methods?.length ? (
+          <div className="mt-2 rounded-xl border border-black/10 bg-white p-2.5">
+            <div className="text-xs text-ink-2">{m.escalation.message}</div>
+            <div className="mt-2 space-y-1.5">
+              {m.escalation.methods.map((mm, idx) => (
+                <a
+                  key={idx}
+                  href={mm.value}
+                  target={mm.value.startsWith("http") ? "_blank" : undefined}
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white"
+                  style={{ background: "var(--brand-accent)" }}
+                >
+                  {mm.type === "email" ? (
+                    <Mail className="size-3.5" />
+                  ) : mm.type === "phone" ? (
+                    <Phone className="size-3.5" />
+                  ) : (
+                    <CalendarClock className="size-3.5" />
+                  )}
+                  {mm.label}
+                </a>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>

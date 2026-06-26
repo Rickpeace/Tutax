@@ -18,10 +18,38 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug")
+    .select("id, name, slug, escalation")
     .eq("slug", accountSlug)
     .single();
   if (!account) return NextResponse.json({ error: "Unbekannt" }, { status: 404 });
+
+  type CatEsc = { name?: string; calendarUrl?: string; email?: string; phone?: string };
+  type Esc = {
+    enabled?: boolean;
+    message?: string;
+    contactName?: string;
+    calendarUrl?: string;
+    email?: string;
+    phone?: string;
+    byCategory?: Record<string, CatEsc>;
+  };
+  const esc = (account.escalation ?? {}) as Esc;
+  // Generische Eskalation: liefert die konfigurierten Kontakt-Wege (Kalender/E-Mail/Telefon).
+  const buildEscalation = (categoryName?: string | null) => {
+    if (!esc.enabled) return null;
+    const cat = categoryName && esc.byCategory ? esc.byCategory[categoryName] : undefined;
+    const calendarUrl = cat?.calendarUrl || esc.calendarUrl;
+    const email = cat?.email || esc.email;
+    const phone = cat?.phone || esc.phone;
+    const name = cat?.name || esc.contactName || account.name;
+    const methods: { type: string; label: string; value: string }[] = [];
+    if (calendarUrl)
+      methods.push({ type: "calendar", label: name ? `Termin buchen · ${name}` : "Termin buchen", value: calendarUrl });
+    if (email) methods.push({ type: "email", label: email, value: `mailto:${email}` });
+    if (phone) methods.push({ type: "phone", label: phone, value: `tel:${phone}` });
+    if (!methods.length) return null;
+    return { message: esc.message || "Gerne helfen wir Ihnen persönlich weiter.", methods };
+  };
 
   if (!aiConfigured()) {
     return NextResponse.json({
@@ -41,15 +69,21 @@ export async function POST(req: NextRequest) {
 
     const rows = (matches ?? []) as {
       chunk: string;
-      metadata: { title?: string; slug?: string };
+      metadata: { title?: string; slug?: string; category?: string | null };
       similarity: number;
     }[];
 
-    if (!rows.length) {
+    // Harte Eskalation, wenn gar nichts/zu Schwaches gefunden wurde.
+    const topSim = rows[0]?.similarity ?? 0;
+    if (rows.length === 0 || topSim < 0.3) {
+      const escalation = buildEscalation(rows[0]?.metadata?.category);
       return NextResponse.json({
-        answer:
-          "Dazu habe ich leider keine passende Anleitung. Bitte wenden Sie sich an Ihre Kanzlei.",
+        answer: escalation
+          ? "Das kann ich Ihnen leider nicht sicher beantworten – am besten klären Sie das direkt persönlich:"
+          : "Dazu habe ich leider keine passende Anleitung. Bitte wenden Sie sich an Ihre Kanzlei.",
         sources: [],
+        escalation,
+        weak: true,
       });
     }
 
@@ -65,6 +99,7 @@ export async function POST(req: NextRequest) {
       model: AI.models.chat,
       temperature: 0.2,
       max_tokens: 400,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: chatSystem(account.name) },
         {
@@ -74,7 +109,17 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    const answer = completion.choices[0].message.content?.trim() ?? "";
+    // KI-Selbsteinschätzung: resolved=false -> sie konnte nicht helfen -> eskalieren.
+    const raw = completion.choices[0].message.content ?? "{}";
+    let answer = "";
+    let resolved = true;
+    try {
+      const p = JSON.parse(raw);
+      answer = String(p.answer ?? "").trim();
+      resolved = p.resolved !== false;
+    } catch {
+      answer = raw.trim();
+    }
 
     // Quellen (eindeutig nach slug)
     const seen = new Set<string>();
@@ -86,6 +131,16 @@ export async function POST(req: NextRequest) {
         seen.add(slug);
         sources.push({ title, slug });
       }
+    }
+
+    if (!resolved) {
+      const escalation = buildEscalation(rows[0]?.metadata?.category);
+      return NextResponse.json({
+        answer: answer || "Das kann ich Ihnen leider nicht sicher beantworten.",
+        sources: sources.slice(0, 3),
+        escalation,
+        weak: true,
+      });
     }
 
     return NextResponse.json({ answer, sources: sources.slice(0, 3) });

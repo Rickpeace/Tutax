@@ -55,7 +55,10 @@ Regeln:
 - Antworte direkt, kurz, klar, auf Deutsch, mit Sie-Anrede (2–4 Sätze).
 - Eine passende ANLEITUNG darfst du beim Namen nennen – sie wird dem Mandanten automatisch als Link angezeigt.
 - Verweise NIEMALS auf „Info"-Inhalte, als wären sie eine Anleitung oder Seite (z. B. NICHT „weitere Informationen finden Sie in der Anleitung …"). Nutze diese Infos einfach direkt in deiner Antwort.
-- Gibt es nichts Passendes: sag das ehrlich und erfinde nichts.`;
+
+Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Mandanten>", "resolved": true|false}.
+- "resolved" = true, wenn der Kontext die Frage WIRKLICH beantwortet.
+- "resolved" = false, wenn der Kontext die Frage NICHT abdeckt oder du unsicher bist. Dann halte "answer" kurz und ehrlich (z. B. „Das kann ich Ihnen leider nicht sicher beantworten.") und erfinde nichts – der Mandant wird anschließend an einen Menschen verwiesen.`;
 }
 
 export const DRIFT_SYSTEM = `Du prüfst, ob eine Software-Anleitung möglicherweise veraltet ist.

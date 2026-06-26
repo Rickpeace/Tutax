@@ -58,11 +58,16 @@ async function insertChunks(accountId, sourceType, sourceId, chunks, meta) {
 }
 
 async function indexTutorialFor(accountId, tutorialId) {
-  const { data: tut } = await admin.from("tutorials").select("title, slug").eq("id", tutorialId).single();
+  const { data: tut } = await admin.from("tutorials").select("title, slug, category_id").eq("id", tutorialId).single();
   if (!tut) return 0;
+  let category = null;
+  if (tut.category_id) {
+    const { data: cat } = await admin.from("categories").select("name").eq("id", tut.category_id).single();
+    category = cat?.name ?? null;
+  }
   const { data: steps } = await admin.from("steps").select("title, body, position")
     .eq("tutorial_id", tutorialId).order("position", { ascending: true });
-  const meta = { title: tut.title, slug: tut.slug };
+  const meta = { title: tut.title, slug: tut.slug, category };
   const chunks = [`Anleitung: ${tut.title}`];
   for (const s of steps ?? []) {
     const txt = [s.title, plainBody(s.body)].filter(Boolean).join(": ");
