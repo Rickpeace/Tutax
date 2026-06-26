@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { brandStyle } from "@/lib/theme";
+import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
@@ -39,7 +39,7 @@ async function load(accountSlug: string, tutorialSlug: string) {
     : { data: [] as StepBranch[] };
   const { data: theme } = await admin
     .from("themes")
-    .select("tokens, logo_path")
+    .select("tokens, ai_tokens, logo_path, ai_logo_path, mode")
     .eq("account_id", account.id)
     .single();
 
@@ -70,13 +70,17 @@ export default async function ViewerPage({
   const imageUrls: Record<string, string> = {};
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const logoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
+  const { tokens, logoPath } = resolveTheme(theme);
+  const fonts = brandFonts(tokens);
+  const fontsHref = googleFontsHref(tokens);
+  const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
 
   return (
     <main
       className="min-h-screen"
-      style={{ ...brandStyle(theme?.tokens), background: "var(--brand-bg)" }}
+      style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
+      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
       <div className="mx-auto flex max-w-md flex-col px-4 py-6">
         <div className="mb-4 flex items-center gap-3">
           {logoUrl ? (
@@ -107,7 +111,7 @@ export default async function ViewerPage({
           <ArrowLeft className="size-4" /> Alle Anleitungen
         </Link>
 
-        <h1 className="mb-3 text-base font-semibold text-[var(--brand-ink)]">
+        <h1 className="mb-3 text-base font-semibold text-[var(--brand-ink)]" style={{ fontFamily: fonts.heading }}>
           {tutorial.title}
         </h1>
 

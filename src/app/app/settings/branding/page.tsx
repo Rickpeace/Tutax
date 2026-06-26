@@ -1,7 +1,7 @@
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { BrandingForm } from "@/components/app/branding-form";
-import { AutoCi } from "@/components/app/auto-ci";
+import { DesignModeSwitcher } from "@/components/app/design-mode-switcher";
 import { publicImageUrl } from "@/lib/public-image";
 
 export default async function BrandingPage() {
@@ -9,35 +9,53 @@ export default async function BrandingPage() {
   const supabase = await createClient();
   const { data: theme } = await supabase
     .from("themes")
-    .select("tokens, logo_path, source_url")
+    .select("tokens, ai_tokens, logo_path, ai_logo_path, mode, source_url")
     .eq("account_id", account.id)
     .single();
+
+  const mode = theme?.mode === "ai" ? "ai" : "manual";
+  const manualLogoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
+  const aiLogoUrl = theme?.ai_logo_path ? publicImageUrl(theme.ai_logo_path) : null;
   const colors = ((theme?.tokens as { colors?: Record<string, string> })?.colors ?? {}) as Record<string, string>;
-  const logoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
 
   return (
-    <div>
-      <h2 className="text-lg font-bold text-ink">Branding &amp; Hilfe-Seite</h2>
-      <p className="mb-5 text-sm text-muted-foreground">
-        Name, Adresse und Farben Ihrer öffentlichen Hilfe-Seite. (Automatische
-        CI-Übernahme per Website-URL kommt mit der KI.)
-      </p>
-      <div className="mb-6">
-        <AutoCi initialUrl={theme?.source_url ?? ""} />
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-lg font-bold text-ink">Branding &amp; Hilfe-Seite</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Wählen Sie, ob Ihre öffentliche Hilfe-Seite das <b>Standard-CI</b> oder ein von der
+          <b> KI aus Ihrer Website</b> abgeleitetes Design nutzt. Vorschau unten, dann aktivieren.
+        </p>
       </div>
 
-      <BrandingForm
-        initialName={account.name}
-        initialSlug={account.slug}
-        initialLogoUrl={logoUrl}
-        initialColors={{
-          primary: colors.primary ?? "#3d4ee6",
-          background: colors.background ?? "#f6f7fe",
-          surface: colors.surface ?? "#eef0fe",
-          text: colors.text ?? "#101524",
-        }}
-        appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+      <DesignModeSwitcher
+        accountName={account.name}
+        mode={mode}
+        manualTokens={theme?.tokens ?? null}
+        manualLogoUrl={manualLogoUrl}
+        aiTokens={theme?.ai_tokens ?? null}
+        aiLogoUrl={aiLogoUrl}
+        sourceUrl={theme?.source_url ?? ""}
       />
+
+      <div className="border-t border-line-2 pt-6">
+        <h3 className="font-bold text-ink">Standard-CI anpassen</h3>
+        <p className="mb-4 mt-1 text-sm text-muted-foreground">
+          Name, Adresse (Slug), Logo und Farben des Standard-Designs.
+        </p>
+        <BrandingForm
+          initialName={account.name}
+          initialSlug={account.slug}
+          initialLogoUrl={manualLogoUrl}
+          initialColors={{
+            primary: colors.primary ?? "#3d4ee6",
+            background: colors.background ?? "#f6f7fe",
+            surface: colors.surface ?? "#eef0fe",
+            text: colors.text ?? "#101524",
+          }}
+          appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        />
+      </div>
     </div>
   );
 }

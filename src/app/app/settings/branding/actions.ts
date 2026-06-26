@@ -57,3 +57,16 @@ export async function saveBranding(
   revalidatePath("/app");
   return { ok: true, slug };
 }
+
+/** Aktive Design-Quelle wählen: Standard-CI (manuell) oder KI-Design. */
+export async function setThemeMode(mode: "manual" | "ai") {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("themes")
+    .update({ mode: mode === "ai" ? "ai" : "manual" })
+    .eq("account_id", account.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/app/settings/branding");
+  revalidatePath("/app");
+}

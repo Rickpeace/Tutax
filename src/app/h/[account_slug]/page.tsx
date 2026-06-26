@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { brandStyle } from "@/lib/theme";
+import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
 import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
@@ -24,7 +24,11 @@ async function load(accountSlug: string) {
       .select("id, name, position, account_id")
       .or(`account_id.eq.${account.id},account_id.is.null`)
       .order("position", { ascending: true }),
-    admin.from("themes").select("tokens, logo_path").eq("account_id", account.id).single(),
+    admin
+      .from("themes")
+      .select("tokens, ai_tokens, logo_path, ai_logo_path, mode")
+      .eq("account_id", account.id)
+      .single(),
   ]);
 
   return { account, catalog, categories: categories ?? [], theme };
@@ -69,10 +73,17 @@ export default async function HubPage({
   ];
   const order = [...new Set([...ordered.map((c) => c.name), "Sonstiges"])];
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const logoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
+  const { tokens, logoPath } = resolveTheme(theme);
+  const fonts = brandFonts(tokens);
+  const fontsHref = googleFontsHref(tokens);
+  const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
 
   return (
-    <main className="min-h-screen" style={{ ...brandStyle(theme?.tokens), background: "var(--brand-bg)" }}>
+    <main
+      className="min-h-screen"
+      style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
+    >
+      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
       <div className="mx-auto max-w-2xl px-4 py-6">
         <div className="mb-5 flex items-center gap-3">
           {logoUrl ? (
@@ -87,7 +98,9 @@ export default async function HubPage({
             </div>
           )}
           <div>
-            <div className="text-lg font-extrabold text-[var(--brand-ink)]">{account.name}</div>
+            <div className="text-lg font-extrabold text-[var(--brand-ink)]" style={{ fontFamily: fonts.heading }}>
+              {account.name}
+            </div>
             <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>

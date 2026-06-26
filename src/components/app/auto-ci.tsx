@@ -6,7 +6,7 @@ import { Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function AutoCi({ initialUrl }: { initialUrl: string }) {
+export function AutoCi({ initialUrl, compact }: { initialUrl: string; compact?: boolean }) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, start] = useTransition();
 
@@ -34,6 +34,22 @@ export function AutoCi({ initialUrl }: { initialUrl: string }) {
     });
   }
 
+  if (compact) {
+    return (
+      <div className="flex gap-2">
+        <Input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://www.kanzlei.de"
+          className="h-9"
+        />
+        <Button onClick={run} disabled={pending || !url} variant="outline" size="sm">
+          <Wand2 className="size-4" /> {pending ? "…" : "Analysieren"}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-dashed border-primary/30 bg-accent/40 p-5">
       <div className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -41,10 +57,7 @@ export function AutoCi({ initialUrl }: { initialUrl: string }) {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Website-URL Ihrer Kanzlei angeben – die KI leitet daraus Farben, Schriften und
-        das Look &amp; Feel ab.{" "}
-        <span className="font-medium text-ink-2">
-          Startklar, sobald der API-Key hinterlegt ist.
-        </span>
+        das Look &amp; Feel ab.
       </p>
       <div className="mt-3 flex gap-2">
         <Input

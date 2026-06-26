@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Eye } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { brandStyle } from "@/lib/theme";
+import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
 import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
@@ -39,7 +39,7 @@ async function load(id: string) {
     : { data: [] as StepBranch[] };
   const { data: theme } = await admin
     .from("themes")
-    .select("tokens, logo_path")
+    .select("tokens, ai_tokens, logo_path, ai_logo_path, mode")
     .eq("account_id", account.id)
     .single();
 
@@ -61,10 +61,14 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
 
   const { account, tutorial, steps, branches, theme, imageUrls } = data;
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const logoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
+  const { tokens, logoPath } = resolveTheme(theme);
+  const fonts = brandFonts(tokens);
+  const fontsHref = googleFontsHref(tokens);
+  const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
 
   return (
-    <div className="min-h-screen" style={{ ...brandStyle(theme?.tokens), background: "var(--brand-bg)" }}>
+    <div className="min-h-screen" style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}>
+      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
       {/* Vorschau-Leiste (gehört nicht zum Mandanten-Look) */}
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-amber-300/60 bg-amber-50 px-4 py-2 text-sm text-amber-900">
         <span className="flex items-center gap-2 font-medium">
