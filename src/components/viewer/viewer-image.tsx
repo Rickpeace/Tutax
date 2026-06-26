@@ -27,7 +27,11 @@ export function ViewerImage({
   }, []);
 
   return (
-    <div ref={wrapRef} className="relative overflow-hidden rounded-xl border border-black/5">
+    <div
+      ref={wrapRef}
+      className="relative overflow-hidden border border-black/5"
+      style={{ borderRadius: "var(--brand-radius, 12px)" }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={url} alt="" className="block w-full" />
       {size.w > 0 && (

@@ -160,10 +160,11 @@ export function Wizard({
 function StepPlaceholder({ title }: { title: string | null }) {
   return (
     <div
-      className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-center"
+      className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 border border-dashed text-center"
       style={{
         borderColor: "color-mix(in srgb, var(--brand-accent) 35%, transparent)",
         background: "color-mix(in srgb, var(--brand-accent) 7%, white)",
+        borderRadius: "var(--brand-radius, 12px)",
       }}
     >
       <ImageIcon className="size-8" style={{ color: "var(--brand-accent)" }} />

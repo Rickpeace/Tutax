@@ -70,7 +70,7 @@ export default async function ViewerPage({
   const imageUrls: Record<string, string> = {};
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const { tokens, logoPath } = resolveTheme(theme);
+  const { mode, tokens, logoPath } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
@@ -81,6 +81,7 @@ export default async function ViewerPage({
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
       {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+      {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
       <div className="mx-auto flex max-w-md flex-col px-4 py-6">
         <div className="mb-4 flex items-center gap-3">
           {logoUrl ? (
@@ -88,20 +89,29 @@ export default async function ViewerPage({
             <img
               src={logoUrl}
               alt=""
-              className="size-9 border border-black/5 bg-white object-contain p-0.5"
+              className="size-11 border border-black/5 bg-white object-contain p-1"
               style={{ borderRadius: "var(--brand-radius, 12px)" }}
             />
           ) : (
             <div
-              className="flex size-9 items-center justify-center rounded-lg font-extrabold text-white"
-              style={{ background: "var(--brand-accent)" }}
+              className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
+              style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
             >
               {initial}
             </div>
           )}
           <div className="flex-1">
-            <div className="font-bold text-[var(--brand-ink)]">{account.name}</div>
-            <div className="text-xs text-muted-foreground">Hilfe &amp; Anleitungen</div>
+            <div
+              className="text-xl font-extrabold"
+              style={{
+                fontFamily: fonts.heading,
+                fontWeight: "var(--brand-heading-weight, 800)",
+                color: "var(--brand-title, var(--brand-ink))",
+              }}
+            >
+              {account.name}
+            </div>
+            <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>
 
@@ -112,7 +122,14 @@ export default async function ViewerPage({
           <ArrowLeft className="size-4" /> Alle Anleitungen
         </Link>
 
-        <h1 className="mb-3 text-base font-semibold text-[var(--brand-ink)]" style={{ fontFamily: fonts.heading }}>
+        <h1
+          className="mb-3 text-base font-semibold"
+          style={{
+            color: "var(--brand-title, var(--brand-ink))",
+            fontFamily: fonts.heading,
+            fontWeight: "var(--brand-heading-weight, 600)",
+          }}
+        >
           {tutorial.title}
         </h1>
 

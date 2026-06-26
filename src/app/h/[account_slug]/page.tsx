@@ -77,9 +77,6 @@ export default async function HubPage({
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
-  const tagline =
-    ((tokens as { content?: { tagline?: string } })?.content?.tagline || "").trim() ||
-    "Hilfe & Anleitungen";
 
   return (
     <main
@@ -100,8 +97,8 @@ export default async function HubPage({
             />
           ) : (
             <div
-              className="flex size-11 items-center justify-center rounded-xl text-lg font-extrabold text-white"
-              style={{ background: "var(--brand-accent)" }}
+              className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
+              style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
             >
               {initial}
             </div>
@@ -117,7 +114,7 @@ export default async function HubPage({
             >
               {account.name}
             </div>
-            <div className="text-sm text-muted-foreground">{tagline}</div>
+            <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>
 

@@ -60,9 +60,7 @@ export function BrandPreview({
             <div className="text-base leading-tight" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: headingColor }}>
               {accountName || "Ihre Kanzlei"}
             </div>
-            <div className="text-[10px]" style={{ opacity: 0.6 }}>
-              {t.content?.tagline?.trim() || "Hilfe & Anleitungen"}
-            </div>
+            <div className="text-[10px]" style={{ opacity: 0.6 }}>Hilfe &amp; Anleitungen</div>
           </div>
         </div>
 
