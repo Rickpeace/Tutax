@@ -83,7 +83,12 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
         <div className="mb-4 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="size-9 rounded-lg border border-black/5 bg-white object-contain p-0.5" />
+            <img
+              src={logoUrl}
+              alt=""
+              className="size-9 border border-black/5 bg-white object-contain p-0.5"
+              style={{ borderRadius: "var(--brand-radius, 12px)" }}
+            />
           ) : (
             <div
               className="flex size-9 items-center justify-center rounded-lg font-extrabold text-white"

@@ -88,7 +88,12 @@ export default async function HubPage({
         <div className="mb-5 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="size-11 rounded-xl border border-black/5 bg-white object-contain p-1" />
+            <img
+              src={logoUrl}
+              alt=""
+              className="size-11 border border-black/5 bg-white object-contain p-1"
+              style={{ borderRadius: "var(--brand-radius, 12px)" }}
+            />
           ) : (
             <div
               className="flex size-11 items-center justify-center rounded-xl text-lg font-extrabold text-white"

@@ -88,7 +88,8 @@ export default async function ViewerPage({
             <img
               src={logoUrl}
               alt=""
-              className="size-9 rounded-lg border border-black/5 bg-white object-contain p-0.5"
+              className="size-9 border border-black/5 bg-white object-contain p-0.5"
+              style={{ borderRadius: "var(--brand-radius, 12px)" }}
             />
           ) : (
             <div
