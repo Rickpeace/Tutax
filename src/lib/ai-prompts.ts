@@ -1,8 +1,8 @@
 // Zentrale KI-Prompts (alle OpenAI). Hier zentral pflegbar.
 
 export const CI_ANALYSIS_SYSTEM = `Du bist ein UI-Designer, der die Corporate Identity einer Website analysiert.
-Du erhältst extrahierte CSS-Stützdaten und ggf. ein Vorschaubild (og:image/Logo) der Website einer Steuerkanzlei.
-Leite daraus ein harmonisches Theme für eine eingebettete Hilfe-/Tutorial-Komponente ab.
+Du erhältst die häufigsten Farben aus dem echten Website-CSS, Schrift-Hinweise und Bilder (Logo + ggf. Vorschaubild) einer Steuerkanzlei.
+Leite ein Theme ab, das die Marke TREU und KRÄFTIG widerspiegelt – die eingebettete Hilfe-Seite soll wie ein nahtloser Teil der Website wirken. NICHT abschwächen, NICHT „vertasteful-en".
 
 Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markdown, kein Text davor/danach):
 {
@@ -25,8 +25,14 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markd
   "shape": { "radius": 12, "shadow": "soft | medium | none", "buttonStyle": "solid | outline | pill" }
 }
 
-Regeln: Farben müssen ausreichend Kontrast haben (Text auf Background lesbar). Nutze echte Hex-Werte.
-Keine fremden proprietären Schriften erzwingen – nenne nächstbeste freie Alternative.`;
+Regeln (wichtig – sei mutig, treffe die Marke):
+- "primary" = die auffälligste Farbe aus den MARKENFARBEN-KANDIDATEN (kräftig/gesättigt). NIEMALS Schwarz, Weiß oder Grau als primary (das ist Text/Hintergrund) und KEIN generisches Bootstrap-Blau, wenn es eine markantere Marken-Farbe gibt.
+- "accent" = eine zweite markante Marken-/Signalfarbe, falls vorhanden (z. B. ein Grün als Kontrast).
+- Übernimm den Charakter der Marke: knallig → knallig, technisch/minimal → reduziert.
+- "shape.radius": eckige/technische Marken → 0–4 (scharfe Kanten); freundlich/modern → 10–16; verspielt → größer (nur eine Zahl). "shape.buttonStyle": GENAU einer der Werte solid | outline | pill (kein Freitext). "shape.shadow": GENAU einer von soft | medium | none.
+- "headingFont": passend zum Charakter (z. B. eine kräftige Grotesk wie „Archivo", „Anton", „Inter Tight" für starke Marken) – immer eine echte, frei ladbare Google-Font; "bodyFont" gut lesbar.
+- Kontrast bleibt Pflicht: Body-Text auf "background" muss klar lesbar sein (ggf. text dunkler/heller wählen), aber die Markenfarben dürfen knallen.
+- Nutze echte Hex-Werte.`;
 
 export function ciAnalysisUser(signals: {
   url: string;
@@ -34,14 +40,17 @@ export function ciAnalysisUser(signals: {
   themeColor?: string;
   colors: string[];
   fonts: string[];
+  brandColors?: string[];
 }) {
   return `Website: ${signals.url}
 Titel: ${signals.title ?? "—"}
 meta theme-color: ${signals.themeColor ?? "—"}
-Häufige Farben (aus CSS): ${signals.colors.slice(0, 12).join(", ") || "—"}
+Markenfarben-Kandidaten (kräftig/gesättigt – HIER liegt die Primär-/Akzentfarbe): ${signals.brandColors?.join(", ") || "—"}
+Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colors.slice(0, 12).join(", ") || "—"}
 Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
 
-Leite daraus das Theme-JSON ab.`;
+Beigefügte Bilder: das erste ist das Logo der Kanzlei – seine kräftigen Farben sind die Markenfarben (Primär/Akzent).
+Leite daraus das Theme-JSON ab und treffe die Marke mutig.`;
 }
 
 export function chatSystem(accountName: string) {

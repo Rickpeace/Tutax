@@ -54,7 +54,15 @@ function extractSignals(html: string, pageUrl: string) {
   };
   const logo = abs(iconHref("apple-touch-icon")) || abs(iconHref("icon")) || abs(ogImage);
 
-  return { url: pageUrl, title, themeColor, ogImage, colors, fonts: [...fonts], logo };
+  const cssHrefs: string[] = [];
+  for (const tag of linkTags) {
+    if (/rel=["'][^"']*stylesheet[^"']*["']/i.test(tag)) {
+      const u = abs(tag.match(/href=["']([^"']+)["']/i)?.[1]);
+      if (u) cssHrefs.push(u);
+    }
+  }
+
+  return { url: pageUrl, title, themeColor, ogImage, colors, fonts: [...fonts], logo, cssHrefs };
 }
 
 export async function POST(req: NextRequest) {
@@ -98,12 +106,67 @@ export async function POST(req: NextRequest) {
     const html = (await resp.text()).slice(0, 200_000);
     const signals = extractSignals(html, url);
 
-    const userContent: OpenAIUserContent = signals.ogImage
+    // Externe CSS holen und Markenfarben extrahieren (HTML allein reicht meist nicht).
+    const rgbToHex = (s: string) => {
+      const p = s.split(",").map((x) => parseInt(x.trim(), 10));
+      if (p.length < 3 || p.some((n) => Number.isNaN(n))) return null;
+      return "#" + p.slice(0, 3).map((n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0")).join("");
+    };
+    try {
+      const cssText = (
+        await Promise.all(
+          signals.cssHrefs.slice(0, 3).map(async (u) => {
+            try {
+              const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+              if (r.ok) return (await r.text()).slice(0, 300_000);
+            } catch {
+              /* ignore */
+            }
+            return "";
+          }),
+        )
+      ).join("\n");
+      if (cssText) {
+        const counts = new Map<string, number>();
+        const bump = (c: string) => counts.set(c, (counts.get(c) ?? 0) + 1);
+        for (const m of cssText.matchAll(/#[0-9a-fA-F]{6}\b/g)) bump(m[0].toLowerCase());
+        for (const m of cssText.matchAll(/rgba?\(([^)]+)\)/gi)) {
+          const hex = rgbToHex(m[1]);
+          if (hex) bump(hex);
+        }
+        const cssColors = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+        signals.colors = [...new Set([...cssColors, ...signals.colors])].slice(0, 15);
+      }
+    } catch {
+      /* CSS optional */
+    }
+
+    // Gesättigte Markenfarben-Kandidaten (Schwarz/Weiß/Grau raus – das ist Text/Hintergrund).
+    const isVivid = (hex: string) => {
+      if (!/^#[0-9a-f]{6}$/i.test(hex)) return false;
+      const r = parseInt(hex.slice(1, 3), 16) / 255;
+      const g = parseInt(hex.slice(3, 5), 16) / 255;
+      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const d = max - min;
+      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      return s > 0.35 && l > 0.18 && l < 0.82;
+    };
+    const brandColors = signals.colors.filter(isVivid).slice(0, 6);
+
+    // Logo (Markenfarbe) + og:image an die Bildanalyse – aber kein SVG (Vision-Limit).
+    const visionImages = [signals.logo, signals.ogImage].filter(
+      (u): u is string => !!u && !/\.svg(\?|$)/i.test(u),
+    );
+    const userText = ciAnalysisUser({ ...signals, brandColors });
+    const userContent: OpenAIUserContent = visionImages.length
       ? [
-          { type: "text", text: ciAnalysisUser(signals) },
-          { type: "image_url", image_url: { url: signals.ogImage } },
+          { type: "text", text: userText },
+          ...visionImages.slice(0, 2).map((u) => ({ type: "image_url" as const, image_url: { url: u } })),
         ]
-      : ciAnalysisUser(signals);
+      : userText;
 
     const completion = await openai().chat.completions.create({
       model: AI.models.vision,
