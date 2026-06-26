@@ -117,14 +117,31 @@ export async function updateAlertStatus(
   status: "acknowledged" | "resolved" | "dismissed",
 ) {
   const supabase = await createClient();
+  const { data: alert } = await supabase
+    .from("change_alerts")
+    .select("tutorial_id")
+    .eq("id", alertId)
+    .single();
+
   const patch: Record<string, unknown> = { status };
   if (status === "resolved" || status === "dismissed") {
     patch.resolved_at = new Date().toISOString();
   }
-  const { error } = await supabase
-    .from("change_alerts")
-    .update(patch)
-    .eq("id", alertId);
+  const { error } = await supabase.from("change_alerts").update(patch).eq("id", alertId);
   if (error) throw new Error(error.message);
+
+  // Wenn das Tutorial keine offenen Hinweise mehr hat -> „Prüfen"-Flag entfernen.
+  if ((status === "resolved" || status === "dismissed") && alert?.tutorial_id) {
+    const { count } = await supabase
+      .from("change_alerts")
+      .select("id", { count: "exact", head: true })
+      .eq("tutorial_id", alert.tutorial_id)
+      .eq("status", "open");
+    if (!count) {
+      await supabase.from("tutorials").update({ freshness: "ok" }).eq("id", alert.tutorial_id);
+    }
+  }
+
   revalidatePath("/app/alerts");
+  revalidatePath("/app");
 }
