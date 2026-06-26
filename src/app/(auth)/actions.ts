@@ -3,12 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { appBaseUrl } from "@/lib/url";
 
 export type AuthState = { error?: string; message?: string };
 
-function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
+const appUrl = appBaseUrl;
 
 /** E-Mail + Passwort Anmeldung */
 export async function signInWithPassword(

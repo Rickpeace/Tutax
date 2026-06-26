@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { appBaseUrl } from "@/lib/url";
 
-const appUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const appUrl = appBaseUrl;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
 
 export type InviteResult = { ok: boolean; message: string; link?: string };

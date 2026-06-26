@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { ExternalLink, Link2, Code2 } from "lucide-react";
 import { requireAccount } from "@/lib/account";
+import { appBaseUrl } from "@/lib/url";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/app/copy-field";
 
 export default async function EinbettenPage() {
   const { account } = await requireAccount();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = appBaseUrl();
   const link = `${appUrl}/h/${account.slug}`;
   const iframe = `<iframe src="${link}" width="100%" height="700" style="border:0" title="Hilfe & Anleitungen"></iframe>`;
 

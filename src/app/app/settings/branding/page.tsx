@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { BrandingForm } from "@/components/app/branding-form";
 import { DesignModeSwitcher } from "@/components/app/design-mode-switcher";
 import { publicImageUrl } from "@/lib/public-image";
+import { appBaseUrl } from "@/lib/url";
 
 export default async function BrandingPage() {
   const { account } = await requireAccount();
@@ -53,7 +54,7 @@ export default async function BrandingPage() {
             surface: colors.surface ?? "#eef0fe",
             text: colors.text ?? "#101524",
           }}
-          appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+          appUrl={appBaseUrl()}
         />
       </div>
     </div>
