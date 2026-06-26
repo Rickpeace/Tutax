@@ -74,6 +74,14 @@ export async function POST(
       affected_steps?: string[];
     };
 
+    // Re-Check löst vorherige OFFENE Drift-Hinweise dieses Tutorials ab
+    // (verhindert veraltete/doppelte Warnungen nach einer Korrektur).
+    await supabase
+      .from("change_alerts")
+      .update({ status: "resolved" })
+      .eq("tutorial_id", id)
+      .eq("status", "open");
+
     if (result.is_stale) {
       await supabase.from("change_alerts").insert({
         tutorial_id: id,
