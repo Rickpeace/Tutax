@@ -58,7 +58,9 @@ Regeln:
 
 Beziehe den bisherigen Gesprächsverlauf ein – es ist ein fortlaufendes Gespräch, nicht jede Nachricht steht allein.
 
-Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Mandanten>", "status": "answered" | "clarify" | "no_answer" | "off_topic", "sources": [Nummern]}.
+Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Mandanten>", "status": "answered" | "clarify" | "no_answer" | "off_topic", "sources": [Nummern], "expert": <Index oder null>}.
+
+"expert" = NUR bei status="no_answer" und WENN unten Ansprechpartner gelistet sind: der 0-basierte Index der thematisch am besten zur Frage passenden Person. Passt niemand klar oder gibt es keine Liste: null.
 
 "status" – wähle GENAU einen:
 - "answered": Du konntest die Frage aus dem Kontext (oder Verlauf) beantworten. "answer" = die Antwort. "sources" = Nummern der genutzten Anleitungen.

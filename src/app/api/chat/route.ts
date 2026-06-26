@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     .single();
   if (!account) return NextResponse.json({ error: "Unbekannt" }, { status: 404 });
 
-  type CatEsc = { name?: string; calendarUrl?: string; email?: string; phone?: string };
+  type Expert = { name?: string; expertise?: string; calendarUrl?: string; email?: string; phone?: string };
   type Esc = {
     enabled?: boolean;
     message?: string;
@@ -37,24 +37,29 @@ export async function POST(req: NextRequest) {
     calendarUrl?: string;
     email?: string;
     phone?: string;
-    byCategory?: Record<string, CatEsc>;
+    experts?: Expert[];
   };
   const esc = (account.escalation ?? {}) as Esc;
-  // Generische Eskalation: liefert die konfigurierten Kontakt-Wege (Kalender/E-Mail/Telefon).
-  const buildEscalation = (categoryName?: string | null) => {
+  const experts = Array.isArray(esc.experts) ? esc.experts : [];
+  // Eskalation: passende Person (von der KI gewählt) ODER allgemeiner Fallback.
+  const buildEscalation = (expertIdx?: number | null) => {
     if (!esc.enabled) return null;
-    const cat = categoryName && esc.byCategory ? esc.byCategory[categoryName] : undefined;
-    const calendarUrl = cat?.calendarUrl || esc.calendarUrl;
-    const email = cat?.email || esc.email;
-    const phone = cat?.phone || esc.phone;
-    const name = cat?.name || esc.contactName || account.name;
+    const p = typeof expertIdx === "number" ? experts[expertIdx] : undefined;
+    const calendarUrl = p?.calendarUrl || esc.calendarUrl;
+    const email = p?.email || esc.email;
+    const phone = p?.phone || esc.phone;
+    const name = p?.name || esc.contactName || account.name;
     const methods: { type: string; label: string; value: string }[] = [];
     if (calendarUrl)
       methods.push({ type: "calendar", label: name ? `Termin buchen · ${name}` : "Termin buchen", value: calendarUrl });
     if (email) methods.push({ type: "email", label: email, value: `mailto:${email}` });
     if (phone) methods.push({ type: "phone", label: phone, value: `tel:${phone}` });
     if (!methods.length) return null;
-    return { message: esc.message || "Gerne helfen wir Ihnen persönlich weiter.", methods };
+    const base = esc.message || "Gerne helfen wir Ihnen persönlich weiter.";
+    const message = p?.name
+      ? `${base} ${p.name}${p.expertise ? ` (${p.expertise})` : ""} ist hierfür die richtige Ansprechperson.`
+      : base;
+    return { message, methods };
   };
 
   if (!aiConfigured()) {
@@ -103,6 +108,12 @@ export async function POST(req: NextRequest) {
           .join("\n\n")
       : "(keine passenden Inhalte gefunden)";
 
+    const expertsText = experts.length
+      ? `\n\nAnsprechpartner (für mögliche Weiterleitung):\n${experts
+          .map((e, i) => `[${i}] ${e.name ?? "?"}${e.expertise ? " – " + e.expertise : ""}`)
+          .join("\n")}`
+      : "";
+
     const completion = await openai().chat.completions.create({
       model: AI.models.chat,
       temperature: 0.2,
@@ -116,7 +127,7 @@ export async function POST(req: NextRequest) {
         })),
         {
           role: "user",
-          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
+          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}${expertsText}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
         },
       ],
     });
@@ -126,6 +137,7 @@ export async function POST(req: NextRequest) {
     let answer = "";
     let status = "answered";
     let used: number[] = [];
+    let expertIdx: number | null = null;
     try {
       const p = JSON.parse(raw);
       answer = String(p.answer ?? "").trim();
@@ -133,6 +145,8 @@ export async function POST(req: NextRequest) {
       used = Array.isArray(p.sources)
         ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
         : [];
+      const ei = Number(p.expert);
+      expertIdx = Number.isInteger(ei) ? ei : null;
     } catch {
       answer = raw.trim();
     }
@@ -170,7 +184,7 @@ export async function POST(req: NextRequest) {
 
     // Echte Sackgasse (zum Thema, nicht lösbar) -> an einen Menschen verweisen.
     if (status === "no_answer") {
-      const escalation = buildEscalation(rows[0]?.metadata?.category);
+      const escalation = buildEscalation(expertIdx);
       return NextResponse.json({
         answer: answer || "Das kann ich Ihnen leider nicht sicher beantworten.",
         sources: [],

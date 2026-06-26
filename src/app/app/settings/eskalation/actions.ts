@@ -4,46 +4,49 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 
-const FIELDS = ["name", "calendarUrl", "email", "phone"] as const;
+type ExpertIn = {
+  name?: string;
+  expertise?: string;
+  calendarUrl?: string;
+  email?: string;
+  phone?: string;
+};
+type EscalationIn = {
+  enabled?: boolean;
+  message?: string;
+  contactName?: string;
+  calendarUrl?: string;
+  email?: string;
+  phone?: string;
+  experts?: ExpertIn[];
+};
 
-export async function saveEscalation(formData: FormData) {
+const clean = (s: unknown) => String(s ?? "").trim();
+
+export async function saveEscalation(input: EscalationIn) {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  // Pro-Kategorie-Felder einsammeln: cat_<feld>__<id>, Label: catlabel__<id>
-  const labels: Record<string, string> = {};
-  const perCat: Record<string, Record<string, string>> = {};
-  for (const [k, v] of formData.entries()) {
-    const val = String(v);
-    if (k.startsWith("catlabel__")) {
-      labels[k.slice(10)] = val;
-    } else {
-      const m = k.match(/^cat_(\w+)__(.+)$/);
-      if (m) {
-        const [, field, id] = m;
-        (perCat[id] ??= {})[field] = val;
-      }
-    }
-  }
-
-  const byCategory: Record<string, Record<string, string>> = {};
-  for (const id of Object.keys(labels)) {
-    const entry: Record<string, string> = {};
-    for (const f of FIELDS) {
-      const val = (perCat[id]?.[f] ?? "").trim();
-      if (val) entry[f] = val;
-    }
-    if (Object.keys(entry).length) byCategory[labels[id]] = entry;
-  }
+  const experts = Array.isArray(input.experts)
+    ? input.experts
+        .map((e) => ({
+          name: clean(e.name),
+          expertise: clean(e.expertise),
+          calendarUrl: clean(e.calendarUrl),
+          email: clean(e.email),
+          phone: clean(e.phone),
+        }))
+        .filter((e) => e.name || e.expertise || e.calendarUrl || e.email || e.phone)
+    : [];
 
   const escalation = {
-    enabled: formData.get("enabled") === "on",
-    message: String(formData.get("message") ?? "").trim(),
-    contactName: String(formData.get("contactName") ?? "").trim(),
-    calendarUrl: String(formData.get("calendarUrl") ?? "").trim(),
-    email: String(formData.get("email") ?? "").trim(),
-    phone: String(formData.get("phone") ?? "").trim(),
-    byCategory,
+    enabled: !!input.enabled,
+    message: clean(input.message),
+    contactName: clean(input.contactName),
+    calendarUrl: clean(input.calendarUrl),
+    email: clean(input.email),
+    phone: clean(input.phone),
+    experts,
   };
 
   const { error } = await supabase.from("accounts").update({ escalation }).eq("id", account.id);
