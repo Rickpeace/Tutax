@@ -144,7 +144,18 @@ Kunden (Referenz-Modell, nicht Kopie). Fork erst beim Bearbeiten.
       `node scripts/seed-datev.mjs --templates`. Redundante account-DATEV in RichardTax entfernt.
 - [x] Verifiziert: `scripts/test-templates-live.mjs` (aktivieren/auflösen/forken/zurücksetzen/deaktivieren).
 
-## 8. PHASE 1 KOMPLETT ✅ + SaaS-Shell + Design + KI-Framework + Admin/Templates steht
+## 7e. KI scharf geschaltet (OPENAI_API_KEY gesetzt) — 2026-06-26
+- [x] Key lokal in `.env.local` gesetzt + verifiziert (text-embedding-3-small, 1536 Dim).
+      ⚠️ **Auch bei Vercel** eintragen, sonst hat die Live-Seite keine KI.
+- [x] **RAG-Backfill** `scripts/index-kb.mjs`: indexiert eigene Tutorials, Wissensartikel
+      und aktivierte Standard-Templates (pro Account). End-to-end getestet (Frage→match_kb→gpt-4o-mini).
+- [x] `lib/kb.ts`: `indexTutorial`-Delete **account-scoped** (geteilte Templates sicher).
+- [x] `template-actions`: Aktivieren/Fork/Reset halten den Chatbot-Index automatisch in sync.
+- [x] **KI-Schritt-Assistent**: `/api/steps/suggest` (gpt-4o Vision) → Titel, Text, Markierung
+      aus Screenshot. Button im Builder (`step-panel.tsx`) übernimmt Vorschlag + Highlight.
+      Nur für eigene Tutorials (Templates haben account_id NULL → kein Upload-Pfad, s. §9).
+
+## 8. PHASE 1 KOMPLETT ✅ + SaaS-Shell + Design + KI (live) + Admin/Templates steht
 Der gesamte MVP-Kreislauf (bauen → veröffentlichen → live ansehen) steht und ist
 gegen die echte DB verifiziert. Nichts mehr offen, das ohne ANTHROPIC_API_KEY /
 externe Entscheidungen baubar wäre.
