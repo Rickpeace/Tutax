@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
+import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -16,12 +17,12 @@ async function load(accountSlug: string, tutorialSlug: string) {
     .single();
   if (!account) return null;
 
+  const tutorialId = await resolveCustomerTutorial(admin, account.id, tutorialSlug);
+  if (!tutorialId) return null;
   const { data: tutorial } = await admin
     .from("tutorials")
     .select("*")
-    .eq("account_id", account.id)
-    .eq("slug", tutorialSlug)
-    .eq("status", "published")
+    .eq("id", tutorialId)
     .single<Tutorial>();
   if (!tutorial) return null;
 

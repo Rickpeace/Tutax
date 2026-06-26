@@ -11,6 +11,10 @@ const admin = createClient(
 const uuid = () => crypto.randomUUID();
 const YES = "#0f9d72";
 const NO = "#d6455d";
+const slugify = (s) =>
+  s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60) || "tutorial";
 const mkBody = (text) => ({
   type: "doc",
   content: [{ type: "paragraph", content: text ? [{ type: "text", text }] : [] }],
@@ -46,7 +50,7 @@ async function exists(title) {
 }
 const tutFields = (catId, title, description) =>
   AS_TEMPLATE
-    ? { account_id: null, is_template: true, category_id: null, title, description, status: "published" }
+    ? { account_id: null, is_template: true, category_id: null, title, description, status: "published", slug: slugify(title) }
     : { account_id: ACC, category_id: catId, title, description, status: "draft" };
 
 async function insertLinear(catId, title, description, steps) {

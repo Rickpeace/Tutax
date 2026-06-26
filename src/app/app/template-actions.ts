@@ -1,0 +1,125 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { requireAccount } from "@/lib/account";
+import { removeTutorialEmbeddings } from "@/lib/kb";
+import type { Step, StepBranch } from "@/lib/types";
+
+/** Standard-Template auf der Hilfe-Seite zeigen/verbergen (Häkchen). */
+export async function setTemplateEnabled(templateId: string, enabled: boolean) {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("account_templates")
+    .upsert(
+      { account_id: account.id, template_id: templateId, enabled },
+      { onConflict: "account_id,template_id" },
+    );
+  if (error) throw new Error(error.message);
+  revalidatePath("/app");
+}
+
+/**
+ * Fork beim Bearbeiten (§14): kopiert das Template in den Account (eigene Kopie),
+ * verknüpft es und öffnet die Kopie im Editor. Ab jetzt „Angepasst".
+ */
+export async function forkTemplate(templateId: string) {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+
+  const { data: tpl } = await supabase
+    .from("tutorials")
+    .select("*")
+    .eq("id", templateId)
+    .eq("is_template", true)
+    .single();
+  if (!tpl) throw new Error("Template nicht gefunden");
+
+  const { data: steps } = await supabase
+    .from("steps")
+    .select("*")
+    .eq("tutorial_id", templateId)
+    .returns<Step[]>();
+  const stepIds = (steps ?? []).map((s) => s.id);
+  const { data: branches } = stepIds.length
+    ? await supabase.from("step_branches").select("*").in("step_id", stepIds).returns<StepBranch[]>()
+    : { data: [] as StepBranch[] };
+
+  const forkId = crypto.randomUUID();
+  await supabase.from("tutorials").insert({
+    id: forkId,
+    account_id: account.id,
+    is_template: false,
+    title: tpl.title,
+    description: tpl.description,
+    status: "published", // bleibt nahtlos sichtbar (UI ändert sich nicht, §14)
+    slug: tpl.slug, // gleicher Slug -> Hilfe-URL bleibt stabil
+  });
+
+  const idMap = new Map<string, string>();
+  for (const s of steps ?? []) idMap.set(s.id, crypto.randomUUID());
+  if (steps?.length) {
+    await supabase.from("steps").insert(
+      steps.map((s) => ({
+        id: idMap.get(s.id),
+        tutorial_id: forkId,
+        title: s.title,
+        body: s.body,
+        image_path: s.image_path,
+        image_width: s.image_width,
+        image_height: s.image_height,
+        highlights: s.highlights,
+        position: s.position,
+        is_decision: s.is_decision,
+      })),
+    );
+  }
+  if (branches?.length) {
+    await supabase.from("step_branches").insert(
+      branches.map((b) => ({
+        step_id: idMap.get(b.step_id)!,
+        label: b.label,
+        color: b.color,
+        target_step_id: b.target_step_id ? (idMap.get(b.target_step_id) ?? null) : null,
+        position: b.position,
+      })),
+    );
+  }
+  if (tpl.root_step_id && idMap.get(tpl.root_step_id)) {
+    await supabase.from("tutorials").update({ root_step_id: idMap.get(tpl.root_step_id) }).eq("id", forkId);
+  }
+
+  await supabase
+    .from("account_templates")
+    .upsert(
+      { account_id: account.id, template_id: templateId, enabled: true, forked_tutorial_id: forkId },
+      { onConflict: "account_id,template_id" },
+    );
+
+  revalidatePath("/app");
+  redirect(`/app/tutorials/${forkId}`);
+}
+
+/** „Auf Standard zurücksetzen": eigene Kopie verwerfen, wieder zentrale Version. */
+export async function resetTemplate(templateId: string) {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("account_templates")
+    .select("forked_tutorial_id")
+    .eq("account_id", account.id)
+    .eq("template_id", templateId)
+    .single();
+  if (row?.forked_tutorial_id) {
+    await removeTutorialEmbeddings(supabase, row.forked_tutorial_id).catch(() => {});
+    await supabase.from("tutorials").delete().eq("id", row.forked_tutorial_id);
+  }
+  await supabase
+    .from("account_templates")
+    .update({ forked_tutorial_id: null })
+    .eq("account_id", account.id)
+    .eq("template_id", templateId);
+  revalidatePath("/app");
+}
