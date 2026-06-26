@@ -70,7 +70,39 @@ export function brandStyle(tokens: unknown): CSSProperties {
   if (c.text) s["--brand-ink"] = c.text;
   if (ty.bodyFont) s["--brand-font"] = String(ty.bodyFont);
   if (ty.headingFont) s["--brand-font-heading"] = String(ty.headingFont);
-  if (sh.radius != null) s["--brand-radius"] = `${sh.radius}px`;
+  if (ty.headingWeight != null) s["--brand-heading-weight"] = String(ty.headingWeight);
+  if (sh.radius != null) s["--brand-radius"] = `${parseInt(String(sh.radius), 10) || 0}px`;
+
+  // Card-/Titel-Stil aus dem Design ableiten (outline | elevated | filled).
+  const accent = (c.primary as string) || "#3d4ee6";
+  const bg = (c.background as string) || "#ffffff";
+  const surface = (c.surface as string) || "#eef0fe";
+  const ink = (c.text as string) || "#101524";
+  const border = (c.border as string) || "";
+  const cardStyle = String(sh.cardStyle ?? "filled");
+
+  if (cardStyle === "outline") {
+    s["--brand-card-bg"] = bg;
+    s["--brand-card-border"] = accent;
+    s["--brand-card-bw"] = "1.5px";
+    s["--brand-title"] = accent;
+    s["--brand-icon-bg"] = "transparent";
+    s["--brand-card-shadow"] = "none";
+  } else if (cardStyle === "elevated") {
+    s["--brand-card-bg"] = "#ffffff";
+    s["--brand-card-border"] = border || "rgba(16,21,36,0.06)";
+    s["--brand-card-bw"] = "1px";
+    s["--brand-title"] = ink;
+    s["--brand-icon-bg"] = surface;
+    s["--brand-card-shadow"] = "0 6px 20px rgba(16,21,36,0.08)";
+  } else {
+    s["--brand-card-bg"] = "#ffffff";
+    s["--brand-card-border"] = border || "rgba(16,21,36,0.10)";
+    s["--brand-card-bw"] = "1px";
+    s["--brand-title"] = ink;
+    s["--brand-icon-bg"] = surface;
+    s["--brand-card-shadow"] = "none";
+  }
 
   return s as CSSProperties;
 }

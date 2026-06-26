@@ -61,7 +61,10 @@ export function HubBrowser({
       ) : (
         groups.map((g) => (
           <section key={g.name} className="mb-6">
-            <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <h2
+              className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground"
+              style={{ fontFamily: "var(--brand-font-heading)" }}
+            >
               {g.name}
             </h2>
             <div className="space-y-2">
@@ -69,23 +72,43 @@ export function HubBrowser({
                 <Link
                   key={t.slug}
                   href={`/h/${accountSlug}/${t.slug}`}
-                  className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-4 transition-colors hover:border-[var(--brand-accent)]"
+                  className="flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
+                  style={{
+                    background: "var(--brand-card-bg, #fff)",
+                    border: "var(--brand-card-bw, 1px) solid var(--brand-card-border, rgba(16,21,36,0.1))",
+                    borderRadius: "var(--brand-radius, 12px)",
+                    boxShadow: "var(--brand-card-shadow, none)",
+                  }}
                 >
                   <div
-                    className="flex size-10 shrink-0 items-center justify-center rounded-lg"
-                    style={{ background: "var(--brand-soft)", color: "var(--brand-accent)" }}
+                    className="flex size-10 shrink-0 items-center justify-center"
+                    style={{
+                      background: "var(--brand-icon-bg, var(--brand-soft))",
+                      color: "var(--brand-accent)",
+                      border: "var(--brand-card-bw, 1px) solid var(--brand-card-border, transparent)",
+                      borderRadius: "var(--brand-radius, 10px)",
+                    }}
                   >
                     <Layers className="size-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-[var(--brand-ink)]">{t.title}</div>
+                    <div
+                      className="font-bold"
+                      style={{
+                        color: "var(--brand-title, var(--brand-ink))",
+                        fontFamily: "var(--brand-font-heading)",
+                        fontWeight: "var(--brand-heading-weight, 700)",
+                      }}
+                    >
+                      {t.title}
+                    </div>
                     {t.description && (
                       <div className="truncate text-sm text-muted-foreground">
                         {t.description}
                       </div>
                     )}
                   </div>
-                  <ChevronRight className="size-5 shrink-0 text-black/20" />
+                  <ChevronRight className="size-5 shrink-0" style={{ color: "var(--brand-accent)", opacity: 0.5 }} />
                 </Link>
               ))}
             </div>

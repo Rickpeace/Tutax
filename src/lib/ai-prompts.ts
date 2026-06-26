@@ -22,7 +22,7 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markd
     "bodyFont": "z. B. Inter, sans-serif",
     "headingWeight": 700
   },
-  "shape": { "radius": 12, "shadow": "soft | medium | none", "buttonStyle": "solid | outline | pill" }
+  "shape": { "radius": 12, "shadow": "soft | medium | none", "buttonStyle": "solid | outline | pill", "cardStyle": "outline | filled | elevated" }
 }
 
 Regeln (wichtig – sei mutig, treffe die Marke):
@@ -30,7 +30,8 @@ Regeln (wichtig – sei mutig, treffe die Marke):
 - "accent" = eine zweite markante Marken-/Signalfarbe, falls vorhanden (z. B. ein Grün als Kontrast).
 - Übernimm den Charakter der Marke: knallig → knallig, technisch/minimal → reduziert.
 - "shape.radius": eckige/technische Marken → 0–4 (scharfe Kanten); freundlich/modern → 10–16; verspielt → größer (nur eine Zahl). "shape.buttonStyle": GENAU einer der Werte solid | outline | pill (kein Freitext). "shape.shadow": GENAU einer von soft | medium | none.
-- "headingFont": passend zum Charakter (z. B. eine kräftige Grotesk wie „Archivo", „Anton", „Inter Tight" für starke Marken) – immer eine echte, frei ladbare Google-Font; "bodyFont" gut lesbar.
+- "shape.cardStyle": Erfasse, WIE die Website Flächen/Boxen darstellt. Dünne farbige Rahmen mit farbigem Text auf Weiß → "outline". Gefüllte Karten → "filled". Karten mit Schatten/Tiefe → "elevated". Triff den echten Look der Seite.
+- "headingFont": passend zum Charakter – bei starken/markanten Marken eine KRÄFTIGE Display-Grotesk (z. B. „Archivo", „Anton", „Oswald", „Inter Tight"); immer eine echte, frei ladbare Google-Font. "headingWeight": hohe Stärke für kräftige Marken (800–900), sonst 700. "bodyFont" gut lesbar.
 - Kontrast bleibt Pflicht: Body-Text auf "background" muss klar lesbar sein (ggf. text dunkler/heller wählen), aber die Markenfarben dürfen knallen.
 - Nutze echte Hex-Werte.`;
 
@@ -41,11 +42,18 @@ export function ciAnalysisUser(signals: {
   colors: string[];
   fonts: string[];
   brandColors?: string[];
+  cardHint?: string;
 }) {
+  const cardLine =
+    signals.cardHint === "outline"
+      ? "Die Website nutzt die Markenfarbe überwiegend als RAHMEN → shape.cardStyle = \"outline\" (farbige Outline-Boxen mit farbigem Text)."
+      : signals.cardHint === "filled"
+        ? "Die Website nutzt v. a. gefüllte Flächen → shape.cardStyle = \"filled\"."
+        : "";
   return `Website: ${signals.url}
 Titel: ${signals.title ?? "—"}
 meta theme-color: ${signals.themeColor ?? "—"}
-Markenfarben-Kandidaten (kräftig/gesättigt – HIER liegt die Primär-/Akzentfarbe): ${signals.brandColors?.join(", ") || "—"}
+Markenfarben-Kandidaten (kräftig/gesättigt – HIER liegt die Primär-/Akzentfarbe): ${signals.brandColors?.join(", ") || "—"}${cardLine ? "\n" + cardLine : ""}
 Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colors.slice(0, 12).join(", ") || "—"}
 Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
 

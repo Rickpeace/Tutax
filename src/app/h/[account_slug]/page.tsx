@@ -98,7 +98,14 @@ export default async function HubPage({
             </div>
           )}
           <div>
-            <div className="text-lg font-extrabold text-[var(--brand-ink)]" style={{ fontFamily: fonts.heading }}>
+            <div
+              className="text-xl font-extrabold"
+              style={{
+                fontFamily: fonts.heading,
+                fontWeight: "var(--brand-heading-weight, 800)",
+                color: "var(--brand-title, var(--brand-ink))",
+              }}
+            >
               {account.name}
             </div>
             <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>

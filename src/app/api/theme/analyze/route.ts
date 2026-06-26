@@ -112,8 +112,9 @@ export async function POST(req: NextRequest) {
       if (p.length < 3 || p.some((n) => Number.isNaN(n))) return null;
       return "#" + p.slice(0, 3).map((n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0")).join("");
     };
+    let cssText = "";
     try {
-      const cssText = (
+      cssText = (
         await Promise.all(
           signals.cssHrefs.slice(0, 3).map(async (u) => {
             try {
@@ -156,11 +157,30 @@ export async function POST(req: NextRequest) {
     };
     const brandColors = signals.colors.filter(isVivid).slice(0, 6);
 
+    // Heuristik: nutzt die Seite die Markenfarbe v. a. als Rahmen (Outline) oder als Fläche?
+    let cardHint = "";
+    try {
+      let borderN = 0;
+      let fillN = 0;
+      for (const hex of brandColors) {
+        const esc = hex.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        for (const m of cssText.matchAll(new RegExp(`[a-z-]+\\s*:\\s*[^;{}]*${esc}`, "gi"))) {
+          const seg = m[0].toLowerCase();
+          if (seg.includes("border")) borderN++;
+          else if (seg.includes("background")) fillN++;
+        }
+      }
+      if (borderN >= 3 && borderN > fillN) cardHint = "outline";
+      else if (fillN > borderN) cardHint = "filled";
+    } catch {
+      /* optional */
+    }
+
     // Logo (Markenfarbe) + og:image an die Bildanalyse – aber kein SVG (Vision-Limit).
     const visionImages = [signals.logo, signals.ogImage].filter(
       (u): u is string => !!u && !/\.svg(\?|$)/i.test(u),
     );
-    const userText = ciAnalysisUser({ ...signals, brandColors });
+    const userText = ciAnalysisUser({ ...signals, brandColors, cardHint });
     const userContent: OpenAIUserContent = visionImages.length
       ? [
           { type: "text", text: userText },
