@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink, Settings, Bell, ShieldCheck } from "lucide-react";
+import { ExternalLink, Settings, Bell, ShieldCheck, LogOut } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
 import { AppTabs } from "@/components/app/app-tabs";
 import { requireAccount } from "@/lib/account";
@@ -31,8 +31,8 @@ export default async function AppLayout({
           <Link href="/app">
             <Wordmark />
           </Link>
-          <span className="text-line">/</span>
-          <span className="truncate text-sm font-medium text-ink-2">
+          <span className="hidden text-line sm:inline">/</span>
+          <span className="hidden truncate text-sm font-medium text-ink-2 sm:inline">
             {account.name}
           </span>
           <div className="ml-auto flex items-center gap-2">
@@ -43,7 +43,8 @@ export default async function AppLayout({
                 nativeButton={false}
                 render={<Link href="/admin" />}
               >
-                <ShieldCheck className="size-4" /> Admin
+                <ShieldCheck className="size-4" />
+                <span className="hidden sm:inline">Admin</span>
               </Button>
             )}
             <Button
@@ -82,8 +83,9 @@ export default async function AppLayout({
               {email}
             </span>
             <form action={signOut}>
-              <Button type="submit" variant="ghost" size="sm">
-                Abmelden
+              <Button type="submit" variant="ghost" size="sm" aria-label="Abmelden">
+                <LogOut className="size-4" />
+                <span className="hidden sm:inline">Abmelden</span>
               </Button>
             </form>
           </div>
