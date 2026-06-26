@@ -73,27 +73,15 @@ export async function POST(req: NextRequest) {
       similarity: number;
     }[];
 
-    // Harte Eskalation, wenn gar nichts/zu Schwaches gefunden wurde.
-    const topSim = rows[0]?.similarity ?? 0;
-    if (rows.length === 0 || topSim < 0.3) {
-      const escalation = buildEscalation(rows[0]?.metadata?.category);
-      return NextResponse.json({
-        answer: escalation
-          ? "Das kann ich Ihnen leider nicht sicher beantworten – am besten klären Sie das direkt persönlich:"
-          : "Dazu habe ich leider keine passende Anleitung. Bitte wenden Sie sich an Ihre Kanzlei.",
-        sources: [],
-        escalation,
-        weak: true,
-      });
-    }
-
-    const context = rows
-      .map((r) =>
-        r.metadata.slug
-          ? `Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
-          : `Info: ${r.chunk}`,
-      )
-      .join("\n\n");
+    const context = rows.length
+      ? rows
+          .map((r) =>
+            r.metadata.slug
+              ? `Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
+              : `Info: ${r.chunk}`,
+          )
+          .join("\n\n")
+      : "(keine passenden Inhalte gefunden)";
 
     const completion = await openai().chat.completions.create({
       model: AI.models.chat,
@@ -109,14 +97,16 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // KI-Selbsteinschätzung: resolved=false -> sie konnte nicht helfen -> eskalieren.
+    // KI-Selbsteinschätzung: onTopic (zum Thema?) + resolved (beantwortet?).
     const raw = completion.choices[0].message.content ?? "{}";
     let answer = "";
     let resolved = true;
+    let onTopic = true;
     try {
       const p = JSON.parse(raw);
       answer = String(p.answer ?? "").trim();
       resolved = p.resolved !== false;
+      onTopic = p.onTopic !== false;
     } catch {
       answer = raw.trim();
     }
@@ -133,6 +123,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Off-Topic (z. B. Kochrezept): freundlich abgrenzen, NICHT eskalieren.
+    if (!onTopic) {
+      return NextResponse.json({
+        answer:
+          answer ||
+          `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Kanzlei und ihre Anleitungen weiterhelfen.`,
+        sources: [],
+      });
+    }
+
+    // Zum Thema, aber nicht beantwortbar -> an einen Menschen verweisen.
     if (!resolved) {
       const escalation = buildEscalation(rows[0]?.metadata?.category);
       return NextResponse.json({
