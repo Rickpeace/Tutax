@@ -83,7 +83,6 @@ export function ImageField({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         hidden
         onChange={onFile}
       />
