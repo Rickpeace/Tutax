@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
-  GitBranch,
   CornerRightDown,
   Plus,
+  ImageOff,
 } from "lucide-react";
+import { signedImageUrl } from "@/lib/upload";
 import type {
   RenderNode,
   RenderStep,
@@ -87,9 +88,7 @@ function StepCard({
           : "border-border hover:border-primary/40"
       }`}
     >
-      <div className="flex size-[38px] shrink-0 items-center justify-center rounded-lg border border-line-2 bg-background text-muted-foreground">
-        {isQ ? <GitBranch className="size-4 text-primary" /> : <span className="text-xs">•</span>}
-      </div>
+      <StepThumb imagePath={node.step.image_path} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-ink">
           {node.step.title?.trim() || "Ohne Titel"}
@@ -101,6 +100,41 @@ function StepCard({
       </div>
       <ChevronRight className="size-4 text-line" />
     </button>
+  );
+}
+
+/** Bild-Thumbnail der Kachel; zeigt „kein Bild" wenn noch kein Screenshot da ist. */
+function StepThumb({ imagePath }: { imagePath: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (imagePath) {
+      signedImageUrl(imagePath).then((u) => {
+        if (active) setUrl(u);
+      });
+    } else {
+      setUrl(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [imagePath]);
+
+  return (
+    <div className="size-[38px] shrink-0 overflow-hidden rounded-lg border border-line-2 bg-background">
+      {imagePath ? (
+        url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" className="size-full object-cover" />
+        ) : (
+          <div className="size-full animate-pulse bg-line-2" />
+        )
+      ) : (
+        <div className="flex size-full items-center justify-center text-line" title="Kein Bild">
+          <ImageOff className="size-4" />
+        </div>
+      )}
+    </div>
   );
 }
 
