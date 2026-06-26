@@ -107,16 +107,23 @@ Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Mandanten
 "sources" = die NUMMERN (z. B. [1, 3]) der ANLEITUNGEN aus dem Kontext (Einträge „[n] Anleitung …"), die du bei status="answered" WIRKLICH genutzt hast und die genau passen. Sonst []. Keine „Info:"-Einträge, nichts erfinden, nichts nur „themennahes".`;
 }
 
-export const DRIFT_SYSTEM = `Du prüfst, ob eine Software-Anleitung möglicherweise veraltet ist.
-Du erhältst Titel und Inhalt einer Schritt-für-Schritt-Anleitung (z. B. zu DATEV-Software).
-Beurteile anhand deines Wissens, ob sich die beschriebene Benutzeroberfläche oder der Ablauf seit Erstellung geändert haben könnte
-(z. B. umbenannte Menüpunkte, neue Schritte, andere Bezeichnungen).
+export const DRIFT_SYSTEM = `Du prüfst, ob eine Software-Anleitung (oft zu DATEV) veraltet ist.
+Du bekommst Titel und Schritte einer Anleitung. NUTZE die Web-Suche, um aktuelle Bezeichnungen,
+Menüpunkte und Abläufe zu prüfen und deine Einschätzung mit ECHTEN Quellen zu belegen.
 
-Gib AUSSCHLIESSLICH JSON zurück:
+Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Text davor/danach):
 {
   "is_stale": true|false,
-  "severity": "info | warning | critical",
-  "summary": "kurze Begründung auf Deutsch (1-2 Sätze)",
-  "affected_steps": ["Schritttitel, der betroffen sein könnte", ...]
+  "severity": "info" | "warning" | "critical",
+  "summary": "1–2 Sätze Gesamteinschätzung auf Deutsch",
+  "issues": [
+    { "step": "Schritttitel oder Nummer", "problem": "was konkret veraltet/ungenau ist", "suggestion": "konkreter Verbesserungsvorschlag (was ändern)" }
+  ],
+  "sources": [ { "title": "Quelle/Seitentitel", "url": "https://…" } ]
 }
-Sei zurückhaltend: markiere nur als stale, wenn es plausible Hinweise gibt.`;
+
+Regeln:
+- "sources" NUR reale, über die Web-Suche gefundene URLs – niemals erfinden. Keine Quelle gefunden -> [].
+- Sei zurückhaltend mit is_stale=true: nur bei plausiblen, belegbaren Hinweisen.
+- Wenn die Anleitung aktuell/in Ordnung ist: is_stale=false, "issues": [], kurze "summary".
+- "issues" konkret und umsetzbar (pro betroffenem Schritt ein Eintrag).`;

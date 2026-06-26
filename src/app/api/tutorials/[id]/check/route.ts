@@ -1,10 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { aiConfigured, AI } from "@/lib/ai";
-import { openai } from "@/lib/openai";
 import { DRIFT_SYSTEM } from "@/lib/ai-prompts";
 
-export const maxDuration = 40;
+export const maxDuration = 60;
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -57,25 +56,62 @@ export async function POST(
       .join("\n");
 
   try {
-    const completion = await openai().chat.completions.create({
-      model: AI.models.chat,
-      temperature: 0.1,
-      max_completion_tokens: 500,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: DRIFT_SYSTEM },
-        { role: "user", content },
-      ],
+    // Responses-API mit Web-Suche -> echte Quellen + detaillierte Prüfung.
+    const res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${AI.openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: AI.models.chat,
+        tools: [{ type: "web_search" }],
+        input: [
+          { role: "system", content: DRIFT_SYSTEM },
+          { role: "user", content },
+        ],
+        max_output_tokens: 1400,
+      }),
+      signal: AbortSignal.timeout(55000),
     });
-    const result = JSON.parse(completion.choices[0].message.content ?? "{}") as {
+    const j = await res.json();
+    if (j.error) throw new Error(j.error.message);
+
+    type Anno = { type?: string; url?: string; title?: string };
+    type Content = { type?: string; text?: string; annotations?: Anno[] };
+    const contents = (Array.isArray(j.output) ? j.output : []).flatMap(
+      (o: { content?: Content[] }) => o.content ?? [],
+    );
+    const text = contents
+      .filter((c: Content) => c.type === "output_text")
+      .map((c: Content) => c.text ?? "")
+      .join("\n")
+      .trim();
+    const citations = contents
+      .flatMap((c: Content) => c.annotations ?? [])
+      .filter((a: Anno) => a.type === "url_citation" && a.url)
+      .map((a: Anno) => ({ title: a.title || a.url!, url: a.url! }));
+
+    let result: {
       is_stale?: boolean;
       severity?: string;
       summary?: string;
-      affected_steps?: string[];
-    };
+      issues?: { step?: string; problem?: string; suggestion?: string }[];
+      sources?: { title?: string; url?: string }[];
+    } = {};
+    try {
+      const m = text.match(/\{[\s\S]*\}/);
+      result = JSON.parse(m ? m[0] : text);
+    } catch {
+      /* unparsebar -> als nicht-stale behandeln */
+    }
 
-    // Re-Check löst vorherige OFFENE Drift-Hinweise dieses Tutorials ab
-    // (verhindert veraltete/doppelte Warnungen nach einer Korrektur).
+    // Quellen mergen (Modell + echte Zitate), nach URL deduplizieren.
+    const srcMap = new Map<string, { title: string; url: string }>();
+    for (const s of [...(result.sources ?? []), ...citations]) {
+      if (s?.url) srcMap.set(s.url, { title: s.title || s.url, url: s.url });
+    }
+    const sources = [...srcMap.values()].slice(0, 5);
+    const issues = (Array.isArray(result.issues) ? result.issues : []).slice(0, 8);
+
+    // Re-Check löst vorherige offene Hinweise ab.
     await supabase
       .from("change_alerts")
       .update({ status: "resolved" })
@@ -89,14 +125,25 @@ export async function POST(
           ? result.severity
           : "warning",
         summary: result.summary ?? "Mögliche Änderung erkannt.",
-        details: { affected_steps: result.affected_steps ?? [] },
+        details: {
+          issues,
+          sources,
+          affected_steps: issues.map((i) => i.step).filter(Boolean),
+        },
       });
       await supabase.from("tutorials").update({ freshness: "stale" }).eq("id", id);
     } else {
       await supabase.from("tutorials").update({ freshness: "ok" }).eq("id", id);
     }
 
-    return NextResponse.json({ configured: true, ...result });
+    return NextResponse.json({
+      configured: true,
+      is_stale: !!result.is_stale,
+      severity: result.severity,
+      summary: result.summary,
+      issues,
+      sources,
+    });
   } catch (e) {
     return NextResponse.json(
       { configured: true, error: e instanceof Error ? e.message : "Fehler" },

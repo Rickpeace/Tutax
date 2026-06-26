@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ShieldCheck, PencilLine } from "lucide-react";
+import { AlertTriangle, ShieldCheck, PencilLine, ExternalLink } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { relativeDe } from "@/lib/format";
@@ -9,7 +9,13 @@ type AlertRow = {
   id: string;
   severity: string;
   summary: string;
-  details: { affected_steps?: string[] } | null;
+  details:
+    | {
+        affected_steps?: string[];
+        issues?: { step?: string; problem?: string; suggestion?: string }[];
+        sources?: { title?: string; url?: string }[];
+      }
+    | null;
   detected_at: string;
   tutorial_id: string;
   tutorials: { title: string } | null;
@@ -77,17 +83,58 @@ export default async function AlertsPage() {
                     </span>
                   </div>
                   <p className="mt-1.5 text-sm text-ink-2">{a.summary}</p>
-                  {a.details?.affected_steps?.length ? (
+
+                  {a.details?.issues?.length ? (
+                    <ul className="mt-3 space-y-2">
+                      {a.details.issues.map((it, i) => (
+                        <li key={i} className="rounded-lg border border-line-2 bg-muted/40 p-2.5 text-sm">
+                          {it.step && (
+                            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                              {it.step}
+                            </div>
+                          )}
+                          {it.problem && (
+                            <div className="mt-0.5 text-ink-2">
+                              <span className="font-semibold text-no">Problem:</span> {it.problem}
+                            </div>
+                          )}
+                          {it.suggestion && (
+                            <div className="mt-0.5 text-ink-2">
+                              <span className="font-semibold text-yes">Vorschlag:</span> {it.suggestion}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : a.details?.affected_steps?.length ? (
                     <ul className="mt-2 flex flex-wrap gap-1.5">
                       {a.details.affected_steps.map((s, i) => (
-                        <li
-                          key={i}
-                          className="rounded-md bg-muted px-2 py-0.5 text-xs text-ink-2"
-                        >
+                        <li key={i} className="rounded-md bg-muted px-2 py-0.5 text-xs text-ink-2">
                           {s}
                         </li>
                       ))}
                     </ul>
+                  ) : null}
+
+                  {a.details?.sources?.length ? (
+                    <div className="mt-3">
+                      <div className="text-xs font-bold text-muted-foreground">Quellen</div>
+                      <ul className="mt-1 space-y-1">
+                        {a.details.sources.map((s, i) => (
+                          <li key={i}>
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <ExternalLink className="size-3 shrink-0" />
+                              <span className="truncate">{s.title || s.url}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ) : null}
                   <div className="mt-3 flex items-center justify-between">
                     <Link
