@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PencilLine, Eye, Undo2, Sparkles } from "lucide-react";
@@ -28,6 +28,14 @@ export function TemplateSection({
   accountSlug: string;
 }) {
   const [pending, start] = useTransition();
+  // Optimistischer Schalter-Zustand; synct mit Server-Daten nach Fork/Reset.
+  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(items.map((i) => [i.templateId, i.enabled])),
+  );
+  useEffect(() => {
+    setEnabledMap(Object.fromEntries(items.map((i) => [i.templateId, i.enabled])));
+  }, [items]);
+
   if (!items.length) return null;
 
   const run = (fn: () => Promise<unknown>, msg?: string) =>
@@ -39,6 +47,16 @@ export function TemplateSection({
         toast.error(e instanceof Error ? e.message : "Fehler");
       }
     });
+
+  // Sofort umschalten, im Hintergrund speichern, bei Fehler zurückrollen.
+  const toggle = (templateId: string) => {
+    const next = !enabledMap[templateId];
+    setEnabledMap((m) => ({ ...m, [templateId]: next }));
+    setTemplateEnabled(templateId, next).catch(() => {
+      setEnabledMap((m) => ({ ...m, [templateId]: !next }));
+      toast.error("Konnte nicht speichern");
+    });
+  };
 
   return (
     <section>
@@ -68,16 +86,15 @@ export function TemplateSection({
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => run(() => setTemplateEnabled(it.templateId, !it.enabled))}
+                onClick={() => toggle(it.templateId)}
                 className="flex items-center gap-2 text-xs font-medium text-ink-2"
                 title="Auf der Hilfe-Seite zeigen"
               >
-                <Switch on={it.enabled} />
+                <Switch on={!!enabledMap[it.templateId]} />
                 <span className="hidden sm:inline">Auf Hilfe-Seite</span>
               </button>
 
-              {it.enabled && it.slug && (
+              {enabledMap[it.templateId] && it.slug && (
                 <Button
                   variant="outline"
                   size="sm"

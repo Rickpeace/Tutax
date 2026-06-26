@@ -18,7 +18,7 @@ export async function setTemplateEnabled(templateId: string, enabled: boolean) {
       { onConflict: "account_id,template_id" },
     );
   if (error) throw new Error(error.message);
-  revalidatePath("/app");
+  // Kein revalidatePath: das Dashboard aktualisiert den Schalter optimistisch (snappy).
 }
 
 /**
