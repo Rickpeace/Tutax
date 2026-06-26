@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink, Settings, Bell } from "lucide-react";
+import { ExternalLink, Settings, Bell, ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
 import { requireAccount } from "@/lib/account";
+import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default async function AppLayout({
     .from("change_alerts")
     .select("id", { count: "exact", head: true })
     .eq("status", "open");
+  const isAdmin = await checkAdmin();
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -33,6 +35,16 @@ export default async function AppLayout({
             {account.name}
           </span>
           <div className="ml-auto flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                nativeButton={false}
+                render={<Link href="/admin" />}
+              >
+                <ShieldCheck className="size-4" /> Admin
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"

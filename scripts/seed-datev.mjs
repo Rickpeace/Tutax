@@ -16,13 +16,19 @@ const mkBody = (text) => ({
   content: [{ type: "paragraph", content: text ? [{ type: "text", text }] : [] }],
 });
 
-const accs = (await admin.from("accounts").select("id, name").order("created_at")).data ?? [];
-if (accs.length !== 1) {
-  console.error(`Erwarte genau 1 Konto, gefunden: ${accs.length}. Abbruch.`);
-  process.exit(1);
+const AS_TEMPLATE = process.argv.includes("--templates");
+let ACC = null;
+if (AS_TEMPLATE) {
+  console.log("Seede als globale TEMPLATES (account_id = NULL, veröffentlicht)\n");
+} else {
+  const accs = (await admin.from("accounts").select("id, name").order("created_at")).data ?? [];
+  if (accs.length !== 1) {
+    console.error(`Erwarte genau 1 Konto, gefunden: ${accs.length}. Abbruch.`);
+    process.exit(1);
+  }
+  ACC = accs[0].id;
+  console.log(`Seede in Konto: ${accs[0].name} (${ACC})\n`);
 }
-const ACC = accs[0].id;
-console.log(`Seede in Konto: ${accs[0].name} (${ACC})\n`);
 
 async function ensureCategory(name) {
   const { data } = await admin.from("categories").select("id").eq("account_id", ACC).eq("name", name);
@@ -32,14 +38,21 @@ async function ensureCategory(name) {
   return c.id;
 }
 async function exists(title) {
-  const { data } = await admin.from("tutorials").select("id").eq("account_id", ACC).eq("title", title);
+  const q = admin.from("tutorials").select("id").eq("title", title);
+  const { data } = AS_TEMPLATE
+    ? await q.eq("is_template", true)
+    : await q.eq("account_id", ACC);
   return (data ?? []).length > 0;
 }
+const tutFields = (catId, title, description) =>
+  AS_TEMPLATE
+    ? { account_id: null, is_template: true, category_id: null, title, description, status: "published" }
+    : { account_id: ACC, category_id: catId, title, description, status: "draft" };
 
 async function insertLinear(catId, title, description, steps) {
   if (await exists(title)) return console.log("· übersprungen (existiert):", title);
   const tutId = uuid();
-  await admin.from("tutorials").insert({ id: tutId, account_id: ACC, category_id: catId, title, description, status: "draft" });
+  await admin.from("tutorials").insert({ id: tutId, ...tutFields(catId, title, description) });
   const ids = steps.map(() => uuid());
   await admin.from("steps").insert(
     steps.map((s, i) => ({ id: ids[i], tutorial_id: tutId, title: s.t, body: mkBody(s.b), position: i + 1, is_decision: false })),
@@ -56,7 +69,7 @@ async function insertTroubleshooter(catId) {
   const title = "SmartLogin: App startet nicht – Problembehebung";
   if (await exists(title)) return console.log("· übersprungen (existiert):", title);
   const tutId = uuid();
-  await admin.from("tutorials").insert({ id: tutId, account_id: ACC, category_id: catId, title, description: "Geführte Lösung – je nach Situation der richtige Weg.", status: "draft" });
+  await admin.from("tutorials").insert({ id: tutId, ...tutFields(catId, title, "Geführte Lösung – je nach Situation der richtige Weg.") });
   const S = {};
   const def = (k, t, b, decision = false) => (S[k] = { id: uuid(), t, b, decision });
   def("s1", "App öffnen", "Öffnen Sie die DATEV SmartLogin-App auf Ihrem Smartphone.");
@@ -91,9 +104,9 @@ async function insertTroubleshooter(catId) {
   console.log("✓ angelegt:", title, "(Verzweigungs-Troubleshooter)");
 }
 
-const cErste = await ensureCategory("Erste Schritte");
-const cLogin = await ensureCategory("SmartLogin & Anmeldung");
-const cBelege = await ensureCategory("Belege & Dokumente");
+const cErste = AS_TEMPLATE ? null : await ensureCategory("Erste Schritte");
+const cLogin = AS_TEMPLATE ? null : await ensureCategory("SmartLogin & Anmeldung");
+const cBelege = AS_TEMPLATE ? null : await ensureCategory("Belege & Dokumente");
 
 await insertLinear(cErste, "DATEV SmartLogin einrichten", "App installieren und in wenigen Schritten startklar.", [
   { t: "App installieren", b: "Laden Sie die App DATEV SmartLogin aus dem App Store (iPhone) oder Google Play Store (Android) und installieren Sie sie." },
