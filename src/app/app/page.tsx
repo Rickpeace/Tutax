@@ -10,7 +10,7 @@ export default async function DashboardPage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }] =
+  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }] =
     await Promise.all([
       supabase
         .from("tutorials")
@@ -29,16 +29,22 @@ export default async function DashboardPage() {
         .eq("account_id", account.id),
       supabase
         .from("tutorials")
-        .select("id, title, slug")
+        .select("id, title, slug, category_id")
         .eq("is_template", true)
         .eq("status", "published")
         .order("created_at", { ascending: true }),
+      supabase
+        .from("categories")
+        .select("id, name, position")
+        .is("account_id", null)
+        .order("position", { ascending: true }),
     ]);
 
   const allOwn = tutorials ?? [];
   const cats = categories ?? [];
   const ats = atRows ?? [];
   const templates = tpls ?? [];
+  const globalCatName = new Map((globalCats ?? []).map((c) => [c.id, c.name]));
   const ownById = new Map(allOwn.map((t) => [t.id, t]));
   const atByTpl = new Map(ats.map((a) => [a.template_id, a]));
   const forkIds = new Set(ats.map((a) => a.forked_tutorial_id).filter(Boolean) as string[]);
@@ -49,6 +55,7 @@ export default async function DashboardPage() {
   // Standard-Anleitungen (Templates)
   const templateItems: TemplateItem[] = templates.map((t) => {
     const row = atByTpl.get(t.id);
+    const categoryName = (t.category_id && globalCatName.get(t.category_id)) || "Sonstiges";
     if (row?.forked_tutorial_id) {
       const fork = ownById.get(row.forked_tutorial_id);
       return {
@@ -58,6 +65,7 @@ export default async function DashboardPage() {
         enabled: !!row.enabled,
         renderId: row.forked_tutorial_id,
         slug: fork?.slug ?? t.slug,
+        categoryName,
       };
     }
     return {
@@ -67,6 +75,7 @@ export default async function DashboardPage() {
       enabled: !!row?.enabled,
       renderId: t.id,
       slug: t.slug,
+      categoryName,
     };
   });
 

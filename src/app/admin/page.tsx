@@ -2,16 +2,26 @@ import { AlertTriangle, FileText } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NewTemplateButton } from "@/components/admin/new-template-button";
 import { TemplateActions } from "@/components/admin/template-actions";
+import { CategoryManager } from "@/components/admin/category-manager";
+import { TemplateCategorySelect } from "@/components/admin/template-category-select";
 
 export default async function AdminTemplatesPage() {
   const admin = createAdminClient();
-  const { data: templates } = await admin
-    .from("tutorials")
-    .select("id, title, status, slug, freshness")
-    .eq("is_template", true)
-    .order("created_at", { ascending: true });
+  const [{ data: templates }, { data: categories }] = await Promise.all([
+    admin
+      .from("tutorials")
+      .select("id, title, status, slug, freshness, category_id")
+      .eq("is_template", true)
+      .order("created_at", { ascending: true }),
+    admin
+      .from("categories")
+      .select("id, name, position")
+      .is("account_id", null)
+      .order("position", { ascending: true }),
+  ]);
 
   const list = templates ?? [];
+  const cats = categories ?? [];
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
@@ -23,6 +33,10 @@ export default async function AdminTemplatesPage() {
           </p>
         </div>
         <NewTemplateButton />
+      </div>
+
+      <div className="mt-6">
+        <CategoryManager categories={cats} />
       </div>
 
       {list.length === 0 ? (
@@ -59,7 +73,12 @@ export default async function AdminTemplatesPage() {
                     <AlertTriangle className="size-3" /> Prüfen
                   </span>
                 )}
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-3">
+                  <TemplateCategorySelect
+                    templateId={t.id}
+                    value={t.category_id}
+                    categories={cats}
+                  />
                   <TemplateActions id={t.id} published={published} />
                 </div>
               </div>

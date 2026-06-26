@@ -19,6 +19,7 @@ export type TemplateItem = {
   enabled: boolean;
   renderId: string;
   slug: string | null;
+  categoryName: string;
 };
 
 export function TemplateSection({ items }: { items: TemplateItem[] }) {
@@ -53,21 +54,23 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
     });
   };
 
-  return (
-    <section>
-      <div className="mb-3 flex items-center gap-2 border-b border-line-2 pb-1.5">
-        <Sparkles className="size-4 text-primary" />
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-          Standard-Anleitungen von Tutax
-        </h2>
-      </div>
-      <div className="space-y-2">
-        {items.map((it) => (
-          <div
-            key={it.templateId}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4"
-          >
-            <span
+  // Nach Kategorie gruppieren (Reihenfolge der ersten Vorkommen erhalten)
+  const groups: { name: string; rows: TemplateItem[] }[] = [];
+  for (const it of items) {
+    let g = groups.find((x) => x.name === it.categoryName);
+    if (!g) {
+      g = { name: it.categoryName, rows: [] };
+      groups.push(g);
+    }
+    g.rows.push(it);
+  }
+
+  const renderRow = (it: TemplateItem) => (
+    <div
+      key={it.templateId}
+      className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4"
+    >
+      <span
               className={
                 it.kind === "fork"
                   ? "rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
@@ -124,9 +127,27 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
               )}
             </div>
           </div>
+  );
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-2 border-b border-line-2 pb-1.5">
+        <Sparkles className="size-4 text-primary" />
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+          Standard-Anleitungen von Tutax
+        </h2>
+      </div>
+      <div className="space-y-6">
+        {groups.map((g) => (
+          <div key={g.name}>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground/80">
+              {g.name}
+            </h3>
+            <div className="space-y-2">{g.rows.map(renderRow)}</div>
+          </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-3 text-xs text-muted-foreground">
         „Standard" wird zentral von Tutax gepflegt – Updates erscheinen automatisch.
         Beim Anpassen entsteht Ihre eigene Kopie („Angepasst").
       </p>

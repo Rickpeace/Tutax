@@ -68,3 +68,44 @@ export async function deleteTemplate(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
 }
+
+// ---- Globale (Standard-)Kategorien -----------------------------------------
+
+/** Globale Kategorie anlegen (erscheint beim Kunden + im Mandanten-Hub). */
+export async function createTemplateCategory(formData: FormData) {
+  await ensureAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return;
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("categories")
+    .select("id", { count: "exact", head: true })
+    .is("account_id", null);
+  const { error } = await admin
+    .from("categories")
+    .insert({ account_id: null, name, position: count ?? 0 });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin");
+}
+
+export async function deleteTemplateCategory(id: string) {
+  await ensureAdmin();
+  const admin = createAdminClient();
+  // Templates der Kategorie werden via FK (on delete set null) freigestellt.
+  const { error } = await admin.from("categories").delete().eq("id", id).is("account_id", null);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin");
+}
+
+/** Template einer globalen Kategorie zuordnen (oder lösen mit null). */
+export async function setTemplateCategory(templateId: string, categoryId: string | null) {
+  await ensureAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("tutorials")
+    .update({ category_id: categoryId })
+    .eq("id", templateId)
+    .eq("is_template", true);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin");
+}

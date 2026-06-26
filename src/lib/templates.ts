@@ -37,14 +37,14 @@ export async function getCatalog(
       .eq("account_id", accountId),
     client
       .from("tutorials")
-      .select("id, title, description, slug, status, freshness, created_at")
+      .select("id, title, description, slug, status, freshness, category_id, created_at")
       .eq("is_template", true)
       .eq("status", "published"),
   ]);
 
   const ownList = own ?? [];
   const atsList = ats ?? [];
-  const tplList = (tpls ?? []) as { id: string; title: string; description: string | null; slug: string | null; freshness: string }[];
+  const tplList = (tpls ?? []) as { id: string; title: string; description: string | null; slug: string | null; freshness: string; category_id: string | null }[];
   const ownById = new Map(ownList.map((o) => [o.id, o]));
   const atsByTpl = new Map(atsList.map((a) => [a.template_id, a]));
   const forkIds = new Set(atsList.map((a) => a.forked_tutorial_id).filter(Boolean) as string[]);
@@ -83,7 +83,7 @@ export async function getCatalog(
         slug: fork.slug,
         status: fork.status,
         freshness: fork.freshness,
-        categoryId: row.category_id ?? fork.category_id,
+        categoryId: t.category_id ?? row.category_id ?? fork.category_id,
         kind: "fork",
         enabled: !!row.enabled,
         visible: !!row.enabled && fork.status === "published",
@@ -98,7 +98,7 @@ export async function getCatalog(
         slug: t.slug,
         status: "published",
         freshness: t.freshness,
-        categoryId: row?.category_id ?? null,
+        categoryId: t.category_id ?? row?.category_id ?? null,
         kind: "standard",
         enabled: !!row?.enabled,
         visible: !!row?.enabled,

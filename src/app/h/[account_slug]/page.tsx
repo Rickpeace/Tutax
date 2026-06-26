@@ -18,7 +18,12 @@ async function load(accountSlug: string) {
 
   const [catalog, { data: categories }, { data: theme }] = await Promise.all([
     getCatalog(admin, account.id),
-    admin.from("categories").select("id, name, position").eq("account_id", account.id).order("position", { ascending: true }),
+    // eigene + globale (Standard-)Kategorien
+    admin
+      .from("categories")
+      .select("id, name, position, account_id")
+      .or(`account_id.eq.${account.id},account_id.is.null`)
+      .order("position", { ascending: true }),
     admin.from("themes").select("tokens, logo_path").eq("account_id", account.id).single(),
   ]);
 
@@ -57,7 +62,12 @@ export default async function HubPage({
       category: (e.categoryId && catName.get(e.categoryId)) || "Sonstiges",
     }));
 
-  const order = [...categories.map((c) => c.name), "Sonstiges"];
+  // eigene Kategorien zuerst, dann globale (Standard), Namen dedupliziert
+  const ordered = [
+    ...categories.filter((c) => c.account_id),
+    ...categories.filter((c) => !c.account_id),
+  ];
+  const order = [...new Set([...ordered.map((c) => c.name), "Sonstiges"])];
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
   const logoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
 
