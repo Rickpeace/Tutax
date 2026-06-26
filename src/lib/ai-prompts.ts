@@ -27,7 +27,7 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markd
 }
 
 Regeln (wichtig – sei mutig, treffe die Marke):
-- "primary" = die auffälligste Farbe aus den MARKENFARBEN-KANDIDATEN (kräftig/gesättigt). NIEMALS Schwarz, Weiß oder Grau als primary (das ist Text/Hintergrund) und KEIN generisches Bootstrap-Blau, wenn es eine markantere Marken-Farbe gibt.
+- "primary" = die charakteristischste Farbe aus den MARKENFARBEN-KANDIDATEN. Sie darf auch GEDÄMPFT/entsättigt sein (z. B. Salbeigrün, Taupe, Altrosa, Beige) – nimm sie trotzdem und weiche NICHT auf ein kräftigeres Standard-/Bootstrap-Blau aus, nur weil es bunter ist. NIEMALS Schwarz, Weiß oder neutrales Grau als primary.
 - "accent" = eine zweite markante Marken-/Signalfarbe, falls vorhanden (z. B. ein Grün als Kontrast).
 - Übernimm den Charakter der Marke: knallig → knallig, technisch/minimal → reduziert.
 - "shape.radius": eckige/technische Marken → 0–4 (scharfe Kanten); freundlich/modern → 10–16; verspielt → größer (nur eine Zahl). "shape.buttonStyle": GENAU einer der Werte solid | outline | pill (kein Freitext). "shape.shadow": GENAU einer von soft | medium | none.
@@ -44,6 +44,7 @@ export function ciAnalysisUser(signals: {
   fonts: string[];
   brandColors?: string[];
   cardHint?: string;
+  radiusHint?: string;
   description?: string;
   heroText?: string;
 }) {
@@ -53,10 +54,18 @@ export function ciAnalysisUser(signals: {
       : signals.cardHint === "filled"
         ? "Die Website nutzt v. a. gefüllte Flächen → shape.cardStyle = \"filled\"."
         : "";
+  const radiusLine =
+    signals.radiusHint === "pill"
+      ? "Die Website nutzt Pill-Buttons / stark abgerundete Ecken → shape.buttonStyle = \"pill\", shape.radius hoch (16+)."
+      : signals.radiusHint === "rund"
+        ? "Die Website nutzt deutlich abgerundete Ecken → shape.radius ~12–16."
+        : signals.radiusHint === "eckig"
+          ? "Die Website nutzt scharfe/eckige Ecken → shape.radius 0–4."
+          : "";
   return `Website: ${signals.url}
 Titel: ${signals.title ?? "—"}
 meta theme-color: ${signals.themeColor ?? "—"}
-Markenfarben-Kandidaten (kräftig/gesättigt – HIER liegt die Primär-/Akzentfarbe): ${signals.brandColors?.join(", ") || "—"}${cardLine ? "\n" + cardLine : ""}
+Markenfarben-Kandidaten (HIER liegt die Primär-/Akzentfarbe – können auch GEDÄMPFT sein, z. B. Salbeigrün): ${signals.brandColors?.join(", ") || "—"}${cardLine ? "\n" + cardLine : ""}${radiusLine ? "\n" + radiusLine : ""}
 Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colors.slice(0, 12).join(", ") || "—"}
 Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
 Texte der Website – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}

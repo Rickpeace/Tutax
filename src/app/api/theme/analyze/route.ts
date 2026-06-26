@@ -152,20 +152,19 @@ export async function POST(req: NextRequest) {
       /* CSS optional */
     }
 
-    // Gesättigte Markenfarben-Kandidaten (Schwarz/Weiß/Grau raus – das ist Text/Hintergrund).
-    const isVivid = (hex: string) => {
+    // Markenfarben über CHROMA (max-min) erkennen: erfasst auch GEDÄMPFTE Töne
+    // (Salbeigrün, Taupe, Altrosa), schließt aber echtes Grau/Schwarz/Weiß aus.
+    const isBrandColor = (hex: string) => {
       if (!/^#[0-9a-f]{6}$/i.test(hex)) return false;
-      const r = parseInt(hex.slice(1, 3), 16) / 255;
-      const g = parseInt(hex.slice(3, 5), 16) / 255;
-      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
       const max = Math.max(r, g, b);
       const min = Math.min(r, g, b);
       const l = (max + min) / 2;
-      const d = max - min;
-      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-      return s > 0.35 && l > 0.18 && l < 0.82;
+      return max - min >= 12 && l > 30 && l < 236;
     };
-    const brandColors = signals.colors.filter(isVivid).slice(0, 6);
+    const brandColors = signals.colors.filter(isBrandColor).slice(0, 8);
 
     // Heuristik: nutzt die Seite die Markenfarbe v. a. als Rahmen (Outline) oder als Fläche?
     let cardHint = "";
@@ -182,6 +181,26 @@ export async function POST(req: NextRequest) {
       }
       if (borderN >= 3 && borderN > fillN) cardHint = "outline";
       else if (fillN > borderN) cardHint = "filled";
+    } catch {
+      /* optional */
+    }
+
+    // Form-Hinweis aus border-radius im CSS (Pill / rund / eckig).
+    let radiusHint = "";
+    try {
+      const radii: number[] = [];
+      for (const m of cssText.matchAll(/border-radius:\s*([0-9.]+)(px|rem|em)?/gi)) {
+        let v = parseFloat(m[1]);
+        const unit = (m[2] || "px").toLowerCase();
+        if (unit === "rem" || unit === "em") v *= 16;
+        if (!Number.isNaN(v)) radii.push(v);
+      }
+      const pill = radii.filter((v) => v >= 100).length;
+      const round = radii.filter((v) => v >= 14 && v < 100).length;
+      const sharp = radii.filter((v) => v <= 4).length;
+      if (pill >= 2) radiusHint = "pill";
+      else if (round >= 2 && round >= sharp) radiusHint = "rund";
+      else if (sharp >= 2 && sharp > round) radiusHint = "eckig";
     } catch {
       /* optional */
     }
@@ -210,7 +229,7 @@ export async function POST(req: NextRequest) {
 
     // Vision-Bild nur als BASE64 und nur bei Raster-Format (OpenAI lädt nichts selbst -> kein 400).
     const isRaster = /image\/(png|jpe?g|gif|webp)/i.test(logoCt);
-    const userText = ciAnalysisUser({ ...signals, brandColors, cardHint });
+    const userText = ciAnalysisUser({ ...signals, brandColors, cardHint, radiusHint });
     const userContent: OpenAIUserContent =
       logoBuf && isRaster
         ? [
