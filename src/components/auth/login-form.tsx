@@ -83,15 +83,20 @@ export function LoginForm({ next }: { next: string }) {
         </form>
       )}
 
-      <button
-        type="button"
-        onClick={() => setMode(mode === "password" ? "magic" : "password")}
-        className="mt-4 text-sm font-medium text-primary hover:underline"
-      >
-        {mode === "password"
-          ? "Stattdessen mit Magic Link anmelden"
-          : "Stattdessen mit Passwort anmelden"}
-      </button>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setMode(mode === "password" ? "magic" : "password")}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          {mode === "password"
+            ? "Stattdessen mit Magic Link anmelden"
+            : "Stattdessen mit Passwort anmelden"}
+        </button>
+        <Link href="/forgot" className="text-sm text-muted-foreground hover:text-ink">
+          Passwort vergessen?
+        </Link>
+      </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
         Noch kein Konto?{" "}

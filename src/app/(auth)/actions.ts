@@ -81,6 +81,42 @@ export async function signInWithMagicLink(
   return { message: "Magic Link gesendet – prüfen Sie Ihr Postfach." };
 }
 
+/** Passwort-Reset anfordern (Mail mit Link). */
+export async function requestPasswordReset(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Bitte E-Mail eingeben." };
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${appUrl()}/auth/confirm?next=/reset`,
+  });
+  // Generische Meldung (keine Konto-Enumeration).
+  return {
+    message: "Wenn ein Konto existiert, haben wir Ihnen einen Link zum Zurücksetzen geschickt. Prüfen Sie Ihr Postfach.",
+  };
+}
+
+/** Neues Passwort setzen (innerhalb der Recovery-Session). */
+export async function updatePassword(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8)
+    return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return { error: "Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an." };
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: uebersetzeAuthFehler(error.message) };
+  redirect("/app");
+}
+
 /** Abmelden */
 export async function signOut() {
   const supabase = await createClient();
