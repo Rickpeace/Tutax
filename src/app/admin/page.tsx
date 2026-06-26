@@ -73,7 +73,7 @@ export default async function AdminTemplatesPage() {
                     <AlertTriangle className="size-3" /> Prüfen
                   </span>
                 )}
-                <div className="ml-auto flex items-center gap-3">
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                   <TemplateCategorySelect
                     templateId={t.id}
                     value={t.category_id}
