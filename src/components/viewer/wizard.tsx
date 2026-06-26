@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
@@ -11,11 +11,13 @@ export function Wizard({
   steps,
   branches,
   imageUrls,
+  placeholders = false,
 }: {
   rootId: string | null;
   steps: Step[];
   branches: StepBranch[];
   imageUrls: Record<string, string>;
+  placeholders?: boolean;
 }) {
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
   const branchesByStep = useMemo(() => {
@@ -54,11 +56,15 @@ export function Wizard({
     <div className="w-full max-w-md rounded-2xl border border-black/5 bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5">
       {step ? (
         <>
-          {imageUrls[step.id] && (
+          {imageUrls[step.id] ? (
             <div className="mb-4">
               <ViewerImage url={imageUrls[step.id]} highlights={step.highlights ?? []} />
             </div>
-          )}
+          ) : placeholders ? (
+            <div className="mb-4">
+              <StepPlaceholder title={step.title} />
+            </div>
+          ) : null}
           {step.title && (
             <h2 className="text-lg font-bold text-[var(--brand-ink)]">{step.title}</h2>
           )}
@@ -126,6 +132,24 @@ export function Wizard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Platzhalter-Grafik für Standard-Templates ohne echten Screenshot. */
+function StepPlaceholder({ title }: { title: string | null }) {
+  return (
+    <div
+      className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-center"
+      style={{
+        borderColor: "color-mix(in srgb, var(--brand-accent) 35%, transparent)",
+        background: "color-mix(in srgb, var(--brand-accent) 7%, white)",
+      }}
+    >
+      <ImageIcon className="size-8" style={{ color: "var(--brand-accent)" }} />
+      <span className="max-w-[80%] text-xs font-medium text-muted-foreground">
+        {title?.trim() || "Screenshot folgt"}
+      </span>
     </div>
   );
 }

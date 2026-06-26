@@ -101,6 +101,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
           steps={steps}
           branches={branches}
           imageUrls={imageUrls}
+          placeholders={tutorial.is_template}
         />
       </div>
     </div>

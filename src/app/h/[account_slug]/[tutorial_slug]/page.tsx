@@ -107,6 +107,7 @@ export default async function ViewerPage({
           steps={steps}
           branches={branches}
           imageUrls={imageUrls}
+          placeholders={tutorial.is_template}
         />
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
