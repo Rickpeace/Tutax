@@ -62,7 +62,17 @@ function extractSignals(html: string, pageUrl: string) {
     }
   }
 
-  return { url: pageUrl, title, themeColor, ogImage, colors, fonts: [...fonts], logo, cssHrefs };
+  // Echte Texte der Seite (für Slogan/Untertitel)
+  const description =
+    get(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+  const heroText = html
+    .match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+    ?.replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { url: pageUrl, title, themeColor, ogImage, colors, fonts: [...fonts], logo, cssHrefs, description, heroText };
 }
 
 export async function POST(req: NextRequest) {

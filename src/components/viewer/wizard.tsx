@@ -53,7 +53,14 @@ export function Wizard({
   const step = cur != null ? stepById.get(cur) : null;
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-black/5 bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5">
+    <div
+      className="w-full max-w-md border bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5"
+      style={{
+        borderRadius: "var(--brand-radius, 16px)",
+        borderColor: "var(--brand-card-border, rgba(16,21,36,0.06))",
+        borderWidth: "var(--brand-card-bw, 1px)",
+      }}
+    >
       {step ? (
         <>
           {imageUrls[step.id] ? (
@@ -66,7 +73,16 @@ export function Wizard({
             </div>
           ) : null}
           {step.title && (
-            <h2 className="text-lg font-bold text-[var(--brand-ink)]">{step.title}</h2>
+            <h2
+              className="text-lg font-bold"
+              style={{
+                color: "var(--brand-title, var(--brand-ink))",
+                fontFamily: "var(--brand-font-heading)",
+                fontWeight: "var(--brand-heading-weight, 700)",
+              }}
+            >
+              {step.title}
+            </h2>
           )}
           <div className="mt-1.5 text-sm text-ink-2">
             <RichTextView doc={step.body} />
@@ -79,8 +95,12 @@ export function Wizard({
                   <button
                     key={b.id}
                     onClick={() => go(b.target_step_id)}
-                    className="w-full rounded-xl border-2 bg-white px-4 py-3 text-base font-bold transition-transform active:translate-y-px"
-                    style={{ borderColor: b.color ?? "var(--brand-accent)", color: b.color ?? "var(--brand-accent)" }}
+                    className="w-full border-2 bg-white px-4 py-3 text-base font-bold transition-transform active:translate-y-px"
+                    style={{
+                      borderColor: b.color ?? "var(--brand-accent)",
+                      color: b.color ?? "var(--brand-accent)",
+                      borderRadius: "var(--brand-btn-radius, 12px)",
+                    }}
                   >
                     {b.label || "Weiter"}
                   </button>
@@ -117,8 +137,8 @@ export function Wizard({
           </p>
           <button
             onClick={restart}
-            className="mt-5 flex items-center gap-1.5 rounded-xl px-5 py-3 text-base font-semibold text-white"
-            style={{ background: "var(--brand-accent)" }}
+            className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-semibold text-white"
+            style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-btn-radius, 12px)" }}
           >
             <RotateCcw className="size-4" /> Von vorne
           </button>
@@ -166,8 +186,8 @@ function NextButton({
   return (
     <button
       onClick={() => onNext(target)}
-      className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold text-white transition-transform active:translate-y-px"
-      style={{ background: "var(--brand-accent)" }}
+      className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-semibold text-white transition-transform active:translate-y-px"
+      style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-btn-radius, 12px)" }}
     >
       {hasNext ? (
         <>

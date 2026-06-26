@@ -72,6 +72,8 @@ export function brandStyle(tokens: unknown): CSSProperties {
   if (ty.headingFont) s["--brand-font-heading"] = String(ty.headingFont);
   if (ty.headingWeight != null) s["--brand-heading-weight"] = String(ty.headingWeight);
   if (sh.radius != null) s["--brand-radius"] = `${parseInt(String(sh.radius), 10) || 0}px`;
+  const radiusPx = sh.radius != null ? `${parseInt(String(sh.radius), 10) || 0}px` : "12px";
+  s["--brand-btn-radius"] = sh.buttonStyle === "pill" ? "999px" : radiusPx;
 
   // Card-/Titel-Stil aus dem Design ableiten (outline | elevated | filled).
   const accent = (c.primary as string) || "#3d4ee6";
