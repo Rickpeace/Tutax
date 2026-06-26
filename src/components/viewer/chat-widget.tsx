@@ -9,6 +9,7 @@ import {
   Sparkles,
   ArrowRight,
   Layers,
+  RotateCcw,
 } from "lucide-react";
 
 type Source = { title: string; slug: string };
@@ -21,20 +22,51 @@ export function ChatWidget({
   accountSlug: string;
   accountName: string;
 }) {
+  const greeting: Msg = {
+    role: "bot",
+    text: `Hallo! Ich bin der Hilfe-Assistent von ${accountName}. Stellen Sie mir eine Frage – ich finde die passende Anleitung.`,
+  };
+  const storageKey = `tutax-chat-${accountSlug}`;
+
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msgs, setMsgs] = useState<Msg[]>([
-    {
-      role: "bot",
-      text: `Hallo! Ich bin der Hilfe-Assistent von ${accountName}. Stellen Sie mir eine Frage – ich finde die passende Anleitung.`,
-    },
-  ]);
+  const [msgs, setMsgs] = useState<Msg[]>([greeting]);
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Gespräch aus localStorage wiederherstellen (übersteht Navigieren/Reload).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved?.msgs) && saved.msgs.length) setMsgs(saved.msgs);
+        if (typeof saved?.open === "boolean") setOpen(saved.open);
+      }
+    } catch {}
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Gespräch speichern (max. 60 Nachrichten).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ msgs: msgs.slice(-60), open }));
+    } catch {}
+  }, [msgs, open, hydrated, storageKey]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs, busy]);
+
+  function resetChat() {
+    setMsgs([greeting]);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+  }
 
   async function send() {
     const q = input.trim();
@@ -79,6 +111,16 @@ export function ChatWidget({
           >
             <Sparkles className="size-4" style={{ color: "var(--brand-accent)" }} />
             <span className="text-sm font-bold text-[var(--brand-ink)]">Hilfe-Assistent</span>
+            {msgs.length > 1 && (
+              <button
+                onClick={resetChat}
+                title="Gespräch zurücksetzen"
+                aria-label="Gespräch zurücksetzen"
+                className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:text-[var(--brand-ink)]"
+              >
+                <RotateCcw className="size-3.5" /> Neu
+              </button>
+            )}
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">

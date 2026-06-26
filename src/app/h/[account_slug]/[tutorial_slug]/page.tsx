@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
@@ -97,6 +99,13 @@ export default async function ViewerPage({
             <div className="text-xs text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>
+
+        <Link
+          href={`/h/${account.slug}`}
+          className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
+        >
+          <ArrowLeft className="size-4" /> Alle Anleitungen
+        </Link>
 
         <h1 className="mb-3 text-base font-semibold text-[var(--brand-ink)]">
           {tutorial.title}
