@@ -4,6 +4,7 @@ type Tokens = {
   colors?: Record<string, string>;
   typography?: { headingWeight?: number | string };
   shape?: { radius?: number | string; buttonStyle?: string; cardStyle?: string };
+  content?: { tagline?: string };
 };
 
 /** Kompakte Vorschau, wie die Hilfe-Seite mit einem Design aussieht. */
@@ -55,8 +56,13 @@ export function BrandPreview({
               {initial}
             </div>
           )}
-          <div className="text-base" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: headingColor }}>
-            {accountName || "Ihre Kanzlei"}
+          <div>
+            <div className="text-base leading-tight" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: headingColor }}>
+              {accountName || "Ihre Kanzlei"}
+            </div>
+            <div className="text-[10px]" style={{ opacity: 0.6 }}>
+              {t.content?.tagline?.trim() || "Hilfe & Anleitungen"}
+            </div>
           </div>
         </div>
 

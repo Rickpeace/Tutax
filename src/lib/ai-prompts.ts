@@ -22,7 +22,8 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markd
     "bodyFont": "z. B. Inter, sans-serif",
     "headingWeight": 700
   },
-  "shape": { "radius": 12, "shadow": "soft | medium | none", "buttonStyle": "solid | outline | pill", "cardStyle": "outline | filled | elevated" }
+  "shape": { "radius": 12, "shadow": "soft | medium | none", "buttonStyle": "solid | outline | pill", "cardStyle": "outline | filled | elevated" },
+  "content": { "tagline": "kurzer Slogan/Positionierung der Kanzlei aus den Texten (max. 8 Wörter, Deutsch, ohne Anführungszeichen)" }
 }
 
 Regeln (wichtig – sei mutig, treffe die Marke):
@@ -43,6 +44,8 @@ export function ciAnalysisUser(signals: {
   fonts: string[];
   brandColors?: string[];
   cardHint?: string;
+  description?: string;
+  heroText?: string;
 }) {
   const cardLine =
     signals.cardHint === "outline"
@@ -56,9 +59,10 @@ meta theme-color: ${signals.themeColor ?? "—"}
 Markenfarben-Kandidaten (kräftig/gesättigt – HIER liegt die Primär-/Akzentfarbe): ${signals.brandColors?.join(", ") || "—"}${cardLine ? "\n" + cardLine : ""}
 Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colors.slice(0, 12).join(", ") || "—"}
 Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
+Texte der Website – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}
 
 Beigefügte Bilder: das erste ist das Logo der Kanzlei – seine kräftigen Farben sind die Markenfarben (Primär/Akzent).
-Leite daraus das Theme-JSON ab und treffe die Marke mutig.`;
+Leite daraus das Theme-JSON ab und treffe die Marke mutig. Formuliere aus den Texten einen kurzen "content.tagline".`;
 }
 
 export function chatSystem(accountName: string) {
