@@ -227,16 +227,36 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Vision-Bild nur als BASE64 und nur bei Raster-Format (OpenAI lädt nichts selbst -> kein 400).
+    // Screenshot der gerenderten Seite holen (bestes Signal – zuverlässiger als CSS).
+    let shotDataUrl = "";
+    try {
+      const shotUrl = `https://image.thum.io/get/width/1200/crop/1500/noanimate/${url}`;
+      const r = await fetch(shotUrl, {
+        signal: AbortSignal.timeout(15000),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
+      });
+      const ct = r.headers.get("content-type") ?? "";
+      if (r.ok && /image\/(png|jpe?g|webp)/i.test(ct)) {
+        const b = Buffer.from(await r.arrayBuffer());
+        if (b.length > 3000) shotDataUrl = `data:${ct};base64,${b.toString("base64")}`;
+      }
+    } catch {
+      /* Screenshot optional */
+    }
+
+    // Bilder an die Vision: Screenshot zuerst (Hauptsignal), dann Logo (Raster).
     const isRaster = /image\/(png|jpe?g|gif|webp)/i.test(logoCt);
-    const userText = ciAnalysisUser({ ...signals, brandColors, cardHint, radiusHint });
-    const userContent: OpenAIUserContent =
-      logoBuf && isRaster
-        ? [
-            { type: "text", text: userText },
-            { type: "image_url", image_url: { url: `data:${logoCt};base64,${logoBuf.toString("base64")}` } },
-          ]
-        : userText;
+    const images: string[] = [];
+    if (shotDataUrl) images.push(shotDataUrl);
+    if (logoBuf && isRaster) images.push(`data:${logoCt};base64,${logoBuf.toString("base64")}`);
+
+    const userText = ciAnalysisUser({ ...signals, brandColors, cardHint, radiusHint, hasShot: !!shotDataUrl });
+    const userContent: OpenAIUserContent = images.length
+      ? [
+          { type: "text", text: userText },
+          ...images.map((u) => ({ type: "image_url" as const, image_url: { url: u } })),
+        ]
+      : userText;
 
     const completion = await openai().chat.completions.create({
       model: AI.models.vision,

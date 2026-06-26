@@ -1,7 +1,8 @@
 // Zentrale KI-Prompts (alle OpenAI). Hier zentral pflegbar.
 
 export const CI_ANALYSIS_SYSTEM = `Du bist ein UI-Designer, der die Corporate Identity einer Website analysiert.
-Du erhältst die häufigsten Farben aus dem echten Website-CSS, Schrift-Hinweise und Bilder (Logo + ggf. Vorschaubild) einer Steuerkanzlei.
+Du erhältst i. d. R. einen SCREENSHOT der Website (Hauptquelle!), dazu häufige CSS-Farben, Schrift-Hinweise und das Logo einer Steuerkanzlei.
+Wenn ein Screenshot vorliegt: bestimme die dominante Marken-/Akzentfarbe und den Stil VISUELL aus dem Screenshot – die CSS-Farbliste ist nur Ergänzung (enthält oft Framework-Defaults wie Bootstrap-Blau, die NICHT die Marke sind).
 Leite ein Theme ab, das die Marke TREU und KRÄFTIG widerspiegelt – die eingebettete Hilfe-Seite soll wie ein nahtloser Teil der Website wirken. NICHT abschwächen, NICHT „vertasteful-en".
 
 Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markdown, kein Text davor/danach):
@@ -47,6 +48,7 @@ export function ciAnalysisUser(signals: {
   radiusHint?: string;
   description?: string;
   heroText?: string;
+  hasShot?: boolean;
 }) {
   const cardLine =
     signals.cardHint === "outline"
@@ -70,8 +72,12 @@ Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colo
 Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
 Texte der Website – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}
 
-Beigefügte Bilder: das erste ist das Logo der Kanzlei – seine kräftigen Farben sind die Markenfarben (Primär/Akzent).
-Leite daraus das Theme-JSON ab und treffe die Marke mutig. Formuliere aus den Texten einen kurzen "content.tagline".`;
+${
+    signals.hasShot
+      ? "Beigefügte Bilder: das ERSTE ist ein SCREENSHOT der gerenderten Website – leite Markenfarbe (primary/accent), Stil (cardStyle) und Form (radius/buttonStyle) PRIMÄR daraus ab; das ist verlässlicher als die CSS-Farbliste (dort stecken oft Framework-Defaults wie Bootstrap-Blau). Das zweite Bild (falls vorhanden) ist das Logo."
+      : "Beigefügtes Bild (falls vorhanden): das Logo der Kanzlei – seine Farben sind die Markenfarben."
+  }
+Leite daraus das Theme-JSON ab und treffe die Marke. Formuliere aus den Texten einen kurzen "content.tagline".`;
 }
 
 export function chatSystem(accountName: string) {
