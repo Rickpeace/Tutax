@@ -1,0 +1,209 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   THEME MAPPING
+   App-Chrome-Tokens aus prototyp-v4.jsx / ARCHITEKTUR.md §13.
+   shadcn liest --primary/--background/... ; zusätzlich exponieren
+   wir die Signature-Verzweigungsfarben (yes/no) und die CI-Brand-
+   Variablen (--brand-*), die im öffentlichen Viewer/Hub pro Account
+   zur Laufzeit überschrieben werden (§8 Theme-Tokens).
+   ============================================================ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* App-Chrome Spezial-Tokens (§13) */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+
+  /* Signature: Verzweigungsfarben (NUR Ja/Nein-Äste, §13) */
+  --color-yes: var(--yes);
+  --color-yes-soft: var(--yes-soft);
+  --color-no: var(--no);
+  --color-no-soft: var(--no-soft);
+
+  /* CI-Brand (öffentlicher Viewer/Hub) — Default = Indigo, pro Account überschrieben */
+  --color-brand: var(--brand-accent);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-ink: var(--brand-ink);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Fonts via next/font: --font-sans (Inter) & --font-display (Space Grotesk) */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius: 0.75rem; /* 12px – Buttons 10–12, Karten via radius-xl ~16 */
+
+  /* App-Chrome-Palette (§13) */
+  --ink: #101524;
+  --ink-2: #3b4254;
+  --line: #e7e8ee;
+  --line-2: #f1f2f6;
+
+  --background: #f7f8fb; /* bg */
+  --foreground: #101524; /* ink */
+  --card: #ffffff;
+  --card-foreground: #101524;
+  --popover: #ffffff;
+  --popover-foreground: #101524;
+
+  --primary: #3d4ee6; /* Indigo – primäre Aktion */
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f6; /* line2 */
+  --secondary-foreground: #101524;
+  --muted: #f1f2f6;
+  --muted-foreground: #6b7280;
+  --accent: #eef0fe; /* accentSoft – dezente Hover-Fläche/Badge */
+  --accent-foreground: #3d4ee6;
+  --destructive: #d6455d; /* deckungsgleich mit "no"-Rosé */
+
+  --border: #e7e8ee; /* line */
+  --input: #e7e8ee;
+  --ring: #3d4ee6; /* Indigo Fokus-Ring */
+
+  /* Signature-Verzweigungsfarben */
+  --yes: #0f9d72;
+  --yes-soft: #e9f7f1;
+  --no: #d6455d;
+  --no-soft: #fdedf0;
+
+  /* CI-Brand-Defaults (Indigo) – im Viewer/Hub pro Account überschrieben */
+  --brand-accent: #3d4ee6;
+  --brand-soft: #eef0fe;
+  --brand-bg: #f6f7fe;
+  --brand-ink: #101524;
+
+  --chart-1: #3d4ee6;
+  --chart-2: #0f9d72;
+  --chart-3: #d6455d;
+  --chart-4: #6b7280;
+  --chart-5: #3b4254;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #101524;
+  --sidebar-primary: #3d4ee6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0fe;
+  --sidebar-accent-foreground: #3d4ee6;
+  --sidebar-border: #e7e8ee;
+  --sidebar-ring: #3d4ee6;
+}
+
+.dark {
+  /* Dark Mode im App-Chrome bewusst NICHT aktiv (Prototyp ist Light).
+     Werte als Sicherheitsnetz für shadcn-Komponenten belassen. */
+  --background: #0c1322;
+  --foreground: #f7f8fb;
+  --card: #101524;
+  --card-foreground: #f7f8fb;
+  --popover: #101524;
+  --popover-foreground: #f7f8fb;
+  --primary: #6b78ee;
+  --primary-foreground: #0c1322;
+  --secondary: #1b2540;
+  --secondary-foreground: #f7f8fb;
+  --muted: #1b2540;
+  --muted-foreground: #9aa3b5;
+  --accent: #1b2540;
+  --accent-foreground: #f7f8fb;
+  --destructive: #e06a7e;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #6b78ee;
+  --ink: #f7f8fb;
+  --ink-2: #cfd6e6;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-2: rgba(255, 255, 255, 0.06);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+  /* Signature: Headings in der Display-Schrift, eng gesetzt */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+  }
+}
+
+/* ============================================================
+   Marken-Helfer / Texturen
+   ============================================================ */
+.font-display {
+  font-family: var(--font-display);
+}
+.bg-dotgrid {
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.bg-dotgrid-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+/* Verzweigungs-Motiv: farbiger linker Rand */
+.branch-yes {
+  border-left: 3px solid var(--yes);
+  background: linear-gradient(90deg, var(--yes-soft), transparent 60%);
+}
+.branch-no {
+  border-left: 3px solid var(--no);
+  background: linear-gradient(90deg, var(--no-soft), transparent 60%);
+}
