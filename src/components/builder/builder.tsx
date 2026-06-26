@@ -93,26 +93,12 @@ export function Builder({
     [router],
   );
 
-  // Debounced Auto-Save für Titel/Text (pro Schritt).
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const pendings = useRef(new Map<string, { title?: string; body?: unknown }>());
-
-  const patchStep = useCallback(
-    (id: string, patch: { title?: string; body?: unknown }) => {
+  // Explizites Speichern (Titel/Text) – kein Auto-Save mehr bei jedem Tastendruck.
+  const dirtyRef = useRef(false);
+  const saveStep = useCallback(
+    (id: string, patch: { title: string; body: unknown }) => {
       setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-      const merged = { ...(pendings.current.get(id) ?? {}), ...patch };
-      pendings.current.set(id, merged);
-      const t = timers.current.get(id);
-      if (t) clearTimeout(t);
-      timers.current.set(
-        id,
-        setTimeout(() => {
-          const p = pendings.current.get(id) ?? {};
-          pendings.current.delete(id);
-          timers.current.delete(id);
-          persist(() => updateStep(id, p));
-        }, 600),
-      );
+      persist(() => updateStep(id, patch));
     },
     [persist],
   );
@@ -380,7 +366,11 @@ export function Builder({
           <Flow
             tree={tree}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              if (dirtyRef.current && id !== selectedId && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+              dirtyRef.current = false;
+              setSelectedId(id);
+            }}
             onInsertAfter={insertAfter}
             onInsertIntoBranch={insertIntoBranch}
           />
@@ -400,7 +390,11 @@ export function Builder({
       <Sheet
         open={!!selectedStep}
         onOpenChange={(o) => {
-          if (!o) setSelectedId(null);
+          if (!o) {
+            if (dirtyRef.current && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+            dirtyRef.current = false;
+            setSelectedId(null);
+          }
         }}
       >
         <SheetContent
@@ -422,7 +416,10 @@ export function Builder({
                 tutorialId={tutorialId}
                 allSteps={steps}
                 branches={selectedBranches}
-                onPatchStep={patchStep}
+                onSaveStep={saveStep}
+                onDirtyChange={(d) => {
+                  dirtyRef.current = d;
+                }}
                 onSetImage={setStepImage}
                 onSetHighlights={setStepHighlights}
                 onSetDecision={handleSetDecision}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Plus, Trash2, GitBranch, Check, Loader2, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,14 +10,13 @@ import { RichText } from "@/components/builder/rich-text";
 import { ImageField } from "@/components/builder/image-field";
 import type { Step, StepBranch, Highlight } from "@/lib/types";
 
-type SaveState = "idle" | "saving" | "saved";
-
 export function StepPanel({
   step,
   tutorialId,
   allSteps,
   branches,
-  onPatchStep,
+  onSaveStep,
+  onDirtyChange,
   onSetImage,
   onSetHighlights,
   onSetDecision,
@@ -30,7 +29,8 @@ export function StepPanel({
   tutorialId: string;
   allSteps: Step[];
   branches: StepBranch[];
-  onPatchStep: (id: string, patch: { title?: string; body?: unknown }) => void;
+  onSaveStep: (id: string, patch: { title: string; body: unknown }) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onSetImage: (
     id: string,
     img: {
@@ -50,15 +50,26 @@ export function StepPanel({
   onDeleteStep: (id: string) => void;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [body, setBody] = useState<unknown>(step.body ?? null);
+  const [dirty, setDirty] = useState(false);
   const [rtKey, setRtKey] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function touched() {
-    setSaveState("saving");
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaveState("saved"), 800);
+  // Eltern (Builder) über ungespeicherte Änderungen informieren (Schließen-Abfrage).
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  function save() {
+    onSaveStep(step.id, { title, body });
+    setDirty(false);
+    toast.success("Schritt gespeichert");
+  }
+  function discard() {
+    setTitle(step.title ?? "");
+    setBody(step.body ?? null);
+    setRtKey((k) => k + 1);
+    setDirty(false);
   }
 
   // KI-Schritt-Assistent: aus dem Screenshot Titel, Text und Markierung vorschlagen.
@@ -74,16 +85,12 @@ export function StepPanel({
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "KI-Fehler");
 
-      if (j.title) {
-        setTitle(j.title);
-        onPatchStep(step.id, { title: j.title });
-      }
+      if (j.title) setTitle(j.title);
       if (j.body) {
-        onPatchStep(step.id, {
-          body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: j.body }] }] },
-        });
+        setBody({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: j.body }] }] });
         setRtKey((k) => k + 1); // RichText neu mounten, damit der Text erscheint
       }
+      if (j.title || j.body) setDirty(true);
       if (j.highlight) {
         const hl: Highlight = {
           id: crypto.randomUUID(),
@@ -97,8 +104,7 @@ export function StepPanel({
         };
         onSetHighlights(step.id, [...(step.highlights ?? []), hl]);
       }
-      touched();
-      toast.success("KI-Vorschlag übernommen – bei Bedarf anpassen.");
+      toast.success("KI-Vorschlag übernommen – prüfen & oben speichern.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Fehler");
     } finally {
@@ -110,18 +116,30 @@ export function StepPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="step-title">Titel</Label>
-          <SaveIndicator state={saveState} />
+      <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
+        <span className={`text-xs ${dirty ? "font-semibold text-no" : "text-muted-foreground"}`}>
+          {dirty ? "Ungespeicherte Änderungen" : "Gespeichert"}
+        </span>
+        <div className="flex gap-2">
+          {dirty && (
+            <Button variant="ghost" size="sm" onClick={discard}>
+              Verwerfen
+            </Button>
+          )}
+          <Button size="sm" onClick={save} disabled={!dirty}>
+            <Save className="size-4" /> Speichern
+          </Button>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="step-title">Titel</Label>
         <Input
           id="step-title"
           value={title}
           onChange={(e) => {
             setTitle(e.target.value);
-            onPatchStep(step.id, { title: e.target.value });
-            touched();
+            setDirty(true);
           }}
           placeholder="z. B. App öffnen"
         />
@@ -183,10 +201,10 @@ export function StepPanel({
         <Label>Erklärtext</Label>
         <RichText
           key={rtKey}
-          value={step.body}
+          value={body}
           onChange={(json) => {
-            onPatchStep(step.id, { body: json });
-            touched();
+            setBody(json);
+            setDirty(true);
           }}
         />
       </div>
@@ -305,18 +323,3 @@ function Switch({ on }: { on: boolean }) {
   );
 }
 
-function SaveIndicator({ state }: { state: SaveState }) {
-  if (state === "saving")
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Loader2 className="size-3 animate-spin" /> Speichert …
-      </span>
-    );
-  if (state === "saved")
-    return (
-      <span className="flex items-center gap-1 text-xs text-yes">
-        <Check className="size-3" /> Gespeichert
-      </span>
-    );
-  return null;
-}
