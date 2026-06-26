@@ -81,6 +81,7 @@ export function ChatWidget({
   async function send() {
     const q = input.trim();
     if (!q || busy) return;
+    const history = msgs.slice(-8).map((m) => ({ role: m.role, text: m.text }));
     setInput("");
     setMsgs((m) => [...m, { role: "user", text: q }]);
     setBusy(true);
@@ -88,7 +89,7 @@ export function ChatWidget({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountSlug, question: q }),
+        body: JSON.stringify({ accountSlug, question: q, history }),
       });
       const data = await res.json();
       setMsgs((m) => [

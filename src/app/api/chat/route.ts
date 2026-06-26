@@ -15,6 +15,12 @@ export async function POST(req: NextRequest) {
   if (!accountSlug || !question)
     return NextResponse.json({ error: "accountSlug/question fehlt" }, { status: 400 });
 
+  const history = Array.isArray(body.history)
+    ? (body.history as { role?: string; text?: string }[])
+        .filter((h) => h && (h.role === "user" || h.role === "bot") && typeof h.text === "string")
+        .slice(-8)
+    : [];
+
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
@@ -60,7 +66,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const qVec = await embed(question);
+    // Folgefragen verstehen: letzte Nutzer-Nachrichten in die Suchanfrage einbeziehen.
+    const priorUser = history.filter((h) => h.role === "user").map((h) => String(h.text));
+    const embedInput = [...priorUser.slice(-2), question].join("\n");
+    const qVec = await embed(embedInput);
     const { data: matches } = await admin.rpc("match_kb", {
       p_account: account.id,
       p_embedding: JSON.stringify(qVec),
@@ -101,24 +110,26 @@ export async function POST(req: NextRequest) {
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: chatSystem(account.name) },
+        ...history.map((h) => ({
+          role: h.role === "bot" ? ("assistant" as const) : ("user" as const),
+          content: String(h.text).slice(0, 1000),
+        })),
         {
           role: "user",
-          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}\n\nAntworte nur auf Basis dieser Ausschnitte.`,
+          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
         },
       ],
     });
 
-    // KI-Selbsteinschätzung: onTopic (zum Thema?) + resolved (beantwortet?).
+    // KI-Selbsteinschätzung: status (answered | clarify | no_answer | off_topic).
     const raw = completion.choices[0].message.content ?? "{}";
     let answer = "";
-    let resolved = true;
-    let onTopic = true;
+    let status = "answered";
     let used: number[] = [];
     try {
       const p = JSON.parse(raw);
       answer = String(p.answer ?? "").trim();
-      resolved = p.resolved !== false;
-      onTopic = p.onTopic !== false;
+      if (typeof p.status === "string") status = p.status;
       used = Array.isArray(p.sources)
         ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
         : [];
@@ -126,20 +137,21 @@ export async function POST(req: NextRequest) {
       answer = raw.trim();
     }
 
-    // Quellen = NUR die von der KI per Nummer genannten Anleitungen
-    // (Reranking im selben Call -> keine nur „themennahen" Fehlvorschläge).
+    // Quellen nur bei beantworteten Fragen (Reranking: KI nennt die genutzten Nummern).
     const seen = new Set<string>();
     const sources: Source[] = [];
-    for (const n of used) {
-      const t = tutList.find((x) => x.idx === n);
-      if (t && !seen.has(t.slug)) {
-        seen.add(t.slug);
-        sources.push({ title: t.title, slug: t.slug });
+    if (status === "answered") {
+      for (const n of used) {
+        const t = tutList.find((x) => x.idx === n);
+        if (t && !seen.has(t.slug)) {
+          seen.add(t.slug);
+          sources.push({ title: t.title, slug: t.slug });
+        }
       }
     }
 
-    // Off-Topic (z. B. Kochrezept): freundlich abgrenzen, NICHT eskalieren.
-    if (!onTopic) {
+    // Off-Topic: freundlich abgrenzen. KEINE Eskalation.
+    if (status === "off_topic") {
       return NextResponse.json({
         answer:
           answer ||
@@ -148,12 +160,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Zum Thema, aber nicht beantwortbar -> an einen Menschen verweisen.
-    if (!resolved) {
+    // Rückfrage nötig: nachfragen, NICHT eskalieren.
+    if (status === "clarify") {
+      return NextResponse.json({
+        answer: answer || "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?",
+        sources: [],
+      });
+    }
+
+    // Echte Sackgasse (zum Thema, nicht lösbar) -> an einen Menschen verweisen.
+    if (status === "no_answer") {
       const escalation = buildEscalation(rows[0]?.metadata?.category);
       return NextResponse.json({
         answer: answer || "Das kann ich Ihnen leider nicht sicher beantworten.",
-        sources: sources.slice(0, 3),
+        sources: [],
         escalation,
         weak: true,
       });
