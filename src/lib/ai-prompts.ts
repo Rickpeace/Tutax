@@ -126,4 +126,5 @@ Regeln:
 - "sources" NUR reale, über die Web-Suche gefundene URLs – niemals erfinden. Keine Quelle gefunden -> [].
 - Sei zurückhaltend mit is_stale=true: nur bei plausiblen, belegbaren Hinweisen.
 - Wenn die Anleitung aktuell/in Ordnung ist: is_stale=false, "issues": [], kurze "summary".
-- "issues" konkret und umsetzbar (pro betroffenem Schritt ein Eintrag).`;
+- GENAU EIN issue pro betroffenem Schritt – fasse alle Probleme eines Schritts in einem Eintrag zusammen (niemals mehrere Einträge für denselben Schritt).
+- "suggestion" muss die KONKRETE, KORREKTE Angabe enthalten (z. B. die richtige Login-URL/den richtigen Menüpunkt/Begriff, belegt durch die Web-Quellen) – nicht bloß „präzisieren" oder „aktualisieren". Wenn etwas falsch ist, sage was stattdessen richtig ist.`;

@@ -20,8 +20,11 @@ function plainBody(body: unknown): string {
 
 type Issue = { step?: string; problem?: string; suggestion?: string; applied?: boolean };
 
-/** Wendet den Verbesserungsvorschlag einer Drift-Position direkt auf den Schritt an. */
-export async function applyDriftSuggestion(alertId: string, index: number) {
+/**
+ * Wendet die Verbesserungsvorschläge EINES Schritts (eine oder mehrere Positionen)
+ * gemeinsam an: ein einziges Umschreiben, das alle Probleme zusammen einarbeitet.
+ */
+export async function applyDriftSuggestions(alertId: string, indices: number[]) {
   if (!aiConfigured()) throw new Error("KI ist nicht aktiviert.");
   const supabase = await createClient();
 
@@ -34,8 +37,8 @@ export async function applyDriftSuggestion(alertId: string, index: number) {
 
   const details = (alert.details ?? {}) as { issues?: Issue[] };
   const issues = details.issues ?? [];
-  const issue = issues[index];
-  if (!issue) throw new Error("Position nicht gefunden.");
+  const selected = indices.map((i) => issues[i]).filter(Boolean) as Issue[];
+  if (!selected.length) throw new Error("Position nicht gefunden.");
 
   const { data: steps } = await supabase
     .from("steps")
@@ -44,8 +47,8 @@ export async function applyDriftSuggestion(alertId: string, index: number) {
     .order("position", { ascending: true });
   if (!steps?.length) throw new Error("Keine Schritte vorhanden.");
 
-  // Ziel-Schritt bestimmen: aus „N. Titel" -> Nummer; sonst Titel-Match.
-  const stepStr = String(issue.step ?? "");
+  // Ziel-Schritt aus der ersten Position bestimmen: „N. Titel" -> Nummer; sonst Titel-Match.
+  const stepStr = String(selected[0].step ?? "");
   const norm = (s: string) => s.toLowerCase().replace(/^\s*\d+[.)]\s*/, "").trim();
   let target: (typeof steps)[number] | null = null;
   const numMatch = stepStr.match(/^\s*(\d+)/);
@@ -60,6 +63,10 @@ export async function applyDriftSuggestion(alertId: string, index: number) {
   }
   if (!target) throw new Error("Passender Schritt nicht gefunden – bitte im Editor anpassen.");
 
+  const punkte = selected
+    .map((it, k) => `${k + 1}) Problem: ${it.problem ?? ""}\n   Korrektur: ${it.suggestion ?? ""}`)
+    .join("\n");
+
   const completion = await openai().chat.completions.create({
     model: AI.models.chat,
     temperature: 0.3,
@@ -69,11 +76,11 @@ export async function applyDriftSuggestion(alertId: string, index: number) {
       {
         role: "system",
         content:
-          "Du verbesserst EINEN Schritt einer Mandanten-Anleitung (Steuerkanzlei). Sie-Anrede, kurz, klar, präzise und fachlich korrekt. Gib JSON {\"title\": \"…\", \"body\": \"…\"} zurück (body 1–3 Sätze).",
+          "Du verbesserst EINEN Schritt einer Mandanten-Anleitung (Steuerkanzlei). Arbeite ALLE genannten Korrekturen GEMEINSAM in einen stimmigen Schritt ein. Sie-Anrede, kurz, klar, fachlich korrekt. Gib JSON {\"title\": \"…\", \"body\": \"…\"} zurück (body 1–3 Sätze).",
       },
       {
         role: "user",
-        content: `Aktueller Titel: ${target.title ?? ""}\nAktueller Text: ${plainBody(target.body)}\n\nProblem: ${issue.problem ?? ""}\nVerbesserungsvorschlag: ${issue.suggestion ?? ""}\n\nSchreibe den Schritt entsprechend verbessert um.`,
+        content: `Aktueller Titel: ${target.title ?? ""}\nAktueller Text: ${plainBody(target.body)}\n\nUmzusetzende Korrekturen:\n${punkte}\n\nSchreibe den Schritt verbessert um (alle Korrekturen zusammen, eine konsistente Fassung).`,
       },
     ],
   });
@@ -97,8 +104,8 @@ export async function applyDriftSuggestion(alertId: string, index: number) {
     .eq("id", target.id);
   if (upErr) throw new Error(upErr.message);
 
-  // Position als übernommen markieren.
-  issues[index] = { ...issue, applied: true };
+  // Alle einbezogenen Positionen als übernommen markieren.
+  for (const i of indices) if (issues[i]) issues[i] = { ...issues[i], applied: true };
   await supabase.from("change_alerts").update({ details: { ...details, issues } }).eq("id", alertId);
 
   revalidatePath("/app/alerts");
