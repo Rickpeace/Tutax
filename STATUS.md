@@ -156,8 +156,9 @@ Noch offen aus `ARCHITEKTUR.md`:
 - [ ] **§9.5 Rate-Limiting** öffentl. Endpunkte (Hub/Viewer/Chat) — vor Go-Live einplanen.
 - [ ] **§10 Drift als Cron** (täglich automatisch) — aktuell nur manuell „Jetzt prüfen";
       `/admin/alerts` (interne Template-Hinweise) noch offen; kein E-Mail-Digest.
-- [ ] **§11 Knowledge-Base-Artikel** (`kb_articles`, `/app/knowledge`) — Tabelle da, keine UI;
-      Chatbot nutzt nur Tutorials.
+- [x] **§11 Knowledge-Base-Artikel** — ERLEDIGT: `/app/knowledge` (Liste + Editor, Rich-Text),
+      Toggle „Aktiv im Chatbot" indexiert via `indexArticle` (source_type kb_article).
+      Chatbot nutzt jetzt Tutorials UND Wissensartikel. Sub-Nav Tutorials|Wissensdatenbank.
 - [ ] **§9.3 Custom Domain** (Premium) · **§9.4** fortgeschrittener `/embed.js`+`/view/[token]`
       (Standard-iFrame-Embed unter Settings→Einbetten EXISTIERT bereits).
 - [ ] **Phase-3-Zusatz**: Analytics/Drop-off, Mehrsprachigkeit, PDF-Export,
