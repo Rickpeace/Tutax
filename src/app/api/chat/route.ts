@@ -73,11 +73,22 @@ export async function POST(req: NextRequest) {
       similarity: number;
     }[];
 
+    // Eindeutige Anleitungen als Quellen-Kandidaten nummerieren ([1], [2], …).
+    const tutList: { idx: number; title: string; slug: string }[] = [];
+    const tutIndex = new Map<string, number>();
+    for (const r of rows) {
+      if (r.metadata.slug && r.metadata.title && !tutIndex.has(r.metadata.slug)) {
+        const idx = tutList.length + 1;
+        tutIndex.set(r.metadata.slug, idx);
+        tutList.push({ idx, title: r.metadata.title, slug: r.metadata.slug });
+      }
+    }
+
     const context = rows.length
       ? rows
           .map((r) =>
             r.metadata.slug
-              ? `Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
+              ? `[${tutIndex.get(r.metadata.slug)}] Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
               : `Info: ${r.chunk}`,
           )
           .join("\n\n")
@@ -102,24 +113,28 @@ export async function POST(req: NextRequest) {
     let answer = "";
     let resolved = true;
     let onTopic = true;
+    let used: number[] = [];
     try {
       const p = JSON.parse(raw);
       answer = String(p.answer ?? "").trim();
       resolved = p.resolved !== false;
       onTopic = p.onTopic !== false;
+      used = Array.isArray(p.sources)
+        ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
+        : [];
     } catch {
       answer = raw.trim();
     }
 
-    // Quellen (eindeutig nach slug)
+    // Quellen = NUR die von der KI per Nummer genannten Anleitungen
+    // (Reranking im selben Call -> keine nur „themennahen" Fehlvorschläge).
     const seen = new Set<string>();
     const sources: Source[] = [];
-    for (const r of rows) {
-      const slug = r.metadata.slug;
-      const title = r.metadata.title;
-      if (slug && title && !seen.has(slug)) {
-        seen.add(slug);
-        sources.push({ title, slug });
+    for (const n of used) {
+      const t = tutList.find((x) => x.idx === n);
+      if (t && !seen.has(t.slug)) {
+        seen.add(t.slug);
+        sources.push({ title: t.title, slug: t.slug });
       }
     }
 
