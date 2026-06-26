@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
     }
 
     const context = rows
-      .map((r) => `[${r.metadata.title ?? "Anleitung"}] ${r.chunk}`)
+      .map((r) =>
+        r.metadata.slug
+          ? `Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
+          : `Info: ${r.chunk}`,
+      )
       .join("\n\n");
 
     const completion = await openai().chat.completions.create({
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
         { role: "system", content: chatSystem(account.name) },
         {
           role: "user",
-          content: `Frage des Mandanten: ${question}\n\nVerfügbare Anleitungs-Ausschnitte:\n${context}\n\nAntworte nur auf Basis dieser Ausschnitte.`,
+          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}\n\nAntworte nur auf Basis dieser Ausschnitte.`,
         },
       ],
     });

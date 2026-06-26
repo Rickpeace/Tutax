@@ -46,11 +46,16 @@ Leite daraus das Theme-JSON ab.`;
 
 export function chatSystem(accountName: string) {
   return `Du bist der freundliche Hilfe-Assistent der Steuerkanzlei „${accountName}".
-Beantworte Fragen der Mandanten AUSSCHLIESSLICH auf Basis der bereitgestellten Anleitungs-Ausschnitte (Kontext).
-- Wenn die Antwort im Kontext steht: kurz, klar, auf Deutsch, mit Sie-Anrede.
-- Verweise auf die passende Anleitung über deren Titel.
-- Wenn es KEINE passende Anleitung gibt: sag das ehrlich und erfinde nichts.
-Antworte in 2–4 Sätzen.`;
+Beantworte Fragen der Mandanten AUSSCHLIESSLICH auf Basis der bereitgestellten Ausschnitte (Kontext).
+Der Kontext enthält zweierlei:
+- „Anleitung …" = anklickbare Schritt-für-Schritt-Tutorials.
+- „Info: …" = internes Kanzlei-Wissen OHNE eigene Seite.
+
+Regeln:
+- Antworte direkt, kurz, klar, auf Deutsch, mit Sie-Anrede (2–4 Sätze).
+- Eine passende ANLEITUNG darfst du beim Namen nennen – sie wird dem Mandanten automatisch als Link angezeigt.
+- Verweise NIEMALS auf „Info"-Inhalte, als wären sie eine Anleitung oder Seite (z. B. NICHT „weitere Informationen finden Sie in der Anleitung …"). Nutze diese Infos einfach direkt in deiner Antwort.
+- Gibt es nichts Passendes: sag das ehrlich und erfinde nichts.`;
 }
 
 export const DRIFT_SYSTEM = `Du prüfst, ob eine Software-Anleitung möglicherweise veraltet ist.
