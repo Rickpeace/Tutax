@@ -4,6 +4,7 @@ import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { relativeDe } from "@/lib/format";
 import { AlertActions } from "@/components/app/alert-actions";
+import { DriftIssues } from "@/components/app/drift-issues";
 
 type AlertRow = {
   id: string;
@@ -85,27 +86,7 @@ export default async function AlertsPage() {
                   <p className="mt-1.5 text-sm text-ink-2">{a.summary}</p>
 
                   {a.details?.issues?.length ? (
-                    <ul className="mt-3 space-y-2">
-                      {a.details.issues.map((it, i) => (
-                        <li key={i} className="rounded-lg border border-line-2 bg-muted/40 p-2.5 text-sm">
-                          {it.step && (
-                            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                              {it.step}
-                            </div>
-                          )}
-                          {it.problem && (
-                            <div className="mt-0.5 text-ink-2">
-                              <span className="font-semibold text-no">Problem:</span> {it.problem}
-                            </div>
-                          )}
-                          {it.suggestion && (
-                            <div className="mt-0.5 text-ink-2">
-                              <span className="font-semibold text-yes">Vorschlag:</span> {it.suggestion}
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    <DriftIssues alertId={a.id} issues={a.details.issues} />
                   ) : a.details?.affected_steps?.length ? (
                     <ul className="mt-2 flex flex-wrap gap-1.5">
                       {a.details.affected_steps.map((s, i) => (
