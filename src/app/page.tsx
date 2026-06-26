@@ -28,14 +28,12 @@ export default function Home() {
             <span className="text-line">·</span> DSGVO · EU
           </div>
 
-          <h1 className="mt-6 max-w-4xl text-5xl font-bold leading-[0.98] tracking-tight text-ink sm:text-7xl">
-            Jede Frage führt
-            <br />
-            zur{" "}
-            <span className="relative whitespace-nowrap text-primary">
+          <h1 className="mt-6 max-w-4xl text-[2rem] font-bold leading-[1.08] tracking-tight text-ink break-words sm:text-6xl sm:leading-[0.98] lg:text-7xl">
+            Jede Frage führt zur{" "}
+            <span className="relative inline-block text-primary">
               passenden Antwort
               <svg
-                className="absolute -bottom-2 left-0 h-3 w-full text-yes"
+                className="absolute -bottom-1.5 left-0 hidden h-3 w-full text-yes sm:block"
                 viewBox="0 0 300 12"
                 preserveAspectRatio="none"
                 fill="none"

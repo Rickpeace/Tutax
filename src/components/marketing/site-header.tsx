@@ -30,7 +30,8 @@ export function SiteHeader() {
             Anmelden
           </Button>
           <Button size="sm" nativeButton={false} render={<Link href="/signup" />}>
-            Kostenlos starten
+            <span className="sm:hidden">Starten</span>
+            <span className="hidden sm:inline">Kostenlos starten</span>
           </Button>
         </div>
       </div>
