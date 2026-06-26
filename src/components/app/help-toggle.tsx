@@ -5,10 +5,12 @@ export function HelpToggle({
   on,
   onToggle,
   disabled,
+  label = "Auf Hilfe-Seite",
 }: {
   on: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  label?: string;
 }) {
   return (
     <button
@@ -16,7 +18,7 @@ export function HelpToggle({
       disabled={disabled}
       onClick={onToggle}
       className="flex items-center gap-2 text-xs font-medium text-ink-2 disabled:opacity-50"
-      title="Auf der Hilfe-Seite zeigen"
+      title={label}
       aria-pressed={on}
     >
       <span
@@ -26,7 +28,7 @@ export function HelpToggle({
           className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${on ? "left-[18px]" : "left-0.5"}`}
         />
       </span>
-      <span className="hidden sm:inline">Auf Hilfe-Seite</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ExternalLink, Settings, Bell, ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
+import { AppTabs } from "@/components/app/app-tabs";
 import { requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -88,6 +89,7 @@ export default async function AppLayout({
           </div>
         </div>
       </header>
+      <AppTabs />
       {children}
     </div>
   );
