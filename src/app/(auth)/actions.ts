@@ -44,7 +44,7 @@ export async function signUp(
     return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -54,9 +54,12 @@ export async function signUp(
   });
   if (error) return { error: uebersetzeAuthFehler(error.message) };
 
+  // E-Mail-Bestätigung ist aktuell deaktiviert -> nach Registrierung direkt eingeloggt.
+  if (data.session) redirect("/app");
+
+  // Falls Bestätigung später aktiviert wird: ehrliche Meldung (kein Fake-„Link gesendet").
   return {
-    message:
-      "Fast geschafft – bitte bestätigen Sie Ihre E-Mail-Adresse über den Link, den wir Ihnen gesendet haben.",
+    message: "Konto erstellt – Sie können sich jetzt direkt anmelden.",
   };
 }
 
