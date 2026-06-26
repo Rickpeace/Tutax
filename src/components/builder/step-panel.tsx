@@ -218,7 +218,13 @@ export function StepPanel({
       )}
 
       <div className="border-t border-line-2 pt-4">
-        <Button variant="destructive" size="sm" onClick={() => onDeleteStep(step.id)}>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            if (confirm("Diesen Schritt mit allen Inhalten wirklich löschen?")) onDeleteStep(step.id);
+          }}
+        >
           <Trash2 className="size-4" /> Schritt löschen
         </Button>
       </div>
@@ -271,7 +277,9 @@ function BranchRow({
       </select>
       <button
         type="button"
-        onClick={() => onDelete(branch.id)}
+        onClick={() => {
+          if (confirm("Diese Antwort-Option löschen?")) onDelete(branch.id);
+        }}
         className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-no-soft hover:text-no"
         aria-label="Antwort löschen"
       >
