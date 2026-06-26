@@ -126,24 +126,51 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
       Troubleshooter (Verzweigung), Gerätewechsel, Belege hochladen, Meine Steuern, Passwort/2FA.
       Script: `scripts/seed-datev.mjs` (idempotent). Bilder ergänzt der Nutzer.
 
-## 8. PHASE 1 KOMPLETT ✅ + SaaS-Shell + Design + KI-Framework steht
+## 7d. Admin + Standard-Templates §14 (Live-Referenz-Modell) — ERLEDIGT & verifiziert
+**Entscheidung Nutzer:** zentral gepflegte Tutorials, Updates wirken AUTOMATISCH bei allen
+Kunden (Referenz-Modell, nicht Kopie). Fork erst beim Bearbeiten.
+- [x] Migration **0006**: `admins`, `is_admin()` (SECURITY DEFINER), RLS für Templates
+      (`account_id IS NULL`), Admin = richard@petrasch.com geseedet.
+- [x] **/admin** (gated via `requireAdmin`): Template-Liste, anlegen, veröffentlichen/zurückziehen/
+      löschen (`src/app/admin/`), Bearbeitung über bestehenden Builder; Admin-Link im App-Header.
+- [x] **Kunden-Actions** `src/app/app/template-actions.ts`: `setTemplateEnabled` (Häkchen),
+      `forkTemplate` (Deep-Copy + gleicher Slug → URL stabil → Editor), `resetTemplate`.
+- [x] **Auflösung** `src/lib/templates.ts`: `getCatalog` (eigene + Standard/Fork),
+      `resolveCustomerTutorial` (Slug → eigene/Fork/zentrale Version).
+      Standard = zentrale Version (Auto-Update); Angepasst = eigene Kopie.
+- [x] **Dashboard**: Sektion „Standard-Anleitungen von Tutax" (Häkchen, Tags Standard/Angepasst,
+      Anpassen, Zurücksetzen). **Hub + Viewer**: aktivierte Templates live aufgelöst.
+- [x] **6 DATEV-Anleitungen als globale Templates** (published, mit Slug):
+      `node scripts/seed-datev.mjs --templates`. Redundante account-DATEV in RichardTax entfernt.
+- [x] Verifiziert: `scripts/test-templates-live.mjs` (aktivieren/auflösen/forken/zurücksetzen/deaktivieren).
+
+## 8. PHASE 1 KOMPLETT ✅ + SaaS-Shell + Design + KI-Framework + Admin/Templates steht
 Der gesamte MVP-Kreislauf (bauen → veröffentlichen → live ansehen) steht und ist
 gegen die echte DB verifiziert. Nichts mehr offen, das ohne ANTHROPIC_API_KEY /
 externe Entscheidungen baubar wäre.
 
-## 9. Status — OFFEN / Phase 2+ (BLOCKIERT bzw. später)
-- [ ] **KI-CI-Analyse** (§8): Playwright-Screenshot + Claude Vision → Tokens.
-      BLOCKIERT: `ANTHROPIC_API_KEY` fehlt; Playwright braucht Worker/Infra.
-- [ ] **Chatbot + Knowledge Base** (§11): pgvector + Embeddings + RAG.
-      BLOCKIERT: Embedding-Provider wählen (Anthropic hat KEINE Embeddings → Voyage/OpenAI), Dimension fixieren.
-- [ ] **Drift-Agent** (§10): Anthropic Web-Search-Tool, Cron. BLOCKIERT: API-Key + Cron-Infra.
-- [ ] **Standard-Templates** (§14): `is_template`, `account_templates`, Fork-beim-Bearbeiten.
-- [ ] **Analytics, Mehrsprachigkeit, PDF, Custom Domain** (Phase 3).
-- [ ] dnd-Sortierung (bewusst zurückgestellt — „+"/Löschen decken Umbau ab).
+## 9. Status — OFFEN (Spec-Lücken, dem Nutzer am 2026-06-26 genannt)
+KI-Framework, Chatbot/RAG, Drift, CI-Analyse, Admin/Templates sind ERLEDIGT (s.o.).
+Noch offen aus `ARCHITEKTUR.md`:
+- [ ] **§9.5 Missbrauchs-Logging** (`view_logs`) + interne Auswertung — Tabelle da, kein Logging/Report.
+- [ ] **§9.5 Rate-Limiting** öffentl. Endpunkte (Hub/Viewer/Chat) — vor Go-Live einplanen.
+- [ ] **§10 Drift als Cron** (täglich automatisch) — aktuell nur manuell „Jetzt prüfen";
+      `/admin/alerts` (interne Template-Hinweise) noch offen; kein E-Mail-Digest.
+- [ ] **§11 Knowledge-Base-Artikel** (`kb_articles`, `/app/knowledge`) — Tabelle da, keine UI;
+      Chatbot nutzt nur Tutorials.
+- [ ] **§9.3 Custom Domain** (Premium) · **§9.4** fortgeschrittener `/embed.js`+`/view/[token]`
+      (Standard-iFrame-Embed unter Settings→Einbetten EXISTIERT bereits).
+- [ ] **Phase-3-Zusatz**: Analytics/Drop-off, Mehrsprachigkeit, PDF-Export,
+      KI-Schritt-Assistent (Vision: Screenshot→Titel/Texte), React-Flow-Vogelperspektive.
+- [ ] dnd-Sortierung + Kapitel (bewusst zurückgestellt).
+- [ ] Detail: Template-BILDER — Templates haben aktuell keine Bilder; bei Bild-Templates muss
+      Upload-Pfad (account_id NULL) + Fork-Bildkopie nachgezogen werden.
 
 ## 10. Datei-Landkarte
 - `src/app/(auth)/` — Login/Signup/Actions · `src/app/auth/confirm/route.ts`
-- `src/app/app/` — Dashboard, Layout, `actions.ts` (CRUD+Publish), `tutorials/[id]/` (Editor+actions)
+- `src/app/app/` — Dashboard, Layout, `actions.ts` (CRUD+Publish), `template-actions.ts` (Kunden-Templates), `tutorials/[id]/` (Editor+actions)
+- `src/app/admin/` — Admin-Bereich (Templates) · `src/lib/admin.ts` (checkAdmin/requireAdmin)
+- `src/lib/templates.ts` — getCatalog + resolveCustomerTutorial (§14) · `src/components/app/template-section.tsx`
 - `src/app/h/[account_slug]/` — Hub + `[tutorial_slug]/` Viewer
 - `src/app/api/upload-url/route.ts` — Signed Upload URL
 - `src/components/builder/` — builder, flow, step-panel, rich-text, image-field, crop-dialog, highlight-editor
