@@ -37,6 +37,7 @@ export default async function BrandingPage() {
 
       <DesignModeSwitcher
         accountName={account.name}
+        accountSlug={account.slug}
         mode={mode}
         manualTokens={theme?.tokens ?? null}
         manualLogoUrl={manualLogoUrl}

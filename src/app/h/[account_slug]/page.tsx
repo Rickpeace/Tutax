@@ -26,7 +26,9 @@ async function load(accountSlug: string) {
       .order("position", { ascending: true }),
     admin
       .from("themes")
-      .select("tokens, ai_tokens, logo_path, ai_logo_path, mode")
+      .select(
+        "tokens, ai_tokens, logo_path, ai_logo_path, mode, extreme_tokens, extreme_css, extreme_layout, extreme_logo_path",
+      )
       .eq("account_id", account.id)
       .single(),
   ]);
@@ -47,14 +49,20 @@ export async function generateMetadata({
 
 export default async function HubPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { account_slug } = await params;
+  const { preview } = await searchParams;
   const data = await load(account_slug);
   if (!data) notFound();
 
-  const { account, catalog, categories, theme } = data;
+  const { account, catalog, categories } = data;
+  // Vorschau: ein Design erzwingen, OHNE es zu aktivieren (ändert themes.mode nicht).
+  const previewMode = ["manual", "ai", "extreme"].includes(preview ?? "") ? preview : null;
+  const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
   const catName = new Map(categories.map((c) => [c.id, c.name]));
 
   const items: HubTutorial[] = catalog

@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, Sparkles, Palette, ArrowDown, Zap } from "lucide-react";
+import { Check, Sparkles, Palette, ArrowDown, Zap, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { BrandPreview } from "./brand-preview";
 import { AutoCi } from "./auto-ci";
 import { AiLogoUpload } from "./ai-logo-upload";
@@ -12,6 +19,7 @@ import { googleFontsHref } from "@/lib/theme";
 
 export function DesignModeSwitcher({
   accountName,
+  accountSlug,
   mode,
   manualTokens,
   manualLogoUrl,
@@ -22,6 +30,7 @@ export function DesignModeSwitcher({
   sourceUrl,
 }: {
   accountName: string;
+  accountSlug: string;
   mode: "manual" | "ai" | "extreme";
   manualTokens: unknown;
   manualLogoUrl: string | null;
@@ -90,15 +99,18 @@ export function DesignModeSwitcher({
           <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
             <ArrowDown className="size-3" /> Farben &amp; Logo unten anpassen
           </p>
-          {mode === "manual" ? (
-            <Button variant="outline" size="sm" disabled className="w-full">
-              <Check className="size-4" /> Aktiv
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="w-full" disabled={pending} onClick={() => activate("manual")}>
-              Standard-CI aktivieren
-            </Button>
-          )}
+          <div className="space-y-2">
+            <PreviewDialog slug={accountSlug} mode="manual" label="Standard-CI" />
+            {mode === "manual" ? (
+              <Button variant="outline" size="sm" disabled className="w-full">
+                <Check className="size-4" /> Aktiv
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" className="w-full" disabled={pending} onClick={() => activate("manual")}>
+                Standard-CI aktivieren
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -133,6 +145,7 @@ export function DesignModeSwitcher({
           </p>
           <AutoCi initialUrl={sourceUrl} compact />
           <AiLogoUpload logoUrl={aiLogoUrl} />
+          {hasAi && <PreviewDialog slug={accountSlug} mode="ai" label="KI-Design" />}
           {hasAi &&
             (mode === "ai" ? (
               <Button variant="outline" size="sm" disabled className="w-full">
@@ -181,11 +194,7 @@ export function DesignModeSwitcher({
             endpoint="/api/theme/extreme"
             successMsg="Extrem-Design erstellt! Aktivieren, um es live zu sehen."
           />
-          {hasExtreme && (
-            <p className="text-[11px] text-muted-foreground">
-              Vorschau zeigt die Farben – der volle Skin erscheint auf der Hilfe-Seite.
-            </p>
-          )}
+          {hasExtreme && <PreviewDialog slug={accountSlug} mode="extreme" label="Extrem-Design" />}
           {hasExtreme &&
             (mode === "extreme" ? (
               <Button variant="outline" size="sm" disabled className="w-full">
@@ -199,5 +208,33 @@ export function DesignModeSwitcher({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Live-Vorschau eines Designs in einem iframe – ohne es zu aktivieren. */
+function PreviewDialog({ slug, mode, label }: { slug: string; mode: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="sm" className="w-full">
+            <Eye className="size-4" /> Live-Vorschau
+          </Button>
+        }
+      />
+      <DialogContent className="max-w-[min(95vw,820px)] p-0 sm:max-w-[min(95vw,820px)]">
+        <DialogHeader className="border-b border-border px-4 py-3">
+          <DialogTitle className="text-sm">Live-Vorschau · {label}</DialogTitle>
+        </DialogHeader>
+        {open && (
+          <iframe
+            title={`Vorschau ${label}`}
+            src={`/h/${slug}?preview=${mode}`}
+            className="h-[72vh] w-full rounded-b-lg bg-white"
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
