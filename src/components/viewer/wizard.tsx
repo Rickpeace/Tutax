@@ -54,6 +54,7 @@ export function Wizard({
 
   return (
     <div
+      data-tx="step"
       className="w-full max-w-md border bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5"
       style={{
         borderRadius: "var(--brand-radius, 16px)",
@@ -74,6 +75,7 @@ export function Wizard({
           ) : null}
           {step.title && (
             <h2
+              data-tx="step-title"
               className="text-lg font-bold"
               style={{
                 color: "var(--brand-title, var(--brand-ink))",
@@ -84,7 +86,7 @@ export function Wizard({
               {step.title}
             </h2>
           )}
-          <div className="mt-1.5 text-sm text-ink-2">
+          <div data-tx="step-body" className="mt-1.5 text-sm text-ink-2">
             <RichTextView doc={step.body} />
           </div>
 
@@ -94,6 +96,7 @@ export function Wizard({
                 {(branchesByStep.get(step.id) ?? []).map((b) => (
                   <button
                     key={b.id}
+                    data-tx="btn"
                     onClick={() => go(b.target_step_id)}
                     className="w-full border-2 bg-white px-4 py-3 text-base font-bold transition-transform active:translate-y-px"
                     style={{
@@ -186,6 +189,7 @@ function NextButton({
   const hasNext = branches.length > 0 && target != null;
   return (
     <button
+      data-tx="btn"
       onClick={() => onNext(target)}
       className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-semibold text-white transition-transform active:translate-y-px"
       style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-btn-radius, 12px)" }}

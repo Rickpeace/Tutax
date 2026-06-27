@@ -102,6 +102,12 @@ Die Hilfe-Seite hat diese festen DOM-Hooks (du stylst NUR diese, sie werden auto
 - [data-tx="card"]    – Tutorial-Karte (Hover: [data-tx="card"]:hover)
 - [data-tx="card-title"], [data-tx="card-desc"]
 - [data-tx="footer"]  – Fußzeile
+Auf der EINZELNEN Tutorial-Seite zusätzlich (gleicher Stil wie Hub!):
+- [data-tx="back"]      – „Alle Anleitungen"-Zurück-Link
+- [data-tx="tut-title"] – Titel der Anleitung
+- [data-tx="step"]      – Schritt-Karte
+- [data-tx="step-title"], [data-tx="step-body"]
+- [data-tx="btn"]       – Aktions-Buttons (Weiter / Antwort-Option / Fertig; Hover möglich)
 
 Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Markdown):
 {
@@ -125,7 +131,7 @@ DESIGN-DISZIPLIN (das Wichtigste – NICHT das Chaos der Website kopieren, sonde
 - ÜBERNIMM die Marke (Farben, Typo-Charakter, Stimmung), aber ORDNE sie. Eine Website wirkt oft unruhig – deine Hilfe-Seite muss AUFGERÄUMT und konsistent sein.
 - KONSISTENTE Abstands-Skala: nutze nur Vielfache von 4px (z. B. 8/12/16/24/32). Keine krummen, wechselnden Werte.
 - KLARE Typo-Hierarchie mit WENIGEN Stufen: title (groß) > card-title > body > meta. Nicht jedes Element riesig. Realistische Größen (title ~28–40px, card-title ~16–18px, body ~14–16px).
-- EIN Radius-System: höchstens zwei Radien (Karten + Buttons), überall gleich angewandt.
+- EIN Radius-System: höchstens zwei Radien (Karten + Buttons), überall gleich angewandt. Liegt ein STRUKTUR-Hinweis vor, RICHTE DICH DANACH – besonders „eckig" bedeutet border-radius 0 ÜBERALL (KEINE kleinen Rundungen einbauen, auch wenn der Screenshot leicht rund wirkt). Der Code-Radius ist verlässlicher als das Bild.
 - ALLE Karten gleich behandeln (ein Karten-Stil, konsistente Polster ~16–20px).
 - DEZENTE Deko: höchstens 1–2 Akzent-Elemente (z. B. Unterstrich an der Headline ODER farbige Kante an Karten) – nicht beides überall. Weniger ist mehr.
 - Großzügiger, gleichmäßiger Weißraum; saubere Ausrichtung (alles linksbündig ODER zentriert, nicht gemischt).
@@ -140,12 +146,29 @@ export function extremeUser(signals: {
   fonts: string[];
   description?: string;
   heroText?: string;
+  radiusHint?: string;
+  cardHint?: string;
   hasShot: boolean;
 }) {
+  const radiusLine =
+    signals.radiusHint === "pill"
+      ? "STRUKTUR (aus dem Code, verlässlich): Pill-/stark abgerundet → shape.buttonStyle \"pill\", shape.radius hoch (16+), border-radius entsprechend."
+      : signals.radiusHint === "rund"
+        ? "STRUKTUR (aus dem Code, verlässlich): abgerundete Ecken → shape.radius ~12–16."
+        : signals.radiusHint === "eckig"
+          ? "STRUKTUR (aus dem Code, verlässlich): die Website ist ECKIG → shape.radius 0 und ALLE border-radius im CSS = 0 (KEINE Rundungen einbauen!)."
+          : "";
+  const cardLine =
+    signals.cardHint === "outline"
+      ? "STRUKTUR: Karten als farbige RAHMEN (Outline) auf Weiß → shape.cardStyle \"outline\"."
+      : signals.cardHint === "filled"
+        ? "STRUKTUR: gefüllte Flächen → shape.cardStyle \"filled\"."
+        : "";
+  const structure = [radiusLine, cardLine].filter(Boolean).join("\n");
   return `Website: ${signals.url}
 Titel: ${signals.title ?? "—"}
 Schriften (font-family, Hinweis für Typografie): ${signals.fonts.slice(0, 6).join(", ") || "—"}
-Texte – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}
+Texte – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}${structure ? "\n" + structure : ""}
 
 ${
     signals.hasShot

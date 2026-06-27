@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
+import { sanitizeSkinCss } from "@/lib/skin-css";
 import { publicImageUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
@@ -39,7 +40,9 @@ async function load(accountSlug: string, tutorialSlug: string) {
     : { data: [] as StepBranch[] };
   const { data: theme } = await admin
     .from("themes")
-    .select("tokens, ai_tokens, logo_path, ai_logo_path, mode")
+    .select(
+      "tokens, ai_tokens, logo_path, ai_logo_path, mode, extreme_tokens, extreme_css, extreme_layout, extreme_logo_path",
+    )
     .eq("account_id", account.id)
     .single();
 
@@ -59,41 +62,57 @@ export async function generateMetadata({
 
 export default async function ViewerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string; tutorial_slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { account_slug, tutorial_slug } = await params;
+  const { preview } = await searchParams;
   const data = await load(account_slug, tutorial_slug);
   if (!data) notFound();
 
-  const { account, tutorial, steps, branches, theme } = data;
+  const { account, tutorial, steps, branches } = data;
+  const previewMode =
+    preview && ["manual", "ai", "extreme"].includes(preview) ? preview : null;
+  const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
   const imageUrls: Record<string, string> = {};
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const { mode, tokens, logoPath } = resolveTheme(theme);
+  const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
+  const previewQ = previewMode ? `?preview=${previewMode}` : "";
+  const skinClass =
+    mode === "extreme"
+      ? `tutax-skin tx-h-${layout?.header ?? "left"} tx-c-${layout?.cards ?? "grid"} tx-hero-${layout?.hero ?? "none"}`
+      : "";
 
   return (
     <main
-      className="min-h-screen"
+      className={`min-h-screen ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
       {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+      {mode === "extreme" && skinCss && (
+        <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
+      )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
       <div className="mx-auto flex max-w-md flex-col px-4 py-6">
-        <div className="mb-4 flex items-center gap-3">
+        <div data-tx="header" className="mb-4 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={logoUrl}
               alt=""
+              data-tx="logo"
               className="size-11 border border-black/5 bg-white object-contain p-1"
               style={{ borderRadius: "var(--brand-radius, 12px)" }}
             />
           ) : (
             <div
+              data-tx="logo"
               className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
               style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
             >
@@ -102,6 +121,7 @@ export default async function ViewerPage({
           )}
           <div className="flex-1">
             <div
+              data-tx="title"
               className="text-xl font-extrabold"
               style={{
                 fontFamily: fonts.heading,
@@ -111,18 +131,20 @@ export default async function ViewerPage({
             >
               {account.name}
             </div>
-            <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
+            <div data-tx="subtitle" className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>
 
         <Link
-          href={`/h/${account.slug}`}
+          href={`/h/${account.slug}${previewQ}`}
+          data-tx="back"
           className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
         >
           <ArrowLeft className="size-4" /> Alle Anleitungen
         </Link>
 
         <h1
+          data-tx="tut-title"
           className="mb-3 text-base font-semibold"
           style={{
             color: "var(--brand-title, var(--brand-ink))",
@@ -141,7 +163,7 @@ export default async function ViewerPage({
           placeholders={tutorial.is_template}
         />
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
           Bereitgestellt von {account.name} · powered by Tutax
         </p>
       </div>

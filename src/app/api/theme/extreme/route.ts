@@ -44,7 +44,62 @@ function extract(html: string, pageUrl: string) {
   };
   const ogImage = get(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
   const logo = abs(icon("apple-touch-icon")) || abs(icon("icon")) || abs(ogImage);
-  return { title, description, heroText, fonts: [...fonts], logo };
+  const cssHrefs: string[] = [];
+  for (const t of linkTags) {
+    if (/rel=["'][^"']*stylesheet[^"']*["']/i.test(t)) {
+      const u = abs(t.match(/href=["']([^"']+)["']/i)?.[1]);
+      if (u) cssHrefs.push(u);
+    }
+  }
+  return { title, description, heroText, fonts: [...fonts], logo, cssHrefs };
+}
+
+/** Struktur-Hinweise (Radius/Karten-Stil) aus dem CSS – verlässlicher als aus dem Bild geraten. */
+async function structureHints(cssHrefs: string[]): Promise<{ radiusHint: string; cardHint: string }> {
+  let cssText = "";
+  try {
+    cssText = (
+      await Promise.all(
+        cssHrefs.slice(0, 3).map(async (u) => {
+          try {
+            const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+            if (r.ok) return (await r.text()).slice(0, 300_000);
+          } catch {
+            /* ignore */
+          }
+          return "";
+        }),
+      )
+    ).join("\n");
+  } catch {
+    /* optional */
+  }
+  let radiusHint = "";
+  let cardHint = "";
+  if (cssText) {
+    const radii: number[] = [];
+    for (const m of cssText.matchAll(/border-radius:\s*([0-9.]+)(px|rem|em)?/gi)) {
+      let v = parseFloat(m[1]);
+      const unit = (m[2] || "px").toLowerCase();
+      if (unit === "rem" || unit === "em") v *= 16;
+      if (!Number.isNaN(v)) radii.push(v);
+    }
+    const pill = radii.filter((v) => v >= 100).length;
+    const round = radii.filter((v) => v >= 14 && v < 100).length;
+    const sharp = radii.filter((v) => v <= 4).length;
+    if (pill >= 2) radiusHint = "pill";
+    else if (round >= 2 && round >= sharp) radiusHint = "rund";
+    else if (sharp >= 2 && sharp > round) radiusHint = "eckig";
+    let borderN = 0;
+    let fillN = 0;
+    for (const m of cssText.matchAll(/(border[a-z-]*|background[a-z-]*)\s*:/gi)) {
+      if (m[1].toLowerCase().startsWith("border")) borderN++;
+      else fillN++;
+    }
+    if (borderN >= 3 && borderN > fillN) cardHint = "outline";
+    else if (fillN > borderN) cardHint = "filled";
+  }
+  return { radiusHint, cardHint };
 }
 
 function validLayout(l: unknown) {
@@ -94,6 +149,7 @@ export async function POST(req: NextRequest) {
     clearTimeout(to);
     const html = (await resp.text()).slice(0, 200_000);
     const sig = extract(html, url);
+    const { radiusHint, cardHint } = await structureHints(sig.cssHrefs);
 
     // Logo (Raster) für Vision + Speicherung
     let logoBuf: Buffer | null = null;
@@ -138,7 +194,7 @@ export async function POST(req: NextRequest) {
     if (shotDataUrl) images.push(shotDataUrl);
     if (logoBuf && isRaster) images.push(`data:${logoCt};base64,${logoBuf.toString("base64")}`);
 
-    const userText = extremeUser({ ...sig, url, hasShot: !!shotDataUrl });
+    const userText = extremeUser({ ...sig, url, radiusHint, cardHint, hasShot: !!shotDataUrl });
     const userContent: UserContent = images.length
       ? [
           { type: "text", text: userText },
