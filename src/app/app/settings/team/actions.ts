@@ -41,11 +41,27 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
 
   revalidatePath("/app/settings/team");
   if (mailErr) {
-    // z. B. „email_exists" -> kein automatischer Mailversand möglich, Link zum Teilen.
+    const code = (mailErr as { code?: string }).code;
+    const status = (mailErr as { status?: number }).status;
+    if (code === "over_email_send_rate_limit" || status === 429) {
+      return {
+        ok: false,
+        message:
+          "E-Mail-Limit von Supabase erreicht. Bitte in ~1 Stunde erneut versuchen oder das Limit erhöhen (Supabase → Auth → Rate Limits). Solange kannst du diesen Link teilen:",
+        link,
+      };
+    }
+    if (code === "email_exists") {
+      return {
+        ok: true,
+        message:
+          "Diese Adresse hat bereits ein Konto. Schicke ihr diesen Link – nach dem Login tritt sie automatisch dem Team bei:",
+        link,
+      };
+    }
     return {
       ok: true,
-      message:
-        "Konnte keine Einladungs-Mail senden (vermutlich existiert bereits ein Konto mit dieser E-Mail). Teile stattdessen diesen Link:",
+      message: "E-Mail konnte nicht gesendet werden. Teile stattdessen diesen Link:",
       link,
     };
   }
