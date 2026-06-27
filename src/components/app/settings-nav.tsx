@@ -15,7 +15,7 @@ const tabs = [
 export function SettingsNav() {
   const path = usePathname();
   return (
-    <div className="mt-4 flex gap-1 overflow-x-auto border-b border-border">
+    <div className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-border [touch-action:pan-x]">
       {tabs.map((t) => {
         const active = path === t.href;
         return (
