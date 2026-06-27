@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
   const { data: inv } = await admin
     .from("invitations")
-    .select("id, account_id, role, status")
+    .select("id, account_id, role, status, email")
     .eq("token", token)
     .maybeSingle();
   if (!inv || inv.status === "revoked") {
@@ -27,6 +27,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (!user) {
     // Nicht eingeloggt -> nach Login zurück hierher.
     return NextResponse.redirect(`${origin}/login?next=/invite/${token}`);
+  }
+
+  // Sicherheit: nur wer als die eingeladene Adresse eingeloggt ist, darf beitreten.
+  // Verhindert versehentliche Beitritte/Rollen-Änderungen durch weitergeleitete Links.
+  if (inv.email && (user.email ?? "").toLowerCase() !== inv.email.toLowerCase()) {
+    return NextResponse.redirect(`${origin}/app?error=invite_email`);
   }
 
   // Beitritt (idempotent) – bestehende Mitgliedschaft NICHT überschreiben,

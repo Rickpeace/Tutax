@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useFormStatus } from "react-dom";
+import { Plus, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -60,10 +61,27 @@ export function NewTutorialButton({
             />
           </div>
           <DialogFooter>
-            <Button type="submit">Erstellen &amp; bearbeiten</Button>
+            <SubmitButton />
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Eigener Submit-Button: deaktiviert sich während des Absendens,
+// damit Doppelklicks nicht mehrere Tutorials anlegen.
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? (
+        <>
+          <Loader2 className="size-4 animate-spin" /> Wird erstellt …
+        </>
+      ) : (
+        <>Erstellen &amp; bearbeiten</>
+      )}
+    </Button>
   );
 }

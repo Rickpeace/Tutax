@@ -11,15 +11,53 @@ const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g,
 
 export type InviteResult = { ok: boolean; message: string; link?: string };
 
-export async function inviteMember(formData: FormData): Promise<InviteResult> {
-  const { account } = await requireAccount();
+/**
+ * Stellt sicher, dass der Aufrufer INHABER des aktuellen Kontos ist.
+ * Schützt die Team-Verwaltung serverseitig (nicht nur über die UI).
+ */
+async function requireOwner() {
+  const { account, userId } = await requireAccount();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data } = await supabase
+    .from("account_members")
+    .select("role")
+    .eq("account_id", account.id)
+    .eq("user_id", userId)
+    .single();
+  if (data?.role !== "owner") throw new Error("Nur der Inhaber darf das Team verwalten.");
+  return { account, userId };
+}
+
+export async function inviteMember(formData: FormData): Promise<InviteResult> {
+  const { account, userId } = await requireOwner();
+  const supabase = await createClient();
+  const admin = createAdminClient();
+
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "editor") === "owner" ? "owner" : "editor";
   if (!email) return { ok: false, message: "Bitte E-Mail eingeben." };
+
+  // Bereits Mitglied dieses Kontos? -> kein zweites Mal einladen.
+  const { data: existingUser } = await admin
+    .from("account_members")
+    .select("user_id")
+    .eq("account_id", account.id);
+  if (existingUser?.length) {
+    const ids = existingUser.map((m) => m.user_id);
+    const { data: usersPage } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const already = (usersPage?.users ?? []).some(
+      (u) => ids.includes(u.id) && (u.email ?? "").toLowerCase() === email,
+    );
+    if (already) return { ok: false, message: "Diese Person ist bereits im Team." };
+  }
+
+  // Alte offene Einladungen an dieselbe Adresse aufräumen (keine Duplikate).
+  await admin
+    .from("invitations")
+    .delete()
+    .eq("account_id", account.id)
+    .eq("email", email)
+    .eq("status", "pending");
 
   const token = newToken();
   const { error: insErr } = await supabase.from("invitations").insert({
@@ -27,13 +65,12 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     email,
     role,
     token,
-    invited_by: user?.id ?? null,
+    invited_by: userId,
   });
   if (insErr) return { ok: false, message: insErr.message };
 
   const link = `${appUrl()}/invite/${token}`;
   // Einladungs-Mail über Supabase (Versand via Resend-SMTP).
-  const admin = createAdminClient();
   const { error: mailErr } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { tutax_invite_token: token },
     redirectTo: link,
@@ -69,9 +106,9 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
 }
 
 export async function revokeInvitation(id: string) {
-  const { account } = await requireAccount();
-  const supabase = await createClient();
-  await supabase
+  const { account } = await requireOwner();
+  const admin = createAdminClient();
+  await admin
     .from("invitations")
     .update({ status: "revoked" })
     .eq("id", id)
@@ -80,13 +117,10 @@ export async function revokeInvitation(id: string) {
 }
 
 export async function removeMember(userId: string) {
-  const { account } = await requireAccount();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user?.id === userId) throw new Error("Sie können sich nicht selbst entfernen.");
-  await supabase
+  const { account, userId: me } = await requireOwner();
+  if (me === userId) throw new Error("Sie können sich nicht selbst entfernen.");
+  const admin = createAdminClient();
+  await admin
     .from("account_members")
     .delete()
     .eq("account_id", account.id)
