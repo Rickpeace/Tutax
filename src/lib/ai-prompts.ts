@@ -116,12 +116,22 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Markdown):
 Regeln für "css" (WICHTIG – Sicherheit & Qualität):
 - Nutze AUSSCHLIESSLICH die [data-tx=...]-Hooks als Selektoren (gern mit :hover, ::before/::after für Deko). KEIN html/body, KEINE fremden Klassen, KEINE IDs.
 - KEIN @import, KEIN @font-face, KEINE url() außer https:-Bildern. Kein JavaScript.
-- Sei MUTIG und konkret: setze Schriftgröße/Gewicht der Headline wie auf der Seite (große, kräftige Display-Headline), Button-Look (Form, Border, Hover, ggf. Großbuchstaben/letter-spacing), Karten-Look (Rahmen vs. Fläche vs. Schatten), Abstände/Dichte. Baue – wenn die Website das hat – ein, zwei dezente Deko-Elemente nach (z. B. farbiger Balken/Unterstrich an der Headline via ::after, farbige linke Kante an Karten).
-- Lesbarkeit bleibt Pflicht (Kontrast Text/Hintergrund).
+- Verwende die Farben aus "colors" auch im CSS (gleiche Hex-Werte).
+- Lesbarkeit ist Pflicht (klarer Kontrast Text/Hintergrund).
 - Halte das CSS kompakt (< 3500 Zeichen), valide, ohne Kommentare.
-- Verwende die Farben aus "colors" auch im CSS (gleiche Hex-Werte), damit alles stimmig ist.
 
-Farben & Schrift: aus Screenshot/Logo ableiten (nicht aus Code-Defaults). Triff die Marke TREU und KRÄFTIG.`;
+DESIGN-DISZIPLIN (das Wichtigste – NICHT das Chaos der Website kopieren, sondern ihre Identität in ein SAUBERES System übersetzen):
+- ÜBERNIMM die Marke (Farben, Typo-Charakter, Stimmung), aber ORDNE sie. Eine Website wirkt oft unruhig – deine Hilfe-Seite muss AUFGERÄUMT und konsistent sein.
+- KONSISTENTE Abstands-Skala: nutze nur Vielfache von 4px (z. B. 8/12/16/24/32). Keine krummen, wechselnden Werte.
+- KLARE Typo-Hierarchie mit WENIGEN Stufen: title (groß) > card-title > body > meta. Nicht jedes Element riesig. Realistische Größen (title ~28–40px, card-title ~16–18px, body ~14–16px).
+- EIN Radius-System: höchstens zwei Radien (Karten + Buttons), überall gleich angewandt.
+- ALLE Karten gleich behandeln (ein Karten-Stil, konsistente Polster ~16–20px).
+- DEZENTE Deko: höchstens 1–2 Akzent-Elemente (z. B. Unterstrich an der Headline ODER farbige Kante an Karten) – nicht beides überall. Weniger ist mehr.
+- Großzügiger, gleichmäßiger Weißraum; saubere Ausrichtung (alles linksbündig ODER zentriert, nicht gemischt).
+- Schrift konsistent: heading-Font für Titel/Card-Titel, body-Font für Fließtext – nicht wild mischen.
+- Ergebnis muss wie von einem Profi GESTALTET wirken (ruhig, edel, markentreu), nicht wie eine 1:1-Kopie der Seite.
+
+Farben & Schrift: aus Screenshot/Logo ableiten (nicht aus Code-Defaults). Triff die Marke TREU, KRÄFTIG – aber GEORDNET.`;
 
 export function extremeUser(signals: {
   url: string;
@@ -142,6 +152,38 @@ ${
       : "Kein Screenshot – orientiere dich an Titel/Texten/Schriften und baue einen sauberen, markanten Skin."
   }
 Erzeuge das JSON (inkl. "css"-Skin gegen die Hooks) so, dass sich die Hilfe-Seite wie ein nahtloser Teil der Website anfühlt.`;
+}
+
+// ── Selbst-Review: KI prüft ihren eigenen Skin kritisch und räumt auf ──
+export const EXTREME_REFINE_SYSTEM = `Du bist ein STRENGER Senior-Designer im Review. Du bekommst einen generierten CSS-„Skin" für eine eingebettete Hilfe-Seite. Schau kritisch drüber, als würdest du ihn abnehmen.
+
+Bewerte gnadenlos: Wirkt es chaotisch, unruhig, überladen oder „billig"? Häufige Fehler, die du BEHEBEN musst:
+- inkonsistente Abstände (krumme/wechselnde Werte) -> auf eine 4px-Skala bringen (8/12/16/24/32)
+- zu viele verschiedene Schriftgrößen/-gewichte -> klare Hierarchie mit wenigen Stufen
+- mehrere verschiedene Radien -> EIN konsistentes Radius-System
+- zu viel Deko / Effekte überall -> auf 1–2 dezente Akzente reduzieren
+- uneinheitliche Karten -> alle gleich
+- schlechte Lesbarkeit / schwacher Kontrast -> korrigieren
+- gemischte Ausrichtung -> vereinheitlichen
+
+WICHTIG: Behalte die MARKENIDENTITÄT (Farben, Typo-Charakter, Grundstimmung) – du machst es nur AUFGERÄUMTER, ruhiger, professioneller. Nicht neutralisieren.
+
+Sicherheit unverändert: nur [data-tx=...]-Hooks (+ :hover/::before/::after), KEIN @import/@font-face/url() außer https-Bildern, kein JS, < 3500 Zeichen, ohne Kommentare.
+
+Gib AUSSCHLIESSLICH JSON zurück: { "issues": ["kurze Liste der gefundenen Probleme"], "css": "der verbesserte, aufgeräumte Skin" }. Wenn der Skin schon top ist: gib ihn (leicht geglättet) zurück, issues = [].`;
+
+export function extremeRefineUser(tokens: unknown, css: string) {
+  const t = (tokens ?? {}) as { style?: string; colors?: Record<string, string> };
+  const colors = Object.entries(t.colors ?? {})
+    .map(([k, v]) => `${k}:${v}`)
+    .join(", ");
+  return `Stil: ${t.style ?? "—"}
+Markenfarben (beibehalten): ${colors || "—"}
+
+Zu prüfender CSS-Skin:
+${css}
+
+Räume ihn nach den Design-Regeln auf und gib das JSON zurück.`;
 }
 
 export function chatSystem(accountName: string) {

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
-import { EXTREME_SYSTEM, extremeUser } from "@/lib/ai-prompts";
+import { EXTREME_SYSTEM, extremeUser, EXTREME_REFINE_SYSTEM, extremeRefineUser } from "@/lib/ai-prompts";
 import { sanitizeSkinCss } from "@/lib/skin-css";
 
 export const maxDuration = 60;
@@ -164,7 +164,27 @@ export async function POST(req: NextRequest) {
       shape: parsed.shape,
       content: parsed.content,
     };
-    const css = sanitizeSkinCss(parsed.css);
+
+    // Pass 2 – Selbst-Review: KI räumt ihren eigenen Skin nach Design-Regeln auf.
+    let rawCss = typeof parsed.css === "string" ? parsed.css : "";
+    if (rawCss.trim()) {
+      try {
+        const refine = await openai().chat.completions.create({
+          model: AI.models.chat,
+          messages: [
+            { role: "system", content: EXTREME_REFINE_SYSTEM },
+            { role: "user", content: extremeRefineUser(tokens, rawCss) },
+          ],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 2000,
+        });
+        const rp = JSON.parse(refine.choices[0].message.content ?? "{}");
+        if (rp && typeof rp.css === "string" && rp.css.trim().length > 40) rawCss = rp.css;
+      } catch {
+        /* Refine optional – Pass-1-CSS behalten */
+      }
+    }
+    const css = sanitizeSkinCss(rawCss);
     const layout = validLayout(parsed.layout);
 
     // Logo ablegen
