@@ -6,18 +6,40 @@ type ThemeRow = {
   ai_tokens?: unknown;
   logo_path?: string | null;
   ai_logo_path?: string | null;
+  extreme_tokens?: unknown;
+  extreme_css?: string | null;
+  extreme_layout?: unknown;
+  extreme_logo_path?: string | null;
 } | null;
 
-/** Aktive Design-Quelle auflösen (Standard-CI vs. KI-Design je nach mode). */
-export function resolveTheme(theme: ThemeRow): {
-  mode: "manual" | "ai";
+export type ResolvedTheme = {
+  mode: "manual" | "ai" | "extreme";
   tokens: unknown;
   logoPath: string | null;
-} {
-  const mode = theme?.mode === "ai" ? "ai" : "manual";
+  /** Nur im Extrem-Modus: gekapseltes Skin-CSS + Layout-Varianten. */
+  skinCss: string | null;
+  layout: { header?: string; cards?: string; hero?: string } | null;
+};
+
+/** Aktive Design-Quelle auflösen (Standard-CI vs. KI-Design vs. Extrem je nach mode). */
+export function resolveTheme(theme: ThemeRow): ResolvedTheme {
+  const raw = theme?.mode;
+  const mode: ResolvedTheme["mode"] =
+    raw === "extreme" ? "extreme" : raw === "ai" ? "ai" : "manual";
+
+  if (mode === "extreme") {
+    return {
+      mode,
+      tokens: theme?.extreme_tokens ?? theme?.ai_tokens ?? theme?.tokens ?? null,
+      logoPath: theme?.extreme_logo_path ?? theme?.ai_logo_path ?? theme?.logo_path ?? null,
+      skinCss: theme?.extreme_css ?? null,
+      layout: (theme?.extreme_layout as ResolvedTheme["layout"]) ?? null,
+    };
+  }
+
   const tokens = mode === "ai" ? (theme?.ai_tokens ?? theme?.tokens) : theme?.tokens;
   const logoPath = mode === "ai" ? (theme?.ai_logo_path ?? theme?.logo_path) : theme?.logo_path;
-  return { mode, tokens: tokens ?? null, logoPath: logoPath ?? null };
+  return { mode, tokens: tokens ?? null, logoPath: logoPath ?? null, skinCss: null, layout: null };
 }
 
 const SYSTEM_FONTS = new Set([

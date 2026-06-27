@@ -6,14 +6,24 @@ import { Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function AutoCi({ initialUrl, compact }: { initialUrl: string; compact?: boolean }) {
+export function AutoCi({
+  initialUrl,
+  compact,
+  endpoint = "/api/theme/analyze",
+  successMsg = "CI übernommen! Farben aktualisiert.",
+}: {
+  initialUrl: string;
+  compact?: boolean;
+  endpoint?: string;
+  successMsg?: string;
+}) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, start] = useTransition();
 
   function run() {
     start(async () => {
       try {
-        const res = await fetch("/api/theme/analyze", {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
@@ -21,7 +31,7 @@ export function AutoCi({ initialUrl, compact }: { initialUrl: string; compact?: 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Fehler");
         if (data.ok) {
-          toast.success("CI übernommen! Farben aktualisiert.");
+          toast.success(successMsg);
           setTimeout(() => window.location.reload(), 900);
         } else if (data.message) {
           toast.message(data.message);

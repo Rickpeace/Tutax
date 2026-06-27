@@ -10,13 +10,19 @@ export default async function BrandingPage() {
   const supabase = await createClient();
   const { data: theme } = await supabase
     .from("themes")
-    .select("tokens, ai_tokens, logo_path, ai_logo_path, mode, source_url")
+    .select(
+      "tokens, ai_tokens, logo_path, ai_logo_path, mode, source_url, extreme_tokens, extreme_logo_path",
+    )
     .eq("account_id", account.id)
     .single();
 
-  const mode = theme?.mode === "ai" ? "ai" : "manual";
+  const mode =
+    theme?.mode === "extreme" ? "extreme" : theme?.mode === "ai" ? "ai" : "manual";
   const manualLogoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
   const aiLogoUrl = theme?.ai_logo_path ? publicImageUrl(theme.ai_logo_path) : null;
+  const extremeLogoUrl = theme?.extreme_logo_path
+    ? publicImageUrl(theme.extreme_logo_path)
+    : null;
   const colors = ((theme?.tokens as { colors?: Record<string, string> })?.colors ?? {}) as Record<string, string>;
 
   return (
@@ -36,6 +42,8 @@ export default async function BrandingPage() {
         manualLogoUrl={manualLogoUrl}
         aiTokens={theme?.ai_tokens ?? null}
         aiLogoUrl={aiLogoUrl}
+        extremeTokens={theme?.extreme_tokens ?? null}
+        extremeLogoUrl={extremeLogoUrl}
         sourceUrl={theme?.source_url ?? ""}
       />
 

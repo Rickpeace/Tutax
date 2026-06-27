@@ -85,6 +85,65 @@ ${
 Leite daraus das Theme-JSON ab und treffe die Marke. Formuliere aus den Texten einen kurzen "content.tagline".`;
 }
 
+// ── Extrem-Design: KI schreibt zusätzlich einen CSS-„Skin" gegen feste Hooks ──
+export const EXTREME_SYSTEM = `Du bist ein Senior-Webdesigner. Du baust für eine Steuerkanzlei eine eingebettete HILFE-SEITE so um, dass sie sich wie ein NAHTLOSER Teil ihrer Hauptwebsite anfühlt – nicht nur Farben, sondern Typografie-Skala, Buttons, Header, Deko-Elemente, Abstände und Stimmung.
+
+Du erhältst einen SCREENSHOT der Website (entscheidende Quelle) + Struktur-Hinweise. Analysiere das gesamte Look & Feel und reproduziere es.
+
+Die Hilfe-Seite hat diese festen DOM-Hooks (du stylst NUR diese, sie werden automatisch unter .tutax-skin gekapselt):
+- [data-tx="header"]  – Kopfbereich (Logo + Titel)
+- [data-tx="logo"]    – Logo/Initial-Box
+- [data-tx="title"]   – Kanzlei-Name (große Headline)
+- [data-tx="subtitle"]– „Hilfe & Anleitungen"
+- [data-tx="browser"] – Inhaltsbereich
+- [data-tx="search"]  – Suchfeld
+- [data-tx="cats"]    – Reihe der Kategorie-Chips
+- [data-tx="cat"]     – einzelner Kategorie-Chip (aktiv: [data-tx="cat"][data-active="true"])
+- [data-tx="card"]    – Tutorial-Karte (Hover: [data-tx="card"]:hover)
+- [data-tx="card-title"], [data-tx="card-desc"]
+- [data-tx="footer"]  – Fußzeile
+
+Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Markdown):
+{
+  "style": "corporate | minimal | playful | editorial | technical",
+  "colors": { "primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","surface":"#hex","text":"#hex","textMuted":"#hex","border":"#hex" },
+  "typography": { "headingFont":"echte Google-Font, z. B. Archivo","bodyFont":"echte Google-Font","headingWeight":800 },
+  "shape": { "radius":12, "shadow":"soft|medium|none", "buttonStyle":"solid|outline|pill", "cardStyle":"outline|filled|elevated" },
+  "layout": { "header":"left|center|banner", "cards":"grid|list", "hero":"none|band" },
+  "css": "reines CSS, NUR mit den obigen Hooks – siehe Regeln"
+}
+
+Regeln für "css" (WICHTIG – Sicherheit & Qualität):
+- Nutze AUSSCHLIESSLICH die [data-tx=...]-Hooks als Selektoren (gern mit :hover, ::before/::after für Deko). KEIN html/body, KEINE fremden Klassen, KEINE IDs.
+- KEIN @import, KEIN @font-face, KEINE url() außer https:-Bildern. Kein JavaScript.
+- Sei MUTIG und konkret: setze Schriftgröße/Gewicht der Headline wie auf der Seite (große, kräftige Display-Headline), Button-Look (Form, Border, Hover, ggf. Großbuchstaben/letter-spacing), Karten-Look (Rahmen vs. Fläche vs. Schatten), Abstände/Dichte. Baue – wenn die Website das hat – ein, zwei dezente Deko-Elemente nach (z. B. farbiger Balken/Unterstrich an der Headline via ::after, farbige linke Kante an Karten).
+- Lesbarkeit bleibt Pflicht (Kontrast Text/Hintergrund).
+- Halte das CSS kompakt (< 3500 Zeichen), valide, ohne Kommentare.
+- Verwende die Farben aus "colors" auch im CSS (gleiche Hex-Werte), damit alles stimmig ist.
+
+Farben & Schrift: aus Screenshot/Logo ableiten (nicht aus Code-Defaults). Triff die Marke TREU und KRÄFTIG.`;
+
+export function extremeUser(signals: {
+  url: string;
+  title?: string;
+  fonts: string[];
+  description?: string;
+  heroText?: string;
+  hasShot: boolean;
+}) {
+  return `Website: ${signals.url}
+Titel: ${signals.title ?? "—"}
+Schriften (font-family, Hinweis für Typografie): ${signals.fonts.slice(0, 6).join(", ") || "—"}
+Texte – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}
+
+${
+    signals.hasShot
+      ? "Beigefügte Bilder: 1) SCREENSHOT der Website (Hauptquelle für Farben, Typo-Stil, Deko, Stimmung), 2) ggf. Logo. Reproduziere das Look & Feel im CSS-Skin."
+      : "Kein Screenshot – orientiere dich an Titel/Texten/Schriften und baue einen sauberen, markanten Skin."
+  }
+Erzeuge das JSON (inkl. "css"-Skin gegen die Hooks) so, dass sich die Hilfe-Seite wie ein nahtloser Teil der Website anfühlt.`;
+}
+
 export function chatSystem(accountName: string) {
   return `Du bist der freundliche Hilfe-Assistent der Steuerkanzlei „${accountName}".
 Beantworte Fragen der Mandanten AUSSCHLIESSLICH auf Basis der bereitgestellten Ausschnitte (Kontext).

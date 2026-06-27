@@ -73,30 +73,39 @@ export default async function HubPage({
   ];
   const order = [...new Set([...ordered.map((c) => c.name), "Sonstiges"])];
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const { mode, tokens, logoPath } = resolveTheme(theme);
+  const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
+  const skinClass =
+    mode === "extreme"
+      ? `tutax-skin tx-h-${layout?.header ?? "left"} tx-c-${layout?.cards ?? "grid"} tx-hero-${layout?.hero ?? "none"}`
+      : "";
 
   return (
     <main
-      className="min-h-screen"
+      className={`min-h-screen ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
       {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+      {mode === "extreme" && skinCss && (
+        <style dangerouslySetInnerHTML={{ __html: skinCss }} />
+      )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
       <div className="mx-auto max-w-2xl px-4 py-6">
-        <div className="mb-5 flex items-center gap-3">
+        <div data-tx="header" className="mb-5 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={logoUrl}
               alt=""
+              data-tx="logo"
               className="size-11 border border-black/5 bg-white object-contain p-1"
               style={{ borderRadius: "var(--brand-radius, 12px)" }}
             />
           ) : (
             <div
+              data-tx="logo"
               className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
               style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
             >
@@ -105,6 +114,7 @@ export default async function HubPage({
           )}
           <div>
             <div
+              data-tx="title"
               className="text-xl font-extrabold"
               style={{
                 fontFamily: fonts.heading,
@@ -114,13 +124,13 @@ export default async function HubPage({
             >
               {account.name}
             </div>
-            <div className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
+            <div data-tx="subtitle" className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
           </div>
         </div>
 
         <HubBrowser accountSlug={account.slug} items={items} order={order} />
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">powered by Tutax</p>
+        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">powered by Tutax</p>
       </div>
       <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>

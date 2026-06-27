@@ -41,8 +41,8 @@ export function HubBrowser({
   }, [q, items, order]);
 
   return (
-    <div>
-      <div className="mb-5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 py-3">
+    <div data-tx="browser">
+      <div data-tx="search" className="mb-5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 py-3">
         <Search className="size-4 text-muted-foreground" />
         <input
           value={q}
@@ -60,8 +60,9 @@ export function HubBrowser({
         </p>
       ) : (
         groups.map((g) => (
-          <section key={g.name} className="mb-6">
+          <section key={g.name} data-tx="cats" className="mb-6">
             <h2
+              data-tx="cat"
               className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground"
               style={{ fontFamily: "var(--brand-font-heading)" }}
             >
@@ -72,6 +73,7 @@ export function HubBrowser({
                 <Link
                   key={t.slug}
                   href={`/h/${accountSlug}/${t.slug}`}
+                  data-tx="card"
                   className="flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
                   style={{
                     background: "var(--brand-card-bg, #fff)",
@@ -93,6 +95,7 @@ export function HubBrowser({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div
+                      data-tx="card-title"
                       className="font-bold"
                       style={{
                         color: "var(--brand-title, var(--brand-ink))",
@@ -103,7 +106,7 @@ export function HubBrowser({
                       {t.title}
                     </div>
                     {t.description && (
-                      <div className="truncate text-sm text-muted-foreground">
+                      <div data-tx="card-desc" className="truncate text-sm text-muted-foreground">
                         {t.description}
                       </div>
                     )}
