@@ -1,8 +1,9 @@
 // Zentrale KI-Prompts (alle OpenAI). Hier zentral pflegbar.
 
 export const CI_ANALYSIS_SYSTEM = `Du bist ein UI-Designer, der die Corporate Identity einer Website analysiert.
-Du erhältst i. d. R. einen SCREENSHOT der Website (Hauptquelle!), dazu häufige CSS-Farben, Schrift-Hinweise und das Logo einer Steuerkanzlei.
-Wenn ein Screenshot vorliegt: bestimme die dominante Marken-/Akzentfarbe und den Stil VISUELL aus dem Screenshot – die CSS-Farbliste ist nur Ergänzung (enthält oft Framework-Defaults wie Bootstrap-Blau, die NICHT die Marke sind).
+Du erhältst i. d. R. einen SCREENSHOT der Website (die ENTSCHEIDENDE Quelle für Farben & Look), dazu Struktur-Hinweise aus dem Code (Schriftarten, Ecken-Radius, Karten-Stil) und das Logo einer Steuerkanzlei.
+FARBEN: Wenn ein Screenshot vorliegt, bestimme ALLE Farben (primary/accent/background/surface/text/...) AUSSCHLIESSLICH visuell aus Screenshot + Logo. IGNORIERE Code-/CSS-Farben für die Farbwahl komplett – die enthalten oft unsichtbare Framework-Defaults (Bootstrap-/jQuery-Blau), die NICHT die Marke sind. Nur wenn KEIN Screenshot vorliegt, nutze die Code-Farben als Näherung.
+STRUKTUR (Schriftarten, Radius, Karten-Stil): dafür darfst/sollst du die Code-Hinweise nutzen – die sind dort verlässlicher als aus dem Bild geschätzt.
 Leite ein Theme ab, das die Marke TREU und KRÄFTIG widerspiegelt – die eingebettete Hilfe-Seite soll wie ein nahtloser Teil der Website wirken. NICHT abschwächen, NICHT „vertasteful-en".
 
 Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markdown, kein Text davor/danach):
@@ -28,7 +29,7 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt nach genau diesem Schema zurück (kein Markd
 }
 
 Regeln (wichtig – sei mutig, treffe die Marke):
-- "primary" = die charakteristischste Farbe aus den MARKENFARBEN-KANDIDATEN. Sie darf auch GEDÄMPFT/entsättigt sein (z. B. Salbeigrün, Taupe, Altrosa, Beige) – nimm sie trotzdem und weiche NICHT auf ein kräftigeres Standard-/Bootstrap-Blau aus, nur weil es bunter ist. NIEMALS Schwarz, Weiß oder neutrales Grau als primary.
+- "primary" = die im SCREENSHOT sichtbar dominante Markenfarbe (Logo, Überschriften, Navigation, Buttons). Sie darf auch GEDÄMPFT/entsättigt sein (z. B. Salbeigrün, Taupe, Altrosa, Beige) – nimm sie trotzdem. NIEMALS Schwarz, Weiß oder neutrales Grau als primary, und NIEMALS ein Code-Blau übernehmen, das im Screenshot gar nicht sichtbar ist.
 - "accent" = eine zweite markante Marken-/Signalfarbe, falls vorhanden (z. B. ein Grün als Kontrast).
 - Übernimm den Charakter der Marke: knallig → knallig, technisch/minimal → reduziert.
 - "shape.radius": eckige/technische Marken → 0–4 (scharfe Kanten); freundlich/modern → 10–16; verspielt → größer (nur eine Zahl). "shape.buttonStyle": GENAU einer der Werte solid | outline | pill (kein Freitext). "shape.shadow": GENAU einer von soft | medium | none.
@@ -64,18 +65,22 @@ export function ciAnalysisUser(signals: {
         : signals.radiusHint === "eckig"
           ? "Die Website nutzt scharfe/eckige Ecken → shape.radius 0–4."
           : "";
+  const structureLines = [cardLine, radiusLine].filter(Boolean).join("\n");
+  // Code-Farben NUR als Backup, wenn kein Screenshot vorliegt (sonst vergiften
+  // Framework-Defaults wie Bootstrap-/jQuery-Blau die Farbwahl).
+  const colorBlock = signals.hasShot
+    ? ""
+    : `\nKein Screenshot – nutze diese Code-Farben als Näherung (nach Häufigkeit, evtl. Framework-Reste): ${signals.brandColors?.join(", ") || signals.colors.slice(0, 12).join(", ") || "—"}${signals.themeColor ? `\nmeta theme-color: ${signals.themeColor}` : ""}`;
+
   return `Website: ${signals.url}
 Titel: ${signals.title ?? "—"}
-meta theme-color: ${signals.themeColor ?? "—"}
-Markenfarben-Kandidaten (HIER liegt die Primär-/Akzentfarbe – können auch GEDÄMPFT sein, z. B. Salbeigrün): ${signals.brandColors?.join(", ") || "—"}${cardLine ? "\n" + cardLine : ""}${radiusLine ? "\n" + radiusLine : ""}
-Alle häufigen Farben (inkl. Text/Hintergrund, nach Häufigkeit): ${signals.colors.slice(0, 12).join(", ") || "—"}
-Schriften (font-family): ${signals.fonts.slice(0, 6).join(", ") || "—"}
+Schriften (font-family, für Typografie): ${signals.fonts.slice(0, 6).join(", ") || "—"}${structureLines ? "\n" + structureLines : ""}${colorBlock}
 Texte der Website – Beschreibung: ${signals.description ?? "—"} | Headline: ${signals.heroText ?? "—"}
 
 ${
     signals.hasShot
-      ? "Beigefügte Bilder: das ERSTE ist ein SCREENSHOT der gerenderten Website – leite Markenfarbe (primary/accent), Stil (cardStyle) und Form (radius/buttonStyle) PRIMÄR daraus ab; das ist verlässlicher als die CSS-Farbliste (dort stecken oft Framework-Defaults wie Bootstrap-Blau). Das zweite Bild (falls vorhanden) ist das Logo."
-      : "Beigefügtes Bild (falls vorhanden): das Logo der Kanzlei – seine Farben sind die Markenfarben."
+      ? "Beigefügte Bilder: das ERSTE ist ein SCREENSHOT der gerenderten Website. Bestimme ALLE Farben (primary/accent/background/surface/text/border) AUSSCHLIESSLICH daraus und aus dem Logo (2. Bild). Die Code-Hinweise oben gelten NUR für Struktur (Schrift/Radius/Karten-Stil), NICHT für Farben."
+      : "Beigefügtes Bild (falls vorhanden): das Logo der Kanzlei – seine Farben sind die Markenfarben. Sonst die Code-Farben oben als Näherung nutzen."
   }
 Leite daraus das Theme-JSON ab und treffe die Marke. Formuliere aus den Texten einen kurzen "content.tagline".`;
 }
