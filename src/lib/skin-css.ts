@@ -28,6 +28,33 @@ export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
   return scopeCss(css, scope).slice(0, 40000);
 }
 
+// Nur „malende" Eigenschaften erlauben – KEINE Struktur (display/position/float/
+// width/height/grid/flex/transform/z-index/overflow). So kann der Skin das saubere
+// Basis-Layout nicht zerbrechen, nur einfärben/typografieren/dekorieren.
+const EXTRA_PROPS = new Set([
+  "color", "line-height", "letter-spacing", "word-spacing", "opacity",
+  "box-shadow", "cursor", "content", "list-style", "list-style-type",
+  "filter", "backdrop-filter", "fill", "stroke", "gap", "white-space",
+  "text-fill-color", "clip-path", "aspect-ratio",
+]);
+function allowedProp(prop: string): boolean {
+  const p = prop.toLowerCase().replace(/^-(webkit|moz|ms|o)-/, "");
+  if (/^(border|background|font|margin|padding|text|transition|outline)/.test(p)) return true;
+  return EXTRA_PROPS.has(p);
+}
+function filterDeclarations(body: string): string {
+  return body
+    .split(";")
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .filter((d) => {
+      const i = d.indexOf(":");
+      if (i < 1) return false;
+      return allowedProp(d.slice(0, i).trim());
+    })
+    .join("; ");
+}
+
 function splitTopLevel(css: string): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -62,12 +89,10 @@ function scopeCss(css: string, scope: string): string {
 
     if (prelude.startsWith("@")) {
       if (/^@(media|supports)/i.test(prelude)) {
-        // verschachtelte Regeln im Inneren ebenfalls kapseln
+        // verschachtelte Regeln im Inneren ebenfalls kapseln + filtern
         result.push(`${prelude} { ${scopeCss(body, scope)} }`);
-      } else if (/^@(font-face|(-webkit-)?keyframes)/i.test(prelude)) {
-        result.push(`${prelude} { ${body} }`); // definiert nur Namen -> unkritisch
       }
-      // alle anderen @-Regeln verwerfen
+      // font-face/keyframes verwerfen (brauchen wir nicht; keyframes nutzen transform o. Ä.)
       continue;
     }
 
@@ -84,7 +109,8 @@ function scopeCss(css: string, scope: string): string {
       .filter(Boolean)
       .join(", ");
 
-    if (scoped) result.push(`${scoped} { ${body} }`);
+    const cleanBody = filterDeclarations(body);
+    if (scoped && cleanBody) result.push(`${scoped} { ${cleanBody} }`);
   }
 
   return result.join("\n");

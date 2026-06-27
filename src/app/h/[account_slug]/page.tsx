@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
+import { sanitizeSkinCss } from "@/lib/skin-css";
 import { publicImageUrl } from "@/lib/public-image";
 import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
@@ -97,7 +98,7 @@ export default async function HubPage({
     >
       {fontsHref && <link rel="stylesheet" href={fontsHref} />}
       {mode === "extreme" && skinCss && (
-        <style dangerouslySetInnerHTML={{ __html: skinCss }} />
+        <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
       <div className="mx-auto max-w-2xl px-4 py-6">

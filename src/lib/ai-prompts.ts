@@ -114,7 +114,8 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Markdown):
 }
 
 Regeln für "css" (WICHTIG – Sicherheit & Qualität):
-- Nutze AUSSCHLIESSLICH die [data-tx=...]-Hooks als Selektoren (gern mit :hover, ::before/::after für Deko). KEIN html/body, KEINE fremden Klassen, KEINE IDs.
+- Du darfst das vorhandene, bereits saubere Layout NUR EINFÄRBEN, typografieren und dezent dekorieren. NIEMALS die STRUKTUR ändern: KEIN display, position, float, width/height, grid, flex, transform, z-index, overflow, top/left/right/bottom (werden ohnehin entfernt). Deko ausschließlich über border / border-radius / background / box-shadow – NICHT über absolute Positionierung. Headline-Unterstrich z. B. via border-bottom, Karten-Akzent via border-left.
+- Nutze AUSSCHLIESSLICH die [data-tx=...]-Hooks als Selektoren (gern mit :hover). KEIN html/body, KEINE fremden Klassen, KEINE IDs.
 - KEIN @import, KEIN @font-face, KEINE url() außer https:-Bildern. Kein JavaScript.
 - Verwende die Farben aus "colors" auch im CSS (gleiche Hex-Werte).
 - Lesbarkeit ist Pflicht (klarer Kontrast Text/Hintergrund).
@@ -168,7 +169,7 @@ Bewerte gnadenlos: Wirkt es chaotisch, unruhig, überladen oder „billig"? Häu
 
 WICHTIG: Behalte die MARKENIDENTITÄT (Farben, Typo-Charakter, Grundstimmung) – du machst es nur AUFGERÄUMTER, ruhiger, professioneller. Nicht neutralisieren.
 
-Sicherheit unverändert: nur [data-tx=...]-Hooks (+ :hover/::before/::after), KEIN @import/@font-face/url() außer https-Bildern, kein JS, < 3500 Zeichen, ohne Kommentare.
+Sicherheit/Struktur unverändert: nur [data-tx=...]-Hooks (+ :hover), nur EINFÄRBEN/typografieren/dekorieren – KEIN display/position/float/width/height/grid/flex/transform/overflow (Layout NICHT umbauen). KEIN @import/@font-face/url() außer https-Bildern, kein JS, < 3500 Zeichen, ohne Kommentare.
 
 Gib AUSSCHLIESSLICH JSON zurück: { "issues": ["kurze Liste der gefundenen Probleme"], "css": "der verbesserte, aufgeräumte Skin" }. Wenn der Skin schon top ist: gib ihn (leicht geglättet) zurück, issues = [].`;
 
