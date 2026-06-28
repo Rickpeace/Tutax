@@ -18,7 +18,7 @@ export default function ImpressumPage() {
           <section>
             <h2 className="font-bold text-ink">Angaben gemäß § 5 TMG</h2>
             <p>
-              [Firmenname / Kanzleiname]<br />
+              [Firmenname / Organisationsname]<br />
               [Straße und Hausnummer]<br />
               [PLZ Ort]
             </p>

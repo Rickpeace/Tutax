@@ -7,20 +7,20 @@ const plans = [
     price: "0 €",
     period: "/ Monat",
     current: true,
-    features: ["1 Hilfe-Seite", "Bis zu 5 Tutorials", "Highlights & Verzweigungen", "Tutax-Branding im Footer"],
+    features: ["1 Hilfe-Seite", "Bis zu 5 Tutorials", "Highlights & Verzweigungen", "Steply-Branding im Footer"],
   },
   {
     name: "Pro",
     price: "29 €",
     period: "/ Monat",
     highlight: true,
-    features: ["Unbegrenzte Tutorials", "Eigenes Logo & CI-Farben", "KI-CI-Übernahme", "Hilfe-Chatbot", "Kein Tutax-Branding"],
+    features: ["Unbegrenzte Tutorials", "Eigenes Logo & CI-Farben", "KI-CI-Übernahme", "Hilfe-Chatbot", "Kein Steply-Branding"],
   },
   {
     name: "Premium",
     price: "79 €",
     period: "/ Monat",
-    features: ["Alles aus Pro", "Eigene Domain (hilfe.kanzlei.de)", "Drift-Überwachung (KI)", "Analytics & Drop-off", "Priorisierter Support"],
+    features: ["Alles aus Pro", "Eigene Domain (hilfe.firma.de)", "Drift-Überwachung (KI)", "Analytics & Drop-off", "Priorisierter Support"],
   },
 ];
 

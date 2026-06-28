@@ -12,7 +12,7 @@ export default async function AdminLayout({
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-ink text-white">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-4 px-5">
-          <span className="font-display text-base font-bold tracking-tight">Tutax</span>
+          <span className="font-display text-base font-bold tracking-tight">Steply</span>
           <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
             Admin
           </span>

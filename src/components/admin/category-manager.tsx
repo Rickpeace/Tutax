@@ -23,7 +23,7 @@ export function CategoryManager({
         <FolderTree className="size-4 text-primary" /> Standard-Kategorien
       </div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Erscheinen automatisch beim Kunden und im Mandanten-Hub.
+        Erscheinen automatisch beim Kunden und im Kunden-Hub.
       </p>
 
       <div className="flex flex-wrap gap-2">

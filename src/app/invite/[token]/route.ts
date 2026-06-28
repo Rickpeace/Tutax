@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Einladung annehmen: tritt dem Kanzlei-Konto bei und leitet zum Passwort-Setzen.
+ * Einladung annehmen: tritt dem Organisation-Konto bei und leitet zum Passwort-Setzen.
  * Aufruf i. d. R. aus der Einladungs-Mail (Nutzer ist dann eingeloggt).
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {

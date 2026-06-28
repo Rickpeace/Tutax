@@ -164,7 +164,7 @@ export default async function ViewerPage({
         />
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
-          Bereitgestellt von {account.name} · powered by Tutax
+          Bereitgestellt von {account.name} · powered by Steply
         </p>
       </div>
     </main>

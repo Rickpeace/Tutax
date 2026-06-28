@@ -139,7 +139,7 @@ export default async function HubPage({
 
         <HubBrowser accountSlug={account.slug} items={items} order={order} />
 
-        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">powered by Tutax</p>
+        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">powered by Steply</p>
       </div>
       <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>

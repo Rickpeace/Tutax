@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         })),
         {
           role: "user",
-          content: `Frage des Mandanten: ${question}\n\nVerfügbare Ausschnitte:\n${context}${expertsText}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
+          content: `Frage des Kunden: ${question}\n\nVerfügbare Ausschnitte:\n${context}${expertsText}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
         },
       ],
     });
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         answer:
           answer ||
-          `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Kanzlei und ihre Anleitungen weiterhelfen.`,
+          `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.`,
         sources: [],
       });
     }

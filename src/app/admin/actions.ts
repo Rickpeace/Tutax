@@ -71,7 +71,7 @@ export async function deleteTemplate(id: string) {
 
 // ---- Globale (Standard-)Kategorien -----------------------------------------
 
-/** Globale Kategorie anlegen (erscheint beim Kunden + im Mandanten-Hub). */
+/** Globale Kategorie anlegen (erscheint beim Kunden + im Kunden-Hub). */
 export async function createTemplateCategory(formData: FormData) {
   await ensureAdmin();
   const name = String(formData.get("name") ?? "").trim();

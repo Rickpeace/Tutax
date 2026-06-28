@@ -58,7 +58,7 @@ export function BrandPreview({
           )}
           <div>
             <div className="text-base leading-tight" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: headingColor }}>
-              {accountName || "Ihre Kanzlei"}
+              {accountName || "Ihre Organisation"}
             </div>
             <div className="text-[10px]" style={{ opacity: 0.6 }}>Hilfe &amp; Anleitungen</div>
           </div>

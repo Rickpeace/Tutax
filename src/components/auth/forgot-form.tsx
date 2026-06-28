@@ -28,7 +28,7 @@ export function ForgotForm() {
             type="email"
             autoComplete="email"
             required
-            placeholder="name@kanzlei.de"
+            placeholder="name@firma.de"
           />
         </div>
         {state.error && (

@@ -46,7 +46,7 @@ export default async function AdminTemplatesPage() {
           </div>
           <h2 className="mt-4 font-bold text-ink">Noch keine Templates</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Lege ein Standard-Template an oder seede die DATEV-Anleitungen per Skript.
+            Lege ein Standard-Template an oder seede die Beispiel-Anleitungen per Skript.
           </p>
         </div>
       ) : (

@@ -28,16 +28,16 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
             <Sparkles className="size-7" />
           </div>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">
-            Willkommen bei Tutax 👋
+            Willkommen bei Steply 👋
           </h1>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
             In wenigen Minuten zur ersten klickbaren Hilfe-Anleitung – ganz im Look
-            Ihrer Kanzlei. Lassen Sie uns kurz einrichten.
+            Ihrer Organisation. Lassen Sie uns kurz einrichten.
           </p>
           <div className="mt-6 space-y-2 text-left">
             {[
               { icon: PencilLine, t: "Anleitungen bauen", d: "Schritte, Screenshots, Verzweigungen" },
-              { icon: Palette, t: "Im CI Ihrer Kanzlei", d: "Logo & Farben – manuell oder per KI" },
+              { icon: Palette, t: "Im CI Ihrer Organisation", d: "Logo & Farben – manuell oder per KI" },
               { icon: Wand2, t: "Veröffentlichen & verlinken", d: "Ein Link auf Ihrer Website genügt" },
             ].map((f) => (
               <div key={f.t} className="flex items-center gap-3 rounded-lg border border-border p-3">
@@ -62,21 +62,21 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
 
           <div className="mt-5 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="ob-name">Name der Kanzlei</Label>
+              <Label htmlFor="ob-name">Name der Organisation</Label>
               <Input
                 id="ob-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Kanzlei Mertens"
+                placeholder="Muster GmbH"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ob-web">Website Ihrer Kanzlei (optional)</Label>
+              <Label htmlFor="ob-web">Website Ihrer Organisation (optional)</Label>
               <Input
                 id="ob-web"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://www.kanzlei-mueller.de"
+                placeholder="https://www.muster-gmbh.de"
               />
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                 <Wand2 className="mt-0.5 size-3.5 text-primary" />

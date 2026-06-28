@@ -19,11 +19,11 @@ const display = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: {
-    default: "Tutax – Klickbare Hilfe-Anleitungen für Kanzleien",
-    template: "%s · Tutax",
+    default: "Steply – Klickbare Hilfe-Anleitungen für Organisationen",
+    template: "%s · Steply",
   },
   description:
-    "Erstellen Sie per Drag & Drop klickbare Schritt-für-Schritt-Anleitungen mit Screenshots, Highlights und Verzweigungen – gehostet im CI Ihrer Kanzlei.",
+    "Erstellen Sie per Drag & Drop klickbare Schritt-für-Schritt-Anleitungen mit Screenshots, Highlights und Verzweigungen – gehostet im CI Ihrer Organisation.",
 };
 
 export default function RootLayout({

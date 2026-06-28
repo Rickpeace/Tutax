@@ -11,7 +11,7 @@ const sections = [
   },
   {
     h: "2. Welche Daten wir verarbeiten",
-    p: "Kontodaten (E-Mail, Name der Kanzlei), von Ihnen hochgeladene Inhalte (Screenshots, Texte) sowie technische Zugriffsdaten. Veröffentlichte Hilfeseiten sind ohne Personenbezug abrufbar.",
+    p: "Kontodaten (E-Mail, Name der Organisation), von Ihnen hochgeladene Inhalte (Screenshots, Texte) sowie technische Zugriffsdaten. Veröffentlichte Hilfeseiten sind ohne Personenbezug abrufbar.",
   },
   {
     h: "3. Zweck und Rechtsgrundlage",

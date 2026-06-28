@@ -51,7 +51,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
       <div>
         <h2 className="text-lg font-bold text-ink">Kontakt &amp; Eskalation</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Wenn der Chatbot eine Frage nicht beantworten kann, leitet er den Mandanten weiter –
+          Wenn der Chatbot eine Frage nicht beantworten kann, leitet er den Kunden weiter –
           bei passendem Thema an die richtige Person.
         </p>
       </div>
@@ -69,7 +69,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
         </label>
 
         <div className="space-y-1.5">
-          <Label>Hinweistext an Mandanten</Label>
+          <Label>Hinweistext an Kunden</Label>
           <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Gerne helfen wir Ihnen persönlich weiter." />
         </div>
 
@@ -81,7 +81,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Ansprechpartner / Team</Label>
-              <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="z. B. Team Kanzlei" />
+              <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="z. B. Team Organisation" />
             </div>
             <div className="space-y-1.5">
               <Label>Online-Kalender</Label>
@@ -89,7 +89,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
             </div>
             <div className="space-y-1.5">
               <Label>E-Mail</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="kanzlei@beispiel.de" />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="team@firma.de" />
             </div>
             <div className="space-y-1.5">
               <Label>Telefon</Label>
@@ -105,7 +105,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
           <h3 className="font-bold text-ink">Ansprechpartner &amp; Schwerpunkte</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Tragen Sie Personen mit ihrem Schwerpunkt ein. Die KI wählt je nach Frage automatisch
-            die passendste Person (z. B. Buchhaltungsfrage → die Buchhaltungs-Kollegin).
+            die passendste Person (z. B. Frage zur Abrechnung → die zuständige Kollegin).
           </p>
         </div>
 
@@ -134,7 +134,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
             <Input
               value={ex.expertise}
               onChange={(e) => setExpert(i, "expertise", e.target.value)}
-              placeholder="Schwerpunkt (z. B. Buchhaltung, Lohn, Immobiliensteuer)"
+              placeholder="Schwerpunkt (z. B. Abrechnung, Technik, Verträge)"
             />
             <div className="grid gap-2 sm:grid-cols-3">
               <Input value={ex.calendarUrl} onChange={(e) => setExpert(i, "calendarUrl", e.target.value)} placeholder="Kalender-Link" />

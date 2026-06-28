@@ -38,7 +38,7 @@ export function NewTemplateButton() {
               name="title"
               autoFocus
               required
-              placeholder="z. B. DATEV SmartLogin einrichten"
+              placeholder="z. B. Konto einrichten"
             />
           </div>
           <DialogFooter>

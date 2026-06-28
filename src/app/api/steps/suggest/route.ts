@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Bild nicht gefunden" }, { status: 404 });
 
   const system =
-    "Du hilfst einer Steuerkanzlei, eine bebilderte Schritt-für-Schritt-Anleitung für Mandanten zu erstellen. " +
+    "Du hilfst einer Organisation, eine bebilderte Schritt-für-Schritt-Anleitung für Kunden zu erstellen. " +
     "Analysiere den Screenshot und beschreibe genau EINEN Bedienschritt: was der Nutzer hier tun soll. " +
-    "Sprich die Mandanten höflich in der Sie-Form an. Erfinde nichts, was nicht im Bild zu sehen ist.";
+    "Sprich die Kunden höflich in der Sie-Form an. Erfinde nichts, was nicht im Bild zu sehen ist.";
   const instruction =
     `Kontext – Anleitung: „${tutorialTitle || "(ohne Titel)"}".\n` +
     "Antworte ausschließlich als JSON mit:\n" +

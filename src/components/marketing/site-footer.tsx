@@ -8,7 +8,7 @@ export function SiteFooter() {
         <div>
           <Wordmark size="lg" />
           <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-            Klickbare Hilfe-Anleitungen für Steuerkanzleien – im eigenen CI, ohne
+            Klickbare Hilfe-Anleitungen für Organisationen – im eigenen CI, ohne
             Webdesigner.
           </p>
         </div>
@@ -42,7 +42,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-line-2 py-5 text-center text-xs text-muted-foreground">
-        © {2026} Tutax · DSGVO-konform, Hosting in der EU
+        © {2026} Steply · DSGVO-konform, Hosting in der EU
       </div>
     </footer>
   );

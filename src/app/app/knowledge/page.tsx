@@ -25,7 +25,7 @@ export default async function KnowledgePage() {
         <div>
           <h1 className="text-xl font-bold text-ink">Wissensdatenbank</h1>
           <p className="text-sm text-muted-foreground">
-            Freies Kanzlei-Wissen, das der Chatbot zusätzlich zu den Tutorials nutzt.
+            Freies Organisations-Wissen, das der Chatbot zusätzlich zu den Tutorials nutzt.
           </p>
         </div>
         <form action={createArticle}>
@@ -56,7 +56,7 @@ export default async function KnowledgePage() {
           <h2 className="mt-4 font-bold text-ink">Noch kein Wissen hinterlegt</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             Legen Sie z. B. Öffnungszeiten, Zuständigkeiten, FAQs oder Hinweise an –
-            der Chatbot beantwortet damit Mandantenfragen.
+            der Chatbot beantwortet damit Kundenfragen.
           </p>
           <form action={createArticle} className="mt-5">
             <Button type="submit">

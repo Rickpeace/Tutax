@@ -10,7 +10,7 @@ export function Wordmark({ size = "base" }: { size?: "base" | "lg" }) {
           size === "lg" ? "text-xl" : "text-base"
         }`}
       >
-        Tutax
+        Steply
       </span>
     </span>
   );

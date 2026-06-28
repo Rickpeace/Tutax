@@ -134,7 +134,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
       <div className="mb-3 flex items-center gap-2 border-b border-line-2 pb-1.5">
         <Sparkles className="size-4 text-primary" />
         <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-          Standard-Anleitungen von Tutax
+          Standard-Anleitungen von Steply
         </h2>
       </div>
       <div className="space-y-6">
@@ -148,7 +148,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         ))}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        „Standard" wird zentral von Tutax gepflegt – Updates erscheinen automatisch.
+        „Standard" wird zentral von Steply gepflegt – Updates erscheinen automatisch.
         Beim Anpassen entsteht Ihre eigene Kopie („Angepasst").
       </p>
     </section>

@@ -29,7 +29,7 @@ export default async function KontoPage() {
           </div>
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Kanzlei
+              Organisation
             </dt>
             <dd className="mt-1 text-sm text-ink">
               {account.name}{" "}

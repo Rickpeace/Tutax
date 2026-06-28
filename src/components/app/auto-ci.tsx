@@ -50,7 +50,7 @@ export function AutoCi({
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://www.kanzlei.de"
+          placeholder="https://www.firma.de"
           className="h-9"
         />
         <Button onClick={run} disabled={pending || !url} variant="outline" size="sm">
@@ -66,14 +66,14 @@ export function AutoCi({
         <Wand2 className="size-4 text-primary" /> CI automatisch übernehmen (KI)
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Website-URL Ihrer Kanzlei angeben – die KI leitet daraus Farben, Schriften und
+        Website-URL Ihrer Organisation angeben – die KI leitet daraus Farben, Schriften und
         das Look &amp; Feel ab.
       </p>
       <div className="mt-3 flex gap-2">
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://www.kanzlei-mueller.de"
+          placeholder="https://www.muster-gmbh.de"
         />
         <Button onClick={run} disabled={pending || !url} variant="outline">
           {pending ? "…" : "Analysieren"}

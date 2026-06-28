@@ -21,12 +21,12 @@ export function SignupForm() {
 
       <form action={action} className="mt-6 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="account_name">Name der Kanzlei</Label>
+          <Label htmlFor="account_name">Name der Organisation</Label>
           <Input
             id="account_name"
             name="account_name"
             type="text"
-            placeholder="Kanzlei Mertens"
+            placeholder="Muster GmbH"
           />
         </div>
         <div className="space-y-1.5">
@@ -37,7 +37,7 @@ export function SignupForm() {
             type="email"
             autoComplete="email"
             required
-            placeholder="name@kanzlei.de"
+            placeholder="name@firma.de"
           />
         </div>
         <div className="space-y-1.5">

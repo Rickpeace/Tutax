@@ -76,7 +76,7 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
       {
         role: "system",
         content:
-          "Du verbesserst EINEN Schritt einer Mandanten-Anleitung (Steuerkanzlei). Arbeite ALLE genannten Korrekturen GEMEINSAM in einen stimmigen Schritt ein. Sie-Anrede, kurz, klar, fachlich korrekt. Gib JSON {\"title\": \"…\", \"body\": \"…\"} zurück (body 1–3 Sätze).",
+          "Du verbesserst EINEN Schritt einer Kunden-Anleitung (Organisation). Arbeite ALLE genannten Korrekturen GEMEINSAM in einen stimmigen Schritt ein. Sie-Anrede, kurz, klar, fachlich korrekt. Gib JSON {\"title\": \"…\", \"body\": \"…\"} zurück (body 1–3 Sätze).",
       },
       {
         role: "user",

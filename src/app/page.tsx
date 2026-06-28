@@ -24,7 +24,7 @@ export default function Home() {
       <section className="relative overflow-hidden border-b border-border bg-dotgrid">
         <div className="mx-auto max-w-6xl px-5 pt-16 pb-14 sm:pt-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-ink-2">
-            <span className="size-1.5 rounded-full bg-yes" /> Hilfe-Hub für Steuerkanzleien
+            <span className="size-1.5 rounded-full bg-yes" /> Hilfe-Hub für Organisationen
             <span className="text-line">·</span> DSGVO · EU
           </div>
 
@@ -47,7 +47,7 @@ export default function Home() {
           <p className="mt-7 max-w-xl text-lg text-ink-2">
             Bauen Sie klickbare Anleitungen mit Screenshots, Markierungen und{" "}
             <b className="font-semibold text-ink">Verzweigungen</b> – veröffentlicht als
-            Hilfeseite im Look Ihrer Kanzlei. Ein Link. Kein iFrame. Kein Webdesigner.
+            Hilfeseite im Look Ihrer Organisation. Ein Link. Kein iFrame. Kein Webdesigner.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -70,7 +70,7 @@ export default function Home() {
           {[
             { k: "0 €", v: "Kostenlos starten" },
             { k: "1 Link", v: "statt iFrame-Chaos" },
-            { k: "100 %", v: "im CI Ihrer Kanzlei" },
+            { k: "100 %", v: "im CI Ihrer Organisation" },
           ].map((s) => (
             <div key={s.v} className="px-5 py-8 text-center">
               <div className="font-display text-4xl font-bold text-ink">{s.k}</div>
@@ -107,8 +107,8 @@ export default function Home() {
           </div>
 
           <BentoCell icon={ScanSearch} t="Highlights & Lupe" d="Rechteck, Kreis, Pfeil – plus eine Lupe, die das markierte Element vergrößert." />
-          <BentoCell icon={ShieldCheck} t="Schwärzen (Blur)" d="Sensible Mandantendaten unkenntlich machen. DSGVO direkt im Editor." />
-          <BentoCell icon={Layers} t="Gehostet im CI" d="Ihre Farben, Ihr Logo. Sieht aus wie Ihre Kanzlei – liegt aber bei uns." />
+          <BentoCell icon={ShieldCheck} t="Schwärzen (Blur)" d="Sensible Kundendaten unkenntlich machen. DSGVO direkt im Editor." />
+          <BentoCell icon={Layers} t="Gehostet im CI" d="Ihre Farben, Ihr Logo. Sieht aus wie Ihre Organisation – liegt aber bei uns." />
           <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy." />
           <BentoCell icon={Sparkles} t="KI übernimmt Ihr CI" d="Website-URL angeben, die KI leitet Farben & Schriften ab." soon />
         </div>
@@ -123,7 +123,7 @@ export default function Home() {
           <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-white/10 bg-white/10 md:grid-cols-3">
             {[
               { n: "01", t: "Aufbauen", d: "Schritte mit Screenshots, Highlights und Verzweigungen zusammenklicken." },
-              { n: "02", t: "Branden", d: "Logo und Farben Ihrer Kanzlei setzen – manuell oder per KI aus Ihrer Website." },
+              { n: "02", t: "Branden", d: "Logo und Farben Ihrer Organisation setzen – manuell oder per KI aus Ihrer Website." },
               { n: "03", t: "Veröffentlichen", d: "Einen Link erhalten und auf Ihrer Website verlinken. Fertig." },
             ].map((s) => (
               <div key={s.n} className="bg-ink p-8">
@@ -142,7 +142,7 @@ export default function Home() {
           <div className="pointer-events-none absolute -right-10 -top-10 size-64 rounded-full bg-accent blur-3xl" />
           <div className="relative">
             <h2 className="max-w-2xl text-4xl font-bold leading-tight tracking-tight text-ink sm:text-5xl">
-              Weniger Rückfragen. Mehr Zeit für Mandate.
+              Weniger Rückfragen. Mehr Zeit fürs Wesentliche.
             </h2>
             <p className="mt-4 max-w-lg text-ink-2">
               Starten Sie kostenlos und veröffentlichen Sie Ihre erste Anleitung in
@@ -240,7 +240,7 @@ function ProductCanvas() {
         <div className="rounded-[1.6rem] border border-border bg-card p-3 shadow-xl">
           <div className="mb-2 flex items-center gap-2 border-b border-line-2 pb-2">
             <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">M</div>
-            <div className="text-xs font-bold text-ink">Kanzlei Mertens</div>
+            <div className="text-xs font-bold text-ink">Muster GmbH</div>
             <span className="ml-auto text-[10px] text-muted-foreground">Hilfe</span>
           </div>
           <div className="aspect-[4/3] rounded-lg bg-[#0c1322] p-2">

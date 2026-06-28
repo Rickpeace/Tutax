@@ -31,7 +31,7 @@ export function LoginForm({ next }: { next: string }) {
     <div>
       <h1 className="text-xl font-bold text-ink">Anmelden</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Willkommen zurück bei Tutax.
+        Willkommen zurück bei Steply.
       </p>
 
       {mode === "password" ? (
@@ -45,7 +45,7 @@ export function LoginForm({ next }: { next: string }) {
               type="email"
               autoComplete="email"
               required
-              placeholder="name@kanzlei.de"
+              placeholder="name@firma.de"
             />
           </div>
           <div className="space-y-1.5">
@@ -73,7 +73,7 @@ export function LoginForm({ next }: { next: string }) {
               type="email"
               autoComplete="email"
               required
-              placeholder="name@kanzlei.de"
+              placeholder="name@firma.de"
             />
           </div>
           <FormFeedback state={state} />

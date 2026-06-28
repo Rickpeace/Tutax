@@ -9,7 +9,7 @@ import { publicImageUrl } from "@/lib/public-image";
 import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Vorschau · Tutax", robots: { index: false } };
+export const metadata: Metadata = { title: "Vorschau · Steply", robots: { index: false } };
 
 async function load(id: string) {
   const { account } = await requireAccount();
@@ -69,10 +69,10 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   return (
     <div className="min-h-screen" style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}>
       {fontsHref && <link rel="stylesheet" href={fontsHref} />}
-      {/* Vorschau-Leiste (gehört nicht zum Mandanten-Look) */}
+      {/* Vorschau-Leiste (gehört nicht zum Kunden-Look) */}
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-amber-300/60 bg-amber-50 px-4 py-2 text-sm text-amber-900">
         <span className="flex items-center gap-2 font-medium">
-          <Eye className="size-4" /> Vorschau – so sehen es Ihre Mandanten {tutorial.status !== "published" && "(noch nicht live)"}
+          <Eye className="size-4" /> Vorschau – so sehen es Ihre Kunden {tutorial.status !== "published" && "(noch nicht live)"}
         </span>
         <Link href="/app" className="flex items-center gap-1 rounded-md px-2 py-1 font-medium hover:bg-amber-100">
           <ArrowLeft className="size-4" /> Zurück

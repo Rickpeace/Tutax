@@ -40,7 +40,7 @@ const steps = [
   {
     icon: Palette,
     t: "5. Branding setzen",
-    d: "Unter Einstellungen → Branding legen Sie Logo und Farben fest. So sieht Ihre Hilfeseite aus wie Ihre Kanzlei.",
+    d: "Unter Einstellungen → Branding legen Sie Logo und Farben fest. So sieht Ihre Hilfeseite aus wie Ihre Organisation.",
   },
   {
     icon: Send,
@@ -60,7 +60,7 @@ export default function AnleitungPage() {
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-12">
         <h1 className="text-3xl font-extrabold tracking-tight text-ink">
-          So nutzen Sie Tutax
+          So nutzen Sie Steply
         </h1>
         <p className="mt-2 text-muted-foreground">
           In wenigen Minuten zur ersten veröffentlichten Anleitung.

@@ -99,7 +99,7 @@ export function BrandingForm({
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
-        <Label htmlFor="b-name">Name der Kanzlei</Label>
+        <Label htmlFor="b-name">Name der Organisation</Label>
         <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
 
@@ -109,7 +109,7 @@ export function BrandingForm({
           id="b-slug"
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
-          placeholder="kanzlei-mueller"
+          placeholder="muster-gmbh"
         />
         <p className="break-all text-xs text-muted-foreground">
           {appUrl}/h/<b className="text-ink-2">{previewSlug}</b>
@@ -177,7 +177,7 @@ export function BrandingForm({
 
       {/* Live-Vorschau */}
       <div className="space-y-1.5">
-        <Label>Vorschau (so sieht es der Mandant)</Label>
+        <Label>Vorschau (so sieht es der Kunde)</Label>
         <div className="rounded-xl border border-border p-4" style={{ background: colors.background }}>
           <div className="flex items-center gap-2">
             {logoUrl ? (
@@ -197,7 +197,7 @@ export function BrandingForm({
             )}
             <div>
               <div className="font-bold" style={{ color: colors.text }}>
-                {name || "Kanzlei"}
+                {name || "Organisation"}
               </div>
               <div className="text-xs" style={{ color: colors.text, opacity: 0.6 }}>
                 Hilfe &amp; Anleitungen

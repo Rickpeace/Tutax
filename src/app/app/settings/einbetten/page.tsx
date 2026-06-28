@@ -16,8 +16,8 @@ export default async function EinbettenPage() {
       <div>
         <h2 className="text-lg font-bold text-ink">Hilfe-Seite einbinden</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Ihre Anleitungen liegen unter dieser Adresse – ganz im Look Ihrer Kanzlei.
-          So bringen Sie Ihre Mandanten dorthin.
+          Ihre Anleitungen liegen unter dieser Adresse – ganz im Look Ihrer Organisation.
+          So bringen Sie Ihre Kunden dorthin.
         </p>
       </div>
 
@@ -62,7 +62,7 @@ export default async function EinbettenPage() {
 
       <p className="text-xs text-muted-foreground">
         Tipp: Da alles auf Ihrer gebrandeten Hilfe-Seite liegt, trägt jeder geteilte
-        Link sichtbar Ihr Kanzlei-Branding.
+        Link sichtbar Ihr Organisations-Branding.
       </p>
     </div>
   );

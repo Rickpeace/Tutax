@@ -64,7 +64,7 @@ export function TeamManager({
           <form ref={formRef} onSubmit={onInvite} className="flex flex-wrap items-end gap-2">
             <div className="min-w-[12rem] flex-1 space-y-1.5">
               <Label htmlFor="invite-email">E-Mail</Label>
-              <Input id="invite-email" name="email" type="email" required placeholder="kollegin@kanzlei.de" />
+              <Input id="invite-email" name="email" type="email" required placeholder="kollegin@firma.de" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="invite-role">Rolle</Label>
