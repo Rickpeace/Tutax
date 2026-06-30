@@ -83,35 +83,60 @@ async function buildTutorial(job, videoPath, dir) {
   let vdim = [null, null];
   try { vdim = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number); } catch { /* dims optional */ }
 
-  // 1) Audio -> Whisper
+  // 1) Audio -> Whisper (mit Wort-Zeitstempeln für die Marker-Erkennung)
   const audio = path.join(dir, "audio.mp3");
   sh("ffmpeg", ["-y","-i", videoPath, "-vn","-ac","1","-ar","16000","-b:a","64k", audio]);
-  const tr = await openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de" });
+  const tr = await openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de", timestamp_granularities: ["segment", "word"] });
   const segs = (tr.segments || []).map((s) => ({ start: +s.start.toFixed(1), text: s.text.trim() }));
 
-  // 2) Transkript -> Handlungsschritte
-  const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
-  let segSteps = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
-  if (segSteps.length < 2) { segSteps = []; const n = Math.min(6, Math.max(2, Math.round(duration/6))); for (let i=0;i<n;i++) segSteps.push({ t: +(i*(duration/n)).toFixed(1), narration: "" }); }
-  segSteps = segSteps.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t).slice(0, 14);
+  // 2) Schritte bestimmen. Jeder Schritt liefert: { shot (Screenshot-Sekunde), tB (Vorher-Frame), narration }.
+  const norm = (s) => (s || "").toLowerCase().replace(/[^a-zäöüß]/g, "");
+  // (A) MARKER-MODUS: Das Wort "Schnitt" markiert das ENDE eines Schritts (Regie-Logik:
+  //     erst Schritt machen + Maus aufs Ziel, dann "Schnitt" sagen). Schnitt genau dort,
+  //     Screenshot KURZ DAVOR (Maus auf dem Ziel) — kein Sekunden-Zählen nötig.
+  const cuts = (tr.words || []).filter((w) => norm(w.word) === "schnitt").map((w) => +w.start).sort((a, b) => a - b);
+  let segSteps = [];
+  if (cuts.length >= 1) {
+    const ends = [...cuts];
+    if (duration - ends[ends.length - 1] > 1.5) ends.push(duration); // letzter Schritt ohne "Schnitt" am Ende
+    for (let i = 0; i < ends.length; i++) {
+      const start = i === 0 ? 0 : ends[i - 1];
+      const end = ends[i];
+      if (end - start < 0.8) continue; // zu kurz -> kein eigener Schritt
+      const shot = Math.min(Math.max(end - 0.4, start + 0.2), duration - 0.1);
+      const tB = Math.min(Math.max(start + 0.2, 0), shot - 0.4);
+      const narration = (tr.words || []).filter((w) => w.start >= start && w.start < end && norm(w.word) !== "schnitt").map((w) => w.word).join(" ").replace(/\s+/g, " ").trim();
+      segSteps.push({ shot, tB, narration });
+    }
+  }
+  // (B) FALLBACK ohne "Schnitt": KI segmentiert aus dem Transkript; Screenshot ~2s nach Ansage.
+  if (!segSteps.length) {
+    const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
+    let llm = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
+    if (llm.length < 2) { llm = []; const n = Math.min(6, Math.max(2, Math.round(duration/6))); for (let i=0;i<n;i++) llm.push({ t: +(i*(duration/n)).toFixed(1), narration: "" }); }
+    llm = llm.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t);
+    for (let i = 0; i < llm.length; i++) {
+      const nextT = i + 1 < llm.length ? llm[i + 1].t : duration;
+      const shot = Math.min(Math.max(llm[i].t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
+      const tB = Math.min(Math.max(llm[i].t - 0.6, 0), shot - 0.4);
+      segSteps.push({ shot, tB, narration: (llm[i].narration || "").trim() });
+    }
+  }
+  segSteps = segSteps.slice(0, 14);
 
   // 3) pro Schritt: Frame + Vision (robust: kaputte Frames überspringen, Job läuft weiter)
   const tutId = uuid();
   const rows = [];
   for (let i = 0; i < segSteps.length; i++) {
-    // Screenshot ~2s nach dem Ansage-Moment (Aktion abgeschlossen: getippter Text/Treffer sichtbar),
-    // aber vor dem nächsten Schritt.
-    const nextT = i + 1 < segSteps.length ? segSteps[i + 1].t : duration;
-    const at = Math.min(Math.max(segSteps[i].t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
+    const at = segSteps[i].shot;
     const local = path.join(dir, `step_${i + 1}.jpg`);
     try {
       sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
       if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
     } catch { continue; }
     const narration = (segSteps[i].narration || "").trim();
-    // Diff: kurz VOR der Handlung vs. Screenshot-Moment (= nachher) -> erdet das Highlight.
-    const tB = Math.min(Math.max(segSteps[i].t - 0.6, 0), at - 0.4);
-    const diffPath = diffImg(videoPath, tB, at, dir, i + 1);
+    // Diff: Schritt-Anfang vs. Screenshot-Moment -> erdet das Highlight (Maus wandert aufs Ziel).
+    const diffPath = diffImg(videoPath, segSteps[i].tB, at, dir, i + 1);
     const content = [
       { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
       { type: "text", text: "BILD 1 (Screenshot):" },

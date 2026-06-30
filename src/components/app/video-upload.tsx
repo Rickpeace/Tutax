@@ -129,8 +129,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
         {phase === "idle" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Zeig die Schritte einmal vor und sprich dabei — die KI macht daraus einen Entwurf mit
-              Schritten, Screenshots und Markierungen. Tipp: vor jeder Aktion <b>„Nächster Schritt"</b> sagen.
+              Mach die Aufgabe einmal vor und erklär dabei ganz normal. Wenn ein Schritt fertig ist
+              (Maus auf dem Ziel), sag einfach <b>„Schnitt"</b> — daraus wird ein Schritt mit Screenshot
+              und Markierung. Kein Timing, keine Zauberwörter sonst.
             </p>
             <input ref={fileRef} type="file" accept="video/*" onChange={onPick} className="hidden" />
             <Button className="w-full" onClick={startRecording}>
@@ -147,7 +148,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             <div className="flex items-center gap-2 text-no">
               <Circle className="size-3 animate-pulse fill-current" /> <span className="font-mono text-lg">{mmss}</span>
             </div>
-            <p className="text-sm text-muted-foreground">Aufnahme läuft – klick dich durch & sprich. „Nächster Schritt" trennt sauber.</p>
+            <p className="text-sm text-muted-foreground">Aufnahme läuft – mach den Schritt, sag dann <b>„Schnitt"</b>. So entsteht jeder Schritt sauber.</p>
             <Button className="w-full" onClick={stopRecording}><Square className="size-4 fill-current" /> Aufnahme beenden</Button>
           </div>
         )}
