@@ -37,8 +37,13 @@ const json = async (model, messages, max = 400) => {
 
 const SEG_SYS = `Du bekommst die Erzählung eines Screencast-Tutorials mit Zeitstempeln.
 Zerlege sie in die EINZELNEN konkreten HANDLUNGS-Schritte (Klicks/Eingaben/Navigation).
-Gib NUR JSON: {"steps":[{"t": <Sekunde, ungefähr wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
-Regeln: nur ECHTE Aktionen (kein Füllmaterial); Reihenfolge wie im Video; t aus den Zeitstempeln; lieber wenige, klare Schritte.`;
+Gib NUR JSON: {"steps":[{"t": <Sekunde, wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
+Regeln:
+- Schneide an natürlichen Handlungsgrenzen — nur ECHTE Aktionen, kein Füllmaterial ("so", "okay", Begrüßung).
+- MARKER-WÖRTER haben VORRANG (Hybrid): Kommt eines dieser Wörter, beginne dort IMMER einen neuen Schritt — auch wenn es sonst natürlich nicht trennen würdest:
+  HART (immer schneiden): "nächster Schritt", "Schritt 1/2/3 …", "erster/zweiter/dritter … Schritt".
+  WEICH (starker Hinweis): "zuerst", "als Erstes", "als Nächstes", "danach", "dann", "weiter mit".
+- Reihenfolge wie im Video; t aus den Zeitstempeln.`;
 const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung aus einem Screenshot + der dabei gesprochenen Erklärung.
 Auf dem Bild liegt ein gelbes KOORDINATEN-GITTER: Zahlen 0.0–0.9 oben (x) und links (y), Linien alle 0.1. LIES die Position am Gitter AB (nicht schätzen).
 Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..1,"h":0..1}}.
