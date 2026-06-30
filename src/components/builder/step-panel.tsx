@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save } from "lucide-react";
+import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { RichText } from "@/components/builder/rich-text";
 import { ImageField } from "@/components/builder/image-field";
 import type { Step, StepBranch, Highlight } from "@/lib/types";
@@ -15,6 +22,12 @@ export function StepPanel({
   tutorialId,
   allSteps,
   branches,
+  index,
+  total,
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
   onSaveStep,
   onDirtyChange,
   onSetImage,
@@ -29,6 +42,12 @@ export function StepPanel({
   tutorialId: string;
   allSteps: Step[];
   branches: StepBranch[];
+  index: number;
+  total: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
   onSaveStep: (id: string, patch: { title: string; body: unknown }) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSetImage: (
@@ -54,6 +73,7 @@ export function StepPanel({
   const [dirty, setDirty] = useState(false);
   const [rtKey, setRtKey] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
+  const [navTarget, setNavTarget] = useState<null | "prev" | "next">(null);
 
   // Eltern (Builder) über ungespeicherte Änderungen informieren (Schließen-Abfrage).
   useEffect(() => {
@@ -70,6 +90,16 @@ export function StepPanel({
     setBody(step.body ?? null);
     setRtKey((k) => k + 1);
     setDirty(false);
+  }
+
+  // Vor/Zurück: bei ungespeicherten Änderungen erst fragen (Abbrechen / Verwerfen / Speichern).
+  function go(dir: "prev" | "next") {
+    if (dir === "prev") onPrev();
+    else onNext();
+  }
+  function tryNav(dir: "prev" | "next") {
+    if (dirty) setNavTarget(dir);
+    else go(dir);
   }
 
   // KI-Schritt-Assistent: aus dem Screenshot Titel, Text und Markierung vorschlagen.
@@ -117,10 +147,21 @@ export function StepPanel({
   return (
     <div className="flex flex-col gap-5">
       <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
-        <span className={`text-xs ${dirty ? "font-semibold text-no" : "text-muted-foreground"}`}>
-          {dirty ? "Ungespeicherte Änderungen" : "Gespeichert"}
-        </span>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => tryNav("prev")} title="Vorheriger Schritt">
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">
+            {index >= 0 ? `${index + 1} / ${total}` : ""}
+          </span>
+          <Button variant="ghost" size="icon-sm" onClick={() => tryNav("next")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
+            {hasNext ? <ChevronRight className="size-4" /> : <Plus className="size-4" />}
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs ${dirty ? "font-semibold text-no" : "text-muted-foreground"}`}>
+            {dirty ? "Ungespeichert" : "Gespeichert"}
+          </span>
           {dirty && (
             <Button variant="ghost" size="sm" onClick={discard}>
               Verwerfen
@@ -246,6 +287,31 @@ export function StepPanel({
           <Trash2 className="size-4" /> Schritt löschen
         </Button>
       </div>
+
+      <Dialog open={navTarget !== null} onOpenChange={(o) => { if (!o) setNavTarget(null); }}>
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Noch nicht gespeichert</DialogTitle>
+            <DialogDescription>
+              Dieser Schritt hat Änderungen, die noch nicht gespeichert sind. Was möchtest du tun?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setNavTarget(null)}>Abbrechen</Button>
+            <Button
+              variant="outline"
+              onClick={() => { const d = navTarget; setNavTarget(null); discard(); if (d) go(d); }}
+            >
+              Verwerfen &amp; {navTarget === "prev" ? "zurück" : "weiter"}
+            </Button>
+            <Button
+              onClick={() => { const d = navTarget; setNavTarget(null); save(); if (d) go(d); }}
+            >
+              Speichern &amp; {navTarget === "prev" ? "zurück" : "weiter"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

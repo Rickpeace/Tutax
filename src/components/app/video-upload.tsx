@@ -121,9 +121,14 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const mmss = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+    <Dialog open={open} onOpenChange={(o) => {
+      // Während Aufnahme/Upload NICHT schließen (Klick neben das Fenster würde sonst die laufende Aufnahme abbrechen).
+      if (!o && (phase === "recording" || phase === "uploading")) return;
+      setOpen(o);
+      if (!o) reset();
+    }}>
       <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" showCloseButton={phase !== "recording" && phase !== "uploading"}>
         <DialogHeader><DialogTitle>Tutorial aus Video erstellen</DialogTitle></DialogHeader>
 
         {phase === "idle" && (

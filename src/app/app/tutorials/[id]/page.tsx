@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Eye } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
@@ -72,6 +72,14 @@ export default async function EditorPage({
             currentCategoryId={tutorial.category_id}
           />
           <DriftCheckButton tutorialId={id} />
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/app/preview/${id}`} target="_blank" rel="noopener noreferrer" />}
+          >
+            <Eye className="size-4" /> Vorschau
+          </Button>
         </div>
       </div>
 

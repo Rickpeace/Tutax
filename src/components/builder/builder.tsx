@@ -355,6 +355,17 @@ export function Builder({
   const selectedStep = steps.find((s) => s.id === selectedId) ?? null;
   const selectedBranches = branches.filter((b) => b.step_id === selectedId);
 
+  // Lineare Reihenfolge (nach Position) für Vor/Zurück im Editor.
+  const ordered = useMemo(() => [...steps].sort((a, b) => a.position - b.position), [steps]);
+  const selIndex = selectedId ? ordered.findIndex((s) => s.id === selectedId) : -1;
+  const goPrev = useCallback(() => {
+    if (selIndex > 0) setSelectedId(ordered[selIndex - 1].id);
+  }, [selIndex, ordered]);
+  const goNext = useCallback(() => {
+    if (selIndex >= 0 && selIndex < ordered.length - 1) setSelectedId(ordered[selIndex + 1].id);
+    else handleAddStep(); // am Ende: neuen Schritt anlegen + auswählen
+  }, [selIndex, ordered, handleAddStep]);
+
   return (
     <>
       <p className="mb-2 text-sm text-muted-foreground">
@@ -402,7 +413,7 @@ export function Builder({
           className={
             mobile
               ? "max-h-[85vh] w-full overflow-y-auto"
-              : "w-full overflow-y-auto sm:max-w-md"
+              : "w-full overflow-y-auto sm:max-w-2xl"
           }
         >
           <SheetHeader>
@@ -416,6 +427,12 @@ export function Builder({
                 tutorialId={tutorialId}
                 allSteps={steps}
                 branches={selectedBranches}
+                index={selIndex}
+                total={ordered.length}
+                hasPrev={selIndex > 0}
+                hasNext={selIndex >= 0 && selIndex < ordered.length - 1}
+                onPrev={goPrev}
+                onNext={goNext}
                 onSaveStep={saveStep}
                 onDirtyChange={(d) => {
                   dirtyRef.current = d;
