@@ -5,6 +5,7 @@ import { NewTutorialButton } from "@/components/app/new-tutorial-button";
 import { VideoUpload } from "@/components/app/video-upload";
 import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
+import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { Layers } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -126,16 +127,13 @@ export default async function DashboardPage() {
       ) : (
         <div className="mt-6 space-y-8">
           {ownSections.map((s) => (
-            <section key={s.id ?? "none"}>
-              <div className="mb-3 flex items-center justify-between gap-3 border-b border-line-2 pb-1.5">
-                <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                  {s.name}
-                  <span className="rounded-full bg-line-2 px-1.5 text-[11px] font-bold text-muted-foreground">
-                    {s.items.length}
-                  </span>
-                </h2>
-                {s.id !== null && <NewTutorialButton compact categoryId={s.id} />}
-              </div>
+            <CollapsibleSection
+              key={s.id ?? "none"}
+              title={s.name}
+              count={s.items.length}
+              storageKey={`dash:own:${s.id ?? "none"}`}
+              action={s.id !== null ? <NewTutorialButton compact categoryId={s.id} /> : undefined}
+            >
               {s.items.length === 0 ? (
                 <p className="py-2 text-sm text-muted-foreground">Noch keine Tutorials in dieser Kategorie.</p>
               ) : (
@@ -145,7 +143,7 @@ export default async function DashboardPage() {
                   ))}
                 </div>
               )}
-            </section>
+            </CollapsibleSection>
           ))}
 
           <TemplateSection items={templateItems} />
