@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PencilLine, Eye, Undo2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpToggle } from "@/components/app/help-toggle";
+import { CollapsibleSection } from "@/components/app/collapsible-section";
 import {
   setTemplateEnabled,
   forkTemplate,
@@ -139,12 +140,15 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
       </div>
       <div className="space-y-6">
         {groups.map((g) => (
-          <div key={g.name}>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground/80">
-              {g.name}
-            </h3>
+          <CollapsibleSection
+            key={g.name}
+            variant="sub"
+            title={g.name}
+            count={g.rows.length}
+            storageKey={`dash:tpl:${g.name}`}
+          >
             <div className="space-y-2">{g.rows.map(renderRow)}</div>
-          </div>
+          </CollapsibleSection>
         ))}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
