@@ -54,8 +54,11 @@ Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..
 const TITLE_SYS = 'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Tutorial-Titel auf Deutsch (max. 6 Wörter, handlungsorientiert, ohne Anführungszeichen).';
 
 async function buildTutorial(job, videoPath, dir) {
-  const duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim());
-  const vdim = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number);
+  let duration = NaN;
+  try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
+  if (!isFinite(duration) || duration < 1) throw new Error("Video konnte nicht gelesen werden (evtl. Aufnahme unvollständig/zu kurz). Bitte erneut aufnehmen.");
+  let vdim = [null, null];
+  try { vdim = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number); } catch { /* dims optional */ }
 
   // 1) Audio -> Whisper
   const audio = path.join(dir, "audio.mp3");
@@ -69,37 +72,41 @@ async function buildTutorial(job, videoPath, dir) {
   if (segSteps.length < 2) { segSteps = []; const n = Math.min(6, Math.max(2, Math.round(duration/6))); for (let i=0;i<n;i++) segSteps.push({ t: +(i*(duration/n)).toFixed(1), narration: "" }); }
   segSteps = segSteps.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t).slice(0, 14);
 
-  // 3) pro Schritt: Frame + Vision
+  // 3) pro Schritt: Frame + Vision (robust: kaputte Frames überspringen, Job läuft weiter)
   const tutId = uuid();
-  const ids = segSteps.map(() => uuid());
   const rows = [];
-  for (let i=0;i<segSteps.length;i++){
-    const at = Math.min(Math.max(segSteps[i].t + 1.2, 0.2), duration - 0.1);
-    const local = path.join(dir, `step_${i+1}.jpg`);
-    sh("ffmpeg", ["-y","-ss", String(at), "-i", videoPath, "-frames:v","1","-q:v","3", local]);
+  for (let i = 0; i < segSteps.length; i++) {
+    // Screenshot kurz NACH dem Ansage-Moment, aber früh genug, dass das Ziel-Element noch sichtbar ist.
+    const at = Math.min(Math.max(segSteps[i].t + 0.5, 0.2), Math.max(duration - 0.1, 0.2));
+    const local = path.join(dir, `step_${i + 1}.jpg`);
+    try {
+      sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
+      if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
+    } catch { continue; }
     const narration = (segSteps[i].narration || "").trim();
     const b64 = fs.readFileSync(gridImg(local)).toString("base64"); // Gitter-Version an die KI (genauere Highlights)
     const p = await json("gpt-5.4-mini", [
-      { role:"system", content: STEP_SYS },
-      { role:"user", content: [{ type:"text", text:`Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` }, { type:"image_url", image_url:{ url:`data:image/jpeg;base64,${b64}` } }] },
+      { role: "system", content: STEP_SYS },
+      { role: "user", content: [{ type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } }] },
     ], 300);
-    // Bild in den privaten Tutorial-Bucket
-    const ipath = `${job.account_id}/${tutId}/step_${i+1}.jpg`;
+    const id = uuid();
+    const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
     await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(local), { contentType: "image/jpeg", upsert: true });
-    const hl = p.highlight && [p.highlight.x,p.highlight.y,p.highlight.w,p.highlight.h].every(n=>typeof n==="number"&&n>=0&&n<=1)
-      ? [{ id: uuid(), type:"rect", x:p.highlight.x, y:p.highlight.y, w:p.highlight.w, h:p.highlight.h, color:"#3d4ee6", rounded:true }] : [];
-    rows.push({ id: ids[i], tutorial_id: tutId, title: p.title || `Schritt ${i+1}`, body: mkBody(p.body || ""), position: i+1, is_decision: false, image_path: ipath, image_width: vdim[0]||null, image_height: vdim[1]||null, highlights: hl });
+    const hl = p.highlight && [p.highlight.x, p.highlight.y, p.highlight.w, p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
+      ? [{ id: uuid(), type: "rect", x: p.highlight.x, y: p.highlight.y, w: p.highlight.w, h: p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
+    rows.push({ id, tutorial_id: tutId, title: p.title || `Schritt ${rows.length + 1}`, body: mkBody(p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl });
   }
+  if (!rows.length) throw new Error("Keine Schritte erkannt (Aufnahme evtl. zu kurz/leer). Bitte erneut aufnehmen.");
 
   // 4) Titel
-  const title = (await json("gpt-5.4-mini", [{ role:"system", content: TITLE_SYS }, { role:"user", content: "Schritte: "+rows.map(r=>r.title).join("; ")+"\nErzählung: "+(tr.text||"").slice(0,500) }], 60)).title || job.title || "Anleitung";
+  const title = (await json("gpt-5.4-mini", [{ role: "system", content: TITLE_SYS }, { role: "user", content: "Schritte: " + rows.map((r) => r.title).join("; ") + "\nErzählung: " + (tr.text || "").slice(0, 500) }], 60)).title || job.title || "Anleitung";
 
-  // 5) Tutorial + Schritte + lineare Verzweigungen schreiben
+  // 5) Tutorial + Schritte + lineare Verzweigungen
   await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title, status: "draft" });
   await sb.from("steps").insert(rows);
-  await sb.from("tutorials").update({ root_step_id: ids[0] }).eq("id", tutId);
+  await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
   const br = [];
-  for (let i=0;i<ids.length-1;i++) br.push({ id: uuid(), step_id: ids[i], label: null, target_step_id: ids[i+1], position: 0 });
+  for (let i = 0; i < rows.length - 1; i++) br.push({ id: uuid(), step_id: rows[i].id, label: null, target_step_id: rows[i + 1].id, position: 0 });
   if (br.length) await sb.from("step_branches").insert(br);
   return { tutId, title, count: rows.length };
 }
@@ -140,8 +147,12 @@ async function loop() {
           const res = await processJob(job);
           await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, updated_at: new Date().toISOString() }).eq("id", job.id);
         } catch (e) {
-          console.error("✗ Job", job.id, e.message);
-          await sb.from("video_jobs").update({ status: "failed", error: String(e.message).slice(0, 500), updated_at: new Date().toISOString() }).eq("id", job.id);
+          const raw = String(e?.message || "Unbekannter Fehler");
+          console.error("✗ Job", job.id, raw);
+          const friendly = /Command failed|ffmpeg|ffprobe/i.test(raw)
+            ? "Video konnte nicht verarbeitet werden (evtl. unvollständige Aufnahme). Bitte erneut aufnehmen."
+            : raw.slice(0, 300);
+          await sb.from("video_jobs").update({ status: "failed", error: friendly, updated_at: new Date().toISOString() }).eq("id", job.id);
         }
       }
     }
