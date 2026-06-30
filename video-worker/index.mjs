@@ -50,15 +50,19 @@ const json = async (model, messages, max = 400) => {
   try { return JSON.parse(c.choices[0].message.content || "{}"); } catch { return {}; }
 };
 
-const SEG_SYS = `Du bekommst die Erzählung eines Screencast-Tutorials mit Zeitstempeln.
-Zerlege sie in die EINZELNEN konkreten HANDLUNGS-Schritte (Klicks/Eingaben/Navigation).
+const SEG_SYS = `Du bekommst die Erzählung eines Screencast-Tutorials mit Zeitstempeln und zerlegst sie in Anleitungs-Schritte.
 Gib NUR JSON: {"steps":[{"t": <Sekunde, wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
-Regeln:
-- Schneide an natürlichen Handlungsgrenzen — nur ECHTE Aktionen, kein Füllmaterial ("so", "okay", Begrüßung).
-- MARKER-WÖRTER haben VORRANG (Hybrid): Kommt eines dieser Wörter, beginne dort IMMER einen neuen Schritt — auch wenn es sonst natürlich nicht trennen würdest:
-  HART (immer schneiden): "nächster Schritt", "Schritt 1/2/3 …", "erster/zweiter/dritter … Schritt".
-  WEICH (starker Hinweis): "zuerst", "als Erstes", "als Nächstes", "danach", "dann", "weiter mit".
-- Reihenfolge wie im Video; t aus den Zeitstempeln.`;
+
+WICHTIG — Granularität (so wenige, klare Schritte wie möglich):
+- Erzeuge nur die Schritte, die ein Leser wirklich als getrennte Anleitungs-Schritte sehen will (typisch 3–6, selten mehr).
+- Fasse zusammengehörige Mikro-Aktionen zu EINEM Schritt zusammen. Beispiel: "Suchfeld anklicken + Namen eintippen + auf den Treffer klicken" = EIN Schritt ("Nach X suchen und öffnen"), NICHT drei.
+- Reines Erklären/Ergebnis-Beschreiben ("dann sehe ich den Chat", "und dann sind wir fertig") ist KEIN eigener Schritt.
+- Lieber zu wenige als zu viele. Im Zweifel zusammenfassen.
+
+MARKER-WÖRTER (haben absoluten VORRANG): Sagt die Person eines dieser Wörter, beginne dort GENAU einen neuen Schritt — und richte dich dann NUR danach (ignoriere die Zusammenfass-Heuristik):
+  "nächster Schritt", "Schritt 1/2/3 …", "erster/zweiter/dritter … Schritt", "als Nächstes", "weiter mit".
+
+Reihenfolge wie im Video; t aus den Zeitstempeln (ungefähr wann die Handlung passiert).`;
 const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung. Du bekommst ZWEI Bilder mit gleichem gelben KOORDINATEN-GITTER (Zahlen 0.0–0.9 oben = x, links = y, Linien alle 0.1):
 - BILD 1 = der Screenshot des Bildschirms.
 - BILD 2 = eine DIFFERENZ (vorher/nachher der Handlung): HELLE/leuchtende Stellen zeigen, WO sich beim Klick/Tippen etwas verändert hat. Dunkel = unverändert. (BILD 2 fehlt manchmal — dann nur aus BILD 1 + Erzählung.)
