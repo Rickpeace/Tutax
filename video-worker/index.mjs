@@ -11,6 +11,23 @@ import path from "node:path";
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+
+// Gelbes Koordinaten-Gitter (Linien alle 0.1 + Zahlen 0.0–0.9) aufs Bild legen,
+// damit die Vision-KI die Highlight-Box am Raster ABLESEN kann (deutlich genauer).
+const GRID_FONT = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"].find((f) => fs.existsSync(f));
+function gridImg(src) {
+  const dst = src.replace(/\.jpg$/i, "_grid.jpg");
+  const parts = ["drawgrid=w=iw/10:h=ih/10:t=1:color=yellow@0.55"];
+  if (GRID_FONT) {
+    for (let k = 0; k <= 9; k++) {
+      const f = (k / 10).toFixed(1);
+      parts.push(`drawtext=fontfile=${GRID_FONT}:text=${f}:x=(iw*${k}/10)+3:y=3:fontsize=15:fontcolor=yellow:box=1:boxcolor=black@0.55`);
+      parts.push(`drawtext=fontfile=${GRID_FONT}:text=${f}:x=3:y=(ih*${k}/10)+3:fontsize=15:fontcolor=yellow:box=1:boxcolor=black@0.55`);
+    }
+  }
+  try { sh("ffmpeg", ["-y", "-i", src, "-vf", parts.join(","), dst]); return dst; }
+  catch { return src; }
+}
 const uuid = () => crypto.randomUUID();
 const mkBody = (t) => ({ type: "doc", content: [{ type: "paragraph", content: t ? [{ type: "text", text: t }] : [] }] });
 const json = async (model, messages, max = 400) => {
@@ -23,10 +40,11 @@ Zerlege sie in die EINZELNEN konkreten HANDLUNGS-Schritte (Klicks/Eingaben/Navig
 Gib NUR JSON: {"steps":[{"t": <Sekunde, ungefähr wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
 Regeln: nur ECHTE Aktionen (kein Füllmaterial); Reihenfolge wie im Video; t aus den Zeitstempeln; lieber wenige, klare Schritte.`;
 const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung aus einem Screenshot + der dabei gesprochenen Erklärung.
+Auf dem Bild liegt ein gelbes KOORDINATEN-GITTER: Zahlen 0.0–0.9 oben (x) und links (y), Linien alle 0.1. LIES die Position am Gitter AB (nicht schätzen).
 Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..1,"h":0..1}}.
 - "title": kurzer Handlungs-Titel im Imperativ (max. 6 Wörter).
 - "body": 1–2 knappe Sätze, Sie-Form, was der Nutzer konkret tun soll.
-- "highlight": die WICHTIGSTE anzuklickende/auszufüllende Stelle als relative Box (Ursprung oben links, 0..1). null, wenn nicht eindeutig.
+- "highlight": ENGE Box NUR um das Ziel-Element (Button/Feld/Icon), am Gitter abgelesen — x,y = obere-linke Ecke, w,h = Breite/Höhe (0..1). null, wenn nicht eindeutig.
 - Stütze dich auf Text UND Bild. Erfinde nichts. Kein Markdown.`;
 const TITLE_SYS = 'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Tutorial-Titel auf Deutsch (max. 6 Wörter, handlungsorientiert, ohne Anführungszeichen).';
 
@@ -55,7 +73,7 @@ async function buildTutorial(job, videoPath, dir) {
     const local = path.join(dir, `step_${i+1}.jpg`);
     sh("ffmpeg", ["-y","-ss", String(at), "-i", videoPath, "-frames:v","1","-q:v","3", local]);
     const narration = (segSteps[i].narration || "").trim();
-    const b64 = fs.readFileSync(local).toString("base64");
+    const b64 = fs.readFileSync(gridImg(local)).toString("base64"); // Gitter-Version an die KI (genauere Highlights)
     const p = await json("gpt-5.4-mini", [
       { role:"system", content: STEP_SYS },
       { role:"user", content: [{ type:"text", text:`Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` }, { type:"image_url", image_url:{ url:`data:image/jpeg;base64,${b64}` } }] },
