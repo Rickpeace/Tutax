@@ -28,6 +28,21 @@ function gridImg(src) {
   try { sh("ffmpeg", ["-y", "-i", src, "-vf", parts.join(","), dst]); return dst; }
   catch { return src; }
 }
+// Frame-Diff: Frame kurz VOR vs. kurz NACH der Handlung -> helle Stellen = was sich verändert hat
+// (= wohin geklickt/getippt wurde). Erdet die Highlight-Erkennung im echten Bildsignal.
+function diffImg(video, tB, tA, dir, idx) {
+  const dst = path.join(dir, `diff_${idx}.jpg`);
+  const bPng = path.join(dir, `_b${idx}.png`);
+  const aPng = path.join(dir, `_a${idx}.png`);
+  try {
+    sh("ffmpeg", ["-y", "-ss", String(tB), "-i", video, "-frames:v", "1", bPng]);
+    sh("ffmpeg", ["-y", "-ss", String(tA), "-i", video, "-frames:v", "1", aPng]);
+    sh("ffmpeg", ["-y", "-i", bPng, "-i", aPng, "-filter_complex",
+      "[0][1]blend=all_mode=difference,format=gray,eq=contrast=4:brightness=0.06,gblur=sigma=1.2", dst]);
+    return gridImg(dst); // gleiches Gitter wie das saubere Bild
+  } catch { return null; }
+  finally { for (const f of [bPng, aPng]) { try { fs.rmSync(f, { force: true }); } catch {} } }
+}
 const uuid = () => crypto.randomUUID();
 const mkBody = (t) => ({ type: "doc", content: [{ type: "paragraph", content: t ? [{ type: "text", text: t }] : [] }] });
 const json = async (model, messages, max = 400) => {
@@ -44,13 +59,17 @@ Regeln:
   HART (immer schneiden): "nächster Schritt", "Schritt 1/2/3 …", "erster/zweiter/dritter … Schritt".
   WEICH (starker Hinweis): "zuerst", "als Erstes", "als Nächstes", "danach", "dann", "weiter mit".
 - Reihenfolge wie im Video; t aus den Zeitstempeln.`;
-const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung aus einem Screenshot + der dabei gesprochenen Erklärung.
-Auf dem Bild liegt ein gelbes KOORDINATEN-GITTER: Zahlen 0.0–0.9 oben (x) und links (y), Linien alle 0.1. LIES die Position am Gitter AB (nicht schätzen).
+const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung. Du bekommst ZWEI Bilder mit gleichem gelben KOORDINATEN-GITTER (Zahlen 0.0–0.9 oben = x, links = y, Linien alle 0.1):
+- BILD 1 = der Screenshot des Bildschirms.
+- BILD 2 = eine DIFFERENZ (vorher/nachher der Handlung): HELLE/leuchtende Stellen zeigen, WO sich beim Klick/Tippen etwas verändert hat. Dunkel = unverändert. (BILD 2 fehlt manchmal — dann nur aus BILD 1 + Erzählung.)
+BILD 2 ist nur ein HINWEIS, wo etwas passierte. Bestimme das Ziel-Element aus Erzählung + BILD 1, nutze die hellen Stellen zur Eingrenzung. Lies die Box dann am Gitter in BILD 1 ab (nicht schätzen).
 Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..1,"h":0..1}}.
 - "title": kurzer Handlungs-Titel im Imperativ (max. 6 Wörter).
 - "body": 1–2 knappe Sätze, Sie-Form, was der Nutzer konkret tun soll.
-- "highlight": ENGE Box NUR um das Ziel-Element (Button/Feld/Icon), am Gitter abgelesen — x,y = obere-linke Ecke, w,h = Breite/Höhe (0..1). null, wenn nicht eindeutig.
-- Stütze dich auf Text UND Bild. Erfinde nichts. Kein Markdown.`;
+- "highlight": ENGE Box NUR um ein ECHTES, sichtbares Bedien-Element in BILD 1 (Button/Feld/Icon/Listeneintrag mit Text/Symbol) — x,y = obere-linke Ecke, w,h = Breite/Höhe (0..1).
+- WICHTIG: Markiere NIEMALS leeren Hintergrund/leere Fläche, auch wenn sie sich in BILD 2 verändert hat (Veränderung kann durch VERSCHWINDEN von Elementen entstehen). Ist die helle Stelle leer, wähle das klickbare Element, das zur Erzählung passt (genannter Treffer/Name/Button/Feld).
+- Bei großflächiger Veränderung (ganzer Bereich neu geladen) markiere das ANGEKLICKTE Element, nicht die ganze Fläche. null, wenn wirklich nichts Passendes sichtbar ist.
+- Stütze dich auf Text UND Bilder. Erfinde nichts. Kein Markdown.`;
 const TITLE_SYS = 'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Tutorial-Titel auf Deutsch (max. 6 Wörter, handlungsorientiert, ohne Anführungszeichen).';
 
 async function buildTutorial(job, videoPath, dir) {
@@ -76,18 +95,31 @@ async function buildTutorial(job, videoPath, dir) {
   const tutId = uuid();
   const rows = [];
   for (let i = 0; i < segSteps.length; i++) {
-    // Screenshot kurz NACH dem Ansage-Moment, aber früh genug, dass das Ziel-Element noch sichtbar ist.
-    const at = Math.min(Math.max(segSteps[i].t + 0.5, 0.2), Math.max(duration - 0.1, 0.2));
+    // Screenshot ~2s nach dem Ansage-Moment (Aktion abgeschlossen: getippter Text/Treffer sichtbar),
+    // aber vor dem nächsten Schritt.
+    const nextT = i + 1 < segSteps.length ? segSteps[i + 1].t : duration;
+    const at = Math.min(Math.max(segSteps[i].t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
     const local = path.join(dir, `step_${i + 1}.jpg`);
     try {
       sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
       if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
     } catch { continue; }
     const narration = (segSteps[i].narration || "").trim();
-    const b64 = fs.readFileSync(gridImg(local)).toString("base64"); // Gitter-Version an die KI (genauere Highlights)
+    // Diff: kurz VOR der Handlung vs. Screenshot-Moment (= nachher) -> erdet das Highlight.
+    const tB = Math.min(Math.max(segSteps[i].t - 0.6, 0), at - 0.4);
+    const diffPath = diffImg(videoPath, tB, at, dir, i + 1);
+    const content = [
+      { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
+      { type: "text", text: "BILD 1 (Screenshot):" },
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridImg(local)).toString("base64")}` } },
+    ];
+    if (diffPath) {
+      content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
+      content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffPath).toString("base64")}` } });
+    }
     const p = await json("gpt-5.4-mini", [
       { role: "system", content: STEP_SYS },
-      { role: "user", content: [{ type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } }] },
+      { role: "user", content },
     ], 300);
     const id = uuid();
     const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
