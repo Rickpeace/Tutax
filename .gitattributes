@@ -1,0 +1,2 @@
+# Shell-Skripte immer mit LF (sonst bricht bash auf Linux: "\r command not found")
+*.sh text eol=lf
