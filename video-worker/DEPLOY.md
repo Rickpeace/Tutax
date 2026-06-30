@@ -1,39 +1,30 @@
-# Auto-Deploy des video-workers (Hetzner)
+# Deploy des video-workers (Hetzner)
 
-Der Worker wird per **GitHub Action** deployt (`.github/workflows/deploy-worker.yml`):
-GitHub verbindet sich nach jedem Push auf `main` (der `video-worker/` ändert) per SSH
-mit dem Server und macht `git pull` + `pm2 restart video-worker`. Manuell auslösbar über
-**Actions → "Deploy video-worker (Hetzner)" → Run workflow**.
+Der video-worker läuft auf dem Hetzner-Server als pm2-Prozess **`video-worker`**
+(Code in **`/opt/tutax/video-worker`**, Repo `/opt/tutax`). Aktualisiert wird er –
+genau wie die agent-bridge – über ein **`deploy.sh`**-Skript: `git pull` + `npm install`
++ `pm2 restart`.
 
-GitHub führt das aus — kein Agent, keine Berechtigungs-Sperre, du machst nichts von Hand.
-
-## Einmalige Einrichtung (2 Schritte)
-
-### 1) Deploy-Key auf dem Server erzeugen + beim tutax-Nutzer hinterlegen
-
-Diese eine Zeile in PowerShell (erzeugt einen eigenen Deploy-Key, trägt den öffentlichen
-Teil bei `tutax` ein und gibt den **privaten** Teil aus):
+## Aktualisieren (eine Zeile vom PC aus)
 
 ```powershell
-ssh root@23.88.98.172 "su - tutax -c 'test -f ~/.ssh/ci_deploy || ssh-keygen -t ed25519 -f ~/.ssh/ci_deploy -N \"\" -q; grep -qF \"\$(cat ~/.ssh/ci_deploy.pub)\" ~/.ssh/authorized_keys 2>/dev/null || cat ~/.ssh/ci_deploy.pub >> ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; echo ===PRIVATER_KEY_FUER_GITHUB_SECRET===; cat ~/.ssh/ci_deploy; echo ===ENDE==='"
+ssh root@23.88.98.172 "su - tutax -c 'cd /opt/tutax/video-worker && bash deploy.sh'"
 ```
 
-Kopiere den Block **zwischen** `===PRIVATER_KEY...===` und `===ENDE===`
-(inkl. `-----BEGIN...-----` und `-----END...-----`).
+Ablauf: Code-Änderung lokal → `git push` (staging + main) → obige Zeile ausführen.
+Das ist **manuell** (jemand stößt `deploy.sh` an) – es gibt **bewusst keinen Cron und
+keine GitHub-Action**.
 
-### 2) Privaten Key als GitHub-Secret anlegen
+> Hinweis: Beim allerersten Mal muss `deploy.sh` schon auf dem Server liegen – es kommt
+> mit dem ersten `git pull` mit. Falls noch nicht da, einmalig direkt:
+> `ssh root@23.88.98.172 "su - tutax -c 'cd /opt/tutax && git pull --ff-only && pm2 restart video-worker'"`
 
-GitHub → Repo **Rickpeace/Tutax** → **Settings → Secrets and variables → Actions →
-New repository secret**:
-
-- **Name:** `HETZNER_SSH_KEY`
-- **Secret:** den kopierten privaten Key einfügen → **Add secret**
-
-Fertig. Ab jetzt: Push auf `main` mit Worker-Änderung → Auto-Deploy. Oder jederzeit
-manuell über den **Run workflow**-Button.
-
-## Manueller Deploy (Notfall / sofort, ohne Action)
+## Die agent-bridge wird genauso deployt
 
 ```powershell
-ssh root@23.88.98.172 "su - tutax -c 'cd /opt/tutax && git pull --ff-only && pm2 restart video-worker'"
+ssh root@23.88.98.172 "su - tutax -c 'cd /opt/agent-bridge && bash deploy.sh'"
 ```
+
+(eigenes Repo `Rickpeace/agent-bridge`, eigenes `deploy.sh`).
+
+Mehr Infra-Kontext: [../../INFRA.md](../../INFRA.md) §7.
