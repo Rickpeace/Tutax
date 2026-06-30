@@ -1,0 +1,12 @@
+{
+  "name": "steply-video-worker",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Verarbeitet Video-Uploads zu Klick-Tutorials (ffmpeg + Whisper + Vision). Läuft auf Hetzner.",
+  "scripts": { "start": "node --env-file=.env index.mjs" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "openai": "^4.67.3"
+  }
+}

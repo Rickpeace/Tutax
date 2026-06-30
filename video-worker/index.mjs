@@ -1,0 +1,123 @@
+// Steply Video-Worker (Hetzner): pollt video_jobs, macht aus Video -> Klick-Tutorial.
+// Pipeline: ffmpeg (Audio + Keyframes) + Whisper (Transkript) + Vision (Schritte/Highlights/Titel).
+// Env (.env): SUPABASE_URL, SUPABASE_SECRET_KEY, OPENAI_API_KEY
+import { createClient } from "@supabase/supabase-js";
+import OpenAI from "openai";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+const uuid = () => crypto.randomUUID();
+const mkBody = (t) => ({ type: "doc", content: [{ type: "paragraph", content: t ? [{ type: "text", text: t }] : [] }] });
+const json = async (model, messages, max = 400) => {
+  const c = await openai.chat.completions.create({ model, messages, response_format: { type: "json_object" }, max_completion_tokens: max });
+  try { return JSON.parse(c.choices[0].message.content || "{}"); } catch { return {}; }
+};
+
+const SEG_SYS = `Du bekommst die Erzählung eines Screencast-Tutorials mit Zeitstempeln.
+Zerlege sie in die EINZELNEN konkreten HANDLUNGS-Schritte (Klicks/Eingaben/Navigation).
+Gib NUR JSON: {"steps":[{"t": <Sekunde, ungefähr wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
+Regeln: nur ECHTE Aktionen (kein Füllmaterial); Reihenfolge wie im Video; t aus den Zeitstempeln; lieber wenige, klare Schritte.`;
+const STEP_SYS = `Du formulierst EINEN Schritt einer Klick-Anleitung aus einem Screenshot + der dabei gesprochenen Erklärung.
+Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..1,"h":0..1}}.
+- "title": kurzer Handlungs-Titel im Imperativ (max. 6 Wörter).
+- "body": 1–2 knappe Sätze, Sie-Form, was der Nutzer konkret tun soll.
+- "highlight": die WICHTIGSTE anzuklickende/auszufüllende Stelle als relative Box (Ursprung oben links, 0..1). null, wenn nicht eindeutig.
+- Stütze dich auf Text UND Bild. Erfinde nichts. Kein Markdown.`;
+const TITLE_SYS = 'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Tutorial-Titel auf Deutsch (max. 6 Wörter, handlungsorientiert, ohne Anführungszeichen).';
+
+async function buildTutorial(job, videoPath, dir) {
+  const duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim());
+  const vdim = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number);
+
+  // 1) Audio -> Whisper
+  const audio = path.join(dir, "audio.mp3");
+  sh("ffmpeg", ["-y","-i", videoPath, "-vn","-ac","1","-ar","16000","-b:a","64k", audio]);
+  const tr = await openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de" });
+  const segs = (tr.segments || []).map((s) => ({ start: +s.start.toFixed(1), text: s.text.trim() }));
+
+  // 2) Transkript -> Handlungsschritte
+  const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
+  let segSteps = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
+  if (segSteps.length < 2) { segSteps = []; const n = Math.min(6, Math.max(2, Math.round(duration/6))); for (let i=0;i<n;i++) segSteps.push({ t: +(i*(duration/n)).toFixed(1), narration: "" }); }
+  segSteps = segSteps.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t).slice(0, 14);
+
+  // 3) pro Schritt: Frame + Vision
+  const tutId = uuid();
+  const ids = segSteps.map(() => uuid());
+  const rows = [];
+  for (let i=0;i<segSteps.length;i++){
+    const at = Math.min(Math.max(segSteps[i].t + 1.2, 0.2), duration - 0.1);
+    const local = path.join(dir, `step_${i+1}.jpg`);
+    sh("ffmpeg", ["-y","-ss", String(at), "-i", videoPath, "-frames:v","1","-q:v","3", local]);
+    const narration = (segSteps[i].narration || "").trim();
+    const b64 = fs.readFileSync(local).toString("base64");
+    const p = await json("gpt-5.4-mini", [
+      { role:"system", content: STEP_SYS },
+      { role:"user", content: [{ type:"text", text:`Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` }, { type:"image_url", image_url:{ url:`data:image/jpeg;base64,${b64}` } }] },
+    ], 300);
+    // Bild in den privaten Tutorial-Bucket
+    const ipath = `${job.account_id}/${tutId}/step_${i+1}.jpg`;
+    await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(local), { contentType: "image/jpeg", upsert: true });
+    const hl = p.highlight && [p.highlight.x,p.highlight.y,p.highlight.w,p.highlight.h].every(n=>typeof n==="number"&&n>=0&&n<=1)
+      ? [{ id: uuid(), type:"rect", x:p.highlight.x, y:p.highlight.y, w:p.highlight.w, h:p.highlight.h, color:"#3d4ee6", rounded:true }] : [];
+    rows.push({ id: ids[i], tutorial_id: tutId, title: p.title || `Schritt ${i+1}`, body: mkBody(p.body || ""), position: i+1, is_decision: false, image_path: ipath, image_width: vdim[0]||null, image_height: vdim[1]||null, highlights: hl });
+  }
+
+  // 4) Titel
+  const title = (await json("gpt-5.4-mini", [{ role:"system", content: TITLE_SYS }, { role:"user", content: "Schritte: "+rows.map(r=>r.title).join("; ")+"\nErzählung: "+(tr.text||"").slice(0,500) }], 60)).title || job.title || "Anleitung";
+
+  // 5) Tutorial + Schritte + lineare Verzweigungen schreiben
+  await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title, status: "draft" });
+  await sb.from("steps").insert(rows);
+  await sb.from("tutorials").update({ root_step_id: ids[0] }).eq("id", tutId);
+  const br = [];
+  for (let i=0;i<ids.length-1;i++) br.push({ id: uuid(), step_id: ids[i], label: null, target_step_id: ids[i+1], position: 0 });
+  if (br.length) await sb.from("step_branches").insert(br);
+  return { tutId, title, count: rows.length };
+}
+
+async function processJob(job) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
+  try {
+    const vpath = path.join(tmp, "in.mp4");
+    const { data, error } = await sb.storage.from("tutorial-videos").download(job.video_path);
+    if (error) throw new Error("Download: " + error.message);
+    fs.writeFileSync(vpath, Buffer.from(await data.arrayBuffer()));
+    const res = await buildTutorial(job, vpath, tmp);
+    console.log(`✓ Job ${job.id} -> Tutorial "${res.title}" (${res.count} Schritte, ${res.tutId})`);
+    return res;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+async function loop() {
+  let ran = false;
+  try {
+    const { data: jobs } = await sb.from("video_jobs").select("*").eq("status", "queued").order("created_at").limit(1);
+    const job = jobs?.[0];
+    if (job) {
+      // atomar beanspruchen
+      const { data: claimed } = await sb.from("video_jobs").update({ status: "processing", updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "queued").select();
+      if (claimed?.length) {
+        ran = true;
+        try {
+          const res = await processJob(job);
+          await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, updated_at: new Date().toISOString() }).eq("id", job.id);
+        } catch (e) {
+          console.error("✗ Job", job.id, e.message);
+          await sb.from("video_jobs").update({ status: "failed", error: String(e.message).slice(0, 500), updated_at: new Date().toISOString() }).eq("id", job.id);
+        }
+      }
+    }
+  } catch (e) { console.error("loop-Fehler:", e.message); }
+  setTimeout(loop, ran ? 1000 : 5000);
+}
+
+console.log("🎬 Steply Video-Worker gestartet — pollt video_jobs.");
+loop();

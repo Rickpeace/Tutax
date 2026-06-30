@@ -2,6 +2,7 @@ import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import type { Tutorial } from "@/lib/types";
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
+import { VideoUpload } from "@/components/app/video-upload";
 import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { Layers } from "lucide-react";
@@ -103,7 +104,10 @@ export default async function DashboardPage() {
             {own.length === 0 ? "Eigene Anleitungen" : `${own.length} eigene Anleitung${own.length === 1 ? "" : "en"}`}
           </p>
         </div>
-        <NewTutorialButton />
+        <div className="flex items-center gap-2">
+          <VideoUpload accountId={account.id} />
+          <NewTutorialButton />
+        </div>
       </div>
 
       {nothing ? (
