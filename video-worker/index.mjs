@@ -107,10 +107,17 @@ async function buildTutorial(job, videoPath, dir) {
 async function processJob(job) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
-    const vpath = path.join(tmp, "in.mp4");
+    const raw = path.join(tmp, "in");
     const { data, error } = await sb.storage.from("tutorial-videos").download(job.video_path);
     if (error) throw new Error("Download: " + error.message);
-    fs.writeFileSync(vpath, Buffer.from(await data.arrayBuffer()));
+    fs.writeFileSync(raw, Buffer.from(await data.arrayBuffer()));
+    // Auf MP4/H.264 normalisieren (webm-Aufnahmen, krumme Codecs -> zuverlässiges Seeking/ffprobe).
+    let vpath = raw;
+    try {
+      const norm = path.join(tmp, "norm.mp4");
+      sh("ffmpeg", ["-y", "-i", raw, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-movflags", "+faststart", norm]);
+      vpath = norm;
+    } catch { /* Fallback: Original verwenden */ }
     const res = await buildTutorial(job, vpath, tmp);
     console.log(`✓ Job ${job.id} -> Tutorial "${res.title}" (${res.count} Schritte, ${res.tutId})`);
     return res;

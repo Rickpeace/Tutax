@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud } from "lucide-react";
+import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-type Phase = "idle" | "uploading" | "queued" | "processing" | "done" | "failed";
+type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed";
 
 export function VideoUpload({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -21,51 +21,38 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [tutorialId, setTutorialId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [secs, setSecs] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamsRef = useRef<MediaStream[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Job-Status pollen, bis fertig/fehlgeschlagen.
+  // Job-Status pollen
   useEffect(() => {
     if (!jobId || phase === "done" || phase === "failed") return;
     const supabase = createClient();
     const iv = setInterval(async () => {
-      const { data } = await supabase
-        .from("video_jobs")
-        .select("status, tutorial_id, error")
-        .eq("id", jobId)
-        .single();
+      const { data } = await supabase.from("video_jobs").select("status, tutorial_id, error").eq("id", jobId).single();
       if (!data) return;
       if (data.status === "processing") setPhase("processing");
-      if (data.status === "done") {
-        setTutorialId(data.tutorial_id);
-        setPhase("done");
-      }
-      if (data.status === "failed") {
-        setError(data.error || "Verarbeitung fehlgeschlagen.");
-        setPhase("failed");
-      }
+      if (data.status === "done") { setTutorialId(data.tutorial_id); setPhase("done"); }
+      if (data.status === "failed") { setError(data.error || "Verarbeitung fehlgeschlagen."); setPhase("failed"); }
     }, 4000);
     return () => clearInterval(iv);
   }, [jobId, phase]);
 
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-    setTutorialId(null);
+  async function uploadAndQueue(blob: Blob, ext: string, niceName: string) {
     setPhase("uploading");
     try {
       const supabase = createClient();
-      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
       const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("tutorial-videos")
-        .upload(vpath, file, { contentType: file.type || "video/mp4", upsert: false });
+      const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });
       if (upErr) throw upErr;
       const { data: job, error: jErr } = await supabase
         .from("video_jobs")
-        .insert({ account_id: accountId, video_path: vpath, title: file.name.replace(/\.[^.]+$/, ""), status: "queued" })
-        .select("id")
-        .single();
+        .insert({ account_id: accountId, video_path: vpath, title: niceName, status: "queued" })
+        .select("id").single();
       if (jErr) throw jErr;
       setJobId(job.id);
       setPhase("queued");
@@ -75,36 +62,93 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     }
   }
 
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null); setTutorialId(null);
+    uploadAndQueue(file, (file.name.split(".").pop() || "mp4").toLowerCase(), file.name.replace(/\.[^.]+$/, ""));
+  }
+
+  async function startRecording() {
+    setError(null); setTutorialId(null);
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setError("Dein Browser unterstützt keine Bildschirmaufnahme. Nutze Chrome/Edge oder lade eine Datei hoch.");
+      setPhase("failed"); return;
+    }
+    try {
+      const screen = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      let mic: MediaStream | null = null;
+      try { mic = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { /* ohne Mikro weiter */ }
+      streamsRef.current = [screen, ...(mic ? [mic] : [])];
+      const tracks = [...screen.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
+      const stream = new MediaStream(tracks);
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus" : "video/webm";
+      const rec = new MediaRecorder(stream, { mimeType: mime });
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+        streamsRef.current = [];
+        if (timerRef.current) clearInterval(timerRef.current);
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        if (blob.size < 1000) { setError("Aufnahme leer."); setPhase("failed"); return; }
+        await uploadAndQueue(blob, "webm", "Aufnahme");
+      };
+      // Stoppt die Aufnahme, wenn der Nutzer das Teilen über die Browser-Leiste beendet.
+      screen.getVideoTracks()[0].addEventListener("ended", () => { if (recRef.current?.state !== "inactive") recRef.current?.stop(); });
+      recRef.current = rec;
+      rec.start();
+      setSecs(0);
+      timerRef.current = setInterval(() => setSecs((s) => s + 1), 1000);
+      setPhase("recording");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Aufnahme konnte nicht gestartet werden.");
+      setPhase("failed");
+    }
+  }
+
+  const stopRecording = () => { if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop(); };
+
   const reset = () => {
-    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null);
+    streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    streamsRef.current = [];
+    if (timerRef.current) clearInterval(timerRef.current);
+    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setSecs(0);
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  const mmss = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
-      <DialogTrigger
-        render={
-          <Button variant="outline">
-            <Clapperboard className="size-4" /> Aus Video
-          </Button>
-        }
-      />
+      <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Tutorial aus Video erstellen</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>Tutorial aus Video erstellen</DialogTitle></DialogHeader>
 
         {phase === "idle" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Lade einen Screencast (mit Stimme) hoch — die KI macht daraus einen Entwurf
-              mit Schritten, Screenshots und Markierungen, den du danach anpasst.
+              Zeig die Schritte einmal vor und sprich dabei — die KI macht daraus einen Entwurf mit
+              Schritten, Screenshots und Markierungen. Tipp: vor jeder Aktion <b>„Nächster Schritt"</b> sagen.
             </p>
             <input ref={fileRef} type="file" accept="video/*" onChange={onPick} className="hidden" />
-            <Button className="w-full" onClick={() => fileRef.current?.click()}>
-              <UploadCloud className="size-4" /> Video auswählen
+            <Button className="w-full" onClick={startRecording}>
+              <Circle className="size-4 fill-current text-no" /> Jetzt aufnehmen (Bildschirm + Mikro)
             </Button>
-            <p className="text-xs text-muted-foreground">Tipp: 1–3 Min, eine Aufgabe, dabei klar ansagen was du tust.</p>
+            <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
+              <UploadCloud className="size-4" /> Stattdessen Datei hochladen
+            </Button>
+          </div>
+        )}
+
+        {phase === "recording" && (
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <div className="flex items-center gap-2 text-no">
+              <Circle className="size-3 animate-pulse fill-current" /> <span className="font-mono text-lg">{mmss}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">Aufnahme läuft – klick dich durch & sprich. „Nächster Schritt" trennt sauber.</p>
+            <Button className="w-full" onClick={stopRecording}><Square className="size-4 fill-current" /> Aufnahme beenden</Button>
           </div>
         )}
 
@@ -114,7 +158,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             <p className="text-sm font-medium text-ink">
               {phase === "uploading" ? "Video wird hochgeladen …" : phase === "queued" ? "In der Warteschlange …" : "KI erstellt das Tutorial …"}
             </p>
-            <p className="text-xs text-muted-foreground">Das kann ein paar Minuten dauern. Du kannst das Fenster offen lassen.</p>
+            <p className="text-xs text-muted-foreground">Das kann ein paar Minuten dauern. Fenster offen lassen.</p>
           </div>
         )}
 
