@@ -444,6 +444,8 @@ export function Builder({
                 onUpdateBranch={handleUpdateBranch}
                 onDeleteBranch={handleDeleteBranch}
                 onDeleteStep={handleDeleteStep}
+                onOpenStep={(id) => setSelectedId(id)}
+                onInsertIntoBranch={insertIntoBranch}
               />
             )}
           </div>

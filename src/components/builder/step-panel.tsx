@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,8 @@ export function StepPanel({
   onUpdateBranch,
   onDeleteBranch,
   onDeleteStep,
+  onOpenStep,
+  onInsertIntoBranch,
 }: {
   step: Step;
   tutorialId: string;
@@ -67,13 +69,15 @@ export function StepPanel({
   ) => void;
   onDeleteBranch: (branchId: string) => void;
   onDeleteStep: (id: string) => void;
+  onOpenStep: (id: string) => void;
+  onInsertIntoBranch: (branchId: string) => void;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
   const [body, setBody] = useState<unknown>(step.body ?? null);
   const [dirty, setDirty] = useState(false);
   const [rtKey, setRtKey] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
-  const [navTarget, setNavTarget] = useState<null | "prev" | "next">(null);
+  const [pendingNav, setPendingNav] = useState<null | { run: () => void; label: string }>(null);
 
   // Eltern (Builder) über ungespeicherte Änderungen informieren (Schließen-Abfrage).
   useEffect(() => {
@@ -92,14 +96,11 @@ export function StepPanel({
     setDirty(false);
   }
 
-  // Vor/Zurück: bei ungespeicherten Änderungen erst fragen (Abbrechen / Verwerfen / Speichern).
-  function go(dir: "prev" | "next") {
-    if (dir === "prev") onPrev();
-    else onNext();
-  }
-  function tryNav(dir: "prev" | "next") {
-    if (dirty) setNavTarget(dir);
-    else go(dir);
+  // Navigieren (Vor/Zurück oder zu einer Verzweigung): bei ungespeicherten Änderungen
+  // erst fragen (Abbrechen / Verwerfen / Speichern).
+  function guardedNav(run: () => void, label: string) {
+    if (dirty) setPendingNav({ run, label });
+    else run();
   }
 
   // KI-Schritt-Assistent: aus dem Screenshot Titel, Text und Markierung vorschlagen.
@@ -148,13 +149,13 @@ export function StepPanel({
     <div className="flex flex-col gap-5">
       <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => tryNav("prev")} title="Vorheriger Schritt">
+          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt">
             <ChevronLeft className="size-4" />
           </Button>
           <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">
             {index >= 0 ? `${index + 1} / ${total}` : ""}
           </span>
-          <Button variant="ghost" size="icon-sm" onClick={() => tryNav("next")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
+          <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
             {hasNext ? <ChevronRight className="size-4" /> : <Plus className="size-4" />}
           </Button>
         </div>
@@ -268,6 +269,12 @@ export function StepPanel({
                 targetOptions={targetOptions}
                 onUpdate={onUpdateBranch}
                 onDelete={onDeleteBranch}
+                onGo={() =>
+                  guardedNav(
+                    () => (b.target_step_id ? onOpenStep(b.target_step_id) : onInsertIntoBranch(b.id)),
+                    "weiter",
+                  )
+                }
               />
             ))}
           <Button variant="outline" size="sm" onClick={() => onAddBranch(step.id)}>
@@ -288,7 +295,7 @@ export function StepPanel({
         </Button>
       </div>
 
-      <Dialog open={navTarget !== null} onOpenChange={(o) => { if (!o) setNavTarget(null); }}>
+      <Dialog open={pendingNav !== null} onOpenChange={(o) => { if (!o) setPendingNav(null); }}>
         <DialogContent showCloseButton={false} className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Noch nicht gespeichert</DialogTitle>
@@ -297,17 +304,17 @@ export function StepPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setNavTarget(null)}>Abbrechen</Button>
+            <Button variant="ghost" onClick={() => setPendingNav(null)}>Abbrechen</Button>
             <Button
               variant="outline"
-              onClick={() => { const d = navTarget; setNavTarget(null); discard(); if (d) go(d); }}
+              onClick={() => { const p = pendingNav; setPendingNav(null); discard(); p?.run(); }}
             >
-              Verwerfen &amp; {navTarget === "prev" ? "zurück" : "weiter"}
+              Verwerfen &amp; {pendingNav?.label ?? "weiter"}
             </Button>
             <Button
-              onClick={() => { const d = navTarget; setNavTarget(null); save(); if (d) go(d); }}
+              onClick={() => { const p = pendingNav; setPendingNav(null); save(); p?.run(); }}
             >
-              Speichern &amp; {navTarget === "prev" ? "zurück" : "weiter"}
+              Speichern &amp; {pendingNav?.label ?? "weiter"}
             </Button>
           </div>
         </DialogContent>
@@ -321,6 +328,7 @@ function BranchRow({
   targetOptions,
   onUpdate,
   onDelete,
+  onGo,
 }: {
   branch: StepBranch;
   targetOptions: Step[];
@@ -329,6 +337,7 @@ function BranchRow({
     patch: { label?: string; target_step_id?: string | null },
   ) => void;
   onDelete: (id: string) => void;
+  onGo: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
@@ -359,6 +368,15 @@ function BranchRow({
           </option>
         ))}
       </select>
+      <button
+        type="button"
+        onClick={onGo}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+        title={branch.target_step_id ? "Zu diesem Schritt springen" : "Schritt für diese Antwort anlegen"}
+        aria-label={branch.target_step_id ? "Zum Ziel-Schritt" : "Schritt anlegen"}
+      >
+        {branch.target_step_id ? <ArrowRight className="size-4" /> : <Plus className="size-4" />}
+      </button>
       <button
         type="button"
         onClick={() => {
