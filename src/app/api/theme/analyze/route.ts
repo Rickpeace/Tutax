@@ -5,6 +5,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { CI_ANALYSIS_SYSTEM, ciAnalysisUser } from "@/lib/ai-prompts";
 import { safeFetch } from "@/lib/ssrf";
+import { activeAccountId } from "@/lib/account";
 
 export const maxDuration = 60;
 
@@ -88,12 +89,7 @@ export async function POST(req: NextRequest) {
   if (!url) return NextResponse.json({ error: "URL fehlt" }, { status: 400 });
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
 
-  const { data: mem } = await supabase
-    .from("account_members")
-    .select("account_id")
-    .eq("user_id", user.id)
-    .single();
-  const accountId = mem?.account_id as string | undefined;
+  const accountId = (await activeAccountId())?.accountId;
   if (accountId) {
     await supabase.from("themes").update({ source_url: url, status: "analyzing" }).eq("account_id", accountId);
   }

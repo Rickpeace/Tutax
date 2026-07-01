@@ -55,7 +55,7 @@ async function requireOwner() {
     .select("role")
     .eq("account_id", account.id)
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
   if (data?.role !== "owner") throw new Error("Nur der Inhaber darf das Team verwalten.");
   return { account, userId };
 }
@@ -135,8 +135,8 @@ export async function acceptInvite(
     .select("id, account_id, role, status, email")
     .eq("token", token)
     .maybeSingle();
-  if (!inv || inv.status === "revoked" || !inv.email)
-    return { ok: false, message: "Diese Einladung ist ungültig oder wurde zurückgezogen." };
+  if (!inv || inv.status !== "pending" || !inv.email)
+    return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
 
   const supabase = await createClient();
   const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -202,8 +202,8 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
     .select("id, account_id, role, status, email")
     .eq("token", token)
     .maybeSingle();
-  if (!inv || inv.status === "revoked" || !inv.email)
-    return { ok: false, message: "Diese Einladung ist ungültig oder wurde zurückgezogen." };
+  if (!inv || inv.status !== "pending" || !inv.email)
+    return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
   if ((user.email ?? "").toLowerCase() !== inv.email.toLowerCase())
     return { ok: false, message: "Diese Einladung ist für eine andere Adresse." };
 
@@ -235,6 +235,16 @@ export async function removeMember(userId: string) {
   const { account, userId: me } = await requireOwner();
   if (me === userId) throw new Error("Sie können sich nicht selbst entfernen.");
   const admin = createAdminClient();
+  // Letzten Inhaber nicht entfernen -> Konto würde sonst ohne Inhaber verwaisen.
+  const { data: owners } = await admin
+    .from("account_members")
+    .select("user_id")
+    .eq("account_id", account.id)
+    .eq("role", "owner");
+  const list = owners ?? [];
+  if (list.some((o) => o.user_id === userId) && list.length <= 1) {
+    throw new Error("Der letzte Inhaber kann nicht entfernt werden.");
+  }
   await admin
     .from("account_members")
     .delete()

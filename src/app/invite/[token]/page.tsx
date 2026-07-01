@@ -22,15 +22,19 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     .select("id, account_id, role, status, email, accounts(name)")
     .eq("token", token)
     .maybeSingle();
-  if (!inv || inv.status === "revoked") redirect("/login?error=invite");
-
-  const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
-  const role = inv.role ?? "editor";
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Einladung ist nur EINMAL einlösbar: nur „pending" ist aktiv. Bereits eingelöste
+  // oder zurückgezogene Links -> eingeloggte Nutzer in die App, sonst zur Anmeldung.
+  // (verhindert Re-Join eines entfernten Mitglieds über einen alten Link).
+  if (!inv || inv.status !== "pending") redirect(user ? "/app" : "/login?error=invite");
+
+  const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
+  const role = inv.role ?? "editor";
 
   if (user) {
     const mismatch = !!inv.email && (user.email ?? "").toLowerCase() !== inv.email.toLowerCase();

@@ -45,3 +45,24 @@ export async function requireAccount(): Promise<{
 
   return { userId: user.id, email: user.email ?? null, account: active.accounts, memberships };
 }
+
+/**
+ * Nur die aktive Konto-ID (ohne Redirect) – für API-Routen. Berücksichtigt
+ * `active_account_id` aus den Metadaten (falls Mitglied), sonst die erste Org.
+ * Gibt null zurück, wenn nicht angemeldet oder ohne Org.
+ */
+export async function activeAccountId(): Promise<{ userId: string; accountId: string } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: rows } = await supabase
+    .from("account_members")
+    .select("account_id")
+    .eq("user_id", user.id);
+  const ids = (rows ?? []).map((r) => r.account_id as string).filter(Boolean);
+  if (!ids.length) return null;
+  const activeId = (user.user_metadata as { active_account_id?: string } | null)?.active_account_id;
+  return { userId: user.id, accountId: activeId && ids.includes(activeId) ? activeId : ids[0] };
+}

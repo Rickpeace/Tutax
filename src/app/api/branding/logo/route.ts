@@ -2,21 +2,15 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicImageUrl } from "@/lib/public-image";
+import { activeAccountId } from "@/lib/account";
 
 const PUBLIC_BUCKET = "tutorial-images-public";
 
 async function currentAccount() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { supabase, accountId: null as string | null };
-  const { data: mem } = await supabase
-    .from("account_members")
-    .select("account_id")
-    .eq("user_id", user.id)
-    .single();
-  return { supabase, accountId: (mem?.account_id as string | undefined) ?? null };
+  // AKTIVE Org (Metadaten), nicht "irgendein" Konto -> korrekt bei Mehrfach-Mitgliedschaft.
+  const a = await activeAccountId();
+  return { supabase, accountId: a?.accountId ?? null };
 }
 
 /** Logo hochladen. target=manual -> logo_path, target=ai -> ai_logo_path. */
