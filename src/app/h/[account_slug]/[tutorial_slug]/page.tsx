@@ -59,7 +59,22 @@ export async function generateMetadata({
   const { account_slug, tutorial_slug } = await params;
   const data = await load(account_slug, tutorial_slug);
   if (!data) return { title: "Nicht gefunden" };
-  return { title: `${data.tutorial.title} · ${data.account.name}` };
+  const { account, tutorial } = data;
+  const title = `${tutorial.title} · ${account.name}`;
+  const description =
+    tutorial.description?.trim() ||
+    `Schritt-für-Schritt-Anleitung von ${account.name}: ${tutorial.title}.`;
+  const { logoPath } = resolveTheme(data.theme);
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      siteName: account.name,
+      ...(logoPath ? { images: [publicImageUrl(logoPath)] } : {}),
+    },
+  };
 }
 
 export default async function ViewerPage({

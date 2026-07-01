@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { appBaseUrl } from "@/lib/url";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -18,6 +19,7 @@ const display = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appBaseUrl()),
   title: {
     default: "Steply – Klickbare Hilfe-Anleitungen für Organisationen",
     template: "%s · Steply",
