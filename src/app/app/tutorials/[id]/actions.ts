@@ -176,6 +176,18 @@ export async function createCategory(name: string): Promise<{ id: string; name: 
   return data;
 }
 
+/** Tutorial-Titel ändern. */
+export async function setTutorialTitle(tutorialId: string, title: string) {
+  const clean = title.trim();
+  if (!clean) throw new Error("Titel fehlt");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tutorials")
+    .update({ title: clean })
+    .eq("id", tutorialId);
+  if (error) throw new Error(error.message);
+}
+
 /** Tutorial einer Kategorie zuordnen (oder lösen mit null). */
 export async function setTutorialCategory(
   tutorialId: string,

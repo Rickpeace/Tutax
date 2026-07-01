@@ -1,13 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Eye } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
-import { Button } from "@/components/ui/button";
 import { Builder } from "@/components/builder/builder";
-import { CategoryPicker } from "@/components/builder/category-picker";
-import { DriftCheckButton } from "@/components/builder/drift-check-button";
+import { TutorialHeader } from "@/components/builder/tutorial-header";
 
 export default async function EditorPage({
   params,
@@ -49,43 +45,13 @@ export default async function EditorPage({
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        nativeButton={false}
-        render={<Link href="/app" />}
-      >
-        <ChevronLeft className="size-4" /> Zurück
-      </Button>
-
-      <div className="mt-3 mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">
-            {tutorial.title}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-muted-foreground">
-              {tutorial.status === "published" ? "Veröffentlicht" : "Entwurf"}
-            </span>
-            <CategoryPicker
-              tutorialId={id}
-              categories={categories ?? []}
-              currentCategoryId={tutorial.category_id}
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <DriftCheckButton tutorialId={id} />
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/app/preview/${id}`} target="_blank" rel="noopener noreferrer" />}
-          >
-            <Eye className="size-4" /> Vorschau
-          </Button>
-        </div>
-      </div>
+      <TutorialHeader
+        tutorialId={id}
+        initialTitle={tutorial.title}
+        published={tutorial.status === "published"}
+        categories={categories ?? []}
+        categoryId={tutorial.category_id}
+      />
 
       <Builder
         tutorialId={id}
