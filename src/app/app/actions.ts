@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -27,13 +26,8 @@ export async function setActiveAccount(accountId: string) {
     .eq("account_id", accountId)
     .maybeSingle();
   if (!m) return; // nicht Mitglied -> ignorieren
-  const cookieStore = await cookies();
-  cookieStore.set("active_account", accountId, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  // Serverseitig in den User-Metadaten merken -> geräteübergreifend gleich.
+  await supabase.auth.updateUser({ data: { active_account_id: accountId } });
   revalidatePath("/", "layout");
 }
 

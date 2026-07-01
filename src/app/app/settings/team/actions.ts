@@ -180,6 +180,8 @@ export async function acceptInvite(
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
 
+  // Direkt in der neuen Org landen.
+  await supabase.auth.updateUser({ data: { active_account_id: inv.account_id } });
   return { ok: true };
 }
 
@@ -213,6 +215,8 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
     .from("invitations")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
+  // Direkt in der neuen Org landen.
+  await supabase.auth.updateUser({ data: { active_account_id: inv.account_id } });
   return { ok: true };
 }
 
