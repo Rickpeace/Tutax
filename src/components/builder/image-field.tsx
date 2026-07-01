@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { HighlightEditor } from "@/components/builder/highlight-editor";
 import { CropDialog } from "@/components/builder/crop-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { compressAndUpload, signedImageUrl } from "@/lib/upload";
 import type { Highlight } from "@/lib/types";
 
@@ -35,6 +41,7 @@ export function ImageField({
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [big, setBig] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,7 +100,10 @@ export function ImageField({
             highlights={highlights}
             onChange={(h) => onSetHighlights(stepId, h)}
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setBig(true)}>
+              <Maximize2 className="size-4" /> Groß bearbeiten
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -122,6 +132,19 @@ export function ImageField({
               <Trash2 className="size-4" /> Entfernen
             </Button>
           </div>
+
+          <Dialog open={big} onOpenChange={setBig}>
+            <DialogContent className="w-[96vw] max-w-[1600px] sm:max-w-[1600px] max-h-[94vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Screenshot bearbeiten</DialogTitle>
+              </DialogHeader>
+              <HighlightEditor
+                url={url}
+                highlights={highlights}
+                onChange={(h) => onSetHighlights(stepId, h)}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
       ) : (
         <button
