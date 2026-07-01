@@ -27,8 +27,10 @@ export async function requireAccount(): Promise<{
 
   const account = membership?.accounts as Account | undefined;
   if (!account) {
-    // Sollte durch den Signup-Trigger nie passieren; defensiv behandeln.
-    redirect("/login");
+    // Eingeloggt, aber keiner Organisation zugeordnet (z. B. abgebrochene Einladung).
+    // NICHT nach /login (die Middleware schickt eingeloggte Nutzer zurück nach /app
+    // -> Endlosschleife). Stattdessen sauber ausloggen -> /login.
+    redirect("/logout");
   }
 
   return { userId: user.id, email: user.email ?? null, account };
