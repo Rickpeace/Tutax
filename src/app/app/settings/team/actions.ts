@@ -11,6 +11,38 @@ const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g,
 
 export type InviteResult = { ok: boolean; message: string; link?: string };
 
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/**
+ * Einladungs-Mail direkt über Resend – für ALLE Adressen (neu wie bestehend).
+ * Braucht RESEND_API_KEY + INVITE_FROM_EMAIL (z. B. "Steply <einladung@deine-domain.de>").
+ * Ohne Konfiguration -> false (Aufrufer nutzt Fallback / Link).
+ */
+async function sendInviteEmail(to: string, orgName: string, link: string, role: string): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.INVITE_FROM_EMAIL;
+  if (!key || !from) return false;
+  const roleLabel = role === "owner" ? "Inhaber" : "Bearbeiter";
+  const org = escapeHtml(orgName);
+  const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#101524">
+    <h2 style="margin:0 0 8px">Einladung zu ${org}</h2>
+    <p style="color:#3b4254;line-height:1.55">Du wurdest als <b>${roleLabel}</b> zu <b>${org}</b> auf Steply eingeladen. Klick zum Beitreten und lege ein Passwort fest:</p>
+    <p style="margin:24px 0"><a href="${link}" style="background:#3d4ee6;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
+    <p style="color:#6b7280;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>${link}</p>
+  </div>`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject: `Einladung zu ${orgName} auf Steply`, html }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Stellt sicher, dass der Aufrufer INHABER des aktuellen Kontos ist.
  * Schützt die Team-Verwaltung serverseitig (nicht nur über die UI).
@@ -70,39 +102,30 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
   if (insErr) return { ok: false, message: insErr.message };
 
   const link = `${appUrl()}/invite/${token}`;
-  // Einladungs-Mail über Supabase (Versand via Resend-SMTP).
+  revalidatePath("/app/settings/team");
+
+  // 1) Bevorzugt: eigene Einladungs-Mail via Resend – funktioniert für NEUE UND
+  //    BESTEHENDE Adressen gleichermaßen (keine email_exists-Sackgasse).
+  if (await sendInviteEmail(email, account.name, link, role)) {
+    return { ok: true, message: `Einladung an ${email} gesendet.`, link };
+  }
+
+  // 2) Fallback ohne Resend-Konfiguration: für NEUE Adressen die Supabase-Invite-Mail;
+  //    für bestehende bleibt der Link zum Teilen.
   const { error: mailErr } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { tutax_invite_token: token },
     redirectTo: link,
   });
-
-  revalidatePath("/app/settings/team");
-  if (mailErr) {
-    const code = (mailErr as { code?: string }).code;
-    const status = (mailErr as { status?: number }).status;
-    if (code === "over_email_send_rate_limit" || status === 429) {
-      return {
-        ok: false,
-        message:
-          "E-Mail-Limit von Supabase erreicht. Bitte in ~1 Stunde erneut versuchen oder das Limit erhöhen (Supabase → Auth → Rate Limits). Solange kannst du diesen Link teilen:",
-        link,
-      };
-    }
-    if (code === "email_exists") {
-      // Existierender Auth-User: über den Invite-Link beitreten (Passwort dort setzbar).
-      return {
-        ok: true,
-        message: "Diese Adresse hat schon ein Konto. Teile ihr diesen Link – darüber tritt sie bei:",
-        link,
-      };
-    }
-    return {
-      ok: true,
-      message: "E-Mail konnte nicht gesendet werden. Teile stattdessen diesen Link:",
-      link,
-    };
+  if (!mailErr) return { ok: true, message: `Einladung an ${email} gesendet.`, link };
+  const status = (mailErr as { status?: number }).status;
+  if ((mailErr as { code?: string }).code === "over_email_send_rate_limit" || status === 429) {
+    return { ok: false, message: "E-Mail-Limit erreicht. Bitte später erneut – oder diesen Link teilen:", link };
   }
-  return { ok: true, message: `Einladung an ${email} gesendet.`, link };
+  return {
+    ok: true,
+    message: "Diese Adresse hat schon ein Konto (oder E-Mail-Versand ist nicht konfiguriert). Teile ihr diesen Beitritts-Link:",
+    link,
+  };
 }
 
 /**
