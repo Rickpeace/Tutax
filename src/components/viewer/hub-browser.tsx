@@ -45,6 +45,8 @@ export function HubBrowser({
       <div data-tx="search" className="mb-5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 py-3">
         <Search className="size-4 text-muted-foreground" />
         <input
+          type="search"
+          aria-label="Anleitung suchen"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Anleitung suchen …"

@@ -9,6 +9,7 @@ import { sanitizeSkinCss } from "@/lib/skin-css";
 import { publicImageUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
+import { ChatWidget } from "@/components/viewer/chat-widget";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
@@ -59,7 +60,22 @@ export async function generateMetadata({
   const { account_slug, tutorial_slug } = await params;
   const data = await load(account_slug, tutorial_slug);
   if (!data) return { title: "Nicht gefunden" };
-  return { title: `${data.tutorial.title} · ${data.account.name}` };
+  const { account, tutorial } = data;
+  const title = `${tutorial.title} · ${account.name}`;
+  const description =
+    tutorial.description?.trim() ||
+    `Schritt-für-Schritt-Anleitung von ${account.name}: ${tutorial.title}.`;
+  const { logoPath } = resolveTheme(data.theme);
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      siteName: account.name,
+      ...(logoPath ? { images: [publicImageUrl(logoPath)] } : {}),
+    },
+  };
 }
 
 export default async function ViewerPage({
@@ -101,7 +117,7 @@ export default async function ViewerPage({
         <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
-      <div className="mx-auto flex max-w-md flex-col px-4 py-6">
+      <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl">
         <div data-tx="header" className="mb-4 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -177,6 +193,7 @@ export default async function ViewerPage({
           </a>
         </p>
       </div>
+      <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>
   );
 }

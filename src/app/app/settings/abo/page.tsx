@@ -1,32 +1,8 @@
 import { Check, Crown, TriangleAlert } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { isPro, FREE_TUTORIAL_LIMIT } from "@/lib/plan";
+import { PLANS as plans } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
-
-const plans = [
-  {
-    key: "free",
-    name: "Kostenlos",
-    price: "0 €",
-    period: "/ Monat",
-    features: ["1 Hilfe-Seite", `Bis zu ${FREE_TUTORIAL_LIMIT} Tutorials`, "Highlights & Verzweigungen", "Steply-Branding im Footer"],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "29 €",
-    period: "/ Monat",
-    highlight: true,
-    features: ["Unbegrenzte Tutorials", "Eigenes Logo & CI-Farben", "KI-CI-Übernahme", "Hilfe-Chatbot", "Kein Steply-Branding"],
-  },
-  {
-    key: "premium",
-    name: "Premium",
-    price: "79 €",
-    period: "/ Monat",
-    features: ["Alles aus Pro", "Eigene Domain (hilfe.firma.de)", "Drift-Überwachung (KI)", "Analytics & Drop-off", "Priorisierter Support"],
-  },
-];
 
 export default async function AboPage({
   searchParams,

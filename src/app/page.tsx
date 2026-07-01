@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { SiteFooter } from "@/components/marketing/site-footer";
+import { PLANS } from "@/lib/pricing";
 
 export default function Home() {
   return (
@@ -110,7 +111,7 @@ export default function Home() {
           <BentoCell icon={ShieldCheck} t="Schwärzen (Blur)" d="Sensible Kundendaten unkenntlich machen. DSGVO direkt im Editor." />
           <BentoCell icon={Layers} t="Gehostet im CI" d="Ihre Farben, Ihr Logo. Sieht aus wie Ihre Organisation – liegt aber bei uns." />
           <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy." />
-          <BentoCell icon={Sparkles} t="KI übernimmt Ihr CI" d="Website-URL angeben, die KI leitet Farben & Schriften ab." soon />
+          <BentoCell icon={Sparkles} t="KI übernimmt Ihr CI" d="Website-URL angeben, die KI leitet Farben & Schriften ab." />
         </div>
       </section>
 
@@ -133,6 +134,79 @@ export default function Home() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ===== PREISE ===== */}
+      <section id="preise" className="scroll-mt-20 border-b border-border">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="flex items-end justify-between gap-4">
+            <h2 className="max-w-md text-4xl font-bold tracking-tight text-ink">
+              Ein Preis, der mitwächst.
+            </h2>
+            <p className="hidden max-w-xs text-sm text-muted-foreground sm:block">
+              Kostenlos starten, jederzeit upgraden. Keine Kreditkarte für den
+              Anfang.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {PLANS.map((p) => (
+              <div
+                key={p.key}
+                className={`flex flex-col rounded-3xl border bg-card p-6 ${
+                  p.highlight
+                    ? "border-primary shadow-[0_6px_24px_rgba(61,78,230,0.12)]"
+                    : "border-border"
+                }`}
+              >
+                {p.highlight && (
+                  <span className="mb-2 inline-flex w-fit items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-primary">
+                    Beliebt
+                  </span>
+                )}
+                <div className="font-bold text-ink">{p.name}</div>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="font-display text-3xl font-extrabold text-ink">
+                    {p.price}
+                  </span>
+                  <span className="text-sm text-muted-foreground">{p.period}</span>
+                </div>
+                <ul className="mt-5 flex-1 space-y-2 text-sm text-ink-2">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2">
+                      <Check className="mt-0.5 size-4 shrink-0 text-yes" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-6">
+                  <Button
+                    className="w-full"
+                    variant={p.highlight ? "default" : "outline"}
+                    nativeButton={false}
+                    render={<Link href="/signup" />}
+                  >
+                    Kostenlos starten <ArrowRight className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== FAQ ===== */}
+      <section id="faq" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20">
+        <h2 className="max-w-md text-4xl font-bold tracking-tight text-ink">
+          Häufige Fragen.
+        </h2>
+        <div className="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2">
+          {FAQS.map((f) => (
+            <div key={f.q}>
+              <h3 className="font-bold text-ink">{f.q}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{f.a}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -161,6 +235,35 @@ export default function Home() {
     </div>
   );
 }
+
+/* ---------- Daten ---------- */
+
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: "Was kostet Steply?",
+    a: "Der Einstieg ist kostenlos: eine Hilfe-Seite mit bis zu 5 Tutorials, Highlights und Verzweigungen. Pro (29 €/Monat) hebt das Limit auf, bringt eigenes Logo, CI-Farben, den Hilfe-Chatbot und entfernt das Steply-Branding. Premium (79 €/Monat) ergänzt eigene Domain, Drift-Überwachung und Analytics.",
+  },
+  {
+    q: "Brauche ich technisches Wissen?",
+    a: "Nein. Sie klicken Schritte mit Screenshots, Markierungen und Ja/Nein-Verzweigungen zusammen – ganz ohne Code. Screenshots lassen sich direkt am Handy aufnehmen, zuschneiden und markieren.",
+  },
+  {
+    q: "Wie steht es um DSGVO & Hosting?",
+    a: "Steply wird in der EU betrieben. Sensible Bereiche in Screenshots können Sie direkt im Editor schwärzen (Blur). Die Chat-Antworten werden per KI erstellt – Endkunden werden darauf hingewiesen, keine personenbezogenen Daten einzugeben.",
+  },
+  {
+    q: "Wie kommt die Hilfe auf meine Website?",
+    a: "Jede veröffentlichte Anleitung erhält einen eigenen Link. Diesen verlinken Sie auf Ihrer Website, in E-Mails oder per Messenger – ganz ohne iFrame. Optional lässt sich die Seite auch einbetten.",
+  },
+  {
+    q: "Kann ich mein CI nutzen?",
+    a: "Ja. Logo und Farben legen Sie manuell fest – oder die KI übernimmt Ihr Corporate Design automatisch aus Ihrer Website. Die Hilfe-Seite sieht dann aus wie Ihre Organisation.",
+  },
+  {
+    q: "Wie funktioniert Video → Tutorial?",
+    a: "Sie nehmen Ihren Bildschirm mit Stimme auf. Sagen Sie „Schnitt“, um einen Schritt abzuschließen. Steply transkribiert, schneidet passende Screenshots und schlägt Titel, Text und Markierungen vor – Sie prüfen nur noch nach.",
+  },
+];
 
 /* ---------- Bausteine ---------- */
 

@@ -48,7 +48,19 @@ export async function generateMetadata({
   const { account_slug } = await params;
   const data = await load(account_slug);
   if (!data) return { title: "Nicht gefunden" };
-  return { title: `Hilfe & Anleitungen · ${data.account.name}` };
+  const { account } = data;
+  const description = `Hilfe & Anleitungen von ${account.name} – Schritt für Schritt erklärt.`;
+  const { logoPath } = resolveTheme(data.theme);
+  return {
+    title: `Hilfe & Anleitungen · ${account.name}`,
+    description,
+    openGraph: {
+      title: `Hilfe & Anleitungen · ${account.name}`,
+      description,
+      siteName: account.name,
+      ...(logoPath ? { images: [publicImageUrl(logoPath)] } : {}),
+    },
+  };
 }
 
 export default async function HubPage({

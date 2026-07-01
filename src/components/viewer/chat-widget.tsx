@@ -43,7 +43,9 @@ export function ChatWidget({
   const [busy, setBusy] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([greeting]);
   const [hydrated, setHydrated] = useState(false);
+  const [status, setStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Gespräch aus localStorage wiederherstellen (übersteht Navigieren/Reload).
   useEffect(() => {
@@ -71,7 +73,19 @@ export function ChatWidget({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs, busy]);
 
+  // Beim Öffnen: Autofokus ins Eingabefeld. Esc schließt das Panel.
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   function resetChat() {
+    if (!window.confirm("Gespräch wirklich löschen?")) return;
     setMsgs([greeting]);
     try {
       localStorage.removeItem(storageKey);
@@ -151,6 +165,8 @@ export function ChatWidget({
       patchBot({ text: "Es ist ein Fehler aufgetreten." });
     } finally {
       setBusy(false);
+      // Screenreader-Ansage NACH Abschluss (nicht beim Streamen -> nicht spammy).
+      setStatus("Antwort erhalten");
     }
   }
 
@@ -159,6 +175,7 @@ export function ChatWidget({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Hilfe-Assistent"
+        aria-expanded={open}
         className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
         style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
       >
@@ -166,7 +183,12 @@ export function ChatWidget({
       </button>
 
       {open && (
-        <div className="fixed bottom-24 right-3 left-3 z-40 flex h-[30rem] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]">
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label="Hilfe-Assistent"
+          className="fixed bottom-24 right-3 left-3 z-40 flex h-[min(30rem,calc(100dvh-7rem))] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
+        >
           <div
             className="flex items-center gap-2 border-b border-black/5 px-4 py-3"
             style={{ background: "var(--brand-bg)" }}
@@ -178,7 +200,7 @@ export function ChatWidget({
                 onClick={resetChat}
                 title="Gespräch zurücksetzen"
                 aria-label="Gespräch zurücksetzen"
-                className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:text-[var(--brand-ink)]"
+                className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:text-[var(--brand-ink)]"
               >
                 <RotateCcw className="size-3.5" /> Neu
               </button>
@@ -204,12 +226,18 @@ export function ChatWidget({
             ))}
           </div>
 
+          {/* Screenreader-Status: erst nach Abschluss angesagt, nicht beim Streamen. */}
+          <p role="status" aria-live="polite" className="sr-only">
+            {status}
+          </p>
+
           <div className="flex gap-2 border-t border-black/5 p-2">
             <input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") send();
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
               }}
               placeholder="Frage stellen …"
               className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)]"
