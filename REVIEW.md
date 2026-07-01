@@ -9,6 +9,20 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 > durchweg gut gebaut; fast alles hier ist „letzter Meter" (Ränder, Fehlerfälle,
 > Betrieb), nicht Architektur.
 
+## ✅ Erledigt in der Nachtschicht 02.07. (Welle 1 + Welle 4 Schritt 1)
+
+**Fable:** Blur in Pixel gebrannt (publish/fork/edit-published, test-blur-live 9/9) ·
+Security-Header (Frame-Schutz außer /h) · `accounts.plan` + Admin-Schalter „Pro
+freischalten" (Vollzugriff ohne Zahlungsanbieter; RichardTax=pro) · Free-Limit
+(5 Tutorials, Forks zählen nicht) in createTutorial/duplicateTutorial · Abo-Seite
+ehrlich (Plan-Status, Limit-Banner, Stripe-Fußnote raus).
+**Opus (Branch welle-1-opus, reviewt+gemerged):** error/not-found/global-error
+(deutsch, gebrandet) · OpenAI-Timeout 20 s + suggest-Cap/maxDuration · Publish-Toast
+mit „Live ansehen" + URL · Kontrast-Ableitung `--brand-accent-fg/-strong` (dunkle CIs
+pixelidentisch) · Impressum/Datenschutz-Gerüst (OpenAI/DPF-Passus, Platzhalter für
+Betreiber-Angaben) · KI-Hinweis im Chat + Impressum/Datenschutz-Links im /h-Footer ·
+Leere-Suche-CTA. **Entsprechende Checkboxen unten gelten als erledigt.**
+
 ---
 
 ## Was gut ist (von 4 unabhängigen Reviews bestätigt)
@@ -48,12 +62,10 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
   disabled, „Preise sind Platzhalter" für Kunden sichtbar (`abo/page.tsx:64-79`);
   Free-Limits (5 Tutorials, Branding) nirgends enforced (`createTutorial` ohne Limit).
   → Stripe Checkout + Portal; Limits gaten; Preise auf die Landing.
-- [ ] 🟠 **Kein error.tsx / not-found.tsx / global-error.tsx im ganzen Projekt** —
-  Fehler/vertippter Link zeigt Endkunden die **englische** Next-Standardseite im
-  Kanzlei-CI. → gebrandete Fehler-/404-Seiten (Root + /h), deutsch.
-- [ ] 🟠 **Publish-Moment verpufft** — `toggleLive` wirft `{slug, accountSlug}` weg
-  (`tutorial-card.tsx:69-79`), kein Erfolgs-Toast, kein Link. → „Live ansehen /
-  Link kopieren"-Toast; beim ersten Publish Hinweis auf Einstellungen → Einbetten.
+- [x] 🟠 ~~Kein error.tsx/not-found.tsx/global-error.tsx~~ **GEFIXT (02.07., Opus/W1):**
+  alle drei, deutsch + gebrandet; /h/gibtsnicht liefert deutsche 404 (curl-verifiziert).
+- [x] 🟠 ~~Publish-Moment verpufft~~ **GEFIXT (02.07., Opus/W1):** Erfolgs-Toast
+  „Veröffentlicht! 🎉" mit „Live ansehen"-Action + URL; Unpublish-Bestätigung.
 
 ---
 
