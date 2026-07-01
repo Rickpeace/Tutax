@@ -40,6 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Agent-Skills: CLI-Zwischenspeicher (redundant). Die echten, von Claude gelesenen
+# Kopien liegen in .claude/skills/ und werden committet; Provenienz via skills-lock.json.
+/.agents/
+
 # lokale Test-/Prototyp-Skripte (Video-Pipeline) – bewusst NICHT im Repo
 /video-to-tutorial.mjs
 /test-video-live.mjs

@@ -21,3 +21,21 @@ funktioniert. Niemals annehmen — immer prüfen, bevor du committest/pushst/abs
 Wird der Build oder ein relevanter Test nicht grün und du kannst es nicht reparieren:
 NICHT committen/pushen — Änderungen verwerfen und das Problem klar benennen. Lieber kein
 Ergebnis als ein kaputtes. Berichte am Ende, welche Verifikationen mit welchem Ergebnis liefen.
+
+# Stack & Skills (autoritativ)
+
+Für JEDE Frontend-/Next.js-Arbeit gilt zuerst der Skill **`tutax-frontend`**
+(`.claude/skills/tutax-frontend/SKILL.md`) — er fixiert unseren Stack und schlägt bei
+Konflikt die generischen Skills.
+
+- **Stack:** Next 16 App Router (RSC-first), React 19, Tailwind v4, **shadcn auf Base UI
+  (NICHT Radix)** → `render` statt `asChild`, `nativeButton={false}`; **OpenAI direkt
+  (NICHT Vercel AI SDK)**; Supabase (Auth/RLS/pgvector).
+- **Installierte, on-stack Skills:** `supabase`, `supabase-postgres-best-practices`,
+  `cache-components`, `next-best-practices`, `react-best-practices`,
+  `postgres-semantic-search`. Nutze sie.
+- **IGNORIEREN** (widersprechen unserem Stack): alles Radix-basierte (`shadcn`,
+  `nextjs-shadcn`) und alles Vercel-AI-SDK-basierte (`ai-sdk*`, `ai-elements`,
+  `nextjs-chatbot`).
+- **Live-Diagnose:** `next-devtools-mcp` ist via `.mcp.json` verdrahtet (Dev-Server nötig)
+  — Build-/Typ-/Laufzeitfehler, Routen, Cache-Components-Guide.
