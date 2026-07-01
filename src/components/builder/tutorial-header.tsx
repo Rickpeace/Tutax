@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Eye, Loader2 } from "lucide-react";
+import { ChevronLeft, Eye, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CategoryPicker } from "@/components/builder/category-picker";
@@ -25,6 +25,7 @@ export function TutorialHeader({
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
+  const [editing, setEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
   const [busy, setBusy] = useState(false);
 
@@ -77,21 +78,47 @@ export function TutorialHeader({
         </Button>
 
         <div className="min-w-0">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") {
-                setTitle(saved);
-                e.currentTarget.blur();
-              }
-            }}
-            placeholder="Titel der Anleitung"
-            aria-label="Tutorial-Titel"
-            className="-mx-1.5 w-full truncate rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none transition-colors hover:border-border focus:border-ring focus:bg-card"
-          />
+          {editing ? (
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={() => {
+                saveTitle();
+                setEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") {
+                  setTitle(saved);
+                  setEditing(false);
+                }
+              }}
+              placeholder="Titel der Anleitung"
+              aria-label="Tutorial-Titel"
+              className="-mx-1.5 w-full rounded-md border border-ring bg-card px-1.5 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none"
+            />
+          ) : (
+            <div className="flex items-start gap-1.5">
+              <h1 className="min-w-0 text-xl font-extrabold tracking-tight text-ink break-words">
+                {saved || "Ohne Titel"}
+              </h1>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="mt-0.5 shrink-0 text-muted-foreground"
+                onClick={() => {
+                  setTitle(saved);
+                  setEditing(true);
+                }}
+                title="Titel bearbeiten"
+                aria-label="Titel bearbeiten"
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            </div>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 px-1.5">
             <button
               type="button"
