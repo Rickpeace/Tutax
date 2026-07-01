@@ -20,6 +20,7 @@ type FlowHandlers = {
   onSelect?: (stepId: string) => void;
   onInsertAfter?: (stepId: string) => void;
   onInsertIntoBranch?: (branchId: string) => void;
+  imgBust?: Record<string, number>; // Bild-Neuladen erzwingen (Ersetzen bei gleichem Pfad)
 };
 
 /** Karten-Flow eines Tutorials (Prototyp-Optik §7.2) mit Einfügepunkten (§7.4). */
@@ -37,7 +38,7 @@ function FlowNode({
   const step = node as RenderStep;
   return (
     <div className="flex flex-col">
-      <StepCard node={step} selected={h.selectedId === step.step.id} onSelect={h.onSelect} />
+      <StepCard node={step} selected={h.selectedId === step.step.id} onSelect={h.onSelect} bust={h.imgBust?.[step.step.id]} />
 
       {step.branches ? (
         <>
@@ -71,10 +72,12 @@ function StepCard({
   node,
   selected,
   onSelect,
+  bust,
 }: {
   node: RenderStep;
   selected: boolean;
   onSelect?: (stepId: string) => void;
+  bust?: number;
 }) {
   const isQ = !!node.branches;
   const bodyText = plainBody(node.step.body);
@@ -88,7 +91,7 @@ function StepCard({
           : "border-border hover:border-primary/40"
       }`}
     >
-      <StepThumb imagePath={node.step.image_path} />
+      <StepThumb imagePath={node.step.image_path} bust={bust} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-ink">
           {node.step.title?.trim() || "Ohne Titel"}
@@ -104,11 +107,12 @@ function StepCard({
 }
 
 /** Bild-Thumbnail der Kachel; zeigt „kein Bild" wenn noch kein Screenshot da ist. */
-function StepThumb({ imagePath }: { imagePath: string | null }) {
+function StepThumb({ imagePath, bust }: { imagePath: string | null; bust?: number }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     if (imagePath) {
+      // `bust` in den Deps: nach „Bild ersetzen" (gleicher Pfad) frisch signieren -> neues Bild.
       signedImageUrl(imagePath).then((u) => {
         if (active) setUrl(u);
       });
@@ -118,7 +122,7 @@ function StepThumb({ imagePath }: { imagePath: string | null }) {
     return () => {
       active = false;
     };
-  }, [imagePath]);
+  }, [imagePath, bust]);
 
   return (
     <div className="size-[38px] shrink-0 overflow-hidden rounded-lg border border-line-2 bg-background">

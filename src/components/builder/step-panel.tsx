@@ -352,7 +352,10 @@ function BranchRow({
         className="size-3 shrink-0 rounded-full"
         style={{ background: branch.color || "var(--muted-foreground)" }}
       />
+      {/* key = aktueller Wert: bleibt beim Tippen stabil (Commit erst onBlur), remountet
+          aber bei EXTERNER Änderung (z. B. „Ja"/„Nein" beim Verzweigen) mit neuem Wert. */}
       <input
+        key={`l:${branch.label ?? ""}`}
         defaultValue={branch.label ?? ""}
         placeholder="Antwort"
         onBlur={(e) => {
@@ -362,6 +365,7 @@ function BranchRow({
         className="w-20 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring"
       />
       <select
+        key={`t:${branch.target_step_id ?? ""}`}
         defaultValue={branch.target_step_id ?? ""}
         onChange={(e) =>
           onUpdate(branch.id, { target_step_id: e.target.value || null })

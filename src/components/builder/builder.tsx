@@ -14,7 +14,18 @@ import { Button } from "@/components/ui/button";
 import { Flow } from "@/components/builder/flow";
 import { StepPanel } from "@/components/builder/step-panel";
 import { buildRenderTree } from "@/lib/builder/tree";
+import type { RenderNode } from "@/lib/builder/tree";
 import type { Step, StepBranch, Highlight } from "@/lib/types";
+
+/** Schritt-IDs in tatsächlicher FLUSS-Reihenfolge (Tree-DFS) – für Vor/Zurück im Editor. */
+function flattenFlow(node: RenderNode): string[] {
+  if (node.type === "merge") return [];
+  const ids: string[] = [node.step.id];
+  for (const b of node.branches ?? []) ids.push(...flattenFlow(b.child));
+  if (node.after) ids.push(...flattenFlow(node.after));
+  if (node.next) ids.push(...flattenFlow(node.next));
+  return ids;
+}
 import {
   addStep,
   updateStep,
@@ -74,6 +85,9 @@ export function Builder({
   const [branches, setBranches] = useState(initialBranches);
   const [rootId, setRootId] = useState(initialRoot);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // "Bild ersetzen" nutzt einen DETERMINISTISCHEN Pfad (image_path bleibt gleich) -> ohne
+  // Bust-Zähler bliebe das Flow-Thumbnail (an image_path gebunden) auf dem alten Bild.
+  const [imgBust, setImgBust] = useState<Record<string, number>>({});
 
   // Nur bei echtem Server-Reload (router.refresh / Navigation) resynchronisieren.
   useEffect(() => {
@@ -334,6 +348,8 @@ export function Builder({
       },
     ) => {
       setSteps((prev) => prev.map((s) => (s.id === stepId ? { ...s, ...img } : s)));
+      // Thumbnail neu laden lassen, auch wenn der Pfad identisch bleibt.
+      setImgBust((m) => ({ ...m, [stepId]: (m[stepId] ?? 0) + 1 }));
       persist(() => updateStep(stepId, img));
     },
     [persist],
@@ -356,8 +372,17 @@ export function Builder({
   const selectedStep = steps.find((s) => s.id === selectedId) ?? null;
   const selectedBranches = branches.filter((b) => b.step_id === selectedId);
 
-  // Lineare Reihenfolge (nach Position) für Vor/Zurück im Editor.
-  const ordered = useMemo(() => [...steps].sort((a, b) => a.position - b.position), [steps]);
+  // Reihenfolge für Vor/Zurück = tatsächliche FLUSS-Reihenfolge (Tree-DFS), nicht die
+  // Anlege-Position. Unerreichbare Schritte hängen wir (nach Position) hinten an, damit
+  // sie per Navigation trotzdem erreichbar bleiben.
+  const ordered = useMemo(() => {
+    const flowIds = tree ? flattenFlow(tree) : [];
+    const seen = new Set(flowIds);
+    const byId = new Map(steps.map((s) => [s.id, s]));
+    const inFlow = flowIds.map((id) => byId.get(id)).filter((s): s is Step => !!s);
+    const rest = steps.filter((s) => !seen.has(s.id)).sort((a, b) => a.position - b.position);
+    return [...inFlow, ...rest];
+  }, [tree, steps]);
   const selIndex = selectedId ? ordered.findIndex((s) => s.id === selectedId) : -1;
   const goPrev = useCallback(() => {
     if (selIndex > 0) setSelectedId(ordered[selIndex - 1].id);
@@ -408,6 +433,7 @@ export function Builder({
     <div className="rounded-2xl border border-border bg-card/40 p-4 sm:p-5">
       <Flow
         tree={tree}
+        imgBust={imgBust}
         selectedId={selectedId}
         onSelect={(id) => {
           if (dirtyRef.current && id !== selectedId && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
