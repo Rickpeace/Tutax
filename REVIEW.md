@@ -137,9 +137,10 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
   (Mailto) zur Nachfragemessung.
 
 ### Marketing
-- [ ] 🟠 Zielgruppen-Sprache fehlt: „Steuerkanzlei/Mandant/DATEV" kommt in keiner
-  UI-Zeile vor — alles „Organisationen". Entweder Kanzlei-Landing oder bewusst
-  generisch (dokumentieren).
+- [x] ~~Zielgruppen-Sprache~~ **Entschieden (01.07.26): Steply ist bewusst generisch**
+  — für jede Firma mit Tutorial-Bedarf, nicht steuer-spezifisch. „Organisationen"-
+  Sprache ist korrekt. (Offen bleibt nur: Landing braucht trotzdem konkrete
+  Anwendungsbeispiele/Branchen-Cases als Beweis.)
 - [ ] 🟡 Kein echter Screenshot/keine Demo auf der Landing (nur Mocks) → öffentlichen
   `/h/demo`-Hub bauen und verlinken (stärkster Beweis).
 - [ ] 🟡 Null Social Proof → solange Kunden fehlen: Gründer-Note + „EU-Hosting,
