@@ -1,16 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SessionFromHash } from "@/components/auth/session-from-hash";
+import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Einladung", robots: { index: false } };
 
 /**
- * Einladung annehmen: dem Organisations-Konto beitreten, dann Passwort setzen.
- * - Eingeloggt (via /auth/confirm ODER Fragment-Fallback unten): Beitritt + -> /reset.
- * - Nicht eingeloggt: impliziter #-Magic-Link -> Session aus Fragment holen und neu laden;
- *   ohne Fragment -> Login (bestehende Nutzer mit Passwort).
+ * Einladung annehmen – selbst-enthaltend (keine Magic-/Recovery-Mail-Abhängigkeit):
+ * - Eingeloggt + passende Adresse: direkt beitreten -> /app.
+ * - Nicht eingeloggt: Passwort-Formular -> setzt Passwort, tritt bei, loggt ein.
  */
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -18,7 +17,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   const { data: inv } = await admin
     .from("invitations")
-    .select("id, account_id, role, status, email")
+    .select("id, account_id, role, status, email, accounts(name)")
     .eq("token", token)
     .maybeSingle();
   if (!inv || inv.status === "revoked") redirect("/login?error=invite");
@@ -29,11 +28,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   } = await supabase.auth.getUser();
 
   if (user) {
-    // Nur die eingeladene Adresse darf beitreten (weitergeleitete Links).
     if (inv.email && (user.email ?? "").toLowerCase() !== inv.email.toLowerCase()) {
       redirect("/app?error=invite_email");
     }
-    // Beitritt idempotent – bestehende Rolle NICHT überschreiben.
     await admin.from("account_members").upsert(
       { account_id: inv.account_id, user_id: user.id, role: inv.role },
       { onConflict: "account_id,user_id", ignoreDuplicates: true },
@@ -44,11 +41,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         .update({ status: "accepted", accepted_at: new Date().toISOString() })
         .eq("id", inv.id);
     }
-    // Neu Eingeladene haben noch kein Passwort -> setzen lassen, dann in die App.
-    redirect("/reset");
+    redirect("/app");
   }
 
-  return (
-    <SessionFromHash next={`/invite/${token}`} fallback={`/login?next=/invite/${token}`} />
-  );
+  const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
+  return <AcceptInviteForm token={token} email={inv.email ?? ""} orgName={orgName} />;
 }
