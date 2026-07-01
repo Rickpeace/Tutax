@@ -97,8 +97,15 @@ export function buildRenderTree(
     common = common.filter((id) => id !== decisionId);
     if (!common.length) return null;
     // "frühester" Join = der mit der größten Vorwärts-Erreichbarkeit
-    // (von ihm aus ist der Rest erreichbar -> er kommt zuerst).
-    common.sort((a, b) => reachable(b).size - reachable(a).size);
+    // (von ihm aus ist der Rest erreichbar -> er kommt zuerst). Bei Gleichstand
+    // stabil nach position, dann id sortieren, damit der Flow deterministisch bleibt.
+    const posOf = (id: string) => stepById.get(id)?.position ?? Infinity;
+    common.sort(
+      (a, b) =>
+        reachable(b).size - reachable(a).size ||
+        posOf(a) - posOf(b) ||
+        (a < b ? -1 : a > b ? 1 : 0),
+    );
     return common[0];
   };
 

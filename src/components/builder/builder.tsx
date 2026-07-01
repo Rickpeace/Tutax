@@ -89,8 +89,15 @@ export function Builder({
   // Bust-Zähler bliebe das Flow-Thumbnail (an image_path gebunden) auf dem alten Bild.
   const [imgBust, setImgBust] = useState<Record<string, number>>({});
 
-  // Nur bei echtem Server-Reload (router.refresh / Navigation) resynchronisieren.
+  // Zahl der noch nicht bestätigten Schreibvorgänge. Verhindert, dass ein FREMDER
+  // Server-Reload (z. B. DriftCheck-Button) laufende optimistische Änderungen zurücksetzt.
+  const pending = useRef(0);
+
+  // Nur resynchronisieren, wenn KEIN Write in-flight ist (sonst gingen Branch/Highlight-
+  // Optimistik im Fenster bis zum Persist verloren). Nach Abschluss liefert der nächste
+  // echte Reload wieder den Server-Stand.
   useEffect(() => {
+    if (pending.current > 0) return;
     setSteps(initialSteps);
     setBranches(initialBranches);
     setRootId(initialRoot);
@@ -98,12 +105,15 @@ export function Builder({
 
   const persist = useCallback(
     (fn: () => Promise<unknown>) => {
-      Promise.resolve()
-        .then(fn)
-        .catch(() => {
-          toast.error("Speichern fehlgeschlagen – lade neu …");
-          router.refresh();
-        });
+      pending.current += 1;
+      const p = Promise.resolve().then(fn);
+      p.catch(() => {
+        toast.error("Speichern fehlgeschlagen – lade neu …");
+        router.refresh();
+      }).finally(() => {
+        pending.current -= 1;
+      });
+      return p; // Promise für Aufrufer, die auf den Erfolg warten wollen (saveStep)
     },
     [router],
   );
@@ -111,9 +121,10 @@ export function Builder({
   // Explizites Speichern (Titel/Text) – kein Auto-Save mehr bei jedem Tastendruck.
   const dirtyRef = useRef(false);
   const saveStep = useCallback(
-    (id: string, patch: { title: string; body: unknown }) => {
+    async (id: string, patch: { title: string; body: unknown }) => {
       setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-      persist(() => updateStep(id, patch));
+      // await -> wirft bei Fehler, damit der Aufrufer KEINEN Erfolg meldet (Toast/Nav).
+      await persist(() => updateStep(id, patch));
     },
     [persist],
   );
@@ -122,21 +133,7 @@ export function Builder({
     const id = crypto.randomUUID();
     const maxPos = steps.reduce((m, s) => Math.max(m, s.position), 0);
     const position = maxPos + 1;
-    const title = "Neuer Schritt";
-    const newStep: Step = {
-      id,
-      tutorial_id: tutorialId,
-      chapter_id: null,
-      title,
-      body: null,
-      image_path: null,
-      image_width: null,
-      image_height: null,
-      highlights: [],
-      position,
-      is_decision: false,
-      created_at: new Date().toISOString(),
-    };
+    const newStep = mkStep(id, tutorialId, position);
     // Nur der ALLERERSTE Schritt wird root. Sonst NIE einen zweiten root setzen
     // (verhinderte den Bug: verwaiste Schritte, wenn rootId kurz null war).
     const setRoot = steps.length === 0;
@@ -169,7 +166,7 @@ export function Builder({
         ]);
       }
     }
-    persist(() => addStep(tutorialId, { id, title, position }, setRoot, wire));
+    persist(() => addStep(tutorialId, { id, title: newStep.title ?? "Neuer Schritt", position }, setRoot, wire));
     setSelectedId(id);
   }, [steps, branches, rootId, tutorialId, persist]);
 

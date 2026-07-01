@@ -51,7 +51,7 @@ export function StepPanel({
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
-  onSaveStep: (id: string, patch: { title: string; body: unknown }) => void;
+  onSaveStep: (id: string, patch: { title: string; body: unknown }) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   onSetImage: (
     id: string,
@@ -86,10 +86,14 @@ export function StepPanel({
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
-  function save() {
-    onSaveStep(step.id, { title, body });
-    setDirty(false);
-    toast.success("Schritt gespeichert");
+  async function save() {
+    try {
+      await onSaveStep(step.id, { title, body });
+      setDirty(false);
+      toast.success("Schritt gespeichert");
+    } catch {
+      /* Fehler-Toast + Reload kommen aus dem Builder (persist); "Ungespeichert" bleibt stehen */
+    }
   }
   function discard() {
     setTitle(step.title ?? "");
