@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -11,6 +12,30 @@ import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
+
+/** Aktive Organisation wechseln (nur wenn der Nutzer dort Mitglied ist). */
+export async function setActiveAccount(accountId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  const { data: m } = await supabase
+    .from("account_members")
+    .select("account_id")
+    .eq("user_id", user.id)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (!m) return; // nicht Mitglied -> ignorieren
+  const cookieStore = await cookies();
+  cookieStore.set("active_account", accountId, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/", "layout");
+}
 
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */
 export async function createTutorial(formData: FormData) {

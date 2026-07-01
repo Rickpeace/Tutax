@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ExternalLink, Settings, Bell, ShieldCheck, LogOut } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
 import { AppTabs } from "@/components/app/app-tabs";
+import { AccountSwitcher } from "@/components/app/account-switcher";
 import { requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +15,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { account, email } = await requireAccount();
+  const { account, email, memberships } = await requireAccount();
   if (!account.onboarded) redirect("/onboarding");
 
   const supabase = await createClient();
@@ -32,9 +33,11 @@ export default async function AppLayout({
             <Wordmark />
           </Link>
           <span className="hidden text-line sm:inline">/</span>
-          <span className="hidden truncate text-sm font-medium text-ink-2 sm:inline">
-            {account.name}
-          </span>
+          <AccountSwitcher
+            currentId={account.id}
+            currentName={account.name}
+            memberships={memberships}
+          />
           <div className="ml-auto flex items-center gap-2">
             {isAdmin && (
               <Button
