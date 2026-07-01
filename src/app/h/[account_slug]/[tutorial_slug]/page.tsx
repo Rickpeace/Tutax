@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -11,7 +12,8 @@ import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
-async function load(accountSlug: string, tutorialSlug: string) {
+// Per-Request via React cache(): generateMetadata + Seite teilen sich EINE Ausführung.
+const load = cache(async (accountSlug: string, tutorialSlug: string) => {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
@@ -47,7 +49,7 @@ async function load(accountSlug: string, tutorialSlug: string) {
     .single();
 
   return { account, tutorial, steps: steps ?? [], branches: branches ?? [], theme };
-}
+});
 
 export async function generateMetadata({
   params,

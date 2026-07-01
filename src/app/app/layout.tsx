@@ -19,12 +19,16 @@ export default async function AppLayout({
   if (!account.onboarded) redirect("/onboarding");
 
   const supabase = await createClient();
-  const { count: alertCount } = await supabase
-    .from("change_alerts")
-    .select("id, tutorials!inner(account_id)", { count: "exact", head: true })
-    .eq("tutorials.account_id", account.id)
-    .eq("status", "open");
-  const isAdmin = await checkAdmin();
+  // Nicht-kritische Layout-Daten (Glocken-Badge + Admin-Flag) parallel statt seriell.
+  const [alertRes, isAdmin] = await Promise.all([
+    supabase
+      .from("change_alerts")
+      .select("id, tutorials!inner(account_id)", { count: "exact", head: true })
+      .eq("tutorials.account_id", account.id)
+      .eq("status", "open"),
+    checkAdmin(),
+  ]);
+  const alertCount = alertRes.count;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">

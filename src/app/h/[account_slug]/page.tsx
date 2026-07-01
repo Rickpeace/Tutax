@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,7 +9,9 @@ import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 
-async function load(accountSlug: string) {
+// Per-Request via React cache(): generateMetadata + Seite teilen sich EINE Ausführung
+// (statt die DB-Queries pro Aufruf zu verdoppeln).
+const load = cache(async (accountSlug: string) => {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
@@ -35,7 +38,7 @@ async function load(accountSlug: string) {
   ]);
 
   return { account, catalog, categories: categories ?? [], theme };
-}
+});
 
 export async function generateMetadata({
   params,
