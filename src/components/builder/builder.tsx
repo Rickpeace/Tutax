@@ -437,11 +437,16 @@ export function Builder({
       </p>
 
       <div className={wide ? "flex items-start gap-6" : ""}>
-        <div className={wide ? "min-w-0 flex-1" : ""}>{flowArea}</div>
+        <div className={wide ? "min-w-0 flex-1" : ""}>
+          <div className="mx-auto w-full max-w-3xl">{flowArea}</div>
+        </div>
 
         {wide && selectedStep && (
-          <aside className="sticky top-4 max-h-[calc(100vh-2rem)] w-[440px] shrink-0 self-start overflow-y-auto rounded-2xl border border-border bg-card px-4 pb-6 shadow-sm xl:w-[520px]">
-            {renderPanel(closeEditor)}
+          // top-[4.5rem] = unter dem 56px hohen, stickyen App-Header (sonst verschwindet der Panel-Kopf dahinter).
+          <aside className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[440px] shrink-0 flex-col self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm xl:w-[520px]">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+              {renderPanel(closeEditor)}
+            </div>
           </aside>
         )}
       </div>
