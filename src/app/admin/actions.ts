@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkAdmin } from "@/lib/admin";
 import { slugify } from "@/lib/slug";
+import { removeTutorialEmbeddings } from "@/lib/kb";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -58,12 +59,17 @@ export async function unpublishTemplate(id: string) {
   const admin = createAdminClient();
   const { error } = await admin.from("tutorials").update({ status: "draft" }).eq("id", id);
   if (error) throw new Error(error.message);
+  // Pro-Account angelegte Embeddings dieses Templates account-übergreifend entfernen,
+  // sonst antworten Kunden-Chatbots weiter aus dem depublizierten Template.
+  await removeTutorialEmbeddings(admin, id).catch(() => {});
   revalidatePath("/admin");
 }
 
 export async function deleteTemplate(id: string) {
   await ensureAdmin();
   const admin = createAdminClient();
+  // Erst die (account-übergreifenden) Embeddings weg, dann die Vorlage.
+  await removeTutorialEmbeddings(admin, id).catch(() => {});
   const { error } = await admin.from("tutorials").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
