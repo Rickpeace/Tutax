@@ -38,7 +38,7 @@ export function AccountSwitcher({
         await setActiveAccount(e.target.value);
         window.location.assign("/app"); // frisch in die gewechselte Org
       }}
-      className="hidden max-w-[13rem] rounded-md border border-border bg-card px-2 py-1 text-sm font-medium text-ink-2 outline-none focus:border-ring sm:inline-block"
+      className="inline-block max-w-[8.5rem] rounded-md border border-border bg-card px-2 py-1 text-sm font-medium text-ink-2 outline-none focus:border-ring sm:max-w-[13rem]"
     >
       {memberships.map((m) => (
         <option key={m.id} value={m.id}>
