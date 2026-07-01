@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -24,6 +24,21 @@ export function ArticleEditor({ article }: { article: Article }) {
   const [published, setPublished] = useState(article.status === "published");
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
+
+  // Verlust-Schutz: Browser-Navigation/Tab-Schließen bei ungespeicherten Änderungen abfangen.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  // Interne Navigation (Zurück-Link, Router-Push) bei ungespeicherten Änderungen absichern.
+  const confirmLeave = () =>
+    !dirty || window.confirm("Es gibt ungespeicherte Änderungen. Trotzdem verlassen?");
 
   const save = () =>
     start(async () => {
@@ -77,6 +92,9 @@ export function ArticleEditor({ article }: { article: Article }) {
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-6">
       <Link
         href="/app/knowledge"
+        onClick={(e) => {
+          if (!confirmLeave()) e.preventDefault();
+        }}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-ink"
       >
         <ArrowLeft className="size-4" /> Wissensdatenbank

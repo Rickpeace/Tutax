@@ -19,12 +19,19 @@ export function DriftCheckButton({ tutorialId }: { tutorialId: string }) {
           toast.message(data.message);
           return;
         }
+        // Cooldown (429): keine echte Fehlermeldung, nur ein Hinweis.
+        if (res.status === 429 || data.cooldown) {
+          toast.message(data.error ?? "Zuletzt kürzlich geprüft – bitte warten.");
+          return;
+        }
         if (data.error) {
           toast.error(data.error);
           return;
         }
         if (data.is_stale) {
-          toast.message(`⚠ ${data.summary ?? "Mögliche Veralterung gefunden."}`);
+          toast.message(`⚠ ${data.summary ?? "Mögliche Veralterung gefunden."}`, {
+            action: { label: "Hinweise ansehen", onClick: () => router.push("/app/alerts") },
+          });
         } else {
           toast.success("Tutorial wirkt aktuell.");
         }

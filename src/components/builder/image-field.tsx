@@ -5,6 +5,13 @@ import { toast } from "sonner";
 import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { HighlightEditor } from "@/components/builder/highlight-editor";
 import { CropDialog } from "@/components/builder/crop-dialog";
 import { compressAndUpload, signedImageUrl } from "@/lib/upload";
@@ -36,6 +43,9 @@ export function ImageField({
   const [busy, setBusy] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [big, setBig] = useState(false);
+  // Nach dem Ersetzen (Bild + vorhandene Markierungen): fragen, ob die Markierungen
+  // behalten oder gelöscht werden sollen (sie sitzen sonst evtl. am falschen Ort).
+  const [askHighlights, setAskHighlights] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,12 +82,15 @@ export function ImageField({
   }
 
   async function doUpload(file: File) {
+    // War das ein ERSETZEN (Bild existierte schon) UND gibt es bereits Markierungen?
+    const wasReplace = !!imagePath && highlights.length > 0;
     setBusy(true);
     try {
       const { path, width, height } = await compressAndUpload(file, tutorialId, stepId);
       onSetImage(stepId, { image_path: path, image_width: width, image_height: height });
       setUrl(await signedImageUrl(path));
       toast.success("Bild hochgeladen");
+      if (wasReplace) setAskHighlights(true); // erst nach Erfolg fragen
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload fehlgeschlagen");
     } finally {
@@ -189,6 +202,30 @@ export function ImageField({
           }}
         />
       )}
+
+      <Dialog open={askHighlights} onOpenChange={(o) => { if (!o) setAskHighlights(false); }}>
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Markierungen behalten?</DialogTitle>
+            <DialogDescription>
+              Dieser Schritt hat Markierungen vom alten Bild. Sie sitzen auf dem neuen Bild
+              womöglich an der falschen Stelle. Behalten oder löschen?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                onSetHighlights(stepId, []);
+                setAskHighlights(false);
+              }}
+            >
+              <Trash2 className="size-4" /> Löschen
+            </Button>
+            <Button onClick={() => setAskHighlights(false)}>Behalten</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

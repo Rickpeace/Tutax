@@ -56,12 +56,16 @@ export async function indexTutorial(
     if (txt.trim()) chunks.push({ text: `${tut.title} – ${txt}`, meta });
   }
 
-  await admin
+  const del = await admin
     .from("kb_embeddings")
     .delete()
     .eq("account_id", accountId)
     .eq("source_type", "tutorial")
     .eq("source_id", tutorialId);
+  if (del.error) {
+    console.error("[kb] delete tutorial embeddings failed", { tutorialId, error: del.error });
+    throw new Error(`Index-Bereinigung fehlgeschlagen: ${del.error.message}`);
+  }
 
   const vectors = await embedMany(chunks.map((c) => c.text));
   const rows = chunks.map((c, i) => ({
@@ -72,18 +76,26 @@ export async function indexTutorial(
     embedding: JSON.stringify(vectors[i]), // pgvector akzeptiert "[...]"-Textform
     metadata: c.meta,
   }));
-  await admin.from("kb_embeddings").insert(rows);
+  const ins = await admin.from("kb_embeddings").insert(rows);
+  if (ins.error) {
+    console.error("[kb] insert tutorial embeddings failed", { tutorialId, error: ins.error });
+    throw new Error(`Index-Aktualisierung fehlgeschlagen: ${ins.error.message}`);
+  }
 }
 
 export async function removeTutorialEmbeddings(
   admin: SupabaseClient,
   tutorialId: string,
 ): Promise<void> {
-  await admin
+  const { error } = await admin
     .from("kb_embeddings")
     .delete()
     .eq("source_type", "tutorial")
     .eq("source_id", tutorialId);
+  if (error) {
+    console.error("[kb] remove tutorial embeddings failed", { tutorialId, error });
+    throw new Error(`Index-Bereinigung fehlgeschlagen: ${error.message}`);
+  }
 }
 
 /** Klartext in handliche Chunks (~maxLen Zeichen, an Absätzen entlang). */
@@ -121,11 +133,15 @@ export async function indexArticle(
     .single();
 
   // Vorhandene Embeddings immer entfernen (Update/Unpublish/Delete).
-  await admin
+  const del = await admin
     .from("kb_embeddings")
     .delete()
     .eq("source_type", "kb_article")
     .eq("source_id", articleId);
+  if (del.error) {
+    console.error("[kb] delete article embeddings failed", { articleId, error: del.error });
+    throw new Error(`Index-Bereinigung fehlgeschlagen: ${del.error.message}`);
+  }
 
   if (!a || a.status !== "published") return;
 
@@ -143,16 +159,24 @@ export async function indexArticle(
     embedding: JSON.stringify(vectors[i]),
     metadata: meta,
   }));
-  await admin.from("kb_embeddings").insert(rows);
+  const ins = await admin.from("kb_embeddings").insert(rows);
+  if (ins.error) {
+    console.error("[kb] insert article embeddings failed", { articleId, error: ins.error });
+    throw new Error(`Index-Aktualisierung fehlgeschlagen: ${ins.error.message}`);
+  }
 }
 
 export async function removeArticleEmbeddings(
   admin: SupabaseClient,
   articleId: string,
 ): Promise<void> {
-  await admin
+  const { error } = await admin
     .from("kb_embeddings")
     .delete()
     .eq("source_type", "kb_article")
     .eq("source_id", articleId);
+  if (error) {
+    console.error("[kb] remove article embeddings failed", { articleId, error });
+    throw new Error(`Index-Bereinigung fehlgeschlagen: ${error.message}`);
+  }
 }

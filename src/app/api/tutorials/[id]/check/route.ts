@@ -31,7 +31,7 @@ export async function POST(
 
   const { data: tut } = await supabase
     .from("tutorials")
-    .select("title")
+    .select("title, drift_checked_at")
     .eq("id", id)
     .single();
   if (!tut) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
@@ -41,6 +41,24 @@ export async function POST(
       configured: false,
       message: "Drift-Prüfung startet, sobald der OPENAI_API_KEY hinterlegt ist.",
     });
+  }
+
+  // Cooldown (Kosten-Schutz, teuerster KI-Call = web_search): max. 1×/Stunde.
+  if (tut.drift_checked_at) {
+    const last = new Date(tut.drift_checked_at).getTime();
+    const elapsedMin = (Date.now() - last) / 60_000;
+    if (Number.isFinite(elapsedMin) && elapsedMin < 60) {
+      const waitMin = Math.max(1, Math.ceil(60 - elapsedMin));
+      const sinceMin = Math.max(0, Math.floor(elapsedMin));
+      return NextResponse.json(
+        {
+          configured: true,
+          cooldown: true,
+          error: `Zuletzt vor ${sinceMin} Min geprüft – bitte noch ${waitMin} Min warten.`,
+        },
+        { status: 429 },
+      );
+    }
   }
 
   const { data: steps } = await supabase
@@ -131,9 +149,15 @@ export async function POST(
           affected_steps: issues.map((i) => i.step).filter(Boolean),
         },
       });
-      await supabase.from("tutorials").update({ freshness: "stale" }).eq("id", id);
+      await supabase
+        .from("tutorials")
+        .update({ freshness: "stale", drift_checked_at: new Date().toISOString() })
+        .eq("id", id);
     } else {
-      await supabase.from("tutorials").update({ freshness: "ok" }).eq("id", id);
+      await supabase
+        .from("tutorials")
+        .update({ freshness: "ok", drift_checked_at: new Date().toISOString() })
+        .eq("id", id);
     }
 
     return NextResponse.json({

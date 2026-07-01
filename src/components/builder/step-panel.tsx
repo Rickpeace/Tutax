@@ -86,13 +86,15 @@ export function StepPanel({
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
-  async function save() {
+  async function save(): Promise<boolean> {
     try {
       await onSaveStep(step.id, { title, body });
       setDirty(false);
       toast.success("Schritt gespeichert");
+      return true;
     } catch {
       /* Fehler-Toast + Reload kommen aus dem Builder (persist); "Ungespeichert" bleibt stehen */
+      return false;
     }
   }
   function discard() {
@@ -150,6 +152,19 @@ export function StepPanel({
   }
 
   const targetOptions = allSteps.filter((s) => s.id !== step.id);
+
+  // Frage-Toggle: beim Ausschalten mit mehreren Antworten warnen (alle außer der ersten
+  // werden entfernt -> Folge-Schritte anderer Antworten sind dann nicht mehr verbunden).
+  function toggleDecision() {
+    const turningOff = step.is_decision;
+    if (turningOff && branches.length > 1) {
+      const ok = confirm(
+        "Alle Antworten außer der ersten werden entfernt – Folge-Schritte anderer Antworten sind dann nicht mehr verbunden. Fortfahren?",
+      );
+      if (!ok) return;
+    }
+    onSetDecision(step.id, !step.is_decision);
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -229,7 +244,7 @@ export function StepPanel({
 
       <button
         type="button"
-        onClick={() => onSetDecision(step.id, !step.is_decision)}
+        onClick={toggleDecision}
         className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
           step.is_decision
             ? "border-primary/40 bg-accent"
@@ -323,7 +338,14 @@ export function StepPanel({
               Verwerfen &amp; {pendingNav?.label ?? "weiter"}
             </Button>
             <Button
-              onClick={() => { const p = pendingNav; setPendingNav(null); save(); p?.run(); }}
+              onClick={async () => {
+                const p = pendingNav;
+                // Erst speichern; nur bei Erfolg navigieren (sonst Dialog offen lassen).
+                if (await save()) {
+                  setPendingNav(null);
+                  p?.run();
+                }
+              }}
             >
               Speichern &amp; {pendingNav?.label ?? "weiter"}
             </Button>

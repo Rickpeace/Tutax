@@ -44,12 +44,18 @@ async function load(id: string) {
     .single();
 
   // Bilder über signierte URLs aus dem privaten Bucket -> funktioniert in JEDEM Status.
+  // Parallel signieren (Promise.all) statt sequenziell -> kein Wasserfall bei vielen Schritten.
   const imageUrls: Record<string, string> = {};
-  for (const s of steps ?? []) {
-    if (!s.image_path) continue;
-    const { data } = await admin.storage.from("tutorial-images").createSignedUrl(s.image_path, 3600);
-    if (data?.signedUrl) imageUrls[s.id] = data.signedUrl;
-  }
+  const withImage = (steps ?? []).filter((s) => s.image_path);
+  const signed = await Promise.all(
+    withImage.map((s) =>
+      admin.storage.from("tutorial-images").createSignedUrl(s.image_path!, 3600),
+    ),
+  );
+  withImage.forEach((s, i) => {
+    const url = signed[i].data?.signedUrl;
+    if (url) imageUrls[s.id] = url;
+  });
 
   return { account, tutorial, steps: steps ?? [], branches: branches ?? [], theme, imageUrls };
 }

@@ -18,6 +18,7 @@ type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | "start" | "end
 const COLORS = ["#111827", "#d6455d", "#3d4ee6", "#0f9d72"];
 const MIN = 0.01;
 const ZOOM = 2;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function HighlightEditor({
   url,
@@ -71,23 +72,52 @@ export function HighlightEditor({
   }
 
   function applyManip(orig: Highlight, handle: Handle | null, dx: number, dy: number): Highlight {
-    if (handle === null) return { ...orig, x: orig.x + dx, y: orig.y + dy };
     if (orig.type === "arrow") {
-      if (handle === "start") {
-        const ex = orig.x + orig.w;
-        const ey = orig.y + orig.h;
-        return { ...orig, x: orig.x + dx, y: orig.y + dy, w: ex - (orig.x + dx), h: ey - (orig.y + dy) };
+      // Endpunkte hart auf 0..1 klemmen, damit die Pfeilspitze nicht aus dem Bild rutscht.
+      const sx = orig.x;
+      const sy = orig.y;
+      const ex = orig.x + orig.w;
+      const ey = orig.y + orig.h;
+      if (handle === null) {
+        // Verschieben: ganzen Pfeil bewegen, aber so, dass beide Enden im Bild bleiben.
+        const cdx = clamp01(Math.min(sx, ex) + dx) - Math.min(sx, ex);
+        const cdy = clamp01(Math.min(sy, ey) + dy) - Math.min(sy, ey);
+        const cdx2 = clamp01(Math.max(sx, ex) + cdx) - Math.max(sx, ex);
+        const cdy2 = clamp01(Math.max(sy, ey) + cdy) - Math.max(sy, ey);
+        const fx = Math.abs(cdx2) < Math.abs(cdx) ? cdx2 : cdx;
+        const fy = Math.abs(cdy2) < Math.abs(cdy) ? cdy2 : cdy;
+        return { ...orig, x: sx + fx, y: sy + fy };
       }
-      return { ...orig, w: orig.w + dx, h: orig.h + dy };
+      if (handle === "start") {
+        const nx = clamp01(sx + dx);
+        const ny = clamp01(sy + dy);
+        return { ...orig, x: nx, y: ny, w: ex - nx, h: ey - ny };
+      }
+      const nex = clamp01(ex + dx);
+      const ney = clamp01(ey + dy);
+      return { ...orig, w: nex - sx, h: ney - sy };
     }
+
+    if (handle === null) {
+      // Verschieben: Box komplett im Bild halten (Position innerhalb [0, 1 - Größe]).
+      const w = orig.w;
+      const h = orig.h;
+      return {
+        ...orig,
+        x: Math.min(Math.max(0, 1 - w), Math.max(0, orig.x + dx)),
+        y: Math.min(Math.max(0, 1 - h), Math.max(0, orig.y + dy)),
+      };
+    }
+
+    // Resize: gezogene Kante(n) auf 0..1 klemmen, MIN-Größe erzwingen.
     let left = orig.x;
     let right = orig.x + orig.w;
     let top = orig.y;
     let bottom = orig.y + orig.h;
-    if (handle.includes("w")) left = orig.x + dx;
-    if (handle.includes("e")) right = orig.x + orig.w + dx;
-    if (handle.includes("n")) top = orig.y + dy;
-    if (handle.includes("s")) bottom = orig.y + orig.h + dy;
+    if (handle.includes("w")) left = clamp01(orig.x + dx);
+    if (handle.includes("e")) right = clamp01(orig.x + orig.w + dx);
+    if (handle.includes("n")) top = clamp01(orig.y + dy);
+    if (handle.includes("s")) bottom = clamp01(orig.y + orig.h + dy);
     return { ...orig, x: left, y: top, w: right - left, h: bottom - top };
   }
 

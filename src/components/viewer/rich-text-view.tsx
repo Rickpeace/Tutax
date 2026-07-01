@@ -1,12 +1,27 @@
 import { Fragment, type ReactNode } from "react";
 
+type Mark = { type: string; attrs?: Record<string, unknown> };
 type Node = {
   type: string;
   content?: Node[];
   text?: string;
-  marks?: { type: string }[];
+  marks?: Mark[];
   attrs?: Record<string, unknown>;
 };
+
+/** Nur echte http/https-Links durchlassen (javascript:/data: etc. verwerfen). */
+function safeHref(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
 
 /** Rendert Tiptap-JSON read-only (ohne Editor). */
 export function RichTextView({ doc }: { doc: unknown }) {
@@ -42,7 +57,24 @@ function renderNode(n: Node): ReactNode {
       for (const m of n.marks ?? []) {
         if (m.type === "bold") el = <strong>{el}</strong>;
         else if (m.type === "italic") el = <em>{el}</em>;
+        else if (m.type === "underline") el = <u>{el}</u>;
+        else if (m.type === "strike") el = <s>{el}</s>;
         else if (m.type === "code") el = <code className="rounded bg-black/5 px-1">{el}</code>;
+        else if (m.type === "link") {
+          const href = safeHref(m.attrs?.href);
+          // Nur mit sicherer http(s)-URL als Link rendern; sonst nur den Text zeigen.
+          if (href)
+            el = (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="underline underline-offset-2 hover:opacity-80"
+              >
+                {el}
+              </a>
+            );
+        }
       }
       return el;
     }

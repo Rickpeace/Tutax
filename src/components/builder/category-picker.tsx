@@ -31,12 +31,14 @@ export function CategoryPicker({
   const exact = cats.some((c) => c.name.toLowerCase() === term);
 
   async function choose(id: string | null) {
+    const prev = selectedId;
     setSelectedId(id);
     setOpen(false);
     setQuery("");
     try {
       await setTutorialCategory(tutorialId, id);
     } catch {
+      setSelectedId(prev); // optimistische Auswahl zurückrollen
       toast.error("Speichern fehlgeschlagen");
     }
   }

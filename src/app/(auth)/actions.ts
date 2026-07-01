@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { appBaseUrl, safeNext } from "@/lib/url";
+import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 
 export type AuthState = { error?: string; message?: string };
 
@@ -122,17 +123,4 @@ export async function signOut() {
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
   redirect("/login");
-}
-
-function uebersetzeAuthFehler(msg: string): string {
-  const m = msg.toLowerCase();
-  if (m.includes("invalid login credentials"))
-    return "E-Mail oder Passwort ist falsch.";
-  if (m.includes("email not confirmed"))
-    return "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.";
-  if (m.includes("user already registered"))
-    return "Für diese E-Mail existiert bereits ein Konto.";
-  if (m.includes("rate limit"))
-    return "Zu viele Versuche. Bitte warten Sie einen Moment.";
-  return msg;
 }
