@@ -4,9 +4,19 @@ import { AI } from "@/lib/ai";
 
 let client: OpenAI | null = null;
 
-/** Gemeinsamer OpenAI-Client (server-only). */
+/**
+ * Gemeinsamer OpenAI-Client (server-only).
+ *
+ * SDK-Default ist timeout: 600 s / maxRetries: 2 – viel zu lang für unsere
+ * Serverless-Routen (maxDuration ≤ 30 s). Wir kappen bewusst: ein hängender
+ * Aufruf (Embeddings ODER Chat/Vision) darf die Function nicht ohne Antwort
+ * ins Timeout laufen lassen. 20 s deckt sowohl kurze Embeddings als auch
+ * längere Vision-Calls (detail:high) ab; ein einziger Retry fängt transiente
+ * Netzfehler, ohne das Zeitbudget zu sprengen.
+ */
 export function openai(): OpenAI {
-  if (!client) client = new OpenAI({ apiKey: AI.openaiKey });
+  if (!client)
+    client = new OpenAI({ apiKey: AI.openaiKey, timeout: 20_000, maxRetries: 1 });
   return client;
 }
 
