@@ -127,49 +127,68 @@ async function buildTutorial(job, videoPath, dir) {
   // 3) pro Schritt: Frame + Vision (robust: kaputte Frames überspringen, Job läuft weiter)
   const tutId = uuid();
   const rows = [];
-  for (let i = 0; i < segSteps.length; i++) {
-    const at = segSteps[i].shot;
-    const local = path.join(dir, `step_${i + 1}.jpg`);
-    try {
-      sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
-      if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
-    } catch { continue; }
-    const narration = (segSteps[i].narration || "").trim();
-    // Diff: Schritt-Anfang vs. Screenshot-Moment -> erdet das Highlight (Maus wandert aufs Ziel).
-    const diffPath = diffImg(videoPath, segSteps[i].tB, at, dir, i + 1);
-    const content = [
-      { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
-      { type: "text", text: "BILD 1 (Screenshot):" },
-      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridImg(local)).toString("base64")}` } },
-    ];
-    if (diffPath) {
-      content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
-      content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffPath).toString("base64")}` } });
+  const uploaded = []; // erfolgreich hochgeladene Bild-Pfade – bei Abbruch wieder entfernen
+  let tutInserted = false;
+  try {
+    for (let i = 0; i < segSteps.length; i++) {
+      const at = segSteps[i].shot;
+      const local = path.join(dir, `step_${i + 1}.jpg`);
+      try {
+        sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
+        if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
+      } catch { continue; }
+      const narration = (segSteps[i].narration || "").trim();
+      // Diff: Schritt-Anfang vs. Screenshot-Moment -> erdet das Highlight (Maus wandert aufs Ziel).
+      const diffPath = diffImg(videoPath, segSteps[i].tB, at, dir, i + 1);
+      const content = [
+        { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
+        { type: "text", text: "BILD 1 (Screenshot):" },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridImg(local)).toString("base64")}` } },
+      ];
+      if (diffPath) {
+        content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
+        content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffPath).toString("base64")}` } });
+      }
+      const p = await json("gpt-5.4-mini", [
+        { role: "system", content: STEP_SYS },
+        { role: "user", content },
+      ], 300);
+      const id = uuid();
+      const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
+      // Upload-Fehler NICHT verschlucken: sonst Schritt mit kaputtem Bild-Verweis. Dann Schritt überspringen.
+      const { error: upErr } = await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(local), { contentType: "image/jpeg", upsert: true });
+      if (upErr) { console.error("  Bild-Upload fehlgeschlagen, Schritt übersprungen:", upErr.message); continue; }
+      uploaded.push(ipath);
+      const hl = p.highlight && [p.highlight.x, p.highlight.y, p.highlight.w, p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
+        ? [{ id: uuid(), type: "rect", x: p.highlight.x, y: p.highlight.y, w: p.highlight.w, h: p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
+      rows.push({ id, tutorial_id: tutId, title: p.title || `Schritt ${rows.length + 1}`, body: mkBody(p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl });
     }
-    const p = await json("gpt-5.4-mini", [
-      { role: "system", content: STEP_SYS },
-      { role: "user", content },
-    ], 300);
-    const id = uuid();
-    const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
-    await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(local), { contentType: "image/jpeg", upsert: true });
-    const hl = p.highlight && [p.highlight.x, p.highlight.y, p.highlight.w, p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
-      ? [{ id: uuid(), type: "rect", x: p.highlight.x, y: p.highlight.y, w: p.highlight.w, h: p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
-    rows.push({ id, tutorial_id: tutId, title: p.title || `Schritt ${rows.length + 1}`, body: mkBody(p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl });
+    if (!rows.length) throw new Error("Keine Schritte erkannt (Aufnahme evtl. zu kurz/leer). Bitte erneut aufnehmen.");
+
+    // 4) Titel
+    const title = (await json("gpt-5.4-mini", [{ role: "system", content: TITLE_SYS }, { role: "user", content: "Schritte: " + rows.map((r) => r.title).join("; ") + "\nErzählung: " + (tr.text || "").slice(0, 500) }], 60)).title || job.title || "Anleitung";
+
+    // 5) Tutorial + Schritte + lineare Verzweigungen (Fehler prüfen -> sonst Cleanup im catch)
+    const { error: tErr } = await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title, status: "draft" });
+    if (tErr) throw new Error("Tutorial anlegen: " + tErr.message);
+    tutInserted = true;
+    const { error: sErr } = await sb.from("steps").insert(rows);
+    if (sErr) throw new Error("Schritte anlegen: " + sErr.message);
+    await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
+    const br = [];
+    for (let i = 0; i < rows.length - 1; i++) br.push({ id: uuid(), step_id: rows[i].id, label: null, target_step_id: rows[i + 1].id, position: 0 });
+    if (br.length) await sb.from("step_branches").insert(br);
+    return { tutId, title, count: rows.length };
+  } catch (e) {
+    // Teil-Ergebnisse aufräumen: verwaiste Bilder + halb angelegtes Tutorial entfernen.
+    if (uploaded.length) { try { await sb.storage.from("tutorial-images").remove(uploaded); } catch {} }
+    if (tutInserted) {
+      try { await sb.from("step_branches").delete().in("step_id", rows.map((r) => r.id)); } catch {}
+      try { await sb.from("steps").delete().eq("tutorial_id", tutId); } catch {}
+      try { await sb.from("tutorials").delete().eq("id", tutId); } catch {}
+    }
+    throw e;
   }
-  if (!rows.length) throw new Error("Keine Schritte erkannt (Aufnahme evtl. zu kurz/leer). Bitte erneut aufnehmen.");
-
-  // 4) Titel
-  const title = (await json("gpt-5.4-mini", [{ role: "system", content: TITLE_SYS }, { role: "user", content: "Schritte: " + rows.map((r) => r.title).join("; ") + "\nErzählung: " + (tr.text || "").slice(0, 500) }], 60)).title || job.title || "Anleitung";
-
-  // 5) Tutorial + Schritte + lineare Verzweigungen
-  await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title, status: "draft" });
-  await sb.from("steps").insert(rows);
-  await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
-  const br = [];
-  for (let i = 0; i < rows.length - 1; i++) br.push({ id: uuid(), step_id: rows[i].id, label: null, target_step_id: rows[i + 1].id, position: 0 });
-  if (br.length) await sb.from("step_branches").insert(br);
-  return { tutId, title, count: rows.length };
 }
 
 async function processJob(job) {
@@ -194,9 +213,26 @@ async function processJob(job) {
   }
 }
 
+// Vom Vorgänger (Absturz/Neustart) hängengebliebene Jobs (>15 Min in "processing")
+// zurück in die Warteschlange. Läuft nur zwischen Jobs (loop() await-et sonst processJob),
+// kollidiert also nie mit einem aktiv laufenden Job dieser (einzigen) Instanz.
+async function reapStale() {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  try {
+    const { data } = await sb
+      .from("video_jobs")
+      .update({ status: "queued", updated_at: new Date().toISOString() })
+      .eq("status", "processing")
+      .lt("updated_at", cutoff)
+      .select("id");
+    if (data?.length) console.log(`↻ ${data.length} hängende(r) Job(s) neu eingereiht.`);
+  } catch (e) { console.error("reapStale-Fehler:", e.message); }
+}
+
 async function loop() {
   let ran = false;
   try {
+    await reapStale();
     const { data: jobs } = await sb.from("video_jobs").select("*").eq("status", "queued").order("created_at").limit(1);
     const job = jobs?.[0];
     if (job) {

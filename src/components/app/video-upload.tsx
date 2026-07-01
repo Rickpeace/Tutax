@@ -19,6 +19,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [noMic, setNoMic] = useState(false);
   const [tutorialId, setTutorialId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [secs, setSecs] = useState(0);
@@ -28,13 +29,24 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const streamsRef = useRef<MediaStream[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Job-Status pollen
+  // Job-Status pollen (mit Gesamt-Timeout, damit der Spinner nicht ewig dreht)
   useEffect(() => {
     if (!jobId || phase === "done" || phase === "failed") return;
     const supabase = createClient();
+    const startedAt = Date.now();
+    const MAX_MS = 12 * 60 * 1000; // nach 12 Min. aufgeben (Worker down / haengt)
     const iv = setInterval(async () => {
-      const { data } = await supabase.from("video_jobs").select("status, tutorial_id, error").eq("id", jobId).single();
-      if (!data) return;
+      if (Date.now() - startedAt > MAX_MS) {
+        setError("Die Verarbeitung dauert ungewöhnlich lange. Schau später bei deinen Tutorials nach oder versuch es erneut.");
+        setPhase("failed");
+        return;
+      }
+      const { data, error } = await supabase
+        .from("video_jobs")
+        .select("status, tutorial_id, error")
+        .eq("id", jobId)
+        .maybeSingle();
+      if (error || !data) return; // transienter Fehler -> weiter pollen bis Timeout
       if (data.status === "processing") setPhase("processing");
       if (data.status === "done") { setTutorialId(data.tutorial_id); setPhase("done"); }
       if (data.status === "failed") { setError(data.error || "Verarbeitung fehlgeschlagen."); setPhase("failed"); }
@@ -70,7 +82,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   }
 
   async function startRecording() {
-    setError(null); setTutorialId(null);
+    setError(null); setTutorialId(null); setNoMic(false);
     if (!navigator.mediaDevices?.getDisplayMedia) {
       setError("Dein Browser unterstützt keine Bildschirmaufnahme. Nutze Chrome/Edge oder lade eine Datei hoch.");
       setPhase("failed"); return;
@@ -78,7 +90,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     try {
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
       let mic: MediaStream | null = null;
-      try { mic = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { /* ohne Mikro weiter */ }
+      // Ohne Ton kann „Schnitt" nicht erkannt werden und die Schritte werden schlechter
+      // segmentiert -> deutlich warnen, aber Aufnahme trotzdem zulassen.
+      try { mic = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { setNoMic(true); }
       streamsRef.current = [screen, ...(mic ? [mic] : [])];
       const tracks = [...screen.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
       const stream = new MediaStream(tracks);
@@ -114,7 +128,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
     streamsRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
-    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setSecs(0);
+    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setSecs(0); setNoMic(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -167,6 +181,15 @@ export function VideoUpload({ accountId }: { accountId: string }) {
               <Circle className="size-3 animate-pulse fill-current" /> <span className="font-mono text-lg">{mmss}</span>
             </div>
             <p className="text-sm text-muted-foreground">Aufnahme läuft – mach den Schritt, sag dann <b>„Schnitt"</b>. So entsteht jeder Schritt sauber.</p>
+            {noMic && (
+              <div className="flex items-start gap-2 rounded-lg border border-no/30 bg-no/5 p-2.5 text-left text-xs text-no">
+                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  <b>Kein Mikrofon.</b> Ohne Ton wird „Schnitt" nicht erkannt und die Schritte werden schlechter.
+                  Für beste Ergebnisse abbrechen, Mikro erlauben und neu starten.
+                </span>
+              </div>
+            )}
             <Button className="w-full" onClick={stopRecording}><Square className="size-4 fill-current" /> Aufnahme beenden</Button>
           </div>
         )}
