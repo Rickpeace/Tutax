@@ -8,7 +8,10 @@ import { NextResponse, type NextRequest } from "next/server";
  * Redirect-Antwort geschrieben (zuverlässig im Route-Handler).
  */
 export async function GET(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/login", request.url));
+  // Optional zurück zu einem relativen Pfad (z. B. dem Invite-Link) nach dem Abmelden.
+  const next = request.nextUrl.searchParams.get("next");
+  const dest = next && next.startsWith("/") ? next : "/login";
+  const response = NextResponse.redirect(new URL(dest, request.url));
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,

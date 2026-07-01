@@ -183,6 +183,39 @@ export async function acceptInvite(
   return { ok: true };
 }
 
+/**
+ * Einladung annehmen für einen BEREITS EINGELOGGTEN Nutzer (Bestätigungs-Klick).
+ * Prüft, dass die eingeloggte Adresse = eingeladene Adresse ist, und tritt bei.
+ */
+export async function joinInvite(token: string): Promise<{ ok: boolean; message?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Du bist nicht angemeldet." };
+
+  const admin = createAdminClient();
+  const { data: inv } = await admin
+    .from("invitations")
+    .select("id, account_id, role, status, email")
+    .eq("token", token)
+    .maybeSingle();
+  if (!inv || inv.status === "revoked" || !inv.email)
+    return { ok: false, message: "Diese Einladung ist ungültig oder wurde zurückgezogen." };
+  if ((user.email ?? "").toLowerCase() !== inv.email.toLowerCase())
+    return { ok: false, message: "Diese Einladung ist für eine andere Adresse." };
+
+  await admin.from("account_members").upsert(
+    { account_id: inv.account_id, user_id: user.id, role: inv.role },
+    { onConflict: "account_id,user_id", ignoreDuplicates: true },
+  );
+  await admin
+    .from("invitations")
+    .update({ status: "accepted", accepted_at: new Date().toISOString() })
+    .eq("id", inv.id);
+  return { ok: true };
+}
+
 export async function revokeInvitation(id: string) {
   const { account } = await requireOwner();
   const admin = createAdminClient();
