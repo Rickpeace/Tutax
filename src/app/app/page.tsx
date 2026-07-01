@@ -1,5 +1,7 @@
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { publicImageUrl } from "@/lib/public-image";
 import type { Tutorial } from "@/lib/types";
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
 import { VideoUpload } from "@/components/app/video-upload";
@@ -53,6 +55,42 @@ export default async function DashboardPage() {
 
   // Eigene Tutorials ohne Forks (Forks erscheinen als Template-Eintrag)
   const own = allOwn.filter((t) => !forkIds.has(t.id));
+
+  // Thumbnails: erstes Schritt-Bild (kleinste position mit image_path) pro Tutorial.
+  // EINE Query für ALLE eigenen Tutorials (kein N+1), nach position sortiert →
+  // erster Treffer pro Tutorial gewinnt.
+  const thumbById = new Map<string, string>();
+  const ownIds = own.map((t) => t.id);
+  if (ownIds.length) {
+    const admin = createAdminClient();
+    const { data: stepRows } = await admin
+      .from("steps")
+      .select("tutorial_id, image_path, position")
+      .in("tutorial_id", ownIds)
+      .not("image_path", "is", null)
+      .order("position", { ascending: true });
+    // Erster (kleinste position) Treffer pro Tutorial.
+    const firstPath = new Map<string, string>();
+    for (const r of stepRows ?? []) {
+      if (r.image_path && !firstPath.has(r.tutorial_id)) {
+        firstPath.set(r.tutorial_id, r.image_path);
+      }
+    }
+    // Published → öffentliche URL; Entwurf → signierte URL (privater Bucket), parallel.
+    const statusById = new Map(own.map((t) => [t.id, t.status]));
+    const resolved = await Promise.all(
+      [...firstPath.entries()].map(async ([tutorialId, path]) => {
+        if (statusById.get(tutorialId) === "published") {
+          return [tutorialId, publicImageUrl(path)] as const;
+        }
+        const { data } = await admin.storage
+          .from("tutorial-images")
+          .createSignedUrl(path, 3600);
+        return [tutorialId, data?.signedUrl ?? null] as const;
+      }),
+    );
+    for (const [id, url] of resolved) if (url) thumbById.set(id, url);
+  }
 
   // Standard-Anleitungen (Templates)
   const templateItems: TemplateItem[] = templates.map((t) => {
@@ -139,7 +177,12 @@ export default async function DashboardPage() {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {s.items.map((t) => (
-                    <TutorialCard key={t.id} tutorial={t} accountSlug={account.slug} />
+                    <TutorialCard
+                      key={t.id}
+                      tutorial={t}
+                      accountSlug={account.slug}
+                      thumbnailUrl={thumbById.get(t.id) ?? null}
+                    />
                   ))}
                 </div>
               )}

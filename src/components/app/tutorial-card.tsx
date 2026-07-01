@@ -9,6 +9,7 @@ import {
   FileText,
   Eye,
   ExternalLink,
+  ImageIcon,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import {
@@ -40,9 +41,11 @@ import type { Tutorial } from "@/lib/types";
 export function TutorialCard({
   tutorial,
   accountSlug,
+  thumbnailUrl = null,
 }: {
   tutorial: Tutorial;
   accountSlug: string;
+  thumbnailUrl?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -97,86 +100,116 @@ export function TutorialCard({
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all hover:-translate-y-0.5 hover:border-primary/40"
+      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all hover:-translate-y-0.5 hover:border-primary/40 sm:p-4"
       data-pending={pending}
     >
-      <div className="mb-2 flex items-center gap-2">
-        <HelpToggle on={live} onToggle={toggleLive} />
-        {stale && (
-          <span className="flex items-center gap-1 rounded-md bg-no-soft px-2 py-0.5 text-xs font-bold text-no">
-            <AlertTriangle className="size-3" /> Prüfen
-          </span>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="ml-auto"
-                aria-label="Aktionen"
-              >
-                <MoreVertical className="size-4" />
-              </Button>
-            }
+      {/* Thumbnail links: erstes Schritt-Bild oder Platzhalter */}
+      <Link
+        href={`/app/tutorials/${tutorial.id}`}
+        aria-label={`${tutorial.title} bearbeiten`}
+        className="size-16 shrink-0 overflow-hidden rounded-lg border border-line-2 bg-muted sm:size-20"
+      >
+        {thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnailUrl}
+            alt=""
+            className="size-full object-cover"
+            loading="lazy"
           />
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
-              <FileText className="size-4" /> Bearbeiten
-            </DropdownMenuItem>
-            {live && tutorial.slug && (
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href={`/h/${accountSlug}/${tutorial.slug}`}
-                    target="_blank"
-                  />
-                }
-              >
-                <ExternalLink className="size-4" /> Live-Seite öffnen
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-              Umbenennen
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                run(() => duplicateTutorial(tutorial.id), "Dupliziert")
-              }
-            >
-              Duplizieren
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
-              Löschen
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <Link href={`/app/tutorials/${tutorial.id}`} className="flex-1">
-        <h3 className="font-bold text-ink group-hover:text-primary">
-          {tutorial.title}
-        </h3>
-        {tutorial.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {tutorial.description}
-          </p>
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground/50">
+            <ImageIcon className="size-6" />
+          </div>
         )}
       </Link>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          Geändert {relativeDe(tutorial.updated_at)}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={`/app/preview/${tutorial.id}`} target="_blank" />}
-        >
-          <Eye className="size-4" /> Ansehen
-        </Button>
+
+      {/* Inhalt rechts */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-start gap-2">
+          <Link href={`/app/tutorials/${tutorial.id}`} className="min-w-0 flex-1">
+            {/* Titel als ERSTES Text-Element */}
+            <h3 className="truncate font-bold text-ink group-hover:text-primary">
+              {tutorial.title}
+            </h3>
+          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="-mr-1 -mt-0.5 shrink-0"
+                  aria-label="Aktionen"
+                >
+                  <MoreVertical className="size-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
+                <FileText className="size-4" /> Bearbeiten
+              </DropdownMenuItem>
+              {live && tutorial.slug && (
+                <DropdownMenuItem
+                  render={
+                    <Link
+                      href={`/h/${accountSlug}/${tutorial.slug}`}
+                      target="_blank"
+                    />
+                  }
+                >
+                  <ExternalLink className="size-4" /> Live-Seite öffnen
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                Umbenennen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  run(() => duplicateTutorial(tutorial.id), "Dupliziert")
+                }
+              >
+                Duplizieren
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                Löschen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {tutorial.description && (
+          <Link href={`/app/tutorials/${tutorial.id}`} className="mt-0.5">
+            <p className="line-clamp-1 text-sm text-muted-foreground sm:line-clamp-2">
+              {tutorial.description}
+            </p>
+          </Link>
+        )}
+
+        {/* Publish-Toggle UNTER dem Titel (nicht mehr darüber) */}
+        <div className="mt-auto flex items-center gap-2 pt-2">
+          <HelpToggle on={live} onToggle={toggleLive} />
+          {stale && (
+            <span className="flex items-center gap-1 rounded-md bg-no-soft px-1.5 py-0.5 text-xs font-bold text-no">
+              <AlertTriangle className="size-3" /> Prüfen
+            </span>
+          )}
+          <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
+            {relativeDe(tutorial.updated_at)}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            className="shrink-0"
+            render={<Link href={`/app/preview/${tutorial.id}`} target="_blank" />}
+          >
+            <Eye className="size-4" /> Ansehen
+          </Button>
+        </div>
       </div>
 
       {/* Umbenennen */}
