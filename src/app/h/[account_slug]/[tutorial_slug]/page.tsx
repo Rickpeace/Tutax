@@ -9,6 +9,7 @@ import { sanitizeSkinCss } from "@/lib/skin-css";
 import { publicImageUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
+import { ChatWidget } from "@/components/viewer/chat-widget";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
@@ -192,6 +193,7 @@ export default async function ViewerPage({
           </a>
         </p>
       </div>
+      <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>
   );
 }
