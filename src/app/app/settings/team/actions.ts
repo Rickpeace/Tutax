@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { appBaseUrl } from "@/lib/url";
 
 const appUrl = appBaseUrl;
@@ -75,12 +76,9 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     .select("user_id")
     .eq("account_id", account.id);
   if (existingUser?.length) {
-    const ids = existingUser.map((m) => m.user_id);
-    const { data: usersPage } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const already = (usersPage?.users ?? []).some(
-      (u) => ids.includes(u.id) && (u.email ?? "").toLowerCase() === email,
-    );
-    if (already) return { ok: false, message: "Diese Person ist bereits im Team." };
+    const ids = new Set(existingUser.map((m) => m.user_id));
+    const u = await findAuthUserByEmail(admin, email);
+    if (u && ids.has(u.id)) return { ok: false, message: "Diese Person ist bereits im Team." };
   }
 
   // Alte offene Einladungen an dieselbe Adresse aufräumen (keine Duplikate).
@@ -139,10 +137,7 @@ export async function acceptInvite(
     return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
 
   const supabase = await createClient();
-  const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const existing = (page?.users ?? []).find(
-    (u) => (u.email ?? "").toLowerCase() === inv.email!.toLowerCase(),
-  );
+  const existing = await findAuthUserByEmail(admin, inv.email);
 
   let userId: string;
   if (existing) {

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 import { InviteConfirm } from "@/components/auth/invite-confirm";
 
@@ -61,11 +62,6 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   // Nicht eingeloggt: hat die Adresse schon ein Konto? -> "anmelden" statt "Passwort festlegen".
   let hasAccount = false;
-  if (inv.email) {
-    const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    hasAccount = (page?.users ?? []).some(
-      (u) => (u.email ?? "").toLowerCase() === inv.email!.toLowerCase(),
-    );
-  }
+  if (inv.email) hasAccount = !!(await findAuthUserByEmail(admin, inv.email));
   return <AcceptInviteForm token={token} email={inv.email ?? ""} orgName={orgName} hasAccount={hasAccount} />;
 }

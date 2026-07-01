@@ -12,7 +12,7 @@ export default async function TeamPage() {
   } = await supabase.auth.getUser();
   const admin = createAdminClient();
 
-  const [{ data: memberRows }, { data: invRows }, usersRes] = await Promise.all([
+  const [{ data: memberRows }, { data: invRows }] = await Promise.all([
     admin.from("account_members").select("user_id, role").eq("account_id", account.id),
     admin
       .from("invitations")
@@ -20,10 +20,13 @@ export default async function TeamPage() {
       .eq("account_id", account.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
-    admin.auth.admin.listUsers({ page: 1, perPage: 200 }),
   ]);
 
-  const emailById = new Map((usersRes.data?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+  // E-Mails gezielt pro Member (getUserById) statt listUsers-Seite -> korrekt unabhängig
+  // von der Gesamt-Nutzerzahl und weniger Datenübertragung.
+  const rows = memberRows ?? [];
+  const userRes = await Promise.all(rows.map((m) => admin.auth.admin.getUserById(m.user_id)));
+  const emailById = new Map(rows.map((m, i) => [m.user_id, userRes[i].data?.user?.email ?? ""]));
   const members = (memberRows ?? []).map((m) => ({
     userId: m.user_id,
     role: m.role,

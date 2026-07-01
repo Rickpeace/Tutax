@@ -41,6 +41,14 @@ export async function requireAccount(): Promise<{
 
   const activeId = (user.user_metadata as { active_account_id?: string } | null)?.active_account_id;
   const active = valid.find((r) => r.accounts.id === activeId) ?? valid[0];
+
+  // Stale active_account_id (nicht mehr Mitglied) best-effort bereinigen. Fire-and-forget +
+  // catch: in reinen RSC-Reads sind Cookie-Writes verboten -> dort still verworfen (die
+  // Metadaten-Aktualisierung persistiert serverseitig trotzdem); in Actions greift sie.
+  if (activeId && activeId !== active.accounts.id) {
+    void supabase.auth.updateUser({ data: { active_account_id: active.accounts.id } }).catch(() => {});
+  }
+
   const memberships: Membership[] = valid.map((r) => ({ id: r.accounts.id, name: r.accounts.name, role: r.role }));
 
   return { userId: user.id, email: user.email ?? null, account: active.accounts, memberships };
