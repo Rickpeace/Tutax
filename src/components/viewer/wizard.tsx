@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
@@ -33,6 +33,28 @@ export function Wizard({
 
   const [cur, setCur] = useState<string | null>(rootId);
   const [history, setHistory] = useState<string[]>([]);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Linear = keine Verzweigungen: kein Schritt ist eine Entscheidung UND kein
+  // Schritt hat mehr als einen Ausgang. Nur dann ist „Schritt x von y" ehrlich.
+  const linearTotal = useMemo(() => {
+    const linear =
+      !steps.some((s) => s.is_decision) &&
+      [...branchesByStep.values()].every((b) => b.length <= 1);
+    if (!linear) return null;
+    // Länge des Pfades ab root entlang des einzigen Ausgangs zählen.
+    let count = 0;
+    let id: string | null = rootId;
+    const seen = new Set<string>();
+    while (id != null && stepById.has(id) && !seen.has(id)) {
+      seen.add(id);
+      count++;
+      id = branchesByStep.get(id)?.[0]?.target_step_id ?? null;
+    }
+    return count > 0 ? count : null;
+  }, [steps, branchesByStep, stepById, rootId]);
 
   const go = (target: string | null) => {
     setHistory((h) => (cur != null ? [...h, cur] : h));
@@ -52,10 +74,25 @@ export function Wizard({
 
   const step = cur != null ? stepById.get(cur) : null;
 
+  // Nach Schrittwechsel Fokus auf den Schritt-Titel (A11y: Screenreader/Tastatur).
+  useEffect(() => {
+    if (step) titleRef.current?.focus();
+  }, [cur, step]);
+
+  // Lightbox per Escape schließen.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
   return (
     <div
       data-tx="step"
-      className="w-full max-w-md border bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5"
+      className="w-full border bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5"
       style={{
         borderRadius: "var(--brand-radius, 16px)",
         borderColor: "var(--brand-card-border, rgba(16,21,36,0.06))",
@@ -64,10 +101,23 @@ export function Wizard({
     >
       {step ? (
         <>
-          {imageUrls[step.id] ? (
-            <div className="mb-4">
-              <ViewerImage url={imageUrls[step.id]} highlights={step.highlights ?? []} />
+          {linearTotal != null && (
+            <div
+              data-tx="progress"
+              className="mb-3 text-xs font-semibold text-muted-foreground"
+            >
+              Schritt {history.length + 1} von {linearTotal}
             </div>
+          )}
+          {imageUrls[step.id] ? (
+            <button
+              type="button"
+              onClick={() => setLightbox(imageUrls[step.id])}
+              aria-label="Bild vergrößern"
+              className="mb-4 block w-full cursor-zoom-in"
+            >
+              <ViewerImage url={imageUrls[step.id]} highlights={step.highlights ?? []} />
+            </button>
           ) : placeholders ? (
             <div className="mb-4">
               <StepPlaceholder title={step.title} />
@@ -75,8 +125,10 @@ export function Wizard({
           ) : null}
           {step.title && (
             <h2
+              ref={titleRef}
+              tabIndex={-1}
               data-tx="step-title"
-              className="text-lg font-bold"
+              className="text-lg font-bold outline-none sm:text-xl"
               style={{
                 color: "var(--brand-title, var(--brand-ink))",
                 fontFamily: "var(--brand-font-heading)",
@@ -157,6 +209,32 @@ export function Wizard({
               <ChevronLeft className="size-4" /> Zurück
             </button>
           )}
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-3"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Bildvorschau"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt=""
+            className="max-h-[95vh] max-w-[95vw] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            aria-label="Schließen"
+            className="fixed right-4 top-4 flex size-10 items-center justify-center rounded-full bg-white/90 text-ink shadow-lg transition-transform hover:scale-105"
+          >
+            <X className="size-5" />
+          </button>
         </div>
       )}
     </div>
