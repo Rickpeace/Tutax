@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -26,16 +26,16 @@ import {
 } from "@/app/app/tutorials/[id]/actions";
 import { YES, NO } from "@/lib/builder/constants";
 
-function useIsMobile() {
-  const [mobile, setMobile] = useState(false);
+function useMedia(query: string) {
+  const [match, setMatch] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const on = () => setMobile(mq.matches);
+    const mq = window.matchMedia(query);
+    const on = () => setMatch(mq.matches);
     on();
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
-  }, []);
-  return mobile;
+  }, [query]);
+  return match;
 }
 
 function mkStep(id: string, tutorialId: string, position: number): Step {
@@ -67,7 +67,8 @@ export function Builder({
   rootStepId: string | null;
 }) {
   const router = useRouter();
-  const mobile = useIsMobile();
+  const mobile = useMedia("(max-width: 767px)");
+  const wide = useMedia("(min-width: 1024px)"); // ab hier zweispaltig (Editor angedockt)
 
   const [steps, setSteps] = useState(initialSteps);
   const [branches, setBranches] = useState(initialBranches);
@@ -366,91 +367,102 @@ export function Builder({
     else handleAddStep(); // am Ende: neuen Schritt anlegen + auswählen
   }, [selIndex, ordered, handleAddStep]);
 
+  const closeEditor = () => {
+    if (dirtyRef.current && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    dirtyRef.current = false;
+    setSelectedId(null);
+  };
+
+  const renderPanel = (onClose?: () => void) =>
+    selectedStep ? (
+      <StepPanel
+        key={selectedStep.id}
+        step={selectedStep}
+        tutorialId={tutorialId}
+        allSteps={steps}
+        branches={selectedBranches}
+        index={selIndex}
+        total={ordered.length}
+        hasPrev={selIndex > 0}
+        hasNext={selIndex >= 0 && selIndex < ordered.length - 1}
+        onPrev={goPrev}
+        onNext={goNext}
+        onSaveStep={saveStep}
+        onDirtyChange={(d) => {
+          dirtyRef.current = d;
+        }}
+        onSetImage={setStepImage}
+        onSetHighlights={setStepHighlights}
+        onSetDecision={handleSetDecision}
+        onAddBranch={handleAddBranch}
+        onUpdateBranch={handleUpdateBranch}
+        onDeleteBranch={handleDeleteBranch}
+        onDeleteStep={handleDeleteStep}
+        onOpenStep={(id) => setSelectedId(id)}
+        onInsertIntoBranch={insertIntoBranch}
+        onClose={onClose}
+      />
+    ) : null;
+
+  const flowArea = tree ? (
+    <div className="rounded-2xl border border-border bg-card/40 p-4 sm:p-5">
+      <Flow
+        tree={tree}
+        selectedId={selectedId}
+        onSelect={(id) => {
+          if (dirtyRef.current && id !== selectedId && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+          dirtyRef.current = false;
+          setSelectedId(id);
+        }}
+        onInsertAfter={insertAfter}
+        onInsertIntoBranch={insertIntoBranch}
+      />
+    </div>
+  ) : (
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+      <p className="max-w-sm text-sm text-muted-foreground">
+        Noch keine Schritte. Legen Sie den ersten Schritt an – er wird zum
+        Startpunkt der Anleitung.
+      </p>
+      <Button className="mt-4" onClick={handleAddStep}>
+        <Plus className="size-4" /> Ersten Schritt anlegen
+      </Button>
+    </div>
+  );
+
   return (
     <>
       <p className="mb-2 text-sm text-muted-foreground">
         {steps.length} Schritt{steps.length === 1 ? "" : "e"}
       </p>
 
-      {tree ? (
-        <div className="rounded-2xl border border-border bg-card/40 p-4 sm:p-5">
-          <Flow
-            tree={tree}
-            selectedId={selectedId}
-            onSelect={(id) => {
-              if (dirtyRef.current && id !== selectedId && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
-              dirtyRef.current = false;
-              setSelectedId(id);
-            }}
-            onInsertAfter={insertAfter}
-            onInsertIntoBranch={insertIntoBranch}
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Noch keine Schritte. Legen Sie den ersten Schritt an – er wird zum
-            Startpunkt der Anleitung.
-          </p>
-          <Button className="mt-4" onClick={handleAddStep}>
-            <Plus className="size-4" /> Ersten Schritt anlegen
-          </Button>
-        </div>
-      )}
+      <div className={wide ? "flex items-start gap-6" : ""}>
+        <div className={wide ? "min-w-0 flex-1" : ""}>{flowArea}</div>
 
-      <Sheet
-        open={!!selectedStep}
-        onOpenChange={(o) => {
-          if (!o) {
-            if (dirtyRef.current && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
-            dirtyRef.current = false;
-            setSelectedId(null);
-          }
-        }}
-      >
-        <SheetContent
-          side={mobile ? "bottom" : "right"}
-          className={
-            mobile
-              ? "max-h-[85vh] w-full overflow-y-auto"
-              : "w-full overflow-y-auto sm:max-w-2xl"
-          }
-        >
-          <SheetHeader>
-            <SheetTitle>Schritt bearbeiten</SheetTitle>
-          </SheetHeader>
-          <div className="px-4 pb-8">
-            {selectedStep && (
-              <StepPanel
-                key={selectedStep.id}
-                step={selectedStep}
-                tutorialId={tutorialId}
-                allSteps={steps}
-                branches={selectedBranches}
-                index={selIndex}
-                total={ordered.length}
-                hasPrev={selIndex > 0}
-                hasNext={selIndex >= 0 && selIndex < ordered.length - 1}
-                onPrev={goPrev}
-                onNext={goNext}
-                onSaveStep={saveStep}
-                onDirtyChange={(d) => {
-                  dirtyRef.current = d;
-                }}
-                onSetImage={setStepImage}
-                onSetHighlights={setStepHighlights}
-                onSetDecision={handleSetDecision}
-                onAddBranch={handleAddBranch}
-                onUpdateBranch={handleUpdateBranch}
-                onDeleteBranch={handleDeleteBranch}
-                onDeleteStep={handleDeleteStep}
-                onOpenStep={(id) => setSelectedId(id)}
-                onInsertIntoBranch={insertIntoBranch}
-              />
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+        {wide && selectedStep && (
+          <aside className="sticky top-4 max-h-[calc(100vh-2rem)] w-[440px] shrink-0 self-start overflow-y-auto rounded-2xl border border-border bg-card px-4 pb-6 shadow-sm xl:w-[520px]">
+            {renderPanel(closeEditor)}
+          </aside>
+        )}
+      </div>
+
+      {!wide && (
+        <Sheet open={!!selectedStep} onOpenChange={(o) => { if (!o) closeEditor(); }}>
+          <SheetContent
+            side={mobile ? "bottom" : "right"}
+            className={
+              mobile
+                ? "max-h-[85vh] w-full overflow-y-auto"
+                : "w-full overflow-y-auto sm:max-w-2xl"
+            }
+          >
+            <SheetHeader>
+              <SheetTitle>Schritt bearbeiten</SheetTitle>
+            </SheetHeader>
+            <div className="px-4 pb-8">{renderPanel()}</div>
+          </SheetContent>
+        </Sheet>
+      )}
     </>
   );
 }

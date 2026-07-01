@@ -48,7 +48,7 @@ export default async function EditorPage({
     : { data: [] as StepBranch[] };
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-6">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-6">
       <Button
         variant="ghost"
         size="sm"

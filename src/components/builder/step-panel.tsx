@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ export function StepPanel({
   onDeleteStep,
   onOpenStep,
   onInsertIntoBranch,
+  onClose,
 }: {
   step: Step;
   tutorialId: string;
@@ -71,6 +72,7 @@ export function StepPanel({
   onDeleteStep: (id: string) => void;
   onOpenStep: (id: string) => void;
   onInsertIntoBranch: (branchId: string) => void;
+  onClose?: () => void;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
   const [body, setBody] = useState<unknown>(step.body ?? null);
@@ -149,6 +151,11 @@ export function StepPanel({
     <div className="flex flex-col gap-5">
       <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
         <div className="flex items-center gap-1">
+          {onClose && (
+            <Button variant="ghost" size="icon-sm" onClick={onClose} title="Editor schließen" aria-label="Editor schließen">
+              <X className="size-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt">
             <ChevronLeft className="size-4" />
           </Button>
