@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Account } from "@/lib/types";
@@ -6,21 +7,32 @@ import type { Account } from "@/lib/types";
 export type Membership = { id: string; name: string; role: string };
 
 /**
+ * Aktueller Auth-User – pro Request via React cache() dedupliziert. getUser() ist eine
+ * Netzwerk-Verifikation; ohne Dedup lief sie mehrfach pro Navigation (Layout + Seite +
+ * Admin-Check). Jetzt genau EINMAL pro Request.
+ */
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
+
+/**
  * Lädt den aktuellen User + sein AKTIVES Konto. Ein Nutzer kann mehreren
  * Organisationen angehören (eigene + per Einladung beigetretene). Das aktive Konto
  * kommt aus den User-Metadaten `active_account_id` (falls Mitglied) — geräteübergreifend
  * gemerkt —, sonst das erste. /login wenn nicht angemeldet; /logout, wenn ganz ohne Org.
  */
-export async function requireAccount(): Promise<{
+export const requireAccount = cache(async (): Promise<{
   userId: string;
   email: string | null;
   account: Account;
   memberships: Membership[];
-}> {
+}> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { data: rows } = await supabase
@@ -52,18 +64,16 @@ export async function requireAccount(): Promise<{
   const memberships: Membership[] = valid.map((r) => ({ id: r.accounts.id, name: r.accounts.name, role: r.role }));
 
   return { userId: user.id, email: user.email ?? null, account: active.accounts, memberships };
-}
+});
 
 /**
  * Nur die aktive Konto-ID (ohne Redirect) – für API-Routen. Berücksichtigt
  * `active_account_id` aus den Metadaten (falls Mitglied), sonst die erste Org.
  * Gibt null zurück, wenn nicht angemeldet oder ohne Org.
  */
-export async function activeAccountId(): Promise<{ userId: string; accountId: string } | null> {
+export const activeAccountId = cache(async (): Promise<{ userId: string; accountId: string } | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
   const { data: rows } = await supabase
     .from("account_members")
@@ -73,4 +83,4 @@ export async function activeAccountId(): Promise<{ userId: string; accountId: st
   if (!ids.length) return null;
   const activeId = (user.user_metadata as { active_account_id?: string } | null)?.active_account_id;
   return { userId: user.id, accountId: activeId && ids.includes(activeId) ? activeId : ids[0] };
-}
+});

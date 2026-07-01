@@ -1,13 +1,25 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Layers, BookOpen } from "lucide-react";
+import { Layers, BookOpen, Loader2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 const tabs = [
   { href: "/app", label: "Tutorials", icon: Layers, match: (p: string) => p === "/app" || p.startsWith("/app/tutorials") },
   { href: "/app/knowledge", label: "Wissensdatenbank", icon: BookOpen, match: (p: string) => p.startsWith("/app/knowledge") },
 ];
+
+/** Innerhalb des Links: zeigt beim Klick SOFORT einen Spinner (Pending), bevor die
+ *  Navigation durch ist – der Tab reagiert unmittelbar. */
+function TabLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />} {label}
+    </>
+  );
+}
 
 export function AppTabs() {
   const path = usePathname();
@@ -26,7 +38,7 @@ export function AppTabs() {
                   : "border-transparent text-muted-foreground hover:text-ink"
               }`}
             >
-              <t.icon className="size-4" /> {t.label}
+              <TabLabel icon={t.icon} label={t.label} />
             </Link>
           );
         })}
