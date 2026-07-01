@@ -5,6 +5,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { EXTREME_SYSTEM, extremeUser, EXTREME_REFINE_SYSTEM, extremeRefineUser } from "@/lib/ai-prompts";
 import { sanitizeSkinCss } from "@/lib/skin-css";
+import { safeFetch } from "@/lib/ssrf";
 
 export const maxDuration = 60;
 
@@ -62,7 +63,7 @@ async function structureHints(cssHrefs: string[]): Promise<{ radiusHint: string;
       await Promise.all(
         cssHrefs.slice(0, 3).map(async (u) => {
           try {
-            const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+            const r = await safeFetch(u, { signal: AbortSignal.timeout(6000) });
             if (r.ok) return (await r.text()).slice(0, 300_000);
           } catch {
             /* ignore */
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 9000);
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       signal: ctrl.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
     });
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
     let logoCt = "";
     if (sig.logo) {
       try {
-        const r = await fetch(sig.logo, {
+        const r = await safeFetch(sig.logo, {
           signal: AbortSignal.timeout(8000),
           headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
         });

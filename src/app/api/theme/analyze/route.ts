@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { CI_ANALYSIS_SYSTEM, ciAnalysisUser } from "@/lib/ai-prompts";
+import { safeFetch } from "@/lib/ssrf";
 
 export const maxDuration = 60;
 
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 9000);
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       signal: ctrl.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
     });
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
         await Promise.all(
           signals.cssHrefs.slice(0, 3).map(async (u) => {
             try {
-              const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+              const r = await safeFetch(u, { signal: AbortSignal.timeout(6000) });
               if (r.ok) return (await r.text()).slice(0, 300_000);
             } catch {
               /* ignore */
@@ -210,7 +211,7 @@ export async function POST(req: NextRequest) {
     let logoCt = "";
     if (signals.logo) {
       try {
-        const r = await fetch(signals.logo, {
+        const r = await safeFetch(signals.logo, {
           signal: AbortSignal.timeout(8000),
           headers: { "User-Agent": "Mozilla/5.0 (compatible; TutaxBot/1.0)" },
         });

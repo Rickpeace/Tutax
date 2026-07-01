@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { SessionFromHash } from "@/components/auth/session-from-hash";
+import { safeNext } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Anmeldung", robots: { index: false } };
@@ -22,17 +23,17 @@ export default async function ConfirmPage({
   const code = sp.code;
   const next = sp.next ?? "/app";
 
-  // Nur relativer Pfad zulassen (absolute URLs auf Pfad reduzieren) -> kein Open-Redirect.
-  let redirectTo = "/app";
-  if (next.startsWith("/")) redirectTo = next;
-  else {
+  // Absolute (Same-Origin-)URL auf Pfad reduzieren, dann Open-Redirect-Schutz (safeNext).
+  let candidate = next;
+  if (!next.startsWith("/")) {
     try {
       const u = new URL(next);
-      redirectTo = u.pathname + u.search;
+      candidate = u.pathname + u.search;
     } catch {
-      /* ungültig -> /app */
+      candidate = "/app";
     }
   }
+  const redirectTo = safeNext(candidate, "/app");
 
   if (tokenHash && type) {
     const supabase = await createClient();

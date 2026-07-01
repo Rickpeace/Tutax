@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { appBaseUrl } from "@/lib/url";
+import { appBaseUrl, safeNext } from "@/lib/url";
 
 export type AuthState = { error?: string; message?: string };
 
@@ -25,7 +25,7 @@ export async function signInWithPassword(
   if (error) return { error: uebersetzeAuthFehler(error.message) };
 
   revalidatePath("/", "layout");
-  redirect(next.startsWith("/") ? next : "/app");
+  redirect(safeNext(next, "/app"));
 }
 
 /** Registrierung mit E-Mail + Passwort (Account-Anlage via DB-Trigger) */

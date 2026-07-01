@@ -8,12 +8,36 @@ export const maxDuration = 30;
 
 type Source = { title: string; slug: string };
 
+// Best-effort Rate-Limit (pro Instanz, ohne externe Infra) gegen Kosten-DoS auf dem
+// öffentlichen Chat-Endpunkt. Input ist zusätzlich hart gekappt (Frage 500, History 8×1000).
+const RL = new Map<string, { count: number; reset: number }>();
+function rateLimited(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const e = RL.get(key);
+  if (!e || e.reset < now) {
+    RL.set(key, { count: 1, reset: now + windowMs });
+    if (RL.size > 5000) for (const [k, v] of RL) if (v.reset < now) RL.delete(k); // simple Bereinigung
+    return false;
+  }
+  e.count += 1;
+  return e.count > limit;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const accountSlug = String(body.accountSlug ?? "").trim();
   const question = String(body.question ?? "").trim().slice(0, 500);
   if (!accountSlug || !question)
     return NextResponse.json({ error: "accountSlug/question fehlt" }, { status: 400 });
+
+  // Rate-Limit pro IP (20/Minute) + pro Kanzlei (120/Minute) gegen Missbrauch.
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  if (rateLimited(`ip:${ip}`, 20, 60_000) || rateLimited(`acc:${accountSlug}`, 120, 60_000)) {
+    return NextResponse.json(
+      { answer: "Zu viele Anfragen – bitte einen Moment warten und erneut versuchen.", sources: [] },
+      { status: 429 },
+    );
+  }
 
   const history = Array.isArray(body.history)
     ? (body.history as { role?: string; text?: string }[])
@@ -195,8 +219,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ answer, sources: sources.slice(0, 3) });
   } catch (e) {
+    console.error("chat error:", e instanceof Error ? e.message : e);
     return NextResponse.json(
-      { answer: "", error: e instanceof Error ? e.message : "Fehler" },
+      { answer: "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.", sources: [], error: true },
       { status: 200 },
     );
   }
