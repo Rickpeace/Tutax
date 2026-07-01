@@ -2,17 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2 } from "lucide-react";
+import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { HighlightEditor } from "@/components/builder/highlight-editor";
 import { CropDialog } from "@/components/builder/crop-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { compressAndUpload, signedImageUrl } from "@/lib/upload";
 import type { Highlight } from "@/lib/types";
 
@@ -58,6 +52,14 @@ export function ImageField({
     };
   }, [imagePath]);
 
+  // Großmodus per Escape schließen.
+  useEffect(() => {
+    if (!big) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setBig(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [big]);
+
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -95,11 +97,13 @@ export function ImageField({
       />
       {imagePath && url ? (
         <div className="space-y-2">
-          <HighlightEditor
-            url={url}
-            highlights={highlights}
-            onChange={(h) => onSetHighlights(stepId, h)}
-          />
+          {!big && (
+            <HighlightEditor
+              url={url}
+              highlights={highlights}
+              onChange={(h) => onSetHighlights(stepId, h)}
+            />
+          )}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => setBig(true)}>
               <Maximize2 className="size-4" /> Groß bearbeiten
@@ -133,18 +137,31 @@ export function ImageField({
             </Button>
           </div>
 
-          <Dialog open={big} onOpenChange={setBig}>
-            <DialogContent className="w-[96vw] max-w-[1600px] sm:max-w-[1600px] max-h-[94vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Screenshot bearbeiten</DialogTitle>
-              </DialogHeader>
-              <HighlightEditor
-                url={url}
-                highlights={highlights}
-                onChange={(h) => onSetHighlights(stepId, h)}
-              />
-            </DialogContent>
-          </Dialog>
+          {big && (
+            <div
+              className="fixed inset-0 z-[100] flex flex-col bg-black/60 p-3 sm:p-6"
+              onClick={() => setBig(false)}
+            >
+              <div
+                className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden rounded-xl bg-popover p-4 shadow-2xl ring-1 ring-foreground/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="font-semibold text-ink">Screenshot bearbeiten</span>
+                  <Button variant="ghost" size="icon-sm" onClick={() => setBig(false)} aria-label="Schließen">
+                    <X className="size-4" />
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <HighlightEditor
+                    url={url}
+                    highlights={highlights}
+                    onChange={(h) => onSetHighlights(stepId, h)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <button
