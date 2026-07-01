@@ -8,6 +8,9 @@ import { requireAccount } from "@/lib/account";
 import { indexTutorial } from "@/lib/kb";
 import type { Step, StepBranch } from "@/lib/types";
 
+const PRIVATE_BUCKET = "tutorial-images";
+const PUBLIC_BUCKET = "tutorial-images-public";
+
 /** Embeddings einer (account-spezifischen) Quelle entfernen. */
 async function dropEmbeddings(accountId: string, sourceId: string) {
   await createAdminClient()
@@ -82,23 +85,43 @@ export async function forkTemplate(templateId: string) {
     slug: tpl.slug, // gleicher Slug -> Hilfe-URL bleibt stabil
   });
 
+  const admin = createAdminClient();
   const idMap = new Map<string, string>();
   for (const s of steps ?? []) idMap.set(s.id, crypto.randomUUID());
+
+  // Bilder in den EIGENEN Namensraum des Forks kopieren (privat UND public). Sonst teilt
+  // der Fork die image_path des Templates — ein Unpublish des Forks würde dann die
+  // öffentlichen Template-Bilder (und die anderer Forks) löschen (Cross-Org-Schaden).
+  // Der Fork ist direkt "published", braucht die Bilder also auch im public Bucket.
+  const cloneImage = async (oldPath: string, newStepId: string): Promise<string | null> => {
+    const newPath = `${account.id}/${forkId}/${newStepId}.webp`;
+    let blob = (await admin.storage.from(PRIVATE_BUCKET).download(oldPath)).data;
+    if (!blob) blob = (await admin.storage.from(PUBLIC_BUCKET).download(oldPath)).data;
+    if (!blob) return null;
+    await admin.storage.from(PRIVATE_BUCKET).upload(newPath, blob, { upsert: true, contentType: "image/webp" });
+    await admin.storage.from(PUBLIC_BUCKET).upload(newPath, blob, { upsert: true, contentType: "image/webp" });
+    return newPath;
+  };
+
   if (steps?.length) {
-    await supabase.from("steps").insert(
-      steps.map((s) => ({
-        id: idMap.get(s.id),
+    const stepRows = [];
+    for (const s of steps) {
+      const newId = idMap.get(s.id)!;
+      const image_path = s.image_path ? await cloneImage(s.image_path, newId) : null;
+      stepRows.push({
+        id: newId,
         tutorial_id: forkId,
         title: s.title,
         body: s.body,
-        image_path: s.image_path,
+        image_path,
         image_width: s.image_width,
         image_height: s.image_height,
         highlights: s.highlights,
         position: s.position,
         is_decision: s.is_decision,
-      })),
-    );
+      });
+    }
+    await supabase.from("steps").insert(stepRows);
   }
   if (branches?.length) {
     await supabase.from("step_branches").insert(

@@ -47,7 +47,13 @@ export default async function TeamPage() {
           </div>
         </div>
       )}
-      <TeamManager members={members} invitations={invRows ?? []} isOwner={myRole === "owner"} />
+      {/* Einladungen (inkl. Token = Beitritts-Link) NUR an Inhaber geben – ein Editor
+          könnte sonst aus dem Client-Payload einen offenen Owner-Invite-Token abgreifen. */}
+      <TeamManager
+        members={members}
+        invitations={myRole === "owner" ? (invRows ?? []) : []}
+        isOwner={myRole === "owner"}
+      />
     </div>
   );
 }

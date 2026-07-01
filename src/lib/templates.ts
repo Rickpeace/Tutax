@@ -140,5 +140,17 @@ export async function resolveCustomerTutorial(
     .eq("template_id", tpl.id)
     .maybeSingle();
   if (!at?.enabled) return null;
-  return at.forked_tutorial_id ?? tpl.id;
+
+  // Fork: NUR ausliefern, wenn die eigene Kopie selbst veröffentlicht ist. Sonst wäre ein
+  // Entwurf-Fork über den (veröffentlichten) Template-Slug öffentlich abrufbar.
+  if (at.forked_tutorial_id) {
+    const { data: fork } = await client
+      .from("tutorials")
+      .select("id, status")
+      .eq("id", at.forked_tutorial_id)
+      .eq("account_id", accountId)
+      .maybeSingle();
+    return fork && fork.status === "published" ? fork.id : null;
+  }
+  return tpl.id;
 }

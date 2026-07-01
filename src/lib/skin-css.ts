@@ -5,7 +5,9 @@
  * - alle Selektoren werden unter `scope` (.tutax-skin) gekapselt -> wirkt NUR
  *   auf die Hilfe-Seite, kann die Host-Seite (Embed) nicht beeinflussen
  * - @import / @charset / expression() / behavior / javascript: werden entfernt
- * - url(...) nur für https: und data:image: erlaubt (kein Tracking/JS)
+ * - url(...) NUR data:image: erlaubt — KEINE externen URLs (sonst würde die Hilfe-Seite
+ *   die IP jedes Endkunden an Dritt-Hosts leaken = Tracking; Schweigepflicht-relevant).
+ *   Eigene Logos werden separat in unseren Bucket gespiegelt, nicht per CSS-url geladen.
  * - Länge begrenzt
  */
 export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
@@ -19,10 +21,10 @@ export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
   css = css.replace(/expression\s*\(/gi, "(");
   css = css.replace(/(behavior|-moz-binding)\s*:/gi, "/* blocked */:");
   css = css.replace(/javascript:/gi, "");
-  // url(): nur https: / data:image: zulassen
+  // url(): NUR data:image: zulassen (keine externen URLs -> kein Tracking/IP-Leak der Endkunden)
   css = css.replace(/url\(\s*(['"]?)([^'")]*)\1\s*\)/gi, (m, _q, u) => {
     const url = String(u || "").trim().toLowerCase();
-    return url.startsWith("https://") || url.startsWith("data:image/") ? m : "none";
+    return url.startsWith("data:image/") ? m : "none";
   });
 
   return scopeCss(css, scope).slice(0, 40000);
