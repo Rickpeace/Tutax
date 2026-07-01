@@ -48,7 +48,7 @@ export default async function EditorPage({
     : { data: [] as StepBranch[] };
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-6">
       <Button
         variant="ghost"
         size="sm"
@@ -58,19 +58,23 @@ export default async function EditorPage({
         <ChevronLeft className="size-4" /> Zurück
       </Button>
 
-      <div className="mt-3 mb-5">
-        <h1 className="text-xl font-extrabold tracking-tight text-ink">
-          {tutorial.title}
-        </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {tutorial.status === "published" ? "Veröffentlicht" : "Entwurf"}
-          </span>
-          <CategoryPicker
-            tutorialId={id}
-            categories={categories ?? []}
-            currentCategoryId={tutorial.category_id}
-          />
+      <div className="mt-3 mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">
+            {tutorial.title}
+          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {tutorial.status === "published" ? "Veröffentlicht" : "Entwurf"}
+            </span>
+            <CategoryPicker
+              tutorialId={id}
+              categories={categories ?? []}
+              currentCategoryId={tutorial.category_id}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <DriftCheckButton tutorialId={id} />
           <Button
             variant="outline"
