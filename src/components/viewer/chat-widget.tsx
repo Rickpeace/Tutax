@@ -78,12 +78,26 @@ export function ChatWidget({
     } catch {}
   }
 
+  // Immer die letzte Bot-Blase aktualisieren (wird beim Streamen live gefüllt).
+  const patchBot = (patch: Partial<Msg>) =>
+    setMsgs((m) => {
+      const copy = m.slice();
+      for (let i = copy.length - 1; i >= 0; i--) {
+        if (copy[i].role === "bot") {
+          copy[i] = { ...copy[i], ...patch };
+          break;
+        }
+      }
+      return copy;
+    });
+
   async function send() {
     const q = input.trim();
     if (!q || busy) return;
     const history = msgs.slice(-8).map((m) => ({ role: m.role, text: m.text }));
     setInput("");
-    setMsgs((m) => [...m, { role: "user", text: q }]);
+    // Nutzer-Nachricht + leere Bot-Blase (zeigt Tipp-Punkte, füllt sich dann live).
+    setMsgs((m) => [...m, { role: "user", text: q }, { role: "bot", text: "" }]);
     setBusy(true);
     try {
       const res = await fetch("/api/chat", {
@@ -91,18 +105,50 @@ export function ChatWidget({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountSlug, question: q, history }),
       });
-      const data = await res.json();
-      setMsgs((m) => [
-        ...m,
-        {
-          role: "bot",
+
+      const ct = res.headers.get("content-type") || "";
+      if (!res.body || !ct.includes("ndjson")) {
+        // Fehler / „nicht konfiguriert" / Rate-Limit -> einfache JSON-Antwort.
+        const data = await res.json().catch(() => ({}));
+        patchBot({
           text: data.answer || "Es ist ein Fehler aufgetreten.",
           sources: data.sources,
           escalation: data.escalation ?? null,
-        },
-      ]);
+        });
+        return;
+      }
+
+      // NDJSON-Stream: {"delta":"…"} füllt die Blase, {"meta":…} liefert Quellen/Eskalation.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let answer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let ev: { delta?: string; meta?: { sources?: Source[]; escalation?: Escalation | null } };
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.delta) {
+            answer += ev.delta;
+            patchBot({ text: answer });
+          }
+          if (ev.meta) {
+            patchBot({ text: answer, sources: ev.meta.sources, escalation: ev.meta.escalation ?? null });
+          }
+        }
+      }
     } catch {
-      setMsgs((m) => [...m, { role: "bot", text: "Es ist ein Fehler aufgetreten." }]);
+      patchBot({ text: "Es ist ein Fehler aufgetreten." });
     } finally {
       setBusy(false);
     }
@@ -143,7 +189,6 @@ export function ChatWidget({
             {msgs.map((m, i) => (
               <Bubble key={i} m={m} accountSlug={accountSlug} />
             ))}
-            {busy && <div className="px-1 text-xs text-muted-foreground">tippt …</div>}
           </div>
 
           <div className="flex gap-2 border-t border-black/5 p-2">
@@ -172,6 +217,15 @@ export function ChatWidget({
   );
 }
 
+function Dot({ delay }: { delay: string }) {
+  return (
+    <span
+      className="size-1.5 animate-bounce rounded-full bg-current opacity-40"
+      style={{ animationDelay: delay }}
+    />
+  );
+}
+
 function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
   const bot = m.role === "bot";
   return (
@@ -182,7 +236,15 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
         }`}
         style={bot ? {} : { background: "var(--brand-accent)" }}
       >
-        {m.text}
+        {bot && !m.text ? (
+          <span className="flex gap-1 py-1" aria-label="tippt">
+            <Dot delay="0ms" />
+            <Dot delay="150ms" />
+            <Dot delay="300ms" />
+          </span>
+        ) : (
+          m.text
+        )}
         {m.sources?.length ? (
           <div className="mt-2 space-y-1">
             {m.sources.map((s) => (

@@ -23,6 +23,46 @@ function rateLimited(key: string, limit: number, windowMs: number): boolean {
   return e.count > limit;
 }
 
+/**
+ * Zieht den (ggf. noch unvollständigen) Wert des JSON-Feldes "answer" aus dem bisher
+ * gestreamten Rohtext. So können wir den Antworttext live rausstreamen, obwohl das
+ * Modell ein JSON-Objekt {"answer":"…","status":…} produziert. { text, closed }.
+ */
+function extractAnswer(raw: string): { text: string; closed: boolean } | null {
+  const ki = raw.indexOf('"answer"');
+  if (ki < 0) return null;
+  let i = raw.indexOf(":", ki + 8);
+  if (i < 0) return null;
+  i++;
+  while (i < raw.length && /\s/.test(raw[i])) i++;
+  if (raw[i] !== '"') return null;
+  i++;
+  let out = "";
+  let closed = false;
+  while (i < raw.length) {
+    const c = raw[i];
+    if (c === "\\") {
+      const n = raw[i + 1];
+      if (n === undefined) break; // unvollständiges Escape -> auf mehr warten
+      if (n === "n") out += "\n";
+      else if (n === "t") out += "\t";
+      else if (n === "r") out += "\r";
+      else if (n === "u") {
+        const hex = raw.slice(i + 2, i + 6);
+        if (hex.length < 4) break; // unvollständiges \uXXXX
+        out += String.fromCharCode(parseInt(hex, 16));
+        i += 4;
+      } else out += n; // ", \\, / und Rest
+      i += 2;
+      continue;
+    }
+    if (c === '"') { closed = true; break; }
+    out += c;
+    i++;
+  }
+  return { text: out, closed };
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const accountSlug = String(body.accountSlug ?? "").trim();
@@ -138,11 +178,12 @@ export async function POST(req: NextRequest) {
           .join("\n")}`
       : "";
 
-    const completion = await openai().chat.completions.create({
+    const oaStream = await openai().chat.completions.create({
       model: AI.models.chat,
       temperature: 0.2,
       max_completion_tokens: 400,
       response_format: { type: "json_object" },
+      stream: true,
       messages: [
         { role: "system", content: chatSystem(account.name) },
         ...history.map((h) => ({
@@ -156,68 +197,76 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // KI-Selbsteinschätzung: status (answered | clarify | no_answer | off_topic).
-    const raw = completion.choices[0].message.content ?? "{}";
-    let answer = "";
-    let status = "answered";
-    let used: number[] = [];
-    let expertIdx: number | null = null;
-    try {
-      const p = JSON.parse(raw);
-      answer = String(p.answer ?? "").trim();
-      if (typeof p.status === "string") status = p.status;
-      used = Array.isArray(p.sources)
-        ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
-        : [];
-      const ei = Number(p.expert);
-      expertIdx = Number.isInteger(ei) ? ei : null;
-    } catch {
-      answer = raw.trim();
-    }
-
-    // Quellen nur bei beantworteten Fragen (Reranking: KI nennt die genutzten Nummern).
-    const seen = new Set<string>();
-    const sources: Source[] = [];
-    if (status === "answered") {
-      for (const n of used) {
-        const t = tutList.find((x) => x.idx === n);
-        if (t && !seen.has(t.slug)) {
-          seen.add(t.slug);
-          sources.push({ title: t.title, slug: t.slug });
+    // NDJSON-Stream: {"delta":"..."} für den live wachsenden Antworttext, am Ende
+    // {"meta":{status, sources, escalation, weak}}. Der Antworttext wird inkrementell
+    // aus dem JSON-Feld "answer" extrahiert, damit die Blase sofort mitläuft.
+    const enc = new TextEncoder();
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (obj: unknown) => controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+        let raw = "";
+        let emitted = "";
+        try {
+          for await (const chunk of oaStream) {
+            raw += chunk.choices[0]?.delta?.content ?? "";
+            const ext = extractAnswer(raw);
+            if (ext && ext.text.startsWith(emitted) && ext.text.length > emitted.length) {
+              send({ delta: ext.text.slice(emitted.length) });
+              emitted = ext.text;
+            }
+          }
+        } catch {
+          /* OpenAI-Stream abgebrochen -> mit dem bisher Erhaltenen weiter */
         }
-      }
-    }
 
-    // Off-Topic: freundlich abgrenzen. KEINE Eskalation.
-    if (status === "off_topic") {
-      return NextResponse.json({
-        answer:
-          answer ||
-          `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.`,
-        sources: [],
-      });
-    }
+        // Vollständig parsen für Status/Quellen/Eskalation (KI-Selbsteinschätzung).
+        let status = "answered";
+        let used: number[] = [];
+        let expertIdx: number | null = null;
+        try {
+          const p = JSON.parse(raw);
+          if (typeof p.status === "string") status = p.status;
+          used = Array.isArray(p.sources)
+            ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
+            : [];
+          const ei = Number(p.expert);
+          expertIdx = Number.isInteger(ei) ? ei : null;
+        } catch {
+          /* raw evtl. kein gültiges JSON -> gestreamten Text behalten */
+        }
 
-    // Rückfrage nötig: nachfragen, NICHT eskalieren.
-    if (status === "clarify") {
-      return NextResponse.json({
-        answer: answer || "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?",
-        sources: [],
-      });
-    }
+        // Falls (fast) nichts ankam: statusabhängigen Fallback-Text nachschieben.
+        if (!emitted.trim()) {
+          const fb =
+            status === "off_topic"
+              ? `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.`
+              : status === "clarify"
+                ? "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?"
+                : status === "no_answer"
+                  ? "Das kann ich Ihnen leider nicht sicher beantworten."
+                  : "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.";
+          send({ delta: fb });
+        }
 
-    // Echte Sackgasse (zum Thema, nicht lösbar) -> an einen Menschen verweisen.
-    if (status === "no_answer") {
-      const escalation = buildEscalation(expertIdx);
-      return NextResponse.json({
-        answer: answer || "Das kann ich Ihnen leider nicht sicher beantworten.",
-        sources: [],
-        escalation,
-        weak: true,
-      });
-    }
+        // Quellen nur bei beantworteten Fragen; Eskalation nur bei echter Sackgasse.
+        const seen = new Set<string>();
+        const sources: Source[] = [];
+        if (status === "answered") {
+          for (const n of used) {
+            const t = tutList.find((x) => x.idx === n);
+            if (t && !seen.has(t.slug)) { seen.add(t.slug); sources.push({ title: t.title, slug: t.slug }); }
+          }
+        }
+        const escalation = status === "no_answer" ? buildEscalation(expertIdx) : null;
 
-    return NextResponse.json({ answer, sources: sources.slice(0, 3) });
+        send({ meta: { status, sources: sources.slice(0, 3), escalation, weak: status === "no_answer" } });
+        controller.close();
+      },
+    });
+
+    return new Response(readable, {
+      headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" },
+    });
   } catch (e) {
     console.error("chat error:", e instanceof Error ? e.message : e);
     return NextResponse.json(
