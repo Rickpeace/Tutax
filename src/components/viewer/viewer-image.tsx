@@ -9,9 +9,16 @@ const ZOOM = 2;
 export function ViewerImage({
   url,
   highlights,
+  width,
+  height,
+  alt = "",
 }: {
   url: string;
   highlights: Highlight[];
+  /** Bildmaße aus der DB -> aspect-ratio reserviert den Platz (kein Layout-Shift). */
+  width?: number | null;
+  height?: number | null;
+  alt?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -30,10 +37,13 @@ export function ViewerImage({
     <div
       ref={wrapRef}
       className="relative overflow-hidden border border-black/5"
-      style={{ borderRadius: "var(--brand-radius, 12px)" }}
+      style={{
+        borderRadius: "var(--brand-radius, 12px)",
+        ...(width && height ? { aspectRatio: `${width} / ${height}` } : {}),
+      }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt="" className="block w-full" />
+      <img src={url} alt={alt} loading="lazy" className="block w-full" />
       {size.w > 0 && (
         <svg width={size.w} height={size.h} className="pointer-events-none absolute inset-0">
           <defs>

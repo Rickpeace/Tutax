@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
+import { recordFeedback } from "@/app/h/actions";
 
 export function Wizard({
   rootId,
@@ -12,12 +13,16 @@ export function Wizard({
   branches,
   imageUrls,
   placeholders = false,
+  accountSlug,
+  tutorialSlug,
 }: {
   rootId: string | null;
   steps: Step[];
   branches: StepBranch[];
   imageUrls: Record<string, string>;
   placeholders?: boolean;
+  accountSlug?: string;
+  tutorialSlug?: string;
 }) {
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
   const branchesByStep = useMemo(() => {
@@ -34,6 +39,12 @@ export function Wizard({
   const [cur, setCur] = useState<string | null>(rootId);
   const [history, setHistory] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<"sent" | null>(null);
+
+  const sendFeedback = (helpful: boolean) => {
+    setFeedback("sent"); // optimistisch — Tracking darf den Endkunden nie blockieren
+    if (accountSlug && tutorialSlug) void recordFeedback(accountSlug, tutorialSlug, helpful);
+  };
 
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -116,7 +127,13 @@ export function Wizard({
               aria-label="Bild vergrößern"
               className="mb-4 block w-full cursor-zoom-in"
             >
-              <ViewerImage url={imageUrls[step.id]} highlights={step.highlights ?? []} />
+              <ViewerImage
+                url={imageUrls[step.id]}
+                highlights={step.highlights ?? []}
+                width={step.image_width}
+                height={step.image_height}
+                alt={step.title ?? ""}
+              />
             </button>
           ) : placeholders ? (
             <div className="mb-4">
@@ -190,6 +207,37 @@ export function Wizard({
           <p className="mt-1 text-sm text-muted-foreground">
             Sie haben die Anleitung abgeschlossen.
           </p>
+
+          {accountSlug && tutorialSlug && (
+            <div className="mt-4">
+              {feedback === "sent" ? (
+                <p className="text-sm font-medium text-muted-foreground" role="status">
+                  Danke für Ihr Feedback!
+                </p>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-sm text-muted-foreground">War diese Anleitung hilfreich?</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => sendFeedback(true)}
+                      aria-label="Ja, hilfreich"
+                      className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+                    >
+                      <ThumbsUp className="size-4" /> Ja
+                    </button>
+                    <button
+                      onClick={() => sendFeedback(false)}
+                      aria-label="Nein, nicht hilfreich"
+                      className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+                    >
+                      <ThumbsDown className="size-4" /> Nein
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={restart}
             className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-semibold"

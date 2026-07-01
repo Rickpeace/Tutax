@@ -1,8 +1,10 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { recordEvent } from "@/lib/events";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { sanitizeSkinCss } from "@/lib/skin-css";
@@ -91,6 +93,11 @@ export default async function ViewerPage({
   if (!data) notFound();
 
   const { account, tutorial, steps, branches } = data;
+
+  // Aufruf zählen — NACH der Antwort (blockiert das Rendering nicht). Näherung:
+  // Prefetch zählt kaum mit (dynamische Route ohne loading.tsx wird nicht geprefetcht).
+  after(() => recordEvent({ account_id: account.id, type: "view", tutorial_slug }));
+
   const previewMode =
     preview && ["manual", "ai", "extreme"].includes(preview) ? preview : null;
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
@@ -179,6 +186,8 @@ export default async function ViewerPage({
           branches={branches}
           imageUrls={imageUrls}
           placeholders={tutorial.is_template}
+          accountSlug={account.slug}
+          tutorialSlug={tutorial_slug}
         />
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai, embed } from "@/lib/openai";
 import { chatSystem } from "@/lib/ai-prompts";
+import { recordEvent } from "@/lib/events";
 
 export const maxDuration = 30;
 
@@ -260,6 +261,17 @@ export async function POST(req: NextRequest) {
         const escalation = status === "no_answer" ? buildEscalation(expertIdx) : null;
 
         send({ meta: { status, sources: sources.slice(0, 3), escalation, weak: status === "no_answer" } });
+
+        // Nutzungs-Event (Insights + Frage-Lücken-Miner): Frage + Selbsteinschätzung.
+        // fire-and-forget — recordEvent wirft nie.
+        void recordEvent({
+          account_id: account.id,
+          type: "chat",
+          question,
+          status,
+          tutorial_slug: sources[0]?.slug ?? null,
+        });
+
         controller.close();
       },
     });
