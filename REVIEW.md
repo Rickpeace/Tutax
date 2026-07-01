@@ -274,6 +274,113 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 
 ---
 
+## G. Visuelles Review (echte Screenshots, 02.07.2026)
+
+17 Screenshots, Desktop (1440) + Mobile (390), öffentlich + eingeloggt.
+Gesamteindruck: Landing stark (~8/10), **Builder = stärkste Oberfläche**, Mobile
+(Hub, Chat, Builder-Bottom-Sheet) überraschend gut.
+
+> **Kontext-Entscheidung (Richard, 02.07.):** Das kräftige Rot des RichardTax-Hubs ist
+> **geklonte CI** (Jakus Tax) und gewollt — das KI-CI-Feature funktioniert. Findings
+> unten betreffen nur die *Dosierung* der Akzentfarbe, nie die Farbe selbst.
+
+- [ ] 🟠 **Chat-Widget fehlt auf den Tutorial-Seiten** (`/h/[slug]/[tutorial]`) — nur
+  der Hub hat es; genau beim Feststecken gibt es keinen Chat. → Widget auch dort.
+- [ ] 🟠 **Dashboard = Wand identischer weißer Kacheln** (26 Stück, kein Blickanker):
+  keine Thumbnails, und der Publish-Toggle steht ÜBER dem Titel (erstes Lese-Element
+  ist ein Schalter). → Thumbnail (erstes Schritt-Bild) + Titel zuerst.
+- [ ] 🟡 **Landing-Hero zeigt Wireframe-Mock statt Produkt** → echten
+  Builder-Screenshot (Browser-Rahmen) einsetzen; „bald"-Badge bei „KI übernimmt Ihr
+  CI" entfernen (Feature ist live).
+- [ ] 🟡 Landing endet nach dem CTA: **Preise-, FAQ-, Demo-Hub-Sektion fehlen**
+  (deckt sich mit B/Monetarisierung).
+- [ ] 🟡 **Wizard auf Desktop zu schmal** (Karte ~430 px in 1440, Titel klein) →
+  breiter (max-w-xl/2xl), größerer Schritt-Titel, Fortschritt „Schritt x von y",
+  Bild-Lightbox (mobil: Tap-to-Zoom).
+- [ ] 🟡 Hilfe-Seiten **Akzent-Dosierung** (Empfehlung, CI bleibt): Markenfarbe färbt
+  jeden Kartenrahmen, jeden Titel, alle Icons → Titel in Ink, Rahmen neutral/dezenter
+  Tint; Akzent konzentriert auf Logo/Topbar/Buttons/Chat-Bubble. Wirkt ruhiger,
+  CI bleibt klar erkennbar.
+- [ ] 🟡 Dashboard mobil: endloser Ein-Spalten-Scroll → sticky Kategorie-Sprungleiste
+  oder einklappbare Sektionen. **Produkt-Nebenfund:** kein Bulk-Löschen/Archivieren
+  (15 Test-Tutorials unter „Sonstiges" ohne Aufräum-Werkzeug).
+- [ ] ⚪ Chat-Panel: fixe Höhe lässt Leerraum; Bot-Antwort könnte direkter zum Klick
+  auf die verlinkte Anleitung auffordern.
+- [x] ~~Mobile-App-Header quillt über~~ — nach Sichtung **herabgestuft**: komprimiert
+  ordentlich (E-Mail wird ausgeblendet).
+
+**Positiv bestätigt:** Builder-Zweispalter + Mobile-Bottom-Sheet exzellent;
+Chat-Streaming mit Quellen-Chip stark; Hub-Layout (Suche/Kategorien/Karten) gut;
+Landing-Typo/Bento/Rhythmus professionell.
+
+---
+
+## H. Produkt-Erweiterungen (Backlog — „geil"-Kandidaten)
+
+**Schwungrad (Produkt verbessert sich selbst):**
+- [ ] ⭐ **Frage-Lücken-Miner** (M): `no_answer`-Chatfragen sammeln → „Diese 7 Fragen
+  blieben unbeantwortet — Tutorial erstellen?" → KI legt Entwurfs-Rahmen an.
+  Schließt die Schleife Content → Chat → Content. Kein Wettbewerber hat das.
+- [ ] **Aktualitäts-Autopilot** (M): Drift-Check als Cron + Digest-Mail + 1-Klick-
+  Übernahme („Deine Hilfe hält sich selbst aktuell" = Abo-Argument).
+- [ ] **Semantische Endkunden-Suche** (S): vorhandenes pgvector-RAG ins Hub-Suchfeld.
+
+**Reichweite & Verteilung:**
+- [ ] ⭐ **Script-Chat-Bubble** (M): ein `<script>`-Tag → KI-Hilfe schwebt auf JEDER
+  Seite der Firmen-Website, nicht nur im Hub. Größter Adoptions-Hebel.
+- [ ] **Custom Domain** (M): `hilfe.firma.de` per CNAME — White-Label komplett,
+  klassisches Bezahl-Feature.
+- [ ] **QR-Codes pro Tutorial** (S): für Brief, Rechnung, Aushang, Gerät.
+
+**Neuer Markt (großer Hebel):**
+- [ ] ⭐ **Interne Tutorials + Schulungsnachweis** (L): Zugriffsschutz (Login/Einladung)
+  + „Mitarbeiter X hat Anleitung Y am … durchgearbeitet ✓" → SOP-/Onboarding-Markt
+  (Scribes Kernmarkt); Video-Pipeline ist dort stärker (Desktop-Software).
+- [ ] **Freigabe-Workflow** (M): Entwurf → Review → Freigabe durch Owner (Teams ≥5).
+
+**Endkunde:**
+- [ ] **Inline-Feedback pro Schritt** (S–M): „Hier komme ich nicht weiter" am Schritt
+  (ergänzt „War das hilfreich?" aus A) → zeigt exakt den schwachen Schritt.
+
+**Top-3-Empfehlung:** Frage-Lücken-Miner · Script-Bubble · Interne Tutorials.
+Story: *überall erreichbar → weiß, was fehlt → funktioniert auch nach innen.*
+
+---
+
+## I. Video→Tutorial-Pipeline (Kern-Feature — Roadmap)
+
+**Nächstes Paket (abgesegnet 01.07.):**
+- [ ] ① **Fortschritt + Live-Aufbau**: `video_jobs.progress` („Schritt 3/6"), Tutorial
+  früh als Draft anlegen + Schritte einfügen sobald fertig; „Wird erstellt…"-Karte im
+  Dashboard → Dialog darf zu, kein „Fenster offen lassen" mehr.
+- [ ] ② **Timestamps → Scrubber**: `video_path` + Zeitpunkt pro Schritt speichern; im
+  Builder „anderes Bild aus dem Video wählen" (Mini-Timeline). Macht KI-Fehlgriffe zu
+  5-Sekunden-Fixes statt Neuaufnahmen.
+- [ ] ③ **Quick-Wins**: Whisper `prompt:"Schnitt"` (Marker-Bias) + Marker-Varianten
+  konfigurierbar + Sprache als Konto-Setting statt hart `de`; Vision-Calls parallel
+  (3–4); Retry mit Backoff um alle OpenAI-Calls; schärfsten von 3 Kandidaten-Frames
+  wählen; Frames auf ~1280 px für Vision verkleinern (Kosten).
+
+**Danach:**
+- [ ] Szenen-Erkennung (ffmpeg `scdet`) als Fallback ohne Ton (statt Gleichverteilung).
+- [ ] **Mini-Clip/GIF pro Schritt** (2–4 s Loop aus dem Video) — Marktlücke: Scribe hat
+  nur Screenshots, Loom keine Schritte.
+- [ ] **Auto-Redaktion**: Vision findet sensible Stellen (Namen, IBAN, Kundennr.) →
+  Blur-Vorschläge. Setzt Top-1 „Blur einbrennen" voraus → macht daraus ein Premium-Feature.
+- [ ] Mehrsprachige Ausgabe (Übersetzungs-Pass über fertige Schritte).
+- [ ] Import per Loom-/MP4-Link („bring dein vorhandenes Video mit").
+- [ ] E-Mail „Tutorial ist fertig → im Builder öffnen".
+
+**Nordstern:**
+- [ ] **Browser-Extension mit Klick- + DOM-Telemetrie**: exakte Highlights ohne
+  Vision-Raten, Schrittgrenzen aus echten Klicks, „Schnitt" optional. Kombi-USP:
+  Extension für Web-Apps **plus** Video-Pipeline für Desktop-Software (DATEV & Co.) —
+  das kann kein Wettbewerber beides.
+
+> ⚠️ Worker-Änderungen wirken erst nach menschlich ausgelöstem `deploy.sh` (Hetzner).
+
+---
+
 ## Muster (was wir strukturell besser machen)
 
 1. **„Demo-fertig" ≠ „belastbar fertig":** Vor jedem Feature-Haken fragen: *Was
@@ -285,15 +392,65 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 4. **Zielgruppe scharf ziehen:** Kanzlei-Sprache in Landing + Beispielen, oder
    bewusst generisch dokumentieren.
 
-## Roadmap
+## Umsetzungsplan (Wellen · Wer · Wie)
 
-**Sofort (Risiko/Vertrauen):** Blur einbrennen → Impressum/Datenschutz echt + KI-
-Hinweis → error/not-found gebrandet → Publish-Erfolgsmoment → Kontrast-Ableitung →
-Security-Header → OpenAI-Timeout + suggest-Cap.
+### Arbeitsmodell (vereinbart 02.07.2026)
 
-**Kurzfristig (Geschäft/Sichtbarkeit):** Stripe + Limit-Gating · OG/SEO-Paket ·
-„War das hilfreich?" + Events · Schritt-Umordnen · RichText-Links · KB-Guard ·
-HNSW-Index · Sentry · CI-Action.
+- **Fable (Claude Fable 5)** = Architekt + Reviewer + Gate: schreibt pro Welle das
+  präzise Arbeitspaket (Scope = Checkboxen aus diesem Dokument + Akzeptanzkriterien),
+  reviewt den Diff, macht Stichproben/Screenshots, merged erst dann nach `main`.
+  Ausnahme: **sicherheitskritische Kern-Fixes codet Fable selbst** (Blur-Einbrennen,
+  Security-Header).
+- **Opus (Claude Opus 4.8)** = Umsetzung: codet die Arbeitspakete **nur auf
+  `staging`**, hält die AGENTS.md-Verifikationspflicht ein (`npm run build` grün +
+  relevante `scripts/test-*-live.mjs`; bei UI-Änderungen zusätzlich Screenshot),
+  committed batch-weise mit klaren Messages, pusht **nur staging — nie main**.
+  Pflicht-Lektüre vor Start: `AGENTS.md`, Skill `tutax-frontend`, betroffene
+  REVIEW.md-Abschnitte, `OVERVIEW.md`.
+- **Gate-Ablauf:** Opus pusht staging → Fable reviewt `staging..main`-Diff → Findings
+  zurück an Opus ODER ff-merge nach `main` (= Prod-Deploy via Vercel) → Checkboxen
+  hier abhaken.
+- **Richard (Mensch):** `deploy.sh` für Worker-Wellen; **echte Impressums-/
+  Datenschutz-Angaben** liefern (kann keine KI erfinden); Stripe-Konto + Keys;
+  visuelle Abnahme pro Welle; strategische Entscheidungen.
 
-**Mittelfristig:** Kanzlei-Landing + Demo-Hub · Druckansicht · Wizard-Resume ·
-Bild-Transform · cacheComponents-Pilot · Redis-Rate-Limit · i18n.
+### Wellen (Reihenfolge)
+
+**Welle 1 — Risiko & Vertrauen** *(zuerst; Blur + Header: Fable selbst)*
+Blur in Pixel einbrennen (Top-1) · error.tsx/not-found.tsx/global-error.tsx gebrandet
+(Root + /h) · Security-Header via next.config (frame-ancestors DENY außer /h) ·
+OpenAI-Client-Timeout + steps/suggest-Cap+maxDuration · Publish-Erfolgsmoment (Toast
+mit Link) · Kontrast-Ableitung für zu helle Brand-Farben · Impressum/Datenschutz-
+Struktur + OpenAI-Passus + KI-Hinweis im Chat + Rechts-Links im /h-Footer
+*(Inhalte: Richard)*.
+
+**Welle 2 — Sichtbarkeit & Funnel** *(Opus)*
+OG/SEO-Paket (metadataBase, descriptions, og-Image mit Kanzlei-Logo, robots.ts,
+sitemap.ts) · Landing: echter Builder-Screenshot in den Hero, Preis-Sektion,
+FAQ, „bald"-Badge weg, Demo-Hub verlinken · G-Visuelles: Dashboard-Thumbnails +
+Titel-zuerst, Wizard breiter + Fortschritt + Lightbox, Chat-Widget auf
+Tutorial-Seiten, Akzent-Dosierung, leere-Suche-CTA.
+
+**Welle 3 — Video-Pipeline ①②③** *(Opus; Review besonders streng; danach deploy.sh)*
+Komplett Abschnitt I, „Nächstes Paket". Live-Test mit echtem Video Pflicht.
+
+**Welle 4 — Geschäft** *(Opus; Stripe-Setup: Richard)*
+Stripe Checkout + Customer Portal + Webhooks · Limit-Gating (5 Tutorials free,
+Branding-Features) · Abo-Seite echt (Platzhalter-Fußnote raus) · „War das
+hilfreich?" + events-Tabelle + Mini-Insights-Karte im Dashboard.
+
+**Welle 5 — Builder- & Ränder-Politur** *(Opus)*
+Schritt-Umordnen · RichText-Links (Editor + Viewer!) · KB-Verlassen-Guard +
+beforeunload · „Bild ersetzen"-Nachfrage zu Highlights · Frage-Toggle-Confirm +
+Orphan-Hinweis · Drift-Cooldown + Alert-Link · HNSW-Index + (source_type,source_id)-
+Index · updated_at-Trigger · Sentry + instrumentation env-Check · GitHub-Action
+(build+lint) · E-Mail ändern · Bulk-Löschen/Archiv · Chat-Retry-Button · A11y-Paket
+(Chat-Dialog-Rollen, aria-live, Wizard-Fokus, Suchfeld-Label).
+
+**Welle 6 — Wachstum** *(je Feature eigenes Konzept vorab)*
+Frage-Lücken-Miner → Script-Bubble → semantische Suche → QR-Codes → Custom Domain →
+interne Tutorials + Nachweis → Freigabe-Workflow. Danach: Pipeline-„Danach"-Liste
+(Clips, Auto-Redaktion, Import), cacheComponents-Pilot, Redis-Rate-Limit, i18n.
+
+**Bewusst zurückgestellt:** M7 updatePassword-Recovery (Plan liegt in F),
+getClaims-Middleware (nur bei Bedarf), Nordstern-Extension (nach Welle 6).
