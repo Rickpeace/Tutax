@@ -1,0 +1,25 @@
+# Minimal-Gate: Typecheck + Lint bei jedem Push/PR. Bewusst OHNE `next build`
+# (bräuchte Supabase-Env-Secrets); Vercel baut ohnehin pro Deploy.
+name: CI
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      # Lint hat noch ~26 Alt-Findings im Bestand -> informativ, nicht blockierend.
+      # Sobald der Bestand aufgeräumt ist: continue-on-error entfernen.
+      - name: Lint (informativ)
+        run: npm run lint
+        continue-on-error: true
