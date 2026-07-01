@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# lokale Test-/Prototyp-Skripte (Video-Pipeline) – bewusst NICHT im Repo
+/video-to-tutorial.mjs
+/test-video-live.mjs
+/fetch-live-boxes.mjs
+/seg-stability.mjs
+/delete-test-drafts.mjs
