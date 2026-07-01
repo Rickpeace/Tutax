@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square } from "lucide-react";
+import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -134,10 +134,23 @@ export function VideoUpload({ accountId }: { accountId: string }) {
         {phase === "idle" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Mach die Aufgabe einmal vor und erklär dabei ganz normal. Wenn ein Schritt fertig ist
-              (Maus auf dem Ziel), sag einfach <b>„Schnitt"</b> — daraus wird ein Schritt mit Screenshot
-              und Markierung. Kein Timing, keine Zauberwörter sonst.
+              Mach die Aufgabe einmal vor und erklär dabei ganz normal. Nach jedem Schritt sagst du
+              <b> „Schnitt"</b> — daraus wird ein Schritt mit Screenshot und Markierung.
             </p>
+
+            <div className="space-y-2 rounded-lg border border-line-2 bg-muted/40 p-3 text-xs text-muted-foreground">
+              <p className="flex items-center gap-1.5 font-semibold text-ink">
+                <Info className="size-3.5 text-primary" /> So wird die Aufnahme am besten
+              </p>
+              <ol className="list-decimal space-y-1 pl-4 marker:text-muted-foreground">
+                <li>Zeig die Aufgabe <b>einmal in Ruhe</b> vor und sprich dabei, als würdest du sie einem Kollegen erklären.</li>
+                <li>Bewege die <b>Maus aufs Ziel</b> (Knopf/Feld) und halt kurz drauf, bevor du klickst.</li>
+                <li>Ist der Schritt fertig, sag <b>„Schnitt"</b> — das trennt sauber zum nächsten Schritt.</li>
+                <li>Ruhig arbeiten, nicht hetzen. Am Ende auf <b>„Aufnahme beenden"</b>.</li>
+              </ol>
+              <p className="pt-0.5">Kein Sekunden-Zählen, keine anderen Zauberwörter nötig. Feinschliff geht danach im Editor.</p>
+            </div>
+
             <input ref={fileRef} type="file" accept="video/*" onChange={onPick} className="hidden" />
             <Button className="w-full" onClick={startRecording}>
               <Circle className="size-4 fill-current text-no" /> Jetzt aufnehmen (Bildschirm + Mikro)
