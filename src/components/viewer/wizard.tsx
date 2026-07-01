@@ -41,6 +41,36 @@ export function Wizard({
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<"sent" | null>(null);
 
+  // Position übersteht Reload/Zurück (REVIEW A1): pro Tutorial in sessionStorage.
+  // Nur wiederherstellen, wenn alle gespeicherten Schritt-IDs noch existieren
+  // (Tutorial könnte inzwischen geändert worden sein).
+  const storKey =
+    accountSlug && tutorialSlug ? `steply-wiz-${accountSlug}-${tutorialSlug}` : null;
+  useEffect(() => {
+    if (!storKey) return;
+    try {
+      const raw = sessionStorage.getItem(storKey);
+      if (!raw) return;
+      const s = JSON.parse(raw) as { cur?: string | null; history?: string[] };
+      if (!Array.isArray(s.history)) return;
+      const validCur = s.cur === null || (typeof s.cur === "string" && stepById.has(s.cur));
+      const validHist = s.history.every((h) => typeof h === "string" && stepById.has(h));
+      if (validCur && validHist && (s.cur !== rootId || s.history.length > 0)) {
+        setCur(s.cur ?? null);
+        setHistory(s.history);
+      }
+    } catch {
+      /* Tracking-Komfort darf nie brechen */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storKey]);
+  useEffect(() => {
+    if (!storKey) return;
+    try {
+      sessionStorage.setItem(storKey, JSON.stringify({ cur, history }));
+    } catch {}
+  }, [cur, history, storKey]);
+
   const sendFeedback = (helpful: boolean) => {
     setFeedback("sent"); // optimistisch — Tracking darf den Endkunden nie blockieren
     if (accountSlug && tutorialSlug) void recordFeedback(accountSlug, tutorialSlug, helpful);
