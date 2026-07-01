@@ -65,18 +65,15 @@ export function TutorialHeader({
   }
 
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-      <div className="flex min-w-0 items-start gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="mt-0.5 shrink-0 text-muted-foreground"
-          nativeButton={false}
-          render={<Link href="/app" aria-label="Zurück zur Übersicht" title="Zurück" />}
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
+    <div className="mb-6">
+      <Link
+        href="/app"
+        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-ink"
+      >
+        <ChevronLeft className="size-4" /> Zurück
+      </Link>
 
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           {editing ? (
             <input
@@ -97,7 +94,7 @@ export function TutorialHeader({
               }}
               placeholder="Titel der Anleitung"
               aria-label="Tutorial-Titel"
-              className="-mx-1.5 w-full rounded-md border border-ring bg-card px-1.5 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none"
+              className="w-full rounded-md border border-ring bg-card px-2 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none"
             />
           ) : (
             <div className="flex items-start gap-1.5">
@@ -119,7 +116,7 @@ export function TutorialHeader({
               </Button>
             </div>
           )}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 px-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={togglePublish}
@@ -140,18 +137,18 @@ export function TutorialHeader({
             <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
           </div>
         </div>
-      </div>
 
-      <div className="flex shrink-0 items-center gap-2">
-        <DriftCheckButton tutorialId={tutorialId} />
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={`/app/preview/${tutorialId}`} target="_blank" rel="noopener noreferrer" />}
-        >
-          <Eye className="size-4" /> Vorschau
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <DriftCheckButton tutorialId={tutorialId} />
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/app/preview/${tutorialId}`} target="_blank" rel="noopener noreferrer" />}
+          >
+            <Eye className="size-4" /> Vorschau
+          </Button>
+        </div>
       </div>
     </div>
   );
