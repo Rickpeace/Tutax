@@ -104,26 +104,16 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
   const link = `${appUrl()}/invite/${token}`;
   revalidatePath("/app/settings/team");
 
-  // 1) Bevorzugt: eigene Einladungs-Mail via Resend – funktioniert für NEUE UND
-  //    BESTEHENDE Adressen gleichermaßen (keine email_exists-Sackgasse).
+  // Einladungs-Mail über Resend (funktioniert für neue UND bestehende Adressen).
+  // BEWUSST KEIN Supabase-inviteUserByEmail-Fallback: das würde sofort einen
+  // passwortlosen Auth-User anlegen ("Einladungs-Leiche"). Der Auth-User entsteht
+  // erst beim Annehmen (acceptInvite). Klappt der Mailversand nicht -> Link teilen.
   if (await sendInviteEmail(email, account.name, link, role)) {
     return { ok: true, message: `Einladung an ${email} gesendet.`, link };
   }
-
-  // 2) Fallback ohne Resend-Konfiguration: für NEUE Adressen die Supabase-Invite-Mail;
-  //    für bestehende bleibt der Link zum Teilen.
-  const { error: mailErr } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { tutax_invite_token: token },
-    redirectTo: link,
-  });
-  if (!mailErr) return { ok: true, message: `Einladung an ${email} gesendet.`, link };
-  const status = (mailErr as { status?: number }).status;
-  if ((mailErr as { code?: string }).code === "over_email_send_rate_limit" || status === 429) {
-    return { ok: false, message: "E-Mail-Limit erreicht. Bitte später erneut – oder diesen Link teilen:", link };
-  }
   return {
     ok: true,
-    message: "Diese Adresse hat schon ein Konto (oder E-Mail-Versand ist nicht konfiguriert). Teile ihr diesen Beitritts-Link:",
+    message: "E-Mail-Versand ist nicht konfiguriert – teile der Person einfach diesen Beitritts-Link:",
     link,
   };
 }
