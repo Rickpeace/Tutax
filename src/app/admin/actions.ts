@@ -103,6 +103,21 @@ export async function deleteTemplateCategory(id: string) {
   revalidatePath("/admin");
 }
 
+// ---- Kunden-Konten -----------------------------------------------------------
+
+/**
+ * Tarif eines Kunden-Kontos manuell setzen (Vollzugriff OHNE Zahlungsanbieter —
+ * Richards Anforderung). Später setzt der LemonSqueezy-Webhook denselben Wert.
+ */
+export async function setAccountPlan(accountId: string, plan: "free" | "pro") {
+  await ensureAdmin();
+  if (plan !== "free" && plan !== "pro") throw new Error("Ungültiger Tarif");
+  const admin = createAdminClient();
+  const { error } = await admin.from("accounts").update({ plan }).eq("id", accountId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin");
+}
+
 /** Template einer globalen Kategorie zuordnen (oder lösen mit null). */
 export async function setTemplateCategory(templateId: string, categoryId: string | null) {
   await ensureAdmin();

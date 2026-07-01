@@ -1,13 +1,15 @@
-import { AlertTriangle, FileText } from "lucide-react";
+import { AlertTriangle, FileText, Crown } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NewTemplateButton } from "@/components/admin/new-template-button";
 import { TemplateActions } from "@/components/admin/template-actions";
 import { CategoryManager } from "@/components/admin/category-manager";
 import { TemplateCategorySelect } from "@/components/admin/template-category-select";
+import { Button } from "@/components/ui/button";
+import { setAccountPlan } from "./actions";
 
 export default async function AdminTemplatesPage() {
   const admin = createAdminClient();
-  const [{ data: templates }, { data: categories }] = await Promise.all([
+  const [{ data: templates }, { data: categories }, { data: accounts }] = await Promise.all([
     admin
       .from("tutorials")
       .select("id, title, status, slug, freshness, category_id")
@@ -18,10 +20,15 @@ export default async function AdminTemplatesPage() {
       .select("id, name, position")
       .is("account_id", null)
       .order("position", { ascending: true }),
+    admin
+      .from("accounts")
+      .select("id, name, slug, plan, created_at")
+      .order("created_at", { ascending: true }),
   ]);
 
   const list = templates ?? [];
   const cats = categories ?? [];
+  const accs = accounts ?? [];
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
@@ -35,7 +42,45 @@ export default async function AdminTemplatesPage() {
         <NewTemplateButton />
       </div>
 
-      <div className="mt-6">
+      {/* Kunden-Konten: Tarif manuell schalten (Vollzugriff ohne Zahlungsanbieter). */}
+      <section className="mt-8">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+          Kunden-Konten &amp; Tarif
+        </h2>
+        <div className="mt-3 space-y-2">
+          {accs.map((a) => {
+            const pro = a.plan === "pro";
+            return (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
+              >
+                <span
+                  className={
+                    pro
+                      ? "flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
+                      : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground"
+                  }
+                >
+                  {pro && <Crown className="size-3" />} {pro ? "Pro" : "Free"}
+                </span>
+                <span className="font-bold text-ink">{a.name}</span>
+                <span className="text-xs text-muted-foreground">/h/{a.slug}</span>
+                <form
+                  action={setAccountPlan.bind(null, a.id, pro ? "free" : "pro")}
+                  className="ml-auto"
+                >
+                  <Button type="submit" variant={pro ? "ghost" : "outline"} size="sm">
+                    {pro ? "Auf Free zurückstufen" : "Pro freischalten"}
+                  </Button>
+                </form>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="mt-8">
         <CategoryManager categories={cats} />
       </div>
 

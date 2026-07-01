@@ -8,7 +8,8 @@ import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
-import type { Step, StepBranch, Tutorial } from "@/lib/types";
+import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
+import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
@@ -32,12 +33,39 @@ export async function setActiveAccount(accountId: string) {
   revalidatePath("/", "layout");
 }
 
+/**
+ * Free-Limit: zählt eigene Tutorials (OHNE Template-Forks — die sind Teil des
+ * Template-Features und sollen nicht aufs Limit schlagen). Pro = unbegrenzt.
+ */
+async function tutorialQuotaReached(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  account: Account,
+): Promise<boolean> {
+  if (isPro(account)) return false;
+  const [{ count: total }, { count: forks }] = await Promise.all([
+    supabase
+      .from("tutorials")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", account.id),
+    supabase
+      .from("account_templates")
+      .select("template_id", { count: "exact", head: true })
+      .eq("account_id", account.id)
+      .not("forked_tutorial_id", "is", null),
+  ]);
+  return (total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT;
+}
+
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */
 export async function createTutorial(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim() || "Neues Tutorial";
   const categoryId = (String(formData.get("category_id") ?? "") || null) as string | null;
   const { account } = await requireAccount();
   const supabase = await createClient();
+
+  if (await tutorialQuotaReached(supabase, account)) {
+    redirect("/app/settings/abo?limit=tutorials");
+  }
 
   const { data, error } = await supabase
     .from("tutorials")
@@ -74,6 +102,10 @@ export async function deleteTutorial(id: string) {
 export async function duplicateTutorial(id: string) {
   const { account } = await requireAccount();
   const supabase = await createClient();
+
+  if (await tutorialQuotaReached(supabase, account)) {
+    redirect("/app/settings/abo?limit=tutorials");
+  }
 
   const { data: src, error: e1 } = await supabase
     .from("tutorials")

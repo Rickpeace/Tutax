@@ -4,12 +4,15 @@ export type TutorialStatus = "draft" | "published";
 export type Freshness = "ok" | "stale" | "checking";
 export type ThemeStatus = "draft" | "analyzing" | "ready" | "failed";
 
+export type AccountPlan = "free" | "pro";
+
 export type Account = {
   id: string;
   name: string;
   slug: string;
   custom_domain: string | null;
   onboarded: boolean;
+  plan: AccountPlan;
   created_at: string;
 };
 
