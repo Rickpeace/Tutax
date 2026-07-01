@@ -58,5 +58,6 @@ export async function deleteArticle(id: string) {
   const { error } = await supabase.from("kb_articles").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/app/knowledge");
-  redirect("/app/knowledge");
+  // Kein redirect() hier: der Client navigiert nach Erfolg (sonst faengt sein
+  // try/catch den NEXT_REDIRECT und zeigt ihn faelschlich als Fehler-Toast).
 }

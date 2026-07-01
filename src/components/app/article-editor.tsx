@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 type Article = { id: string; title: string; body: unknown; status: string };
 
 export function ArticleEditor({ article }: { article: Article }) {
+  const router = useRouter();
   const [title, setTitle] = useState(article.title);
   const [body, setBody] = useState<unknown>(article.body);
   const [published, setPublished] = useState(article.status === "published");
@@ -63,6 +65,8 @@ export function ArticleEditor({ article }: { article: Article }) {
       start(async () => {
         try {
           await deleteArticle(article.id);
+          toast.success("Artikel gelöscht");
+          router.push("/app/knowledge");
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Fehler");
         }

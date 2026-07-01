@@ -89,10 +89,12 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
       };
     }
     if (code === "email_exists") {
+      // Existierender Auth-User: Recovery-Mail -> Passwort setzen + über /invite beitreten.
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo: link }).catch(() => {});
       return {
         ok: true,
         message:
-          "Diese Adresse hat bereits ein Konto. Schicke ihr diesen Link – nach dem Login tritt sie automatisch dem Team bei:",
+          "Diese Adresse hat schon ein Konto – wir haben ihr eine E-Mail zum Beitreten geschickt. Alternativ diesen Link teilen:",
         link,
       };
     }
