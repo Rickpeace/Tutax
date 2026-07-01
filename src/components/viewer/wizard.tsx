@@ -100,8 +100,8 @@ export function Wizard({
                     onClick={() => go(b.target_step_id)}
                     className="w-full border-2 bg-white px-4 py-3 text-base font-bold transition-transform active:translate-y-px"
                     style={{
-                      borderColor: b.color ?? "var(--brand-accent)",
-                      color: b.color ?? "var(--brand-accent)",
+                      borderColor: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
+                      color: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
                       borderRadius: "var(--brand-btn-radius, 12px)",
                     }}
                   >
@@ -129,8 +129,8 @@ export function Wizard({
       ) : (
         <div className="flex flex-col items-center py-8 text-center">
           <div
-            className="flex size-14 items-center justify-center rounded-full text-white"
-            style={{ background: "var(--brand-accent)" }}
+            className="flex size-14 items-center justify-center rounded-full"
+            style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
           >
             <Check className="size-7" />
           </div>
@@ -140,8 +140,12 @@ export function Wizard({
           </p>
           <button
             onClick={restart}
-            className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-semibold text-white"
-            style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-btn-radius, 12px)" }}
+            className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-semibold"
+            style={{
+              background: "var(--brand-accent)",
+              color: "var(--brand-accent-fg, #fff)",
+              borderRadius: "var(--brand-btn-radius, 12px)",
+            }}
           >
             <RotateCcw className="size-4" /> Von vorne
           </button>
@@ -191,8 +195,12 @@ function NextButton({
     <button
       data-tx="btn"
       onClick={() => onNext(target)}
-      className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-semibold text-white transition-transform active:translate-y-px"
-      style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-btn-radius, 12px)" }}
+      className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-semibold transition-transform active:translate-y-px"
+      style={{
+        background: "var(--brand-accent)",
+        color: "var(--brand-accent-fg, #fff)",
+        borderRadius: "var(--brand-btn-radius, 12px)",
+      }}
     >
       {hasNext ? (
         <>

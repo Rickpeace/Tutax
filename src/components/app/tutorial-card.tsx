@@ -69,13 +69,30 @@ export function TutorialCard({
   const toggleLive = () => {
     const next = !live;
     setLive(next);
-    const action = next
-      ? publishTutorial(tutorial.id).then(() => undefined)
-      : unpublishTutorial(tutorial.id);
-    Promise.resolve(action).catch(() => {
-      setLive(!next);
-      toast.error("Konnte nicht speichern");
-    });
+    if (next) {
+      publishTutorial(tutorial.id)
+        .then(({ slug, accountSlug: acc }) => {
+          const url = `${window.location.origin}/h/${acc}/${slug}`;
+          toast.success("Veröffentlicht! 🎉", {
+            description: url,
+            action: {
+              label: "Live ansehen",
+              onClick: () => window.open(url, "_blank", "noopener,noreferrer"),
+            },
+          });
+        })
+        .catch(() => {
+          setLive(false);
+          toast.error("Konnte nicht speichern");
+        });
+    } else {
+      unpublishTutorial(tutorial.id)
+        .then(() => toast("Nicht mehr öffentlich."))
+        .catch(() => {
+          setLive(true);
+          toast.error("Konnte nicht speichern");
+        });
+    }
   };
 
   return (

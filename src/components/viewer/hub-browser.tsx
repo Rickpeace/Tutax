@@ -53,11 +53,27 @@ export function HubBrowser({
       </div>
 
       {groups.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          {items.length === 0
-            ? "Noch keine veröffentlichten Anleitungen."
-            : "Keine Anleitung gefunden."}
-        </p>
+        items.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Noch keine veröffentlichten Anleitungen.
+          </p>
+        ) : (
+          <div className="flex flex-col items-center py-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              Keine Anleitung zu &bdquo;{q.trim()}&ldquo; gefunden.
+            </p>
+            <button
+              onClick={() => setQ("")}
+              className="mt-3 rounded-lg border border-black/10 bg-white px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+            >
+              Suche zurücksetzen
+            </button>
+            <p className="mt-4 max-w-xs text-xs text-muted-foreground">
+              Nicht das Richtige dabei? Fragen Sie den Hilfe-Assistenten unten
+              rechts.
+            </p>
+          </div>
+        )
       ) : (
         groups.map((g) => (
           <section key={g.name} data-tx="cats" className="mb-6">
