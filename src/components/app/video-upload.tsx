@@ -22,6 +22,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [noMic, setNoMic] = useState(false);
   const [tutorialId, setTutorialId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [secs, setSecs] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
@@ -29,9 +30,11 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const streamsRef = useRef<MediaStream[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Job-Status pollen (mit Gesamt-Timeout, damit der Spinner nicht ewig dreht)
+  // Job-Status pollen (mit Gesamt-Timeout, damit der Spinner nicht ewig dreht).
+  // Deps nur [jobId]: der Effect beendet sich bei Terminal-Status selbst via clearInterval,
+  // statt bei jedem Phasenwechsel neu zu starten (sonst Doppel-Poll + Timeout-Reset).
   useEffect(() => {
-    if (!jobId || phase === "done" || phase === "failed") return;
+    if (!jobId) return;
     const supabase = createClient();
     const startedAt = Date.now();
     const MAX_MS = 12 * 60 * 1000; // nach 12 Min. aufgeben (Worker down / haengt)
@@ -39,20 +42,21 @@ export function VideoUpload({ accountId }: { accountId: string }) {
       if (Date.now() - startedAt > MAX_MS) {
         setError("Die Verarbeitung dauert ungewöhnlich lange. Schau später bei deinen Tutorials nach oder versuch es erneut.");
         setPhase("failed");
+        clearInterval(iv);
         return;
       }
       const { data, error } = await supabase
         .from("video_jobs")
-        .select("status, tutorial_id, error")
+        .select("status, tutorial_id, error, note")
         .eq("id", jobId)
         .maybeSingle();
       if (error || !data) return; // transienter Fehler -> weiter pollen bis Timeout
       if (data.status === "processing") setPhase("processing");
-      if (data.status === "done") { setTutorialId(data.tutorial_id); setPhase("done"); }
-      if (data.status === "failed") { setError(data.error || "Verarbeitung fehlgeschlagen."); setPhase("failed"); }
+      if (data.status === "done") { setTutorialId(data.tutorial_id); setNote(data.note ?? null); setPhase("done"); clearInterval(iv); }
+      if (data.status === "failed") { setError(data.error || "Verarbeitung fehlgeschlagen."); setPhase("failed"); clearInterval(iv); }
     }, 4000);
     return () => clearInterval(iv);
-  }, [jobId, phase]);
+  }, [jobId]);
 
   async function uploadAndQueue(blob: Blob, ext: string, niceName: string) {
     setPhase("uploading");
@@ -128,7 +132,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
     streamsRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
-    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setSecs(0); setNoMic(false);
+    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setSecs(0); setNoMic(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -208,6 +212,12 @@ export function VideoUpload({ accountId }: { accountId: string }) {
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <CheckCircle2 className="size-8 text-yes" />
             <p className="text-sm font-medium text-ink">Entwurf ist fertig! 🎉</p>
+            {note && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300/40 bg-amber-50 p-2.5 text-left text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                <Info className="mt-0.5 size-3.5 shrink-0" />
+                <span>{note}</span>
+              </div>
+            )}
             {tutorialId && (
               <Link href={`/app/tutorials/${tutorialId}`} className="w-full">
                 <Button className="w-full">Im Builder öffnen &amp; anpassen</Button>

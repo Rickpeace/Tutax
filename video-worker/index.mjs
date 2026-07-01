@@ -81,7 +81,15 @@ async function buildTutorial(job, videoPath, dir) {
   try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
   if (!isFinite(duration) || duration < 1) throw new Error("Video konnte nicht gelesen werden (evtl. Aufnahme unvollständig/zu kurz). Bitte erneut aufnehmen.");
   let vdim = [null, null];
-  try { vdim = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number); } catch { /* dims optional */ }
+  try {
+    const wh = sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=s=x:p=0", videoPath]).trim().split("x").map(Number);
+    // Rotations-Metadaten (Handy-Hochkant) berücksichtigen: ffmpeg extrahiert die Frames
+    // AUTO-ROTIERT, ffprobe liefert aber die codierten (unrotierten) Maße -> bei ±90° tauschen,
+    // sonst passen die gespeicherten Bildmaße nicht zum Bild und Highlights verrutschen.
+    let rot = 0;
+    try { rot = Math.abs(parseInt(sh("ffprobe", ["-v","error","-select_streams","v:0","-show_entries","stream_side_data=rotation","-of","default=nw=1:nk=1", videoPath]).trim(), 10)) || 0; } catch { /* keine Rotation */ }
+    vdim = (rot === 90 || rot === 270) ? [wh[1], wh[0]] : [wh[0], wh[1]];
+  } catch { /* dims optional */ }
 
   // 1) Audio -> Whisper (mit Wort-Zeitstempeln für die Marker-Erkennung)
   const audio = path.join(dir, "audio.mp3");
@@ -95,6 +103,12 @@ async function buildTutorial(job, videoPath, dir) {
   //     erst Schritt machen + Maus aufs Ziel, dann "Schnitt" sagen). Schnitt genau dort,
   //     Screenshot KURZ DAVOR (Maus auf dem Ziel) — kein Sekunden-Zählen nötig.
   const cuts = (tr.words || []).filter((w) => norm(w.word) === "schnitt").map((w) => +w.start).sort((a, b) => a - b);
+  // Nutzer hat "Schnitt" gesprochen, aber es kamen keine Marker an (fehlende Wort-Zeitstempel
+  // von Whisper) -> ehrlicher Hinweis, statt still auf den schwächeren Fallback zu gehen.
+  let note = null;
+  const saidSchnitt = /schnitt/i.test(tr.text || "") || segs.some((s) => /schnitt/i.test(s.text));
+  if (saidSchnitt && !cuts.length)
+    note = "Du hast \"Schnitt\" gesagt, aber die Schnitt-Marker konnten nicht sauber erkannt werden. Die Schritte wurden automatisch geschätzt – bitte im Editor prüfen.";
   let segSteps = [];
   if (cuts.length >= 1) {
     const ends = [...cuts];
@@ -178,7 +192,7 @@ async function buildTutorial(job, videoPath, dir) {
     const br = [];
     for (let i = 0; i < rows.length - 1; i++) br.push({ id: uuid(), step_id: rows[i].id, label: null, target_step_id: rows[i + 1].id, position: 0 });
     if (br.length) await sb.from("step_branches").insert(br);
-    return { tutId, title, count: rows.length };
+    return { tutId, title, count: rows.length, note };
   } catch (e) {
     // Teil-Ergebnisse aufräumen: verwaiste Bilder + halb angelegtes Tutorial entfernen.
     if (uploaded.length) { try { await sb.storage.from("tutorial-images").remove(uploaded); } catch {} }
@@ -204,7 +218,11 @@ async function processJob(job) {
       const norm = path.join(tmp, "norm.mp4");
       sh("ffmpeg", ["-y", "-i", raw, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-movflags", "+faststart", norm]);
       vpath = norm;
-    } catch { /* Fallback: Original verwenden */ }
+    } catch (e) {
+      // Gerade krumme Aufnahmen brauchen die Normalisierung am nötigsten -> Fehler sichtbar loggen
+      // (buildTutorial wirft klar, falls auch das Original nicht lesbar ist).
+      console.error(`  Normalisierung fehlgeschlagen, nutze Original: ${String(e?.message || e).slice(0, 200)}`);
+    }
     const res = await buildTutorial(job, vpath, tmp);
     console.log(`✓ Job ${job.id} -> Tutorial "${res.title}" (${res.count} Schritte, ${res.tutId})`);
     return res;
@@ -242,7 +260,7 @@ async function loop() {
         ran = true;
         try {
           const res = await processJob(job);
-          await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, updated_at: new Date().toISOString() }).eq("id", job.id);
+          await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, note: res.note ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
         } catch (e) {
           const raw = String(e?.message || "Unbekannter Fehler");
           console.error("✗ Job", job.id, raw);
