@@ -44,6 +44,16 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     redirect("/app");
   }
 
+  // Hat die Adresse schon ein Konto? -> Formular zeigt "anmelden" statt "Passwort festlegen".
+  let hasAccount = false;
+  if (inv.email) {
+    const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    hasAccount = (page?.users ?? []).some(
+      (u) => (u.email ?? "").toLowerCase() === inv.email!.toLowerCase(),
+    );
+  }
   const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
-  return <AcceptInviteForm token={token} email={inv.email ?? ""} orgName={orgName} />;
+  return (
+    <AcceptInviteForm token={token} email={inv.email ?? ""} orgName={orgName} hasAccount={hasAccount} />
+  );
 }

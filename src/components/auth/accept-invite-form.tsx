@@ -11,10 +11,12 @@ export function AcceptInviteForm({
   token,
   email,
   orgName,
+  hasAccount,
 }: {
   token: string;
   email: string;
   orgName: string;
+  hasAccount: boolean;
 }) {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
@@ -22,7 +24,11 @@ export function AcceptInviteForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 8) {
+    if (!password) {
+      setError("Bitte ein Passwort eingeben.");
+      return;
+    }
+    if (!hasAccount && password.length < 8) {
       setError("Das Passwort muss mindestens 8 Zeichen haben.");
       return;
     }
@@ -45,8 +51,11 @@ export function AcceptInviteForm({
         </div>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">Team beitreten</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Du wurdest {orgName ? <>zu <b>{orgName}</b> </> : null}eingeladen. Lege ein Passwort fest,
-          um beizutreten.
+          {hasAccount ? (
+            <>Du hast schon ein Konto. Melde dich an, um {orgName ? <><b>{orgName}</b> </> : null}beizutreten.</>
+          ) : (
+            <>Du wurdest {orgName ? <>zu <b>{orgName}</b> </> : null}eingeladen. Lege ein Passwort fest, um beizutreten.</>
+          )}
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
@@ -55,22 +64,22 @@ export function AcceptInviteForm({
             <Input id="invite-email" type="email" value={email} disabled readOnly />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="invite-password">Passwort festlegen</Label>
+            <Label htmlFor="invite-password">{hasAccount ? "Dein Passwort" : "Passwort festlegen"}</Label>
             <Input
               id="invite-password"
               type="password"
-              autoComplete="new-password"
+              autoComplete={hasAccount ? "current-password" : "new-password"}
               autoFocus
               required
-              minLength={8}
+              minLength={hasAccount ? undefined : 8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="mindestens 8 Zeichen"
+              placeholder={hasAccount ? "Passwort deines Kontos" : "mindestens 8 Zeichen"}
             />
           </div>
           {error && <p className="rounded-lg bg-no-soft px-3 py-2 text-sm text-no">{error}</p>}
           <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Trete bei …" : "Passwort setzen & beitreten"}
+            {pending ? "Trete bei …" : hasAccount ? "Anmelden & beitreten" : "Passwort setzen & beitreten"}
           </Button>
         </form>
       </div>

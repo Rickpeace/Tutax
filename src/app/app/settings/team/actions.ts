@@ -127,8 +127,7 @@ export async function acceptInvite(
   token: string,
   password: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  if (!password || password.length < 8)
-    return { ok: false, message: "Das Passwort muss mindestens 8 Zeichen haben." };
+  if (!password) return { ok: false, message: "Bitte ein Passwort eingeben." };
 
   const admin = createAdminClient();
   const { data: inv } = await admin
@@ -139,17 +138,26 @@ export async function acceptInvite(
   if (!inv || inv.status === "revoked" || !inv.email)
     return { ok: false, message: "Diese Einladung ist ungültig oder wurde zurückgezogen." };
 
-  // Auth-User finden oder anlegen. tutax_invite_token in den Metadaten -> Trigger legt KEIN Eigen-Konto an.
+  const supabase = await createClient();
   const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   const existing = (page?.users ?? []).find(
     (u) => (u.email ?? "").toLowerCase() === inv.email!.toLowerCase(),
   );
+
   let userId: string;
   if (existing) {
-    const { error } = await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true });
-    if (error) return { ok: false, message: error.message };
+    // Hat schon ein Konto -> mit dem VORHANDENEN Passwort anmelden (NICHT überschreiben).
+    const { error } = await supabase.auth.signInWithPassword({ email: inv.email, password });
+    if (error)
+      return {
+        ok: false,
+        message: "Passwort stimmt nicht. Bitte das Passwort deines bestehenden Kontos verwenden – oder per Passwort-vergessen neu setzen.",
+      };
     userId = existing.id;
   } else {
+    // Neu -> Konto anlegen (Invite-Metadaten => Trigger legt kein Eigen-Konto an) + einloggen.
+    if (password.length < 8)
+      return { ok: false, message: "Das Passwort muss mindestens 8 Zeichen haben." };
     const { data: created, error } = await admin.auth.admin.createUser({
       email: inv.email,
       password,
@@ -158,6 +166,8 @@ export async function acceptInvite(
     });
     if (error || !created?.user) return { ok: false, message: error?.message ?? "Konto konnte nicht angelegt werden." };
     userId = created.user.id;
+    const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
+    if (signErr) return { ok: false, message: "Konto angelegt – bitte melde dich jetzt an." };
   }
 
   // Beitritt (idempotent) + Einladung als akzeptiert markieren.
@@ -170,10 +180,6 @@ export async function acceptInvite(
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
 
-  // Einloggen (Session-Cookies) -> Client leitet danach in die App.
-  const supabase = await createClient();
-  const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
-  if (signErr) return { ok: false, message: "Beigetreten – bitte melde dich jetzt mit dem neuen Passwort an." };
   return { ok: true };
 }
 
