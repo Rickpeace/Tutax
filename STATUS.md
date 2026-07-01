@@ -1,7 +1,8 @@
 # Tutax — Projekt-Status & Betriebsanleitung
 
 > Selbstgepflegte Status-/Kontextdatei (für Claude). **Bei jeder größeren Änderung aktualisieren.**
-> Spezifikation: `../ARCHITEKTUR.md` · Design-Referenz: `../prototyp-v4.jsx`
+> **Neu reinkommen? Zuerst [`OVERVIEW.md`](OVERVIEW.md) lesen** (Funktions-Inventar, Farben, lokale Skripte – „was gibt es schon").
+> Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md` · Design-Referenz: `../prototyp-v4.jsx`
 
 Letztes Update: 2026-06-26 (autonomer Nacht-Lauf)
 
