@@ -121,6 +121,9 @@
   --brand-soft: #eef0fe;
   --brand-bg: #f6f7fe;
   --brand-ink: #101524;
+  /* Kontrast-Ableitung (brandStyle): Text AUF Akzent bzw. Akzent ALS Text. */
+  --brand-accent-fg: #ffffff;
+  --brand-accent-strong: var(--brand-accent);
 
   --chart-1: #3d4ee6;
   --chart-2: #0f9d72;

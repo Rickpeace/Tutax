@@ -167,6 +167,14 @@ export default async function ViewerPage({
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
           Bereitgestellt von {account.name} · powered by Steply
+          <span className="mx-1.5 opacity-50">·</span>
+          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Impressum
+          </a>
+          <span className="mx-1.5 opacity-50">·</span>
+          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Datenschutz
+          </a>
         </p>
       </div>
     </main>

@@ -6,6 +6,9 @@ import { openai } from "@/lib/openai";
 
 const BUCKET = "tutorial-images";
 
+// Vision mit detail:high kann über den Vercel-Default (~15 s) laufen.
+export const maxDuration = 30;
+
 /**
  * KI-Schritt-Assistent (§Zusatz): aus einem Screenshot Titel, Anleitungstext
  * und optional die wichtigste Markierung (relative Box) vorschlagen.
@@ -64,6 +67,7 @@ export async function POST(req: NextRequest) {
       model: AI.models.vision,
       response_format: { type: "json_object" },
       temperature: 0.3,
+      max_completion_tokens: 300,
       messages: [
         { role: "system", content: system },
         {
@@ -104,8 +108,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ title, body: text, highlight });
   } catch (e) {
+    // Keine rohe Fehlermeldung an den Client leaken – nur intern loggen.
+    console.error("[steps/suggest] KI-Fehler:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "KI-Fehler" },
+      { error: "Der KI-Vorschlag hat nicht geklappt. Bitte versuchen Sie es erneut." },
       { status: 500 },
     );
   }

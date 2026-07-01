@@ -159,8 +159,8 @@ export function ChatWidget({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Hilfe-Assistent"
-        className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full text-white shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
-        style={{ background: "var(--brand-accent)" }}
+        className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
+        style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
       >
         {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
       </button>
@@ -171,7 +171,7 @@ export function ChatWidget({
             className="flex items-center gap-2 border-b border-black/5 px-4 py-3"
             style={{ background: "var(--brand-bg)" }}
           >
-            <Sparkles className="size-4" style={{ color: "var(--brand-accent)" }} />
+            <Sparkles className="size-4" style={{ color: "var(--brand-accent-strong, var(--brand-accent))" }} />
             <span className="text-sm font-bold text-[var(--brand-ink)]">Hilfe-Assistent</span>
             {msgs.length > 1 && (
               <button
@@ -184,6 +184,19 @@ export function ChatWidget({
               </button>
             )}
           </div>
+
+          <p className="border-b border-black/5 bg-white px-4 py-1.5 text-[11px] leading-snug text-muted-foreground">
+            Antworten werden automatisiert per KI erstellt – bitte keine
+            personenbezogenen Daten eingeben.{" "}
+            <Link
+              href="/datenschutz"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-[var(--brand-ink)]"
+            >
+              Datenschutz
+            </Link>
+          </p>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
             {msgs.map((m, i) => (
@@ -205,8 +218,8 @@ export function ChatWidget({
               onClick={send}
               disabled={busy}
               aria-label="Senden"
-              className="flex items-center rounded-lg px-3 text-white disabled:opacity-50"
-              style={{ background: "var(--brand-accent)" }}
+              className="flex items-center rounded-lg px-3 disabled:opacity-50"
+              style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
             >
               <Send className="size-4" />
             </button>
@@ -232,9 +245,11 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
     <div className={bot ? "" : "flex justify-end"}>
       <div
         className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-          bot ? "rounded-tl-sm bg-[var(--brand-bg)] text-ink-2" : "rounded-tr-sm text-white"
+          bot ? "rounded-tl-sm bg-[var(--brand-bg)] text-ink-2" : "rounded-tr-sm"
         }`}
-        style={bot ? {} : { background: "var(--brand-accent)" }}
+        style={
+          bot ? {} : { background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }
+        }
       >
         {bot && !m.text ? (
           <span className="flex gap-1 py-1" aria-label="tippt">
@@ -253,7 +268,7 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
                 href={`/h/${accountSlug}/${s.slug}`}
                 className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-semibold text-ink hover:border-[var(--brand-accent)]"
               >
-                <Layers className="size-3.5" style={{ color: "var(--brand-accent)" }} />
+                <Layers className="size-3.5" style={{ color: "var(--brand-accent-strong, var(--brand-accent))" }} />
                 <span className="truncate">{s.title}</span>
                 <ArrowRight className="ml-auto size-3 shrink-0" />
               </Link>
@@ -270,8 +285,8 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
                   href={mm.value}
                   target={mm.value.startsWith("http") ? "_blank" : undefined}
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white"
-                  style={{ background: "var(--brand-accent)" }}
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold"
+                  style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
                 >
                   {mm.type === "email" ? (
                     <Mail className="size-3.5" />

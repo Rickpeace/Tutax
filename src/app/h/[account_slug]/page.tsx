@@ -142,7 +142,17 @@ export default async function HubPage({
 
         <HubBrowser accountSlug={account.slug} items={items} order={order} />
 
-        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">powered by Steply</p>
+        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">
+          powered by Steply
+          <span className="mx-1.5 opacity-50">·</span>
+          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Impressum
+          </a>
+          <span className="mx-1.5 opacity-50">·</span>
+          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Datenschutz
+          </a>
+        </p>
       </div>
       <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>

@@ -71,6 +71,43 @@ export function brandFonts(tokens: unknown): { body?: string; heading?: string }
   };
 }
 
+/** Hex (#rgb / #rrggbb) → {r,g,b} in 0..255, oder null bei ungültigem Wert. */
+function parseHex(hex: string): { r: number; g: number; b: number } | null {
+  if (typeof hex !== "string") return null;
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+/**
+ * Relative Luminanz nach WCAG (0 = schwarz, 1 = weiß). null bei ungültigem Hex,
+ * damit Aufrufer aufs bisherige Verhalten zurückfallen können.
+ */
+function relativeLuminance(hex: string): number | null {
+  const rgb = parseHex(hex);
+  if (!rgb) return null;
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+}
+
+/** Eine Farbe um `amount` (0..1) Richtung Schwarz abmischen. */
+function darken(hex: string, amount: number): string | null {
+  const rgb = parseHex(hex);
+  if (!rgb) return null;
+  const f = Math.max(0, Math.min(1, amount));
+  const mix = (v: number) => Math.round(v * (1 - f));
+  const to2 = (v: number) => mix(v).toString(16).padStart(2, "0");
+  return `#${to2(rgb.r)}${to2(rgb.g)}${to2(rgb.b)}`;
+}
+
 /**
  * Wandelt themes.tokens (§8) in CSS-Custom-Properties für den öffentlichen
  * Viewer/Hub. Nicht gesetzte Werte fallen auf die Indigo-Defaults (:root) zurück.
@@ -104,6 +141,25 @@ export function brandStyle(tokens: unknown): CSSProperties {
   const ink = (c.text as string) || "#101524";
   const border = (c.border as string) || "";
   const cardStyle = String(sh.cardStyle ?? "filled");
+
+  // Kontrast-Ableitung für die Akzentfarbe (WCAG-Luminanz).
+  //   --brand-accent-fg     = Textfarbe AUF Akzent-Hintergrund
+  //   --brand-accent-strong = Akzent ALS Text auf Weiß (helle Töne abgedunkelt)
+  // Wichtig: greift NUR bei hellen Akzenten. Bei dunklen (z. B. dem Rot des
+  // Demo-Kontos) bleibt es pixelidentisch: fg = weiß, strong = Akzent selbst.
+  // Ungültiger/fehlender Hex → gleiches Fallback-Verhalten (weiß / Akzent).
+  const lum = relativeLuminance(accent);
+  if (lum != null && lum > 0.55) {
+    // Heller Akzent: weißer Text darauf wäre unlesbar → dunkle Ink-Farbe.
+    s["--brand-accent-fg"] = "#101524";
+    // Als Text auf Weiß: umso heller, desto stärker abdunkeln (bis ~45 %).
+    const amount = Math.min(0.45, (lum - 0.35) * 0.75);
+    s["--brand-accent-strong"] = darken(accent, amount) ?? accent;
+  } else {
+    // Dunkler/mittlerer Akzent oder ungültig → bisheriges Verhalten.
+    s["--brand-accent-fg"] = "#ffffff";
+    s["--brand-accent-strong"] = accent;
+  }
 
   if (cardStyle === "outline") {
     s["--brand-card-bg"] = bg;
