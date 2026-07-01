@@ -23,6 +23,23 @@ pixelidentisch) · Impressum/Datenschutz-Gerüst (OpenAI/DPF-Passus, Platzhalter
 Betreiber-Angaben) · KI-Hinweis im Chat + Impressum/Datenschutz-Links im /h-Footer ·
 Leere-Suche-CTA. **Entsprechende Checkboxen unten gelten als erledigt.**
 
+**Fable (Runde 2):** Migration 0016 (HNSW-Vektorindex, kb-Source-Index,
+updated_at-Trigger für Steps/Branches, drift_checked_at) · GitHub-CI (Typecheck
+blockierend, Lint informativ — 26 Alt-Findings).
+**Opus Welle 2 (reviewt+gemerged):** SEO-Paket (metadataBase, OG mit Kanzlei-Logo,
+robots.ts, sitemap.ts) · Dashboard-Thumbnails + Titel-zuerst (1 Query, kein N+1) ·
+Wizard breiter + Fortschritt (nur linear) + Bild-Lightbox + Fokus-Management ·
+**Chat-Widget auf Tutorial-Seiten** · Chat-A11y (dialog-Rolle, Esc, Autofokus, dvh-Höhe,
+isComposing, Reset-Confirm) · Landing: Preis-Sektion (lib/pricing.ts als Quelle) + FAQ +
+„bald"-Badge weg.
+**Opus Welle 5 (reviewt+gemerged):** RichText-**Links** (StarterKit hatte Link schon —
+Editor-Button + Viewer rendert nur http/https, 12 Sanitisierungs-Fälle getestet) +
+underline/strike · KB-Editor-Verlassen-Schutz · „Bild ersetzen"-Dialog (Markierungen
+behalten/löschen) · Frage-Toggle-Confirm · „Speichern & weiter" wartet auf Erfolg ·
+Drift-Cooldown (60 Min, 429) + „Hinweise ansehen"-Link · kb.ts wirft/loggt Fehler ·
+deutsche Auth-Fehler überall (lib/auth-errors.ts) · Category-Rollback ·
+Preview-Promise.all · Highlight-Clamp 0..1.
+
 ---
 
 ## Was gut ist (von 4 unabhängigen Reviews bestätigt)
