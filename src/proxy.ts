@@ -13,8 +13,9 @@ export const config = {
      * Auf alle Pfade außer:
      * - _next/static, _next/image
      * - favicon, Bilder (statische Assets)
-     * Die öffentliche Hub/Viewer (/h/...) läuft mit durch (Session optional, kein Schutz).
+     * - h/... : die ÖFFENTLICHE Hub/Viewer-Seite braucht keine Session (admin-Reads,
+     *   Chat ist public) -> spart getUser bei jedem Endkunden-Besuch + dessen Prefetches.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|h/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

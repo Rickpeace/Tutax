@@ -7,6 +7,17 @@ import { NextResponse, type NextRequest } from "next/server";
  * Aufgerufen aus proxy.ts (Next.js 16: ehem. middleware.ts).
  */
 export async function updateSession(request: NextRequest) {
+  // Prefetch-Requests NICHT mit einem getUser (Netzwerk-Verifikation) belasten: Next holt
+  // pro sichtbarem Link vorab die Route: ohne diesen Skip liefe getUser dutzendfach im
+  // Hintergrund. Die ECHTE Navigation (kein Prefetch) macht Refresh + Schutz-Check; und
+  // serverseitig schützt requireAccount ohnehin jede /app-Seite.
+  if (
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch"
+  ) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
