@@ -21,7 +21,8 @@ export default async function AppLayout({
   const supabase = await createClient();
   const { count: alertCount } = await supabase
     .from("change_alerts")
-    .select("id", { count: "exact", head: true })
+    .select("id, tutorials!inner(account_id)", { count: "exact", head: true })
+    .eq("tutorials.account_id", account.id)
     .eq("status", "open");
   const isAdmin = await checkAdmin();
 

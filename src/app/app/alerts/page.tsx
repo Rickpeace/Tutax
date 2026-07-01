@@ -29,11 +29,12 @@ const sev: Record<string, string> = {
 };
 
 export default async function AlertsPage() {
-  await requireAccount();
+  const { account } = await requireAccount();
   const supabase = await createClient();
   const { data } = await supabase
     .from("change_alerts")
-    .select("id, severity, summary, details, detected_at, tutorial_id, tutorials(title)")
+    .select("id, severity, summary, details, detected_at, tutorial_id, tutorials!inner(title, account_id)")
+    .eq("tutorials.account_id", account.id)
     .eq("status", "open")
     .order("detected_at", { ascending: false });
   const alerts = (data ?? []) as unknown as AlertRow[];
