@@ -36,11 +36,11 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 
 ## 🚨 Top 5 (zuerst fixen)
 
-- [ ] 🔴 **Blur ist Schein-Schwärzung** *(selbst verifiziert)* — Blur nur als
-  SVG-Filter über dem Bild (`viewer-image.tsx:106`); `publishTutorial` kopiert das
-  **unredigierte Original** in den public Bucket (`app/actions.ts:198-206`).
-  Bild-URL öffnen = Steuernummern im Klartext, Marketing verspricht „DSGVO im Editor".
-  → Blur beim Upload/Publish **in die Pixel brennen** (Canvas client- oder sharp serverseitig).
+- [x] 🔴 ~~Blur ist Schein-Schwärzung~~ **GEFIXT (02.07., Fable):** `lib/redact.ts`
+  brennt Blur als irreversible Pixelierung (sharp) in ALLE öffentlichen Kopien:
+  publishTutorial, forkTemplate UND beim Bearbeiten veröffentlichter Tutorials
+  (updateStep→refreshPublicImage). Privates Original bleibt editierbar. Verifiziert:
+  scripts/test-blur-live.mjs (9/9, Varianz 74→5.5, Nachbarpixel identisch).
 - [ ] 🔴 **Impressum + Datenschutz sind Platzhalter** (live verlinkt, Abmahnrisiko);
   Datenschutz behauptet fälschlich „keine Drittland-Übermittlung" trotz OpenAI.
   → echte Angaben; OpenAI als Auftragsverarbeiter inkl. Drittland/DPF aufnehmen.
@@ -220,10 +220,9 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 
 ## D. Plattform / Next.js / Betrieb
 
-- [ ] 🟠 `next.config.ts` komplett leer: **keine Security-Header** — /app (Builder,
-  Team) ist clickjackbar → headers(): X-Frame-Options DENY / CSP frame-ancestors
-  'none' für alles **außer** `/h/:path*` (muss einbettbar bleiben); Basis-CSP mind.
-  Report-Only.
+- [x] 🟠 ~~keine Security-Header~~ **GEFIXT (02.07., Fable):** next.config headers() —
+  X-Frame-Options DENY + frame-ancestors 'none' auf /app, /admin, Auth-/Invite-Seiten;
+  /h bleibt bewusst einbettbar; global nosniff + Referrer-Policy + Permissions-Policy.
 - [ ] 🟠 **Kein Error-Tracking** (kein Sentry, kein instrumentation.ts) — Produktions-
   fehler beim Kunden unsichtbar → Sentry + onRequestError.
 - [ ] 🟡 Kein CI (kein .github/): Vercel deployt ungeprüft → GitHub Action mit
@@ -434,10 +433,15 @@ Tutorial-Seiten, Akzent-Dosierung, leere-Suche-CTA.
 **Welle 3 — Video-Pipeline ①②③** *(Opus; Review besonders streng; danach deploy.sh)*
 Komplett Abschnitt I, „Nächstes Paket". Live-Test mit echtem Video Pflicht.
 
-**Welle 4 — Geschäft** *(Opus; Stripe-Setup: Richard)*
-Stripe Checkout + Customer Portal + Webhooks · Limit-Gating (5 Tutorials free,
-Branding-Features) · Abo-Seite echt (Platzhalter-Fußnote raus) · „War das
-hilfreich?" + events-Tabelle + Mini-Insights-Karte im Dashboard.
+**Welle 4 — Geschäft** *(Entscheidung Richard 02.07.: KEIN Stripe — LemonSqueezy
+als Merchant of Record [übernimmt MwSt/Rechnungen — guter Fit für Solo-Betrieb];
+Konto/Keys: Richard)*
+Schritt 1 (ohne Payment, sofort baubar): `accounts.plan` (free/pro) + **manueller
+Vollzugriff durch Plattform-Admin** (Admin-UI-Schalter „Pro freischalten" — Richards
+Anforderung: Kunden Vollzugriff OHNE LemonSqueezy geben) + Limit-Gating liest nur
+`plan` (5 Tutorials free etc.) + Abo-Seite ehrlich. Schritt 2: LemonSqueezy Checkout +
+Webhooks setzen denselben `plan` automatisch. · „War das hilfreich?" + events-Tabelle
++ Mini-Insights-Karte im Dashboard.
 
 **Welle 5 — Builder- & Ränder-Politur** *(Opus)*
 Schritt-Umordnen · RichText-Links (Editor + Viewer!) · KB-Verlassen-Guard +

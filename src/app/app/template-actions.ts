@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { indexTutorial } from "@/lib/kb";
+import { burnBlur, hasBlur } from "@/lib/redact";
 import type { Step, StepBranch } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -93,13 +94,23 @@ export async function forkTemplate(templateId: string) {
   // der Fork die image_path des Templates — ein Unpublish des Forks würde dann die
   // öffentlichen Template-Bilder (und die anderer Forks) löschen (Cross-Org-Schaden).
   // Der Fork ist direkt "published", braucht die Bilder also auch im public Bucket.
-  const cloneImage = async (oldPath: string, newStepId: string): Promise<string | null> => {
+  const cloneImage = async (oldPath: string, newStepId: string, highlights: unknown): Promise<string | null> => {
     const newPath = `${account.id}/${forkId}/${newStepId}.webp`;
     let blob = (await admin.storage.from(PRIVATE_BUCKET).download(oldPath)).data;
     if (!blob) blob = (await admin.storage.from(PUBLIC_BUCKET).download(oldPath)).data;
     if (!blob) return null;
-    await admin.storage.from(PRIVATE_BUCKET).upload(newPath, blob, { upsert: true, contentType: "image/webp" });
-    await admin.storage.from(PUBLIC_BUCKET).upload(newPath, blob, { upsert: true, contentType: "image/webp" });
+    const original: Buffer = Buffer.from(await blob.arrayBuffer());
+    // privat = Original (Autor kann Blur weiter bearbeiten); public = Blur eingebrannt.
+    let pub: Buffer = original;
+    if (hasBlur(highlights)) {
+      try {
+        pub = await burnBlur(original, highlights);
+      } catch {
+        return null; // lieber ohne Bild als unredigiert öffentlich
+      }
+    }
+    await admin.storage.from(PRIVATE_BUCKET).upload(newPath, original, { upsert: true, contentType: "image/webp" });
+    await admin.storage.from(PUBLIC_BUCKET).upload(newPath, pub, { upsert: true, contentType: "image/webp" });
     return newPath;
   };
 
@@ -107,7 +118,7 @@ export async function forkTemplate(templateId: string) {
     const stepRows = [];
     for (const s of steps) {
       const newId = idMap.get(s.id)!;
-      const image_path = s.image_path ? await cloneImage(s.image_path, newId) : null;
+      const image_path = s.image_path ? await cloneImage(s.image_path, newId, s.highlights) : null;
       stepRows.push({
         id: newId,
         tutorial_id: forkId,

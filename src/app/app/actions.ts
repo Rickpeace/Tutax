@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
+import { burnBlur, hasBlur } from "@/lib/redact";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -187,10 +188,12 @@ export async function publishTutorial(tutorialId: string) {
     while (taken.has(slug)) slug = `${base}-${++n}`;
   }
 
-  // Bilder in den public Bucket kopieren (download privat -> upload public)
+  // Bilder in den public Bucket kopieren (download privat -> upload public).
+  // WICHTIG: Blur-Markierungen werden dabei IN DIE PIXEL gebrannt — der Filter im
+  // Viewer ist nur Optik; ohne Einbrennen läge das unredigierte Original öffentlich.
   const { data: steps } = await supabase
     .from("steps")
-    .select("image_path")
+    .select("image_path, highlights")
     .eq("tutorial_id", tutorialId)
     .not("image_path", "is", null);
 
@@ -199,9 +202,19 @@ export async function publishTutorial(tutorialId: string) {
     if (!s.image_path) continue;
     const { data: blob } = await admin.storage.from(PRIVATE_BUCKET).download(s.image_path);
     if (blob) {
+      let buf: Buffer = Buffer.from(await blob.arrayBuffer());
+      if (hasBlur(s.highlights)) {
+        try {
+          buf = await burnBlur(buf, s.highlights);
+        } catch (e) {
+          // Lieber Abbruch als unredigierte Daten veröffentlichen.
+          console.error("Blur-Einbrennen fehlgeschlagen:", e instanceof Error ? e.message : e);
+          throw new Error("Veröffentlichen abgebrochen: Die Schwärzung konnte nicht angewendet werden.");
+        }
+      }
       await admin.storage
         .from(PUBLIC_BUCKET)
-        .upload(s.image_path, blob, { upsert: true, contentType: "image/webp" });
+        .upload(s.image_path, buf, { upsert: true, contentType: "image/webp" });
     }
   }
 

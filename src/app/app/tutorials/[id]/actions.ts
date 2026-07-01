@@ -1,7 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { burnBlur, hasBlur } from "@/lib/redact";
 import { YES } from "@/lib/builder/constants";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
@@ -60,6 +62,39 @@ export async function updateStep(
   if (Object.keys(patch).length === 0) return;
   const { error } = await supabase.from("steps").update(patch).eq("id", stepId);
   if (error) throw new Error(error.message);
+
+  // Ist das Tutorial VERÖFFENTLICHT und Bild/Markierungen haben sich geändert,
+  // muss die öffentliche Bild-Kopie nachgezogen werden — inkl. eingebranntem Blur.
+  // Sonst bliebe z. B. eine nachträglich geschwärzte Stelle öffentlich lesbar.
+  if ("image_path" in patch || "highlights" in patch) {
+    await refreshPublicImage(stepId).catch((e) =>
+      console.error("Public-Bild-Refresh fehlgeschlagen:", e instanceof Error ? e.message : e),
+    );
+  }
+}
+
+/** Öffentliche Kopie des Schritt-Bilds neu erzeugen (Blur eingebrannt). */
+async function refreshPublicImage(stepId: string) {
+  const supabase = await createClient();
+  // RLS-sichtbarer Read: liefert nur Schritte aus eigenen Tutorials.
+  const { data: step } = await supabase
+    .from("steps")
+    .select("image_path, highlights, tutorials!inner(status)")
+    .eq("id", stepId)
+    .maybeSingle();
+  if (!step) return;
+  const status = (Array.isArray(step.tutorials) ? step.tutorials[0] : step.tutorials)?.status;
+  if (status !== "published") return;
+
+  const admin = createAdminClient();
+  if (!step.image_path) return; // Bild entfernt -> unpublish räumt public auf
+  const { data: blob } = await admin.storage.from("tutorial-images").download(step.image_path);
+  if (!blob) return;
+  let buf: Buffer = Buffer.from(await blob.arrayBuffer());
+  if (hasBlur(step.highlights)) buf = await burnBlur(buf, step.highlights);
+  await admin.storage
+    .from("tutorial-images-public")
+    .upload(step.image_path, buf, { upsert: true, contentType: "image/webp" });
 }
 
 /** Frage an/aus. Server spiegelt exakt die optimistische Client-Logik. */
