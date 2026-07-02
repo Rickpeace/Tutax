@@ -13,16 +13,25 @@ export function AccountSwitcher({
   currentId,
   currentName,
   memberships,
+  full = false,
 }: {
   currentId: string;
   currentName: string;
   memberships: Membership[];
+  /** Volle Breite (Sidebar) statt kompakter Inline-Variante (frühere Topbar). */
+  full?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
 
   if (memberships.length <= 1) {
     return (
-      <span className="hidden max-w-[12rem] truncate text-sm font-medium text-ink-2 sm:inline">
+      <span
+        className={
+          full
+            ? "block truncate rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium text-ink-2"
+            : "hidden max-w-[12rem] truncate text-sm font-medium text-ink-2 sm:inline"
+        }
+      >
         {currentName}
       </span>
     );
@@ -38,7 +47,11 @@ export function AccountSwitcher({
         await setActiveAccount(e.target.value);
         window.location.assign("/app"); // frisch in die gewechselte Org
       }}
-      className="inline-block max-w-[8.5rem] rounded-md border border-border bg-card px-2 py-1 text-sm font-medium text-ink-2 outline-none focus:border-ring sm:max-w-[13rem]"
+      className={
+        full
+          ? "block w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium text-ink-2 outline-none focus:border-ring"
+          : "inline-block max-w-[8.5rem] rounded-md border border-border bg-card px-2 py-1 text-sm font-medium text-ink-2 outline-none focus:border-ring sm:max-w-[13rem]"
+      }
     >
       {memberships.map((m) => (
         <option key={m.id} value={m.id}>
