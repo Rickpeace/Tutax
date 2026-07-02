@@ -9,7 +9,7 @@ import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
-import { invalidateTutorialTags } from "@/lib/cache-tags";
+import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
 import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
 import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
@@ -82,6 +82,51 @@ export async function createTutorial(formData: FormData) {
 
   revalidatePath("/app");
   redirect(`/app/tutorials/${data.id}`);
+}
+
+/**
+ * Leere EIGENE Kategorie löschen (Welle 20, Dashboard-Papierkorb).
+ * Sicherheit serverseitig:
+ *  - Kategorie muss dem aktiven Konto gehören (globale/Standard-Kategorien mit
+ *    account_id = null werden NIE gelöscht — RLS + expliziter Check).
+ *  - Kategorie muss WIRKLICH leer sein (0 Tutorials) — sonst Fehler (Toast beim Client).
+ * Danach Dashboard revalidieren + Hub-Cache invalidieren (Kategorie verschwindet
+ * auch aus der öffentlichen Hilfe-Seite, falls sie dort noch auftauchte).
+ */
+export async function deleteCategory(categoryId: string) {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+
+  // Nur eigene Kategorie (account_id gesetzt + == aktives Konto). Globale ausschließen.
+  const { data: cat, error: ce } = await supabase
+    .from("categories")
+    .select("id, account_id")
+    .eq("id", categoryId)
+    .maybeSingle();
+  if (ce) throw new Error(ce.message);
+  if (!cat || cat.account_id !== account.id) {
+    throw new Error("Kategorie kann nicht gelöscht werden.");
+  }
+
+  // Serverseitig nachprüfen, dass die Kategorie wirklich leer ist.
+  const { count } = await supabase
+    .from("tutorials")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", account.id)
+    .eq("category_id", categoryId);
+  if ((count ?? 0) > 0) {
+    throw new Error("Kategorie ist nicht leer.");
+  }
+
+  const { error } = await supabase
+    .from("categories")
+    .delete()
+    .eq("id", categoryId)
+    .eq("account_id", account.id);
+  if (error) throw new Error(error.message);
+
+  invalidateHubTag(account.slug);
+  revalidatePath("/app");
 }
 
 export async function renameTutorial(id: string, title: string) {
@@ -351,11 +396,86 @@ export async function publishTutorial(tutorialId: string) {
   return { slug, accountSlug: account.slug };
 }
 
+type VisibilityTutorial = Pick<
+  Tutorial,
+  "id" | "title" | "slug" | "account_id" | "status" | "visibility"
+>;
+
 /**
- * Sichtbarkeit umschalten (intern ↔ öffentlich). Nur bei PUBLISHED-Tutorials sind
- * Nebenwirkungen nötig; ein Entwurf ändert nur die Spalte:
- *  - → internal: public-Bilder entfernen, Embeddings löschen, Hub-Cache invalidieren.
- *  - → public: Slug sicherstellen, Bilder public kopieren, indizieren, Cache invalidieren.
+ * Kern der Sichtbarkeits-Umschaltung (intern ↔ öffentlich) — die sicherheitskritischen
+ * Nebenwirkungen an EINER Stelle, damit setTutorialVisibility UND setTutorialAudience
+ * (Welle 20) exakt dasselbe tun. Erwartet das bereits geladene Tutorial; ändert nur,
+ * wenn sich die Sichtbarkeit wirklich unterscheidet. Nur bei PUBLISHED-Tutorials sind
+ * Nebenwirkungen nötig (ein Entwurf ändert nur die Spalte):
+ *  - → internal: public-Bilder entfernen, Audio/Embeddings löschen, Hub-Cache invalidieren.
+ *  - → public: Slug sicherstellen, Bilder public kopieren, indizieren, übersetzen, TTS.
+ */
+async function applyVisibilityChange(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  account: Account,
+  tutorial: VisibilityTutorial,
+  visibility: Tutorial["visibility"],
+): Promise<void> {
+  if (tutorial.visibility === visibility) return; // nichts zu tun
+  const isPublished = tutorial.status === "published";
+
+  if (visibility === "internal") {
+    // Erst umschalten (RAG-Guard greift danach), dann öffentliche Spuren entfernen.
+    const { error: ue } = await supabase
+      .from("tutorials")
+      .update({ visibility })
+      .eq("id", tutorial.id);
+    if (ue) throw new Error(ue.message);
+    if (isPublished) {
+      await removePublicImages(supabase, tutorial.id).catch((e) =>
+        console.error("Public-Bilder entfernen fehlgeschlagen:", e instanceof Error ? e.message : e),
+      );
+      // Vorlesen: public Bucket darf keine Audios interner Tutorials behalten.
+      await removeTutorialAudio(tutorial.id);
+      await removeTutorialEmbeddings(supabase, tutorial.id).catch(() => {});
+      await invalidateTutorialTags(tutorial.id, { force: true });
+    }
+  } else {
+    // → öffentlich
+    let slug = tutorial.slug;
+    if (isPublished) {
+      slug = await ensureSlug(supabase, account.id, tutorial.id, tutorial.title, tutorial.slug);
+      await copyImagesToPublic(supabase, tutorial.id);
+    }
+    const { error: ue } = await supabase
+      .from("tutorials")
+      .update({ visibility, ...(slug ? { slug } : {}) })
+      .eq("id", tutorial.id);
+    if (ue) throw new Error(ue.message);
+    if (isPublished) {
+      await indexTutorial(supabase, account.id, tutorial.id).catch(() => {});
+      await invalidateTutorialTags(tutorial.id);
+      // Wird jetzt öffentlich sichtbar -> ggf. übersetzen (wie beim Publish).
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("languages")
+        .eq("id", account.id)
+        .single();
+      if (((acc?.languages as string[] | null) ?? []).some(isExtraLang)) {
+        after(() =>
+          translateTutorial(tutorial.id).catch((e) =>
+            console.error("Auto-Übersetzung (Sichtbarkeit):", e instanceof Error ? e.message : e),
+          ),
+        );
+      }
+      // Wird wieder öffentlich sichtbar -> Vorlese-Audios (neu) erzeugen (Hash-Cache).
+      after(() =>
+        ensureTutorialAudio(account.id, tutorial.id).catch((e) =>
+          console.error("Auto-Vorlesen (Sichtbarkeit):", e instanceof Error ? e.message : e),
+        ),
+      );
+    }
+  }
+}
+
+/**
+ * Sichtbarkeit umschalten (intern ↔ öffentlich). Dünner Wrapper um
+ * applyVisibilityChange (Gate + Laden + revalidate).
  */
 export async function setTutorialVisibility(
   tutorialId: string,
@@ -371,66 +491,54 @@ export async function setTutorialVisibility(
     .from("tutorials")
     .select("id, title, slug, account_id, status, visibility")
     .eq("id", tutorialId)
-    .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id" | "status" | "visibility">>();
+    .single<VisibilityTutorial>();
   if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
-  if (tutorial.visibility === visibility) return; // nichts zu tun
 
-  const isPublished = tutorial.status === "published";
+  await applyVisibilityChange(supabase, account, tutorial, visibility);
+  revalidatePath("/app");
+}
 
-  if (visibility === "internal") {
-    // Erst umschalten (RAG-Guard greift danach), dann öffentliche Spuren entfernen.
-    const { error: ue } = await supabase
-      .from("tutorials")
-      .update({ visibility })
-      .eq("id", tutorialId);
-    if (ue) throw new Error(ue.message);
-    if (isPublished) {
-      await removePublicImages(supabase, tutorialId).catch((e) =>
-        console.error("Public-Bilder entfernen fehlgeschlagen:", e instanceof Error ? e.message : e),
-      );
-      // Vorlesen: public Bucket darf keine Audios interner Tutorials behalten.
-      await removeTutorialAudio(tutorialId);
-      await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
-      await invalidateTutorialTags(tutorialId, { force: true });
-    }
-  } else {
-    // → öffentlich
-    let slug = tutorial.slug;
-    if (isPublished) {
-      slug = await ensureSlug(supabase, account.id, tutorialId, tutorial.title, tutorial.slug);
-      await copyImagesToPublic(supabase, tutorialId);
-    }
-    const { error: ue } = await supabase
-      .from("tutorials")
-      .update({ visibility, ...(slug ? { slug } : {}) })
-      .eq("id", tutorialId);
-    if (ue) throw new Error(ue.message);
-    if (isPublished) {
-      await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
-      await invalidateTutorialTags(tutorialId);
-      // Wird jetzt öffentlich sichtbar -> ggf. übersetzen (wie beim Publish).
-      const { data: acc } = await supabase
-        .from("accounts")
-        .select("languages")
-        .eq("id", account.id)
-        .single();
-      if (((acc?.languages as string[] | null) ?? []).some(isExtraLang)) {
-        after(() =>
-          translateTutorial(tutorialId).catch((e) =>
-            console.error("Auto-Übersetzung (Sichtbarkeit):", e instanceof Error ? e.message : e),
-          ),
-        );
-      }
-      // Wird wieder öffentlich sichtbar -> Vorlese-Audios (neu) erzeugen (Hash-Cache).
-      after(() =>
-        ensureTutorialAudio(account.id, tutorialId).catch((e) =>
-          console.error("Auto-Vorlesen (Sichtbarkeit):", e instanceof Error ? e.message : e),
-        ),
-      );
-    }
-  }
+/**
+ * Zielgruppe eines Tutorials setzen (Welle 20, Häkchen statt Entweder-Oder):
+ *  - publicOn=true  ⇒ visibility='public'  (auf der Hilfe-Seite sichtbar);
+ *                     in_lernen = lernenOn  (zusätzlich im Team-Lernbereich, mit Nachweis).
+ *  - publicOn=false ⇒ visibility='internal' (nur Team, Lernen implizit immer an);
+ *                     in_lernen wird auf false zurückgesetzt (bei intern bedeutungslos).
+ * Mappt intern auf die bestehende, sicherheitskritische Sichtbarkeits-Logik
+ * (Publish-Nebenwirkungen, Business-Gate für intern) und setzt zusätzlich in_lernen.
+ * „Beide aus" gibt es nicht — die UI verhindert das; hier fällt publicOn=false immer
+ * auf internal (= Team sichtbar), also nie „nirgends sichtbar".
+ */
+export async function setTutorialAudience(
+  tutorialId: string,
+  audience: { publicOn: boolean; lernenOn: boolean },
+) {
+  const { account } = await requireAccount();
+  const targetVisibility: Tutorial["visibility"] = audience.publicOn ? "public" : "internal";
+  // Business-Gate: intern (inkl. Schulungsnachweis) ist Business. Öffentlich geht immer.
+  if (targetVisibility === "internal" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
+  const supabase = await createClient();
+
+  const { data: tutorial, error } = await supabase
+    .from("tutorials")
+    .select("id, title, slug, account_id, status, visibility")
+    .eq("id", tutorialId)
+    .single<VisibilityTutorial>();
+  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+
+  // Zuerst die Sichtbarkeit über die geteilte Logik umschalten (falls nötig).
+  await applyVisibilityChange(supabase, account, tutorial, targetVisibility);
+
+  // in_lernen setzen: nur bei öffentlich relevant; intern impliziert Lernen ohnehin.
+  const nextInLernen = audience.publicOn ? audience.lernenOn : false;
+  const { error: le } = await supabase
+    .from("tutorials")
+    .update({ in_lernen: nextInLernen })
+    .eq("id", tutorialId);
+  if (le) throw new Error(le.message);
 
   revalidatePath("/app");
+  return { visibility: targetVisibility, inLernen: nextInLernen };
 }
 
 /** Veröffentlichung zurückziehen: Status = draft, öffentliche Bilder entfernen. */

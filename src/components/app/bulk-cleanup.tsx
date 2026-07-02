@@ -11,7 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckSquare, Trash2, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -121,8 +121,8 @@ export function CleanupControls() {
 
   if (!active) {
     return (
-      <Button variant="outline" onClick={enter} aria-label="Aufräumen">
-        <CheckSquare className="size-4" /> Aufräumen
+      <Button variant="outline" onClick={enter} aria-label="Löschen">
+        <Trash2 className="size-4" /> Löschen
       </Button>
     );
   }
@@ -145,7 +145,7 @@ export function CleanupControls() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {count} Anleitung{count === 1 ? "" : "en"} löschen?
+              Mehrere Tutorials löschen — {count} ausgewählt
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
