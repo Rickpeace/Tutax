@@ -31,7 +31,9 @@
 - [x] ~~Interne Tutorials + Schulungsnachweis~~ **GEBAUT (02.07., Welle 10b):**
   Builder-Schalter „Öffentlich | Intern", Tab „Lernen", Absolviert-Haken,
   Owner-Nachweis-Tabelle. → Einmal selbst durchklicken.
-- [ ] **Landing-Hero: echter Produkt-Screenshot** (Material: /h/demo + /h/steply)
+- [x] ~~Landing-Hero: echter Produkt-Screenshot~~ **NEU GEBAUT (02.07.):** komplette
+  Landing überarbeitet — echte Screenshots (Hub im Browser-Rahmen + Wizard im
+  Handy-Rahmen), Video→Tutorial als Herzstück-Sektion, KI-Assistent+Insights-Sektion.
 - [x] ~~Recorder v2: clicks.json im „Aus Video"-Dialog~~ **GEBAUT (02.07., Welle 10a).**
   → Zusammen mit Extension-Test einmal Ende-zu-Ende probieren (Aufnahme → beide
   Dateien hochladen → exakte Schrittgrenzen; wirkt erst nach `deploy.sh`).

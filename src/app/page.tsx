@@ -1,15 +1,28 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   GitBranch,
   ScanSearch,
   ShieldCheck,
   Smartphone,
   Sparkles,
-  Layers,
   ArrowRight,
   ArrowUpRight,
   Check,
   CornerRightDown,
+  Mic,
+  Scissors,
+  Wand2,
+  MonitorPlay,
+  Link2,
+  QrCode,
+  MessageCircle,
+  GraduationCap,
+  RefreshCw,
+  Search,
+  MousePointerClick,
+  FileVideo,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
@@ -23,16 +36,20 @@ export default function Home() {
 
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden border-b border-border bg-dotgrid">
-        <div className="mx-auto max-w-6xl px-5 pt-16 pb-14 sm:pt-24">
+        {/* Farbglühen hinter dem Produktbild */}
+        <div className="pointer-events-none absolute left-1/2 top-24 h-[480px] w-[900px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute -right-24 top-64 size-72 rounded-full bg-yes/10 blur-3xl" />
+
+        <div className="relative mx-auto max-w-6xl px-5 pt-16 pb-0 sm:pt-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-ink-2">
-            <span className="size-1.5 rounded-full bg-yes" /> Hilfe-Hub für Organisationen
-            <span className="text-line">·</span> DSGVO · EU
+            <span className="size-1.5 rounded-full bg-yes" /> Für jede Organisation mit
+            Erklärbedarf <span className="text-line">·</span> DSGVO · EU
           </div>
 
           <h1 className="mt-6 max-w-4xl text-[2rem] font-bold leading-[1.08] tracking-tight text-ink break-words sm:text-6xl sm:leading-[0.98] lg:text-7xl">
-            Jede Frage führt zur{" "}
+            Einmal zeigen.{" "}
             <span className="relative inline-block text-primary">
-              passenden Antwort
+              Nie wieder erklären.
               <svg
                 className="absolute -bottom-1.5 left-0 hidden h-3 w-full text-yes sm:block"
                 viewBox="0 0 300 12"
@@ -42,13 +59,13 @@ export default function Home() {
                 <path d="M2 8 Q 80 2 150 6 T 298 5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
               </svg>
             </span>
-            .
           </h1>
 
           <p className="mt-7 max-w-xl text-lg text-ink-2">
-            Bauen Sie klickbare Anleitungen mit Screenshots, Markierungen und{" "}
-            <b className="font-semibold text-ink">Verzweigungen</b> – veröffentlicht als
-            Hilfeseite im Look Ihrer Organisation. Ein Link. Kein iFrame. Kein Webdesigner.
+            Steply macht aus einer <b className="font-semibold text-ink">Bildschirm-Aufnahme</b>{" "}
+            eine klickbare Schritt-für-Schritt-Anleitung – veröffentlicht auf Ihrer eigenen
+            Hilfe-Seite im Look Ihrer Organisation. Mit KI-Chat, der{" "}
+            <b className="font-semibold text-ink">nur Ihre Inhalte</b> kennt.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -69,17 +86,55 @@ export default function Home() {
             </Button>
           </div>
 
-          {/* Produkt-Canvas */}
-          <ProductCanvas />
+          {/* Echtes Produkt: Demo-Hilfeseite im Browser-Rahmen + Wizard am Handy */}
+          <div className="relative mt-14">
+            <div className="relative mx-auto max-w-4xl">
+              <BrowserFrame url="steply.app/h/muster-gmbh">
+                <Image
+                  src="/marketing/hub-demo.webp"
+                  alt="Echte Steply-Hilfeseite der Muster GmbH mit Suchfeld, Kategorien und Chat"
+                  width={1280}
+                  height={800}
+                  priority
+                  className="block w-full"
+                />
+              </BrowserFrame>
+
+              {/* Schwebende Beweis-Chips */}
+              <div className="absolute -left-4 top-10 hidden rotate-[-2deg] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-ink shadow-lg md:flex">
+                <FileVideo className="size-4 text-primary" /> Video hochgeladen
+                <span className="text-line">→</span>
+                <span className="text-yes">6 Schritte erkannt</span>
+              </div>
+              <div className="absolute -right-2 top-[13%] hidden rotate-[2deg] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-ink shadow-lg md:flex">
+                <ScanSearch className="size-4 text-primary" /> Markierung automatisch gesetzt
+              </div>
+            </div>
+
+            {/* Wizard am Handy — überlappt den Browser-Rahmen */}
+            <div className="absolute -bottom-10 right-0 hidden w-[230px] rotate-2 lg:block xl:-right-10">
+              <div className="overflow-hidden rounded-[1.8rem] border-[6px] border-ink bg-ink shadow-2xl">
+                <Image
+                  src="/marketing/wizard-phone.webp"
+                  alt="Klickbare Anleitung Schritt für Schritt am Smartphone"
+                  width={390}
+                  height={800}
+                  className="block w-full"
+                />
+              </div>
+            </div>
+          </div>
         </div>
+        {/* weicher Auslauf unter dem Bild */}
+        <div className="h-14 bg-gradient-to-t from-background to-transparent" />
       </section>
 
       {/* ===== STAT-BAND ===== */}
       <section className="border-b border-border">
         <div className="mx-auto grid max-w-6xl divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
-            { k: "0 €", v: "Kostenlos starten" },
-            { k: "1 Link", v: "statt iFrame-Chaos" },
+            { k: "3 Min", v: "vom Video zur fertigen Anleitung" },
+            { k: "1 Link", v: "statt PDF-Anhängen und Rückfragen" },
             { k: "100 %", v: "im CI Ihrer Organisation" },
           ].map((s) => (
             <div key={s.v} className="px-5 py-8 text-center">
@@ -90,6 +145,271 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ===== VIDEO → TUTORIAL (Signature-Feature) ===== */}
+      <section id="video" className="scroll-mt-20 border-b border-border">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            Video → Tutorial
+          </div>
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
+            <h2 className="max-w-xl text-4xl font-bold tracking-tight text-ink">
+              Reden Sie einfach. Steply baut mit.
+            </h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Niemand schreibt gern Anleitungen. Also nehmen Sie einfach Ihren Bildschirm
+              auf und erklären dabei – den Rest übernimmt die KI.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+            {/* Ablauf */}
+            <ol className="space-y-8">
+              <VideoStep
+                icon={Mic}
+                n="01"
+                t="Aufnehmen"
+                d={
+                  <>
+                    Bildschirm und Stimme, direkt im Browser – keine Software nötig. Sagen
+                    Sie <b className="font-semibold text-ink">„Schnitt“</b>, wenn ein
+                    Schritt fertig ist.
+                  </>
+                }
+              />
+              <VideoStep
+                icon={Wand2}
+                n="02"
+                t="Zusehen"
+                d={
+                  <>
+                    Die KI transkribiert, wählt die schärfsten Bilder und setzt
+                    Markierungen. Die Anleitung{" "}
+                    <b className="font-semibold text-ink">wächst live</b>, Schritt für
+                    Schritt.
+                  </>
+                }
+              />
+              <VideoStep
+                icon={Check}
+                n="03"
+                t="Prüfen &amp; veröffentlichen"
+                d={
+                  <>
+                    Sie korrigieren nur noch Details – mit „Bild aus Video wählen“ greifen
+                    Sie jeden beliebigen Moment als Screenshot ab. Dann: veröffentlichen.
+                  </>
+                }
+              />
+            </ol>
+
+            {/* Visual: Timeline -> entstehende Schritte */}
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_24px_60px_-24px_rgba(16,21,36,0.25)]">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <MonitorPlay className="size-4 text-primary" /> aufnahme.webm · 2:47
+              </div>
+              {/* Timeline mit „Schnitt"-Markern */}
+              <div className="relative mt-3 h-9 overflow-hidden rounded-lg bg-ink">
+                <div className="absolute inset-y-0 left-0 w-2/3 bg-primary/25" />
+                {[18, 37, 58, 79].map((x) => (
+                  <div key={x} className="absolute inset-y-0" style={{ left: `${x}%` }}>
+                    <div className="h-full w-0.5 bg-yes" />
+                  </div>
+                ))}
+                <div className="absolute inset-y-0 left-2/3 flex items-center">
+                  <div className="h-full w-0.5 bg-white" />
+                </div>
+                <div className="absolute bottom-1 left-2 flex items-center gap-1 text-[10px] font-bold text-white/70">
+                  <Scissors className="size-3" /> „Schnitt“
+                </div>
+              </div>
+
+              {/* Entstehende Schritte */}
+              <div className="mt-4 space-y-2">
+                {[
+                  { n: 1, t: "Anmeldeseite öffnen", done: true },
+                  { n: 2, t: "Zugangsdaten eingeben", done: true },
+                  { n: 3, t: "Zwei-Faktor bestätigen", done: false },
+                ].map((s) => (
+                  <div
+                    key={s.n}
+                    className={`flex items-center gap-3 rounded-xl border p-3 ${
+                      s.done ? "border-border bg-background" : "border-dashed border-primary/40 bg-accent/40"
+                    }`}
+                  >
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-card text-xs font-bold text-ink-2">
+                      {s.n}
+                    </span>
+                    <span className="text-sm font-semibold text-ink">{s.t}</span>
+                    <span className="ml-auto text-xs font-semibold">
+                      {s.done ? (
+                        <span className="flex items-center gap-1 text-yes">
+                          <Check className="size-3.5" /> fertig
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-primary">
+                          <Sparkles className="size-3.5" /> KI schreibt …
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-4 flex items-start gap-2 rounded-xl bg-accent/50 p-3 text-xs text-ink-2">
+                <MousePointerClick className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>
+                  Mit dem <b className="font-semibold text-ink">Steply Recorder</b> werden
+                  sogar Ihre Klicks aufgezeichnet – Schrittgrenzen und Markierungen sitzen
+                  dann pixelgenau.
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-2 text-xs font-semibold text-ink-2">
+            {["Bildschirm-Aufnahme im Browser", "Datei-Upload (auch mehrere auf einmal)", "Import per Video-URL", "Browser-Extension mit Klick-Erkennung"].map((c) => (
+              <span key={c} className="rounded-full border border-border bg-card px-3 py-1.5">
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== IHRE HILFE-SEITE ===== */}
+      <section className="border-b border-border bg-card/50">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="grid gap-10 lg:grid-cols-[1fr_1.15fr] lg:items-center">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                Ihre Hilfe-Seite
+              </div>
+              <h2 className="mt-3 max-w-md text-4xl font-bold tracking-tight text-ink">
+                Sieht aus wie Sie. Arbeitet ohne Sie.
+              </h2>
+              <p className="mt-4 max-w-md text-ink-2">
+                Jede Anleitung erscheint auf Ihrer eigenen Hilfe-Seite – ein Link, den Sie
+                auf Website, E-Mail-Signatur oder Briefe setzen. Kein iFrame-Gefrickel,
+                kein Webdesigner.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm text-ink-2">
+                {[
+                  { icon: Sparkles, t: <>Die KI übernimmt Ihr CI automatisch von Ihrer Website – Farben, Schriften, Look &amp; Feel.</> },
+                  { icon: Search, t: <>Semantische Suche: Wer „Geld zurück“ tippt, findet auch „Erstattung beantragen“.</> },
+                  { icon: MessageCircle, t: <>Chat-Bubble für Ihre eigene Website – eine Zeile Code, KI-Hilfe überall.</> },
+                  { icon: QrCode, t: <>QR-Codes für Briefe und Aushänge, Druckansicht für alle, die Papier mögen.</> },
+                  { icon: Link2, t: <>Verlinken, einbetten oder beides – Sie entscheiden.</> },
+                ].map((f, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+                      <f.icon className="size-3.5" />
+                    </span>
+                    <span>{f.t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <BrowserFrame url="steply.app/h/steply/ihr-erstes-tutorial-erstellen">
+              <Image
+                src="/marketing/wizard-step.webp"
+                alt="Ein Tutorial-Schritt mit echtem Screenshot und blauer Markierung im Wizard"
+                width={1100}
+                height={820}
+                className="block w-full"
+              />
+            </BrowserFrame>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== KI-ASSISTENT & INSIGHTS ===== */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            KI-Assistent &amp; Insights
+          </div>
+          <h2 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight text-ink">
+            Antwortet nur mit Ihrem Wissen. Und sagt Ihnen, was fehlt.
+          </h2>
+          <p className="mt-4 max-w-xl text-ink-2">
+            Der Chat auf Ihrer Hilfe-Seite erfindet nichts dazu: Er antwortet ausschließlich
+            aus Ihren Anleitungen und Ihrer Wissensdatenbank – und verweist sonst an den
+            richtigen Ansprechpartner.
+          </p>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {/* Chat-Mock */}
+            <div className="rounded-3xl border border-border bg-card p-6">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Bot className="size-4 text-primary" /> Hilfe-Chat · Muster GmbH
+              </div>
+              <div className="mt-4 space-y-3">
+                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-white">
+                  Wie richte ich die Zwei-Faktor-Anmeldung ein?
+                </div>
+                <div className="w-fit max-w-[90%] rounded-2xl rounded-bl-sm border border-border bg-background px-4 py-2.5 text-sm text-ink-2">
+                  Öffnen Sie die Einstellungen und wählen Sie „Sicherheit“. Die Anleitung
+                  führt Sie in 4 Schritten durch – inklusive Bildern:
+                  <span className="mt-2 flex w-fit items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1 text-xs font-bold text-primary">
+                    Sicher anmelden: Passwort &amp; Zwei-Faktor <ArrowRight className="size-3" />
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-ink-2">
+                    📅 Termin buchen
+                  </span>
+                  <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-ink-2">
+                    ✉️ E-Mail an Support
+                  </span>
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">
+                Keine Antwort in Ihren Inhalten? Der Chat eskaliert an die Kontakte, die
+                Sie festlegen – pro Fachgebiet.
+              </p>
+            </div>
+
+            {/* Insights-Mock */}
+            <div className="rounded-3xl border border-border bg-card p-6">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Search className="size-4 text-primary" /> Offene Fragen · letzte 30 Tage
+              </div>
+              <div className="mt-4 space-y-2">
+                {[
+                  { q: "Wie ändere ich meine Bankverbindung?", n: "4×" },
+                  { q: "Wo finde ich die Rechnung vom letzten Monat?", n: "2×" },
+                ].map((g) => (
+                  <div key={g.q} className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink-2">„{g.q}“</span>
+                    <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-primary">
+                      {g.n}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-white">
+                      <Sparkles className="size-3" /> Entwurf erstellen
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-sm text-ink-2">
+                Fragen, die der Chat <b className="font-semibold text-ink">nicht</b>{" "}
+                beantworten konnte, werden gesammelt. Ein Klick – und die KI baut den
+                Anleitungs-Entwurf dazu.{" "}
+                <b className="font-semibold text-ink">Ihre Hilfe lernt, was Kunden wirklich fragen.</b>
+              </p>
+              <p className="mt-3 flex items-start gap-2 rounded-xl bg-accent/50 p-3 text-xs text-ink-2">
+                <RefreshCw className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                <span>
+                  Der <b className="font-semibold text-ink">Aktualitäts-Autopilot</b> prüft
+                  Ihre Anleitungen wöchentlich gegen das Web und meldet, wenn sich z.&nbsp;B.
+                  eine Software-Oberfläche geändert hat.
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ===== FEATURES (Bento) ===== */}
       <section id="features" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20">
         <div className="flex items-end justify-between gap-4">
@@ -97,8 +417,8 @@ export default function Home() {
             Werkzeuge, die mitdenken.
           </h2>
           <p className="hidden max-w-xs text-sm text-muted-foreground sm:block">
-            Vom ersten Screenshot bis zur veröffentlichten Hilfeseite – ohne
-            technisches Vorwissen.
+            Vom ersten Screenshot bis zur veröffentlichten Hilfeseite – ohne technisches
+            Vorwissen.
           </p>
         </div>
 
@@ -117,10 +437,10 @@ export default function Home() {
           </div>
 
           <BentoCell icon={ScanSearch} t="Highlights & Lupe" d="Rechteck, Kreis, Pfeil – plus eine Lupe, die das markierte Element vergrößert." />
-          <BentoCell icon={ShieldCheck} t="Schwärzen (Blur)" d="Sensible Kundendaten unkenntlich machen. DSGVO direkt im Editor." />
-          <BentoCell icon={Layers} t="Gehostet im CI" d="Ihre Farben, Ihr Logo. Sieht aus wie Ihre Organisation – liegt aber bei uns." />
+          <BentoCell icon={ShieldCheck} t="Schwärzen, das hält" d="Blur wird beim Veröffentlichen unwiderruflich ins Bild gebrannt. DSGVO ohne Bauchweh." />
+          <BentoCell icon={GraduationCap} t="Interne Schulungen" d="Anleitungen nur fürs Team – mit Nachweis, wer was wann absolviert hat." />
+          <BentoCell icon={RefreshCw} t="Bleibt aktuell" d="Der Autopilot prüft wöchentlich, ob Ihre Anleitungen noch stimmen." />
           <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy." />
-          <BentoCell icon={Sparkles} t="KI übernimmt Ihr CI" d="Website-URL angeben, die KI leitet Farben & Schriften ab." />
         </div>
       </section>
 
@@ -132,9 +452,9 @@ export default function Home() {
           </h2>
           <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-white/10 bg-white/10 md:grid-cols-3">
             {[
-              { n: "01", t: "Aufbauen", d: "Schritte mit Screenshots, Highlights und Verzweigungen zusammenklicken." },
-              { n: "02", t: "Branden", d: "Logo und Farben Ihrer Organisation setzen – manuell oder per KI aus Ihrer Website." },
-              { n: "03", t: "Veröffentlichen", d: "Einen Link erhalten und auf Ihrer Website verlinken. Fertig." },
+              { n: "01", t: "Aufnehmen oder klicken", d: "Video aufnehmen und die KI bauen lassen – oder Schritte von Hand zusammenklicken. Beides geht." },
+              { n: "02", t: "Branden", d: "Logo und Farben setzen – oder die KI übernimmt Ihr Corporate Design direkt von Ihrer Website." },
+              { n: "03", t: "Veröffentlichen", d: "Link auf die Website, QR-Code in den Brief, Chat-Bubble ins Portal. Fertig." },
             ].map((s) => (
               <div key={s.n} className="bg-ink p-8">
                 <div className="font-display text-5xl font-bold text-white/25">{s.n}</div>
@@ -154,8 +474,7 @@ export default function Home() {
               Ein Preis, der mitwächst.
             </h2>
             <p className="hidden max-w-xs text-sm text-muted-foreground sm:block">
-              Kostenlos starten, jederzeit upgraden. Keine Kreditkarte für den
-              Anfang.
+              Kostenlos starten, jederzeit upgraden. Keine Kreditkarte für den Anfang.
             </p>
           </div>
 
@@ -220,20 +539,29 @@ export default function Home() {
       </section>
 
       {/* ===== CTA ===== */}
-      <section className="mx-auto max-w-6xl px-5 py-20">
+      <section className="mx-auto max-w-6xl px-5 pb-20">
         <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card p-10 sm:p-16">
           <div className="pointer-events-none absolute -right-10 -top-10 size-64 rounded-full bg-accent blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 left-1/4 size-56 rounded-full bg-yes/10 blur-3xl" />
           <div className="relative">
             <h2 className="max-w-2xl text-4xl font-bold leading-tight tracking-tight text-ink sm:text-5xl">
-              Weniger Rückfragen. Mehr Zeit fürs Wesentliche.
+              Ihre erste Anleitung ist in 10 Minuten live.
             </h2>
             <p className="mt-4 max-w-lg text-ink-2">
-              Starten Sie kostenlos und veröffentlichen Sie Ihre erste Anleitung in
-              Minuten.
+              Kostenlos starten, Video hochladen oder Schritte klicken – und den Link
+              teilen. Mehr ist es nicht.
             </p>
-            <div className="mt-8">
+            <div className="mt-8 flex flex-wrap gap-3">
               <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
                 Jetzt loslegen <ArrowUpRight className="size-4" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/h/demo" target="_blank" />}
+              >
+                Erst die Demo ansehen
               </Button>
             </div>
           </div>
@@ -253,28 +581,82 @@ const FAQS: { q: string; a: string }[] = [
     a: "Der Einstieg ist kostenlos: eine Hilfe-Seite mit bis zu 5 Tutorials, Highlights und Verzweigungen. Pro (29 €/Monat) hebt das Limit auf, bringt eigenes Logo, CI-Farben, den Hilfe-Chatbot und entfernt das Steply-Branding. Premium (79 €/Monat) ergänzt eigene Domain, Drift-Überwachung und Analytics.",
   },
   {
+    q: "Wie funktioniert Video → Tutorial genau?",
+    a: "Sie nehmen Ihren Bildschirm mit Stimme auf (oder laden ein vorhandenes Video hoch). Sagen Sie „Schnitt“, um einen Schritt abzuschließen. Steply transkribiert, wählt scharfe Screenshots, schlägt Titel, Texte und Markierungen vor – die Anleitung entsteht live, Sie prüfen nur noch nach. Mit der Recorder-Extension werden zusätzlich Ihre Klicks erfasst, dann sitzen Schrittgrenzen und Markierungen pixelgenau.",
+  },
+  {
     q: "Brauche ich technisches Wissen?",
     a: "Nein. Sie klicken Schritte mit Screenshots, Markierungen und Ja/Nein-Verzweigungen zusammen – ganz ohne Code. Screenshots lassen sich direkt am Handy aufnehmen, zuschneiden und markieren.",
   },
   {
     q: "Wie steht es um DSGVO & Hosting?",
-    a: "Steply wird in der EU betrieben. Sensible Bereiche in Screenshots können Sie direkt im Editor schwärzen (Blur). Die Chat-Antworten werden per KI erstellt – Endkunden werden darauf hingewiesen, keine personenbezogenen Daten einzugeben.",
+    a: "Steply wird in der EU betrieben. Sensible Bereiche in Screenshots schwärzen Sie direkt im Editor – der Blur wird beim Veröffentlichen unwiderruflich in die Bilder gebrannt. Die Chat-Antworten werden per KI erstellt; Endkunden werden darauf hingewiesen, keine personenbezogenen Daten einzugeben.",
+  },
+  {
+    q: "Erfindet der KI-Chat Antworten?",
+    a: "Nein. Der Assistent antwortet ausschließlich aus Ihren veröffentlichten Anleitungen und Ihrer Wissensdatenbank. Findet er nichts, sagt er das ehrlich und verweist an die Ansprechpartner, die Sie hinterlegt haben – auf Wunsch pro Fachgebiet mit Terminbuchung, E-Mail und Telefon.",
+  },
+  {
+    q: "Woher weiß ich, welche Anleitungen fehlen?",
+    a: "Steply sammelt die Fragen, die der Chat nicht beantworten konnte, unter „Offene Fragen“. Ein Klick auf „Entwurf erstellen“ – und die KI baut das Anleitungs-Gerüst dazu. Dazu sehen Sie Aufrufe und „War das hilfreich?“-Feedback pro Hilfe-Seite.",
+  },
+  {
+    q: "Können wir Steply auch intern nutzen?",
+    a: "Ja. Anleitungen lassen sich auf „Intern“ stellen – dann sind sie nur für Ihr Team sichtbar, nie auf der öffentlichen Hilfe-Seite. Inklusive Schulungsnachweis: Sie sehen, wer welche Schulung wann absolviert hat.",
   },
   {
     q: "Wie kommt die Hilfe auf meine Website?",
-    a: "Jede veröffentlichte Anleitung erhält einen eigenen Link. Diesen verlinken Sie auf Ihrer Website, in E-Mails oder per Messenger – ganz ohne iFrame. Optional lässt sich die Seite auch einbetten.",
-  },
-  {
-    q: "Kann ich mein CI nutzen?",
-    a: "Ja. Logo und Farben legen Sie manuell fest – oder die KI übernimmt Ihr Corporate Design automatisch aus Ihrer Website. Die Hilfe-Seite sieht dann aus wie Ihre Organisation.",
-  },
-  {
-    q: "Wie funktioniert Video → Tutorial?",
-    a: "Sie nehmen Ihren Bildschirm mit Stimme auf. Sagen Sie „Schnitt“, um einen Schritt abzuschließen. Steply transkribiert, schneidet passende Screenshots und schlägt Titel, Text und Markierungen vor – Sie prüfen nur noch nach.",
+    a: "Jede veröffentlichte Anleitung erhält einen eigenen Link – verlinken Sie ihn auf Ihrer Website, in E-Mails oder per Messenger. Zusätzlich gibt es QR-Codes, eine Druckansicht und eine Chat-Bubble, die Sie mit einer Zeile Code auf Ihrer eigenen Website einbinden.",
   },
 ];
 
 /* ---------- Bausteine ---------- */
+
+function BrowserFrame({ url, children }: { url: string; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_30px_80px_-20px_rgba(16,21,36,0.3)]">
+      <div className="flex items-center gap-2 border-b border-border bg-background/70 px-4 py-2.5">
+        <span className="size-2.5 rounded-full bg-no/70" />
+        <span className="size-2.5 rounded-full bg-[#f7b955]" />
+        <span className="size-2.5 rounded-full bg-yes/70" />
+        <span className="ml-3 flex-1 truncate rounded-md border border-line-2 bg-card px-3 py-1 text-xs text-muted-foreground">
+          {url}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function VideoStep({
+  icon: Icon,
+  n,
+  t,
+  d,
+}: {
+  icon: typeof Mic;
+  n: string;
+  t: string;
+  d: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-4">
+      <div className="flex flex-col items-center">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+          <Icon className="size-5" />
+        </div>
+        <div className="mt-2 w-px flex-1 bg-line-2 [li:last-child_&]:hidden" />
+      </div>
+      <div className="pb-2">
+        <div className="flex items-baseline gap-2">
+          <span className="font-display text-sm font-bold text-primary">{n}</span>
+          <h3 className="text-lg font-bold text-ink">{t}</h3>
+        </div>
+        <p className="mt-1 max-w-md text-sm leading-relaxed text-ink-2">{d}</p>
+      </div>
+    </li>
+  );
+}
 
 function BentoCell({
   icon: Icon,
@@ -327,55 +709,6 @@ function MiniBranch() {
         <div className="mb-1 flex items-center gap-2.5 rounded-xl border border-border bg-background p-2.5">
           <span className="flex size-7 items-center justify-center rounded-lg border border-line-2 bg-card text-xs text-muted-foreground">8</span>
           <span className="text-sm font-semibold text-ink">App neu installieren</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProductCanvas() {
-  return (
-    <div className="mt-14 grid items-center gap-5 rounded-3xl border border-border bg-card p-5 shadow-[0_30px_80px_-20px_rgba(16,21,36,0.25)] sm:p-8 lg:grid-cols-[1.3fr_1fr]">
-      {/* Builder-Seite */}
-      <div className="rounded-2xl border border-border bg-background/60 p-4">
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-          <span className="size-2 rounded-full bg-no" />
-          <span className="size-2 rounded-full bg-yes" />
-          <span className="size-2 rounded-full bg-primary" />
-          <span className="ml-1">Builder</span>
-        </div>
-        <MiniBranch />
-      </div>
-
-      {/* Viewer (Phone) */}
-      <div className="mx-auto w-full max-w-[260px]">
-        <div className="rounded-[1.6rem] border border-border bg-card p-3 shadow-xl">
-          <div className="mb-2 flex items-center gap-2 border-b border-line-2 pb-2">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">M</div>
-            <div className="text-xs font-bold text-ink">Muster GmbH</div>
-            <span className="ml-auto text-[10px] text-muted-foreground">Hilfe</span>
-          </div>
-          <div className="aspect-[4/3] rounded-lg bg-[#0c1322] p-2">
-            <div className="flex h-full flex-col gap-1.5">
-              {["Face ID", "App Login", "Mitteilungen"].map((r, i) => (
-                <div
-                  key={r}
-                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[10px] ${
-                    i === 0 ? "bg-primary/20 ring-1 ring-primary" : "bg-white/5"
-                  }`}
-                >
-                  <span className="text-white/80">{r}</span>
-                  <span className="ml-auto text-white/40">{i === 0 ? "Ein" : "Aus"}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-2 text-sm font-bold text-ink">Face ID aktivieren</div>
-          <p className="text-xs text-muted-foreground">Schalter antippen, mit Gesicht bestätigen.</p>
-          <div className="mt-2 flex gap-1.5">
-            <span className="flex-1 rounded-lg border-2 border-yes py-1.5 text-center text-xs font-bold text-yes">Ja</span>
-            <span className="flex-1 rounded-lg border-2 border-no py-1.5 text-center text-xs font-bold text-no">Nein</span>
-          </div>
         </div>
       </div>
     </div>
