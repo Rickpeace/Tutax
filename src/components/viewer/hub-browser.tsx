@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Layers, ChevronRight, Loader2 } from "lucide-react";
+import { labelsFor, t as translate, type HubLabels, type HubLang } from "@/lib/i18n-hub";
 
 export type HubTutorial = {
   title: string;
@@ -15,11 +16,23 @@ export function HubBrowser({
   accountSlug,
   items,
   order,
+  lang = "de",
+  langQuery = "",
+  labels,
 }: {
   accountSlug: string;
   items: HubTutorial[];
   order: string[];
+  /** Aktive Sprache; Default DE, damit /app-Vorschauen unverändert bleiben. */
+  lang?: HubLang;
+  /** „lang=xx“ oder "" (an interne Links anhängen, damit die Sprache erhalten bleibt). */
+  langQuery?: string;
+  /** UI-Strings; Default = deutsche Strings. */
+  labels?: HubLabels;
 }) {
+  const L = labels ?? labelsFor(lang);
+  // Query-Suffix für Karten-Links (?lang=… bzw. leer).
+  const suffix = langQuery ? `?${langQuery}` : "";
   const [q, setQ] = useState("");
 
   const groups = useMemo(() => {
@@ -91,10 +104,10 @@ export function HubBrowser({
         <Search className="size-4 text-muted-foreground" />
         <input
           type="search"
-          aria-label="Anleitung suchen"
+          aria-label={L.searchAria}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Anleitung suchen …"
+          placeholder={L.searchPlaceholder}
           className="w-full bg-transparent text-sm outline-none"
         />
       </div>
@@ -102,37 +115,36 @@ export function HubBrowser({
       {groups.length === 0 ? (
         items.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            Noch keine veröffentlichten Anleitungen.
+            {L.noneYet}
           </p>
         ) : (
           <div className="flex flex-col items-center py-10 text-center">
             <p className="text-sm text-muted-foreground">
-              Keine Anleitung zu &bdquo;{q.trim()}&ldquo; gefunden.
+              {translate(lang, "noneFound", { q: q.trim() })}
             </p>
             <button
               onClick={() => setQ("")}
               className="mt-3 rounded-lg border border-black/10 bg-white px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
             >
-              Suche zurücksetzen
+              {L.resetSearch}
             </button>
 
             {semEligible && semLoading && sem.length === 0 && (
               <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> Ähnliche Anleitungen
-                werden gesucht …
+                <Loader2 className="size-3.5 animate-spin" /> {L.searchingSimilar}
               </p>
             )}
 
             {semEligible && sem.length > 0 && (
               <div className="mt-5 w-full max-w-sm text-left">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Meinten Sie:
+                  {L.didYouMean}
                 </p>
                 <div className="space-y-2">
                   {sem.map((t) => (
                     <Link
                       key={t.slug}
-                      href={`/h/${accountSlug}/${t.slug}`}
+                      href={`/h/${accountSlug}/${t.slug}${suffix}`}
                       className="flex items-center gap-3 p-3 transition-transform hover:-translate-y-px"
                       style={{
                         background: "var(--brand-card-bg, #fff)",
@@ -171,8 +183,7 @@ export function HubBrowser({
             )}
 
             <p className="mt-5 max-w-xs text-xs text-muted-foreground">
-              Nicht das Richtige dabei? Fragen Sie den Hilfe-Assistenten unten
-              rechts.
+              {L.notRight}
             </p>
           </div>
         )
@@ -190,7 +201,7 @@ export function HubBrowser({
               {g.items.map((t) => (
                 <Link
                   key={t.slug}
-                  href={`/h/${accountSlug}/${t.slug}`}
+                  href={`/h/${accountSlug}/${t.slug}${suffix}`}
                   data-tx="card"
                   className="group flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
                   style={{

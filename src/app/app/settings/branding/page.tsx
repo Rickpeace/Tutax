@@ -2,19 +2,27 @@ import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { BrandingForm } from "@/components/app/branding-form";
 import { DesignModeSwitcher } from "@/components/app/design-mode-switcher";
+import { LanguagesForm } from "@/components/app/languages-form";
 import { publicImageUrl } from "@/lib/public-image";
 import { appBaseUrl } from "@/lib/url";
+import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 
 export default async function BrandingPage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
-  const { data: theme } = await supabase
-    .from("themes")
-    .select(
-      "tokens, ai_tokens, logo_path, ai_logo_path, mode, source_url, extreme_tokens, extreme_logo_path",
-    )
-    .eq("account_id", account.id)
-    .single();
+  const [{ data: theme }, { data: acc }] = await Promise.all([
+    supabase
+      .from("themes")
+      .select(
+        "tokens, ai_tokens, logo_path, ai_logo_path, mode, source_url, extreme_tokens, extreme_logo_path",
+      )
+      .eq("account_id", account.id)
+      .single(),
+    supabase.from("accounts").select("languages").eq("id", account.id).single(),
+  ]);
+  const languages = ((acc?.languages as string[] | null) ?? []).filter(
+    isExtraLang,
+  ) as ExtraLang[];
 
   const mode =
     theme?.mode === "extreme" ? "extreme" : theme?.mode === "ai" ? "ai" : "manual";
@@ -66,6 +74,8 @@ export default async function BrandingPage() {
           appUrl={appBaseUrl()}
         />
       </div>
+
+      <LanguagesForm initial={languages} />
     </div>
   );
 }

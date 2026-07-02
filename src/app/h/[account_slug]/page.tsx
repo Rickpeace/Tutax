@@ -9,18 +9,27 @@ import { publicImageUrl } from "@/lib/public-image";
 import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
 import { ChatWidget } from "@/components/viewer/chat-widget";
+import { LangSwitcher } from "@/components/viewer/lang-switcher";
+import {
+  resolveLang,
+  labelsFor,
+  isExtraLang,
+  LANG_BCP47,
+  type HubLang,
+} from "@/lib/i18n-hub";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
-// Konto. Mutationen (publish/theme/…) invalidieren via updateTag (lib/cache-tags);
-// verpasste Pfade fängt cacheLife('hours') ab. Dedup generateMetadata/Seite inklusive.
-async function load(accountSlug: string) {
+// Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
+// getrennt gecacht werden. Mutationen (publish/theme/übersetzen/…) invalidieren via
+// updateTag (lib/cache-tags); verpasste Pfade fängt cacheLife('hours') ab.
+async function load(accountSlug: string, lang: HubLang) {
   "use cache";
   cacheTag(hubTag(accountSlug));
   cacheLife("hours");
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug")
+    .select("id, name, slug, languages")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -42,7 +51,28 @@ async function load(accountSlug: string) {
       .single(),
   ]);
 
-  return { account, catalog, categories: categories ?? [], theme };
+  // Übersetzte Katalog-Titel/Beschreibungen (nur wenn lang≠de). Fallback = DE.
+  // Als schlichtes Record (serialisierbar über die 'use cache'-Grenze).
+  const translations: Record<string, { title: string; description: string | null }> = {};
+  if (lang !== "de") {
+    const ids = catalog.map((e) => e.renderTutorialId);
+    if (ids.length) {
+      const { data: trows } = await admin
+        .from("tutorial_translations")
+        .select("tutorial_id, title, description")
+        .eq("lang", lang)
+        .in("tutorial_id", ids);
+      for (const t of trows ?? []) {
+        translations[t.tutorial_id as string] = {
+          title: t.title as string,
+          description: (t.description as string | null) ?? null,
+        };
+      }
+    }
+  }
+
+  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+  return { account, catalog, categories: categories ?? [], theme, translations, languages };
 }
 
 /** Statische Shell: Demo-Hub zur Build-Zeit; weitere Slugs zur Laufzeit (Fallback-Shell). */
@@ -52,22 +82,40 @@ export function generateStaticParams() {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }): Promise<Metadata> {
   const { account_slug } = await params;
-  const data = await load(account_slug);
+  const { lang: langParam } = await searchParams;
+  // Metadaten sprachneutral laden (nur für Sprachliste/Existenz) -> DE.
+  const data = await load(account_slug, "de");
   if (!data) return { title: "Nicht gefunden" };
-  const { account } = data;
+  const { account, languages } = data;
+  const lang = resolveLang(langParam, languages);
   const description = `Hilfe & Anleitungen von ${account.name} – Schritt für Schritt erklärt.`;
+  // hreflang: DE + aktivierte Sprachen (nur wenn welche aktiv sind).
+  const base = `/h/${account.slug}`;
+  const alternates =
+    languages.length > 0
+      ? {
+          languages: {
+            [LANG_BCP47.de]: base,
+            ...Object.fromEntries(languages.map((l) => [LANG_BCP47[l], `${base}?lang=${l}`])),
+          },
+        }
+      : undefined;
   const { logoPath } = resolveTheme(data.theme);
   return {
     title: `Hilfe & Anleitungen · ${account.name}`,
     description,
+    ...(alternates ? { alternates } : {}),
     openGraph: {
       title: `Hilfe & Anleitungen · ${account.name}`,
       description,
       siteName: account.name,
+      locale: LANG_BCP47[lang],
       ...(logoPath ? { images: [publicImageUrl(logoPath)] } : {}),
     },
   };
@@ -78,14 +126,21 @@ export default async function HubPage({
   searchParams,
 }: {
   params: Promise<{ account_slug: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; lang?: string }>;
 }) {
   const { account_slug } = await params;
-  const { preview } = await searchParams;
-  const data = await load(account_slug);
-  if (!data) notFound();
+  const { preview, lang: langParam } = await searchParams;
+  // lang zuerst grob laden (DE), um die aktivierten Sprachen zu kennen, dann final
+  // mit korrekter Sprache laden (getrennter Cache-Key). Bei lang=de identisch.
+  const probe = await load(account_slug, "de");
+  if (!probe) notFound();
+  const lang = resolveLang(langParam, probe.languages);
+  const data = lang === "de" ? probe : ((await load(account_slug, lang)) ?? probe);
 
-  const { account, catalog, categories } = data;
+  const { account, catalog, categories, translations, languages } = data;
+  const labels = labelsFor(lang);
+  // Suffix, das alle internen Links die Sprache mitgeben (kein Zurückfallen auf DE).
+  const langQ = lang === "de" ? "" : `lang=${lang}`;
   // Vorschau: ein Design erzwingen, OHNE es zu aktivieren (ändert themes.mode nicht).
   const previewMode = ["manual", "ai", "extreme"].includes(preview ?? "") ? preview : null;
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
@@ -93,12 +148,15 @@ export default async function HubPage({
 
   const items: HubTutorial[] = catalog
     .filter((e) => e.visible && e.slug)
-    .map((e) => ({
-      title: e.title,
-      description: e.description,
-      slug: e.slug as string,
-      category: (e.categoryId && catName.get(e.categoryId)) || "Sonstiges",
-    }));
+    .map((e) => {
+      const tr = translations[e.renderTutorialId];
+      return {
+        title: tr?.title || e.title,
+        description: tr?.description ?? e.description,
+        slug: e.slug as string,
+        category: (e.categoryId && catName.get(e.categoryId)) || "Sonstiges",
+      };
+    });
 
   // eigene Kategorien zuerst, dann globale (Standard), Namen dedupliziert
   const ordered = [
@@ -154,7 +212,7 @@ export default async function HubPage({
               {initial}
             </div>
           )}
-          <div>
+          <div className="min-w-0 flex-1">
             <div
               data-tx="title"
               className="text-xl font-extrabold"
@@ -166,11 +224,21 @@ export default async function HubPage({
             >
               {account.name}
             </div>
-            <div data-tx="subtitle" className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
+            <div data-tx="subtitle" className="text-sm text-muted-foreground">{labels.subtitle}</div>
           </div>
+          {languages.length > 0 && (
+            <LangSwitcher current={lang} languages={languages} basePath={`/h/${account.slug}`} />
+          )}
         </div>
 
-        <HubBrowser accountSlug={account.slug} items={items} order={order} />
+        <HubBrowser
+          accountSlug={account.slug}
+          items={items}
+          order={order}
+          lang={lang}
+          langQuery={langQ}
+          labels={labels}
+        />
 
         <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">
           powered by Steply

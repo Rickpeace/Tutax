@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { Builder } from "@/components/builder/builder";
 import { TutorialHeader } from "@/components/builder/tutorial-header";
+import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 
 export default async function EditorPage({
   params,
@@ -21,11 +22,26 @@ export default async function EditorPage({
     .single<Tutorial>();
   if (!tutorial) notFound();
 
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("account_id", account.id)
-    .order("position", { ascending: true });
+  const [{ data: categories }, { data: acc }, { data: translations }] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("account_id", account.id)
+      .order("position", { ascending: true }),
+    // Aktivierte Zusatzsprachen (steuert den „Übersetzen“-Button im Header).
+    supabase.from("accounts").select("languages").eq("id", account.id).single(),
+    // Übersetzungsstatus für den „veraltet“-Punkt am Button.
+    supabase.from("tutorial_translations").select("lang, stale").eq("tutorial_id", id),
+  ]);
+
+  const languages = ((acc?.languages as string[] | null) ?? []).filter(
+    isExtraLang,
+  ) as ExtraLang[];
+  // „veraltet“, wenn eine aktivierte Sprache fehlt ODER als stale markiert ist.
+  const byLang = new Map((translations ?? []).map((t) => [t.lang as string, t.stale as boolean]));
+  const translationsStale =
+    languages.length > 0 &&
+    languages.some((l) => !byLang.has(l) || byLang.get(l) === true);
 
   const { data: steps } = await supabase
     .from("steps")
@@ -59,6 +75,8 @@ export default async function EditorPage({
         visibility={tutorial.visibility}
         categories={categories ?? []}
         categoryId={tutorial.category_id}
+        languages={languages}
+        translationsStale={translationsStale}
       />
 
       <Builder

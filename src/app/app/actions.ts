@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
@@ -9,6 +10,9 @@ import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
+import { markTranslationsStale } from "@/lib/translate-stale";
+import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
+import { isExtraLang } from "@/lib/i18n-hub";
 import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -89,6 +93,8 @@ export async function renameTutorial(id: string, title: string) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   await invalidateTutorialTags(id);
+  await markTranslationsStale(id);
+  after(() => translateTitleDelta(id));
   revalidatePath("/app");
 }
 
@@ -313,6 +319,24 @@ export async function publishTutorial(tutorialId: string) {
   await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
 
   await invalidateTutorialTags(tutorialId); // öffentliche /h-Caches sofort aktualisieren
+
+  // Mehrsprachigkeit (Welle 13): sind Zusatzsprachen aktiv, das frisch veröffentlichte
+  // Tutorial im Hintergrund voll übersetzen — via after(), damit der Publish schnell
+  // bleibt. Nur öffentlicher Pfad (interne Tutorials sieht niemand -> nicht übersetzen).
+  const { data: acc } = await supabase
+    .from("accounts")
+    .select("languages")
+    .eq("id", account.id)
+    .single();
+  const hasLangs = ((acc?.languages as string[] | null) ?? []).some(isExtraLang);
+  if (hasLangs) {
+    after(() =>
+      translateTutorial(tutorialId).catch((e) =>
+        console.error("Auto-Übersetzung beim Publish:", e instanceof Error ? e.message : e),
+      ),
+    );
+  }
+
   revalidatePath("/app");
   return { slug, accountSlug: account.slug };
 }
@@ -370,6 +394,19 @@ export async function setTutorialVisibility(
     if (isPublished) {
       await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
       await invalidateTutorialTags(tutorialId);
+      // Wird jetzt öffentlich sichtbar -> ggf. übersetzen (wie beim Publish).
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("languages")
+        .eq("id", account.id)
+        .single();
+      if (((acc?.languages as string[] | null) ?? []).some(isExtraLang)) {
+        after(() =>
+          translateTutorial(tutorialId).catch((e) =>
+            console.error("Auto-Übersetzung (Sichtbarkeit):", e instanceof Error ? e.message : e),
+          ),
+        );
+      }
     }
   }
 

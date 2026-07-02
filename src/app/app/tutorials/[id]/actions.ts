@@ -1,10 +1,21 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
+import {
+  markTranslationsStale,
+  markTranslationsStaleByStep,
+  markTranslationsStaleByBranch,
+} from "@/lib/translate-stale";
+import {
+  translateStepDelta,
+  translateTitleDelta,
+  translateBranchDelta,
+} from "@/app/app/actions-translate";
 import { YES } from "@/lib/builder/constants";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
@@ -46,6 +57,7 @@ export async function addStep(
     if (be) throw new Error(be.message);
   }
   await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
+  await markTranslationsStale(tutorialId); // neuer Schritt -> Übersetzungen unvollständig
 }
 
 /** Titel/Text/Bild speichern (stiller Auto-Save). */
@@ -75,6 +87,11 @@ export async function updateStep(
     );
   }
   await invalidateStepTags(stepId); // nur wirksam, wenn veröffentlicht
+  // Nur Text-Änderungen entwerten Übersetzungen (Bild/Markierungen sind sprachneutral).
+  if ("title" in patch || "body" in patch) {
+    await markTranslationsStaleByStep(stepId); // sofort veraltet …
+    after(() => translateStepDelta(stepId)); // … und im Hintergrund nachziehen (Delta-Sync)
+  }
 }
 
 /** Öffentliche Kopie des Schritt-Bilds neu erzeugen (Blur eingebrannt). */
@@ -132,6 +149,10 @@ export async function setDecision(stepId: string, isDecision: boolean) {
     }
   }
   await invalidateStepTags(stepId);
+  await markTranslationsStaleByStep(stepId); // Labels/Verzweigung geändert
+  // setDecision ändert das Label der ersten Verzweigung („Ja“ bzw. null) -> Label-Delta.
+  const firstBranch = existing?.[0]?.id;
+  if (firstBranch) after(() => translateBranchDelta(firstBranch));
 }
 
 /** Antwort-Option anlegen (Client liefert id/color/position). */
@@ -147,6 +168,8 @@ export async function addBranch(branch: {
   const { error } = await supabase.from("step_branches").insert(branch);
   if (error) throw new Error(error.message);
   await invalidateStepTags(branch.step_id);
+  await markTranslationsStaleByStep(branch.step_id);
+  if (branch.label?.trim()) after(() => translateBranchDelta(branch.id));
 }
 
 export async function updateBranch(
@@ -160,11 +183,16 @@ export async function updateBranch(
     .eq("id", branchId);
   if (error) throw new Error(error.message);
   await invalidateBranchTags(branchId);
+  if ("label" in patch) {
+    await markTranslationsStaleByBranch(branchId);
+    after(() => translateBranchDelta(branchId));
+  }
 }
 
 export async function deleteBranch(branchId: string) {
   const supabase = await createClient();
   await invalidateBranchTags(branchId); // VOR dem Delete (Lookup braucht die Zeile)
+  await markTranslationsStaleByBranch(branchId); // ebenfalls VOR dem Delete
   const { error } = await supabase
     .from("step_branches")
     .delete()
@@ -199,6 +227,7 @@ export async function deleteStep(
   const { error } = await supabase.from("steps").delete().eq("id", stepId);
   if (error) throw new Error(error.message);
   await invalidateTutorialTags(tutorialId);
+  await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
 }
 
 /**
@@ -247,6 +276,8 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
   await invalidateTutorialTags(tutorialId);
+  await markTranslationsStale(tutorialId);
+  after(() => translateTitleDelta(tutorialId));
 }
 
 /**

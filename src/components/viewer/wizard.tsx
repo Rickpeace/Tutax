@@ -7,6 +7,7 @@ import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
 import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
 import { dateDe } from "@/lib/format";
+import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
 
 export function Wizard({
   rootId,
@@ -20,6 +21,7 @@ export function Wizard({
   completion,
   onComplete,
   onUncomplete,
+  labels,
 }: {
   rootId: string | null;
   steps: Step[];
@@ -33,7 +35,10 @@ export function Wizard({
   completion?: { completed: boolean; completedAt: string | null };
   onComplete?: () => Promise<void>;
   onUncomplete?: () => Promise<void>;
+  /** UI-Strings; Default = deutsche Strings (damit /app/lernen & Vorschau unverändert bleiben). */
+  labels?: HubLabels;
 }) {
+  const L = labels ?? labelsFor("de");
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
   const branchesByStep = useMemo(() => {
     const m = new Map<string, StepBranch[]>();
@@ -207,7 +212,9 @@ export function Wizard({
               data-tx="progress"
               className="mb-3 text-xs font-semibold text-muted-foreground"
             >
-              Schritt {history.length + 1} von {linearTotal}
+              {L.stepXofY
+                .replace("{n}", String(history.length + 1))
+                .replace("{total}", String(linearTotal))}
             </div>
           )}
           {imageUrls[step.id] ? (
@@ -271,7 +278,7 @@ export function Wizard({
                       borderRadius: "var(--brand-btn-radius, 12px)",
                     }}
                   >
-                    {b.label || "Weiter"}
+                    {b.label || L.next}
                   </button>
                 ))}
               </div>
@@ -279,6 +286,8 @@ export function Wizard({
               <NextButton
                 branches={branchesByStep.get(step.id) ?? []}
                 onNext={(t) => go(t)}
+                nextLabel={L.next}
+                doneLabel={L.done}
               />
             )}
 
@@ -287,7 +296,7 @@ export function Wizard({
                 onClick={back}
                 className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-semibold text-muted-foreground"
               >
-                <ChevronLeft className="size-4" /> Zurück
+                <ChevronLeft className="size-4" /> {L.back}
               </button>
             )}
 
@@ -299,8 +308,7 @@ export function Wizard({
               <div className="mt-3 text-center" data-tx="stuck">
                 {stuckSent.has(step.id) ? (
                   <p className="text-xs text-muted-foreground" role="status">
-                    Danke – wir schauen uns diesen Schritt an. Nutzen Sie gern den
-                    Hilfe-Assistenten unten rechts.
+                    {L.stuckThanks}
                   </p>
                 ) : (
                   <button
@@ -308,7 +316,7 @@ export function Wizard({
                     onClick={() => sendStuck(step.id, step.title)}
                     className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-[var(--brand-ink)]"
                   >
-                    Ich komme hier nicht weiter
+                    {L.stuck}
                   </button>
                 )}
               </div>
@@ -323,9 +331,9 @@ export function Wizard({
           >
             <Check className="size-7" />
           </div>
-          <h2 className="mt-4 text-lg font-bold text-[var(--brand-ink)]">Fertig!</h2>
+          <h2 className="mt-4 text-lg font-bold text-[var(--brand-ink)]">{L.finished}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Sie haben die Anleitung abgeschlossen.
+            {L.finishedSub}
           </p>
 
           {/* Interner Schulungsnachweis statt öffentlichem Feedback. */}
@@ -365,25 +373,25 @@ export function Wizard({
             <div className="mt-4">
               {feedback === "sent" ? (
                 <p className="text-sm font-medium text-muted-foreground" role="status">
-                  Danke für Ihr Feedback!
+                  {L.feedbackThanks}
                 </p>
               ) : (
                 <div className="flex flex-col items-center gap-2">
-                  <p className="text-sm text-muted-foreground">War diese Anleitung hilfreich?</p>
+                  <p className="text-sm text-muted-foreground">{L.helpful}</p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => sendFeedback(true)}
-                      aria-label="Ja, hilfreich"
+                      aria-label={L.yes}
                       className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
                     >
-                      <ThumbsUp className="size-4" /> Ja
+                      <ThumbsUp className="size-4" /> {L.yes}
                     </button>
                     <button
                       onClick={() => sendFeedback(false)}
-                      aria-label="Nein, nicht hilfreich"
+                      aria-label={L.no}
                       className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
                     >
-                      <ThumbsDown className="size-4" /> Nein
+                      <ThumbsDown className="size-4" /> {L.no}
                     </button>
                   </div>
                 </div>
@@ -400,14 +408,14 @@ export function Wizard({
               borderRadius: "var(--brand-btn-radius, 12px)",
             }}
           >
-            <RotateCcw className="size-4" /> Von vorne
+            <RotateCcw className="size-4" /> {L.restart}
           </button>
           {history.length > 0 && (
             <button
               onClick={back}
               className="mt-2 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-muted-foreground"
             >
-              <ChevronLeft className="size-4" /> Zurück
+              <ChevronLeft className="size-4" /> {L.back}
             </button>
           )}
         </div>
@@ -476,9 +484,13 @@ function StepPlaceholder({ title }: { title: string | null }) {
 function NextButton({
   branches,
   onNext,
+  nextLabel,
+  doneLabel,
 }: {
   branches: StepBranch[];
   onNext: (target: string | null) => void;
+  nextLabel: string;
+  doneLabel: string;
 }) {
   const target = branches[0]?.target_step_id ?? null;
   const hasNext = branches.length > 0 && target != null;
@@ -495,11 +507,11 @@ function NextButton({
     >
       {hasNext ? (
         <>
-          Weiter <ChevronRight className="size-5" />
+          {nextLabel} <ChevronRight className="size-5" />
         </>
       ) : (
         <>
-          Fertig <Check className="size-5" />
+          {doneLabel} <Check className="size-5" />
         </>
       )}
     </button>
