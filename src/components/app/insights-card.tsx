@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { BarChart3, MessageCircleQuestion, ThumbsUp } from "lucide-react";
+import { GapAction } from "@/components/app/gap-action";
 
 /**
  * Insights-Karte fürs Dashboard (letzte 30 Tage). Zeigt kompakt:
@@ -38,12 +39,15 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
     base().eq("type", "feedback").eq("helpful", true),
     base().eq("type", "feedback").eq("helpful", false),
     // Unbeantwortete Fragen im Klartext für die Top-3-Lücken-Liste.
+    // Nur noch OFFENE Fragen: bereits in einen Entwurf überführte (handled_at gesetzt)
+    // fliegen raus (Frage-Lücken-Miner, REVIEW H1).
     supabase
       .from("events")
       .select("question")
       .eq("account_id", accountId)
       .eq("type", "chat")
       .eq("status", "no_answer")
+      .is("handled_at", null)
       .not("question", "is", null)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
@@ -127,20 +131,23 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
           <p className="mb-3 text-xs text-muted-foreground">
             Ein Hinweis, für welches Thema noch eine Anleitung fehlt.
           </p>
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {topGaps.map((g) => (
               <li
                 key={g.question}
-                className="flex items-start justify-between gap-3 text-sm text-ink-2"
+                className="flex flex-col gap-2 text-sm text-ink-2 sm:flex-row sm:items-start sm:justify-between"
               >
-                <span className="min-w-0 flex-1">
-                  &bdquo;{g.question}&ldquo;
-                </span>
-                {g.count > 1 && (
-                  <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
-                    {g.count}×
+                <span className="flex min-w-0 flex-1 items-start gap-2">
+                  <span className="min-w-0 flex-1">
+                    &bdquo;{g.question}&ldquo;
                   </span>
-                )}
+                  {g.count > 1 && (
+                    <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
+                      {g.count}×
+                    </span>
+                  )}
+                </span>
+                <GapAction question={g.question} />
               </li>
             ))}
           </ul>

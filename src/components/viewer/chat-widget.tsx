@@ -28,9 +28,12 @@ type Msg = {
 export function ChatWidget({
   accountSlug,
   accountName,
+  embedded = false,
 }: {
   accountSlug: string;
   accountName: string;
+  /** Läuft im Script-Bubble-iFrame (Feature H4): Größe an das Eltern-Fenster melden. */
+  embedded?: boolean;
 }) {
   const greeting: Msg = {
     role: "bot",
@@ -83,6 +86,15 @@ export function ChatWidget({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // Script-Bubble (H4): dem Eltern-Fenster den Öffnen/Schließen-Zustand melden, damit
+  // das einbettende <script> das iFrame vergrößert/verkleinert. Nur im Embedded-Modus.
+  useEffect(() => {
+    if (!embedded || !hydrated) return;
+    try {
+      window.parent?.postMessage({ steply: open ? "chat-open" : "chat-close" }, "*");
+    } catch {}
+  }, [embedded, hydrated, open]);
 
   function resetChat() {
     if (!window.confirm("Gespräch wirklich löschen?")) return;
@@ -172,22 +184,36 @@ export function ChatWidget({
 
   return (
     <>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Hilfe-Assistent"
-        aria-expanded={open}
-        className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
-        style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
-      >
-        {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
-      </button>
+      {/* Launcher. Im Embedded-Modus nur ZEIGEN, wenn geschlossen (das offene Panel
+          füllt dann das ganze iFrame und hat einen eigenen Schließen-Knopf im Kopf). */}
+      {!(embedded && open) && (
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Hilfe-Assistent"
+          aria-expanded={open}
+          className={
+            embedded
+              ? // Im iFrame geschlossen (76×76) den Launcher mittig platzieren.
+                "fixed inset-0 z-40 m-auto flex size-14 items-center justify-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
+              : "fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition-transform active:scale-95"
+          }
+          style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
+        >
+          {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
+        </button>
+      )}
 
       {open && (
         <div
           role="dialog"
           aria-modal="false"
           aria-label="Hilfe-Assistent"
-          className="fixed bottom-24 right-3 left-3 z-40 flex h-[min(30rem,calc(100dvh-7rem))] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
+          className={
+            embedded
+              ? // Im iFrame gibt das Fenster die Größe vor -> Panel füllt es komplett.
+                "fixed inset-0 z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)]"
+              : "fixed bottom-24 right-3 left-3 z-40 flex h-[min(30rem,calc(100dvh-7rem))] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
+          }
         >
           <div
             className="flex items-center gap-2 border-b border-black/5 px-4 py-3"
@@ -203,6 +229,16 @@ export function ChatWidget({
                 className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:text-[var(--brand-ink)]"
               >
                 <RotateCcw className="size-3.5" /> Neu
+              </button>
+            )}
+            {embedded && (
+              <button
+                onClick={() => setOpen(false)}
+                title="Schließen"
+                aria-label="Hilfe-Assistent schließen"
+                className={`${msgs.length > 1 ? "" : "ml-auto"} flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-[var(--brand-ink)]`}
+              >
+                <X className="size-4" />
               </button>
             )}
           </div>
