@@ -13,7 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed";
+type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed" | "bulk" | "bulkDone";
+
+// Fortschritt je Datei im Bulk-Upload (mehrere Dateien auf einmal).
+type BulkItem = { name: string; status: "pending" | "uploading" | "done" | "error"; error?: string };
 
 export function VideoUpload({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -28,6 +31,8 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [showUrl, setShowUrl] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
+  const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -62,19 +67,27 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     return () => clearInterval(iv);
   }, [jobId]);
 
+  // Kern: Datei hochladen + einen video_job einreihen, jobId zurückgeben.
+  // Setzt KEINE Komponenten-States — Einzel- und Bulk-Flow steuern die UI selbst.
+  async function uploadOne(blob: Blob, ext: string, niceName: string): Promise<{ jobId: string }> {
+    const supabase = createClient();
+    const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });
+    if (upErr) throw upErr;
+    const { data: job, error: jErr } = await supabase
+      .from("video_jobs")
+      .insert({ account_id: accountId, video_path: vpath, title: niceName, status: "queued" })
+      .select("id").single();
+    if (jErr) throw jErr;
+    return { jobId: job.id };
+  }
+
+  // Einzel-Flow: wie bisher (Phase uploading -> queued, Polling via setJobId).
   async function uploadAndQueue(blob: Blob, ext: string, niceName: string) {
     setPhase("uploading");
     try {
-      const supabase = createClient();
-      const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });
-      if (upErr) throw upErr;
-      const { data: job, error: jErr } = await supabase
-        .from("video_jobs")
-        .insert({ account_id: accountId, video_path: vpath, title: niceName, status: "queued" })
-        .select("id").single();
-      if (jErr) throw jErr;
-      setJobId(job.id);
+      const { jobId } = await uploadOne(blob, ext, niceName);
+      setJobId(jobId);
       setPhase("queued");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload fehlgeschlagen.");
@@ -82,11 +95,60 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     }
   }
 
-  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const extOf = (name: string) => (name.split(".").pop() || "mp4").toLowerCase();
+  const baseName = (name: string) => name.replace(/\.[^.]+$/, "");
+
+  // Bulk-Flow: mehrere Dateien nacheinander hochladen + je einen Job einreihen.
+  // KEIN jobId/Polling — die „Wird erstellt…"-Karten auf dem Dashboard übernehmen.
+  // Fehler pro Datei einsammeln und mit den restlichen weitermachen.
+  async function uploadBulk(files: File[]) {
     setError(null); setTutorialId(null);
-    uploadAndQueue(file, (file.name.split(".").pop() || "mp4").toLowerCase(), file.name.replace(/\.[^.]+$/, ""));
+    setBulkItems(files.map((f) => ({ name: f.name, status: "pending" })));
+    setPhase("bulk");
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setBulkItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, status: "uploading" } : it)));
+      try {
+        await uploadOne(f, extOf(f.name), baseName(f.name));
+        setBulkItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, status: "done" } : it)));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
+        setBulkItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, status: "error", error: msg } : it)));
+      }
+    }
+    setPhase("bulkDone");
+  }
+
+  // Gemeinsamer Einstieg für Datei-Input UND Drag&Drop: 1 Datei = Einzel-Flow (wie
+  // bisher), mehrere = Bulk-Flow. Nicht-Video-Dateien werden ignoriert/gemeldet.
+  function handleFiles(list: FileList | File[]) {
+    const files = Array.from(list).filter((f) => f.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(f.name));
+    if (files.length === 0) {
+      setError("Bitte eine Video-Datei auswählen.");
+      setPhase("failed");
+      return;
+    }
+    if (files.length === 1) {
+      const f = files[0];
+      setError(null); setTutorialId(null);
+      uploadAndQueue(f, extOf(f.name), baseName(f.name));
+    } else {
+      uploadBulk(files);
+    }
+  }
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    if (!list || list.length === 0) return;
+    handleFiles(list);
+  }
+
+  function onDropVideo(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const list = e.dataTransfer.files;
+    if (!list || list.length === 0) return;
+    handleFiles(list);
   }
 
   // Video per direktem Link importieren: der Server lädt es (SSRF-geschützt) und reiht
@@ -165,7 +227,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     streamsRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setProgress(null); setSecs(0); setNoMic(false);
-    setShowUrl(false); setImportUrl(""); setImporting(false);
+    setShowUrl(false); setImportUrl(""); setImporting(false); setBulkItems([]); setDragActive(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -173,17 +235,25 @@ export function VideoUpload({ accountId }: { accountId: string }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => {
-      // Während Aufnahme/Upload NICHT schließen (Klick neben das Fenster würde sonst die laufende Aufnahme abbrechen).
-      if (!o && (phase === "recording" || phase === "uploading")) return;
+      // Während Aufnahme/Upload NICHT schließen (Klick neben das Fenster würde sonst die laufende Aufnahme/Uploads abbrechen).
+      if (!o && (phase === "recording" || phase === "uploading" || phase === "bulk")) return;
       setOpen(o);
       if (!o) reset();
     }}>
       <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
-      <DialogContent className="sm:max-w-md" showCloseButton={phase !== "recording" && phase !== "uploading"}>
+      <DialogContent className="sm:max-w-md" showCloseButton={phase !== "recording" && phase !== "uploading" && phase !== "bulk"}>
         <DialogHeader><DialogTitle>Tutorial aus Video erstellen</DialogTitle></DialogHeader>
 
         {phase === "idle" && (
-          <div className="space-y-3">
+          <div
+            className={`space-y-3 rounded-lg transition-shadow ${
+              dragActive ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+            }`}
+            onDrop={onDropVideo}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+          >
             <p className="text-sm text-muted-foreground">
               Mach die Aufgabe einmal vor und erklär dabei ganz normal. Nach jedem Schritt sagst du
               <b> „Schnitt“</b> — daraus wird ein Schritt mit Screenshot und Markierung.
@@ -202,12 +272,12 @@ export function VideoUpload({ accountId }: { accountId: string }) {
               <p className="pt-0.5">Kein Sekunden-Zählen, keine anderen Zauberwörter nötig. Feinschliff geht danach im Editor.</p>
             </div>
 
-            <input ref={fileRef} type="file" accept="video/*" onChange={onPick} className="hidden" />
+            <input ref={fileRef} type="file" accept="video/*" multiple onChange={onPick} className="hidden" />
             <Button className="w-full" onClick={startRecording}>
               <Circle className="size-4 fill-current text-no" /> Jetzt aufnehmen (Bildschirm + Mikro)
             </Button>
             <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
-              <UploadCloud className="size-4" /> Stattdessen Datei hochladen
+              <UploadCloud className="size-4" /> {dragActive ? "Videos hier ablegen" : "Datei(en) hochladen oder hierher ziehen"}
             </Button>
             {!showUrl ? (
               <Button variant="ghost" className="w-full" onClick={() => setShowUrl(true)}>
@@ -274,6 +344,64 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             </p>
           </div>
         )}
+
+        {phase === "bulk" && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center justify-center gap-2 text-sm font-medium text-ink">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              {bulkItems.filter((it) => it.status === "done" || it.status === "error").length}/{bulkItems.length} hochgeladen …
+            </div>
+            <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line-2 bg-muted/40 p-2 text-xs">
+              {bulkItems.map((it, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  {it.status === "done" ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-yes" />
+                  ) : it.status === "error" ? (
+                    <AlertCircle className="size-3.5 shrink-0 text-no" />
+                  ) : it.status === "uploading" ? (
+                    <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+                  ) : (
+                    <Circle className="size-3.5 shrink-0 text-muted-foreground/50" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground" title={it.name}>{it.name}</span>
+                  {it.status === "error" && <span className="shrink-0 text-no">Fehler</span>}
+                </li>
+              ))}
+            </ul>
+            <p className="text-center text-xs text-muted-foreground">Bitte kurz warten – die Videos werden nacheinander hochgeladen.</p>
+          </div>
+        )}
+
+        {phase === "bulkDone" && (() => {
+          const okCount = bulkItems.filter((it) => it.status === "done").length;
+          const errs = bulkItems.filter((it) => it.status === "error");
+          return (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <CheckCircle2 className="size-8 text-yes" />
+              <p className="text-sm font-medium text-ink">
+                {okCount} {okCount === 1 ? "Video" : "Videos"} eingereiht 🎉
+              </p>
+              <p className="max-w-[22rem] text-xs text-muted-foreground">
+                Die Entwürfe erscheinen nacheinander auf dem Dashboard – der Dialog kann zu.
+              </p>
+              {errs.length > 0 && (
+                <div className="w-full space-y-1 rounded-lg border border-no/30 bg-no/5 p-2.5 text-left text-xs text-no">
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <AlertCircle className="size-3.5 shrink-0" /> {errs.length} {errs.length === 1 ? "Datei" : "Dateien"} fehlgeschlagen:
+                  </p>
+                  <ul className="space-y-0.5 pl-5">
+                    {errs.map((it, i) => (
+                      <li key={i} className="list-disc break-words">
+                        <span className="font-medium">{it.name}</span>{it.error ? ` – ${it.error}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Button variant="ghost" size="sm" onClick={reset}>Noch Videos hochladen</Button>
+            </div>
+          );
+        })()}
 
         {phase === "done" && (
           <div className="flex flex-col items-center gap-3 py-6 text-center">

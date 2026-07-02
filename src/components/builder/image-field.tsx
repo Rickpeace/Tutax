@@ -54,6 +54,9 @@ export function ImageField({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(false);
+  // Drag&Drop: Counter-Pattern gegen Flackern durch Kind-Elemente (dragenter/leave
+  // feuern auch beim Überfahren von Kindknoten). >0 = Datei schwebt über der Fläche.
+  const [dragDepth, setDragDepth] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Beim Klick auf „Bild aus Video wählen": signierte URL lazy holen; null -> Hinweis.
@@ -97,16 +100,65 @@ export function ImageField({
     return () => window.removeEventListener("keydown", onKey);
   }, [big]);
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  // Gemeinsamer Weg für Datei-Auswahl, Drop und Einfügen: Typ-Check -> Crop-Dialog
+  // (danach Upload + ggf. Highlights-Nachfrage beim Ersetzen). Nicht duplizieren.
+  function handleFile(file: File) {
     if (!file.type.startsWith("image/")) {
       toast.error("Bitte ein Bild auswählen");
       return;
     }
     setPendingFile(file); // -> Crop-Dialog
   }
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    handleFile(file);
+  }
+
+  // Drag&Drop: erste Bild-Datei aus dataTransfer nehmen. Enthält der Drop nur
+  // Nicht-Bild-Dateien -> freundlicher Hinweis, kein Crash.
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragDepth(0);
+    if (busy) return;
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    const img = files.find((f) => f.type.startsWith("image/"));
+    if (!img) {
+      toast.error("Bitte ein Bild ablegen");
+      return;
+    }
+    handleFile(img);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    // preventDefault ist Pflicht, damit ein Drop überhaupt zugelassen wird.
+    e.preventDefault();
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setDragDepth((d) => d + 1);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragDepth((d) => Math.max(0, d - 1));
+  }
+
+  // Einfügen (Strg+V): erste Bild-Datei aus der Zwischenablage -> gleicher Weg.
+  function onPaste(e: React.ClipboardEvent) {
+    if (busy) return;
+    const img = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    if (!img) return;
+    e.preventDefault();
+    handleFile(img);
+  }
+
+  const dragActive = dragDepth > 0;
 
   async function doUpload(file: File) {
     // War das ein ERSETZEN (Bild existierte schon) UND gibt es bereits Markierungen?
@@ -136,7 +188,22 @@ export function ImageField({
         onChange={onFile}
       />
       {imagePath && url ? (
-        <div className="space-y-2">
+        <div
+          className={`relative space-y-2 rounded-lg transition-shadow ${
+            dragActive ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+          }`}
+          tabIndex={0}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onPaste={onPaste}
+        >
+          {dragActive && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-background/80 text-sm font-medium text-primary">
+              Bild hier ablegen
+            </div>
+          )}
           {!big && (
             <HighlightEditor
               url={url}
@@ -221,14 +288,32 @@ export function ImageField({
           type="button"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card py-8 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onPaste={onPaste}
+          className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-sm transition-colors ${
+            dragActive
+              ? "border-primary bg-muted text-primary"
+              : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-muted"
+          }`}
         >
           {busy ? (
             <Loader2 className="size-6 animate-spin" />
           ) : (
             <ImagePlus className="size-6" />
           )}
-          {busy ? "Wird hochgeladen …" : "Screenshot hochladen / Foto aufnehmen"}
+          {busy
+            ? "Wird hochgeladen …"
+            : dragActive
+            ? "Bild hier ablegen"
+            : "Screenshot hochladen / Foto aufnehmen"}
+          {!busy && !dragActive && (
+            <span className="text-xs text-muted-foreground/80">
+              Klicken, ablegen oder einfügen (Strg+V)
+            </span>
+          )}
         </button>
       )}
 
