@@ -1,12 +1,21 @@
 import Link from "next/link";
-import { ExternalLink, Link2, Code2, MessageCircle } from "lucide-react";
+import { ExternalLink, Link2, Code2, MessageCircle, Clapperboard } from "lucide-react";
 import { requireAccount } from "@/lib/account";
+import { createClient } from "@/lib/supabase/server";
 import { appBaseUrl } from "@/lib/url";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/app/copy-field";
+import { RecorderConnect } from "@/components/app/recorder-connect";
 
 export default async function EinbettenPage() {
   const { account } = await requireAccount();
+  const supabase = await createClient();
+  const { data: tokenRow } = await supabase
+    .from("accounts")
+    .select("recorder_token")
+    .eq("id", account.id)
+    .maybeSingle();
+  const hasRecorderToken = Boolean(tokenRow?.recorder_token);
   const appUrl = appBaseUrl();
   const link = `${appUrl}/h/${account.slug}`;
   const iframe = `<iframe src="${link}" width="100%" height="700" style="border:0" title="Hilfe & Anleitungen"></iframe>`;
@@ -97,6 +106,27 @@ export default async function EinbettenPage() {
         <div className="mt-3">
           <CopyField value={bubble} multiline />
         </div>
+      </section>
+
+      {/* Steply Recorder (Extension): Direkt-Upload statt Datei-Download-Umweg. */}
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="flex items-center gap-2 text-sm font-bold text-ink">
+          <Clapperboard className="size-4 text-primary" /> Steply Recorder verbinden
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Mit der Steply-Recorder-Extension nehmen Sie einen Ablauf auf und laden ihn per
+          Klick direkt hierher hoch – Steply erstellt daraus automatisch ein Tutorial.
+          Erzeugen Sie dafür einen Verbindungs-Token und fügen Sie ihn in der Extension ein.
+        </p>
+        <div className="mt-3">
+          <RecorderConnect initialHasToken={hasRecorderToken} />
+        </div>
+        <ol className="mt-4 list-decimal space-y-1 pl-5 text-xs text-muted-foreground marker:text-muted-foreground">
+          <li>Extension installieren (Ordner <code>extension/</code>, siehe Anleitung).</li>
+          <li>Hier auf „Recorder verbinden“ klicken und den Token kopieren.</li>
+          <li>In der Extension unter „Verbindungs-Token“ einfügen.</li>
+          <li>Aufnahme machen – am Ende „Zu Steply hochladen“.</li>
+        </ol>
       </section>
 
       <p className="text-xs text-muted-foreground">
