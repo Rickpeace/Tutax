@@ -1,6 +1,7 @@
 // Handgepflegte DB-Typen (Kern). Später ggf. via `supabase gen types` ersetzen.
 
 export type TutorialStatus = "draft" | "published";
+export type TutorialVisibility = "public" | "internal";
 export type Freshness = "ok" | "stale" | "checking";
 export type ThemeStatus = "draft" | "analyzing" | "ready" | "failed";
 
@@ -33,6 +34,7 @@ export type Tutorial = {
   description: string | null;
   is_template: boolean;
   status: TutorialStatus;
+  visibility: TutorialVisibility;
   freshness: Freshness;
   slug: string | null;
   public_token: string | null;

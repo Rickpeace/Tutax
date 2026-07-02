@@ -12,6 +12,7 @@ import {
   ImageIcon,
   QrCode,
   Check,
+  Lock,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
@@ -60,6 +61,7 @@ export function TutorialCard({
   // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: optimistischen live-Zustand mit neuem Server-Status resyncen, kein Cascade
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
+  const internal = tutorial.visibility === "internal";
 
   // Bulk-Aufräumen (REVIEW G): im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
   const cleanup = useCleanup();
@@ -86,8 +88,18 @@ export function TutorialCard({
     setLive(next);
     if (next) {
       publishTutorial(tutorial.id)
-        .then(({ slug, accountSlug: acc }) => {
-          const url = `${window.location.origin}/h/${acc}/${slug}`;
+        .then((res) => {
+          if ("internal" in res) {
+            const url = `${window.location.origin}/app/lernen/${tutorial.id}`;
+            toast.success("Für das Team freigegeben", {
+              action: {
+                label: "Öffnen",
+                onClick: () => window.open(url, "_blank", "noopener,noreferrer"),
+              },
+            });
+            return;
+          }
+          const url = `${window.location.origin}/h/${res.accountSlug}/${res.slug}`;
           toast.success("Veröffentlicht! 🎉", {
             description: url,
             action: {
@@ -102,7 +114,7 @@ export function TutorialCard({
         });
     } else {
       unpublishTutorial(tutorial.id)
-        .then(() => toast("Nicht mehr öffentlich."))
+        .then(() => toast(internal ? "Nicht mehr freigegeben." : "Nicht mehr öffentlich."))
         .catch(() => {
           setLive(true);
           toast.error("Konnte nicht speichern");
@@ -165,9 +177,19 @@ export function TutorialCard({
         <div className="flex items-start gap-2">
           <Link href={`/app/tutorials/${tutorial.id}`} className="min-w-0 flex-1">
             {/* Titel als ERSTES Text-Element */}
-            <h3 className="truncate font-bold text-ink group-hover:text-primary">
-              {tutorial.title}
-            </h3>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h3 className="truncate font-bold text-ink group-hover:text-primary">
+                {tutorial.title}
+              </h3>
+              {internal && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-medium text-ink-2"
+                  title="Interne Anleitung – nur für das Team sichtbar"
+                >
+                  <Lock className="size-3" /> Intern
+                </span>
+              )}
+            </div>
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -186,7 +208,12 @@ export function TutorialCard({
               <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
                 <FileText className="size-4" /> Bearbeiten
               </DropdownMenuItem>
-              {live && tutorial.slug && (
+              {live && internal && (
+                <DropdownMenuItem render={<Link href={`/app/lernen/${tutorial.id}`} />}>
+                  <Lock className="size-4" /> Im Lernbereich öffnen
+                </DropdownMenuItem>
+              )}
+              {live && !internal && tutorial.slug && (
                 <DropdownMenuItem
                   render={
                     <Link
@@ -198,7 +225,7 @@ export function TutorialCard({
                   <ExternalLink className="size-4" /> Live-Seite öffnen
                 </DropdownMenuItem>
               )}
-              {live && tutorial.slug && (
+              {live && !internal && tutorial.slug && (
                 // QR-Code öffnen (H6): führt zur öffentlichen Anleitung; nur die eigene
                 // Hilfe-URL wird an /api/qr übergeben (serverseitig zusätzlich geprüft).
                 <DropdownMenuItem
@@ -243,7 +270,7 @@ export function TutorialCard({
 
         {/* Publish-Toggle UNTER dem Titel (nicht mehr darüber) */}
         <div className="mt-auto flex items-center gap-2 pt-2">
-          <HelpToggle on={live} onToggle={toggleLive} />
+          <HelpToggle on={live} onToggle={toggleLive} label={internal ? "Fürs Team" : "Auf Hilfe-Seite"} />
           {stale && (
             <span className="flex items-center gap-1 rounded-md bg-no-soft px-1.5 py-0.5 text-xs font-bold text-no">
               <AlertTriangle className="size-3" /> Prüfen
@@ -257,7 +284,12 @@ export function TutorialCard({
             size="sm"
             nativeButton={false}
             className="shrink-0"
-            render={<Link href={`/app/preview/${tutorial.id}`} target="_blank" />}
+            render={
+              <Link
+                href={internal ? `/app/lernen/${tutorial.id}` : `/app/preview/${tutorial.id}`}
+                target={internal ? undefined : "_blank"}
+              />
+            }
           >
             <Eye className="size-4" /> Ansehen
           </Button>

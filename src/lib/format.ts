@@ -19,3 +19,14 @@ export function relativeDe(iso: string): string {
   }
   return "gerade eben";
 }
+
+const dateFmt = new Intl.DateTimeFormat("de-DE", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/** "02.07.2026" – absolutes Datum (z. B. Schulungsnachweis). */
+export function dateDe(iso: string): string {
+  return dateFmt.format(new Date(iso));
+}

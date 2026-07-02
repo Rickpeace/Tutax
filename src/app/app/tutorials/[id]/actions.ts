@@ -83,12 +83,13 @@ async function refreshPublicImage(stepId: string) {
   // RLS-sichtbarer Read: liefert nur Schritte aus eigenen Tutorials.
   const { data: step } = await supabase
     .from("steps")
-    .select("image_path, highlights, tutorials!inner(status)")
+    .select("image_path, highlights, tutorials!inner(status, visibility)")
     .eq("id", stepId)
     .maybeSingle();
   if (!step) return;
-  const status = (Array.isArray(step.tutorials) ? step.tutorials[0] : step.tutorials)?.status;
-  if (status !== "published") return;
+  const tut = Array.isArray(step.tutorials) ? step.tutorials[0] : step.tutorials;
+  // Nur öffentliche, veröffentlichte Tutorials haben eine public Bild-Kopie.
+  if (tut?.status !== "published" || tut?.visibility !== "public") return;
 
   const admin = createAdminClient();
   if (!step.image_path) return; // Bild entfernt -> unpublish räumt public auf

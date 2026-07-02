@@ -192,40 +192,40 @@ export async function duplicateTutorial(id: string) {
 }
 
 /**
- * Tutorial veröffentlichen (§7 Schritt 7):
- *  - eindeutigen Slug pro Account erzeugen,
- *  - Schritt-Bilder vom privaten in den öffentlichen Bucket kopieren,
- *  - Status = published.
+ * Eindeutigen Slug pro Account sicherstellen. Gibt einen vorhandenen Slug unverändert
+ * zurück, sonst leitet er aus dem Titel einen freien ab.
  */
-export async function publishTutorial(tutorialId: string) {
-  const { account } = await requireAccount();
-  const supabase = await createClient();
-
-  const { data: tutorial, error } = await supabase
+async function ensureSlug(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+  tutorialId: string,
+  title: string,
+  currentSlug: string | null,
+): Promise<string> {
+  if (currentSlug) return currentSlug;
+  const base = slugify(title);
+  const { data: existing } = await supabase
     .from("tutorials")
-    .select("id, title, slug, account_id")
-    .eq("id", tutorialId)
-    .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id">>();
-  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+    .select("slug")
+    .eq("account_id", accountId)
+    .not("slug", "is", null)
+    .neq("id", tutorialId);
+  const taken = new Set((existing ?? []).map((t) => t.slug));
+  let slug = base;
+  let n = 1;
+  while (taken.has(slug)) slug = `${base}-${++n}`;
+  return slug;
+}
 
-  // Slug bestimmen (nur falls noch keiner)
-  let slug = tutorial.slug;
-  if (!slug) {
-    const base = slugify(tutorial.title);
-    const { data: existing } = await supabase
-      .from("tutorials")
-      .select("slug")
-      .eq("account_id", account.id)
-      .not("slug", "is", null);
-    const taken = new Set((existing ?? []).map((t) => t.slug));
-    slug = base;
-    let n = 1;
-    while (taken.has(slug)) slug = `${base}-${++n}`;
-  }
-
-  // Bilder in den public Bucket kopieren (download privat -> upload public).
-  // WICHTIG: Blur-Markierungen werden dabei IN DIE PIXEL gebrannt — der Filter im
-  // Viewer ist nur Optik; ohne Einbrennen läge das unredigierte Original öffentlich.
+/**
+ * Schritt-Bilder vom privaten in den öffentlichen Bucket kopieren.
+ * WICHTIG: Blur-Markierungen werden dabei IN DIE PIXEL gebrannt — der Filter im
+ * Viewer ist nur Optik; ohne Einbrennen läge das unredigierte Original öffentlich.
+ */
+async function copyImagesToPublic(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tutorialId: string,
+): Promise<void> {
   const { data: steps } = await supabase
     .from("steps")
     .select("image_path, highlights")
@@ -252,6 +252,56 @@ export async function publishTutorial(tutorialId: string) {
         .upload(s.image_path, buf, { upsert: true, contentType: "image/webp" });
     }
   }
+}
+
+/** Öffentliche Bild-Kopien eines Tutorials entfernen (Wechsel zu intern / unpublish). */
+async function removePublicImages(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tutorialId: string,
+): Promise<void> {
+  const { data: steps } = await supabase
+    .from("steps")
+    .select("image_path")
+    .eq("tutorial_id", tutorialId)
+    .not("image_path", "is", null);
+  const paths = (steps ?? []).map((s) => s.image_path).filter(Boolean) as string[];
+  if (paths.length) {
+    const admin = createAdminClient();
+    await admin.storage.from(PUBLIC_BUCKET).remove(paths);
+  }
+}
+
+/**
+ * Tutorial veröffentlichen (§7 Schritt 7):
+ *  - Öffentlich: eindeutigen Slug erzeugen, Bilder in den public Bucket kopieren,
+ *    für den Chatbot indizieren, Hub-Caches invalidieren.
+ *  - Intern: nur Status=published (= „fürs Team freigegeben") — KEINE public-Bilder,
+ *    KEIN Index, KEINE Cache-Invalidierung, KEIN Slug nötig.
+ */
+export async function publishTutorial(tutorialId: string) {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+
+  const { data: tutorial, error } = await supabase
+    .from("tutorials")
+    .select("id, title, slug, account_id, visibility")
+    .eq("id", tutorialId)
+    .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id" | "visibility">>();
+  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+
+  // Interne Tutorials: „veröffentlichen" bedeutet nur fürs Team freigeben.
+  if (tutorial.visibility === "internal") {
+    const { error: ue } = await supabase
+      .from("tutorials")
+      .update({ status: "published", published_at: new Date().toISOString() })
+      .eq("id", tutorialId);
+    if (ue) throw new Error(ue.message);
+    revalidatePath("/app");
+    return { internal: true as const };
+  }
+
+  const slug = await ensureSlug(supabase, account.id, tutorialId, tutorial.title, tutorial.slug);
+  await copyImagesToPublic(supabase, tutorialId);
 
   const { error: ue } = await supabase
     .from("tutorials")
@@ -265,6 +315,65 @@ export async function publishTutorial(tutorialId: string) {
   await invalidateTutorialTags(tutorialId); // öffentliche /h-Caches sofort aktualisieren
   revalidatePath("/app");
   return { slug, accountSlug: account.slug };
+}
+
+/**
+ * Sichtbarkeit umschalten (intern ↔ öffentlich). Nur bei PUBLISHED-Tutorials sind
+ * Nebenwirkungen nötig; ein Entwurf ändert nur die Spalte:
+ *  - → internal: public-Bilder entfernen, Embeddings löschen, Hub-Cache invalidieren.
+ *  - → public: Slug sicherstellen, Bilder public kopieren, indizieren, Cache invalidieren.
+ */
+export async function setTutorialVisibility(
+  tutorialId: string,
+  visibility: Tutorial["visibility"],
+) {
+  if (visibility !== "public" && visibility !== "internal") return;
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+
+  const { data: tutorial, error } = await supabase
+    .from("tutorials")
+    .select("id, title, slug, account_id, status, visibility")
+    .eq("id", tutorialId)
+    .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id" | "status" | "visibility">>();
+  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+  if (tutorial.visibility === visibility) return; // nichts zu tun
+
+  const isPublished = tutorial.status === "published";
+
+  if (visibility === "internal") {
+    // Erst umschalten (RAG-Guard greift danach), dann öffentliche Spuren entfernen.
+    const { error: ue } = await supabase
+      .from("tutorials")
+      .update({ visibility })
+      .eq("id", tutorialId);
+    if (ue) throw new Error(ue.message);
+    if (isPublished) {
+      await removePublicImages(supabase, tutorialId).catch((e) =>
+        console.error("Public-Bilder entfernen fehlgeschlagen:", e instanceof Error ? e.message : e),
+      );
+      await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
+      await invalidateTutorialTags(tutorialId, { force: true });
+    }
+  } else {
+    // → öffentlich
+    let slug = tutorial.slug;
+    if (isPublished) {
+      slug = await ensureSlug(supabase, account.id, tutorialId, tutorial.title, tutorial.slug);
+      await copyImagesToPublic(supabase, tutorialId);
+    }
+    const { error: ue } = await supabase
+      .from("tutorials")
+      .update({ visibility, ...(slug ? { slug } : {}) })
+      .eq("id", tutorialId);
+    if (ue) throw new Error(ue.message);
+    if (isPublished) {
+      await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
+      await invalidateTutorialTags(tutorialId);
+    }
+  }
+
+  revalidatePath("/app");
 }
 
 /** Veröffentlichung zurückziehen: Status = draft, öffentliche Bilder entfernen. */
