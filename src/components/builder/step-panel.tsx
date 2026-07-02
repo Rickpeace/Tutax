@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ArrowRight, ArrowUp, ArrowDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,7 +86,6 @@ export function StepPanel({
   const [body, setBody] = useState<unknown>(step.body ?? null);
   const [dirty, setDirty] = useState(false);
   const [rtKey, setRtKey] = useState(0);
-  const [suggesting, setSuggesting] = useState(false);
   const [pendingNav, setPendingNav] = useState<null | { run: () => void; label: string }>(null);
 
   // Eltern (Builder) über ungespeicherte Änderungen informieren (Schließen-Abfrage).
@@ -117,46 +116,6 @@ export function StepPanel({
   function guardedNav(run: () => void, label: string) {
     if (dirty) setPendingNav({ run, label });
     else run();
-  }
-
-  // KI-Schritt-Assistent: aus dem Screenshot Titel, Text und Markierung vorschlagen.
-  async function suggestFromImage() {
-    if (!step.image_path) return;
-    setSuggesting(true);
-    try {
-      const res = await fetch("/api/steps/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tutorialId, imagePath: step.image_path }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "KI-Fehler");
-
-      if (j.title) setTitle(j.title);
-      if (j.body) {
-        setBody({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: j.body }] }] });
-        setRtKey((k) => k + 1); // RichText neu mounten, damit der Text erscheint
-      }
-      if (j.title || j.body) setDirty(true);
-      if (j.highlight) {
-        const hl: Highlight = {
-          id: crypto.randomUUID(),
-          type: "rect",
-          x: j.highlight.x,
-          y: j.highlight.y,
-          w: j.highlight.w,
-          h: j.highlight.h,
-          color: "#3d4ee6",
-          rounded: true,
-        };
-        onSetHighlights(step.id, [...(step.highlights ?? []), hl]);
-      }
-      toast.success("KI-Vorschlag übernommen – prüfen & oben speichern.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Fehler");
-    } finally {
-      setSuggesting(false);
-    }
   }
 
   const targetOptions = allSteps.filter((s) => s.id !== step.id);
@@ -230,7 +189,7 @@ export function StepPanel({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="step-title">Titel</Label>
+        <Label htmlFor="step-title">Titel (optional)</Label>
         <Input
           id="step-title"
           value={title}
@@ -252,26 +211,6 @@ export function StepPanel({
         onSetImage={onSetImage}
         onSetHighlights={onSetHighlights}
       />
-
-      {step.image_path && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={suggesting}
-          onClick={suggestFromImage}
-          className="w-full border-primary/30 text-primary hover:bg-accent"
-        >
-          {suggesting ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> KI analysiert den Screenshot …
-            </>
-          ) : (
-            <>
-              <Sparkles className="size-4" /> KI: Titel &amp; Text aus Bild vorschlagen
-            </>
-          )}
-        </Button>
-      )}
 
       <button
         type="button"
