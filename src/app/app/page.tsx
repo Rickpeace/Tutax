@@ -9,6 +9,7 @@ import { VideoUpload } from "@/components/app/video-upload";
 import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
+import { CategoryJump, type JumpSection } from "@/components/app/category-jump";
 import { InsightsCard } from "@/components/app/insights-card";
 import { Layers, Loader2 } from "lucide-react";
 
@@ -144,6 +145,15 @@ export default async function DashboardPage() {
   const jobs = activeJobs ?? [];
   const nothing = own.length === 0 && templateItems.length === 0;
 
+  // Stabile DOM-ids pro Sektion (für die mobile Kategorie-Sprungleiste, REVIEW G).
+  const secDomId = (id: string | null) => `dash-sec-${id ?? "none"}`;
+  const jumpSections: JumpSection[] = [
+    ...ownSections.map((s) => ({ domId: secDomId(s.id), name: s.name, count: s.items.length })),
+    ...(templateItems.length
+      ? [{ domId: "dash-sec-templates", name: "Standard-Anleitungen", count: templateItems.length }]
+      : []),
+  ];
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
       <div className="flex items-center justify-between gap-4">
@@ -204,34 +214,44 @@ export default async function DashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="mt-6 space-y-8">
-          {ownSections.map((s) => (
-            <CollapsibleSection
-              key={s.id ?? "none"}
-              title={s.name}
-              count={s.items.length}
-              storageKey={`dash:own:${s.id ?? "none"}`}
-              action={s.id !== null ? <NewTutorialButton compact categoryId={s.id} /> : undefined}
-            >
-              {s.items.length === 0 ? (
-                <p className="py-2 text-sm text-muted-foreground">Noch keine Tutorials in dieser Kategorie.</p>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {s.items.map((t) => (
-                    <TutorialCard
-                      key={t.id}
-                      tutorial={t}
-                      accountSlug={account.slug}
-                      thumbnailUrl={thumbById.get(t.id) ?? null}
-                    />
-                  ))}
-                </div>
-              )}
-            </CollapsibleSection>
-          ))}
+        <>
+          {/* Mobile Kategorie-Sprungleiste (REVIEW G): rendert sich selbst weg bei < 3 Sektionen. */}
+          <CategoryJump sections={jumpSections} />
 
-          <TemplateSection items={templateItems} />
-        </div>
+          <div className="mt-6 space-y-8">
+            {ownSections.map((s) => (
+              <div key={s.id ?? "none"} id={secDomId(s.id)} className="scroll-mt-[6.5rem] md:scroll-mt-4">
+                <CollapsibleSection
+                  title={s.name}
+                  count={s.items.length}
+                  storageKey={`dash:own:${s.id ?? "none"}`}
+                  action={s.id !== null ? <NewTutorialButton compact categoryId={s.id} /> : undefined}
+                >
+                  {s.items.length === 0 ? (
+                    <p className="py-2 text-sm text-muted-foreground">Noch keine Tutorials in dieser Kategorie.</p>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {s.items.map((t) => (
+                        <TutorialCard
+                          key={t.id}
+                          tutorial={t}
+                          accountSlug={account.slug}
+                          thumbnailUrl={thumbById.get(t.id) ?? null}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </CollapsibleSection>
+              </div>
+            ))}
+
+            {templateItems.length > 0 && (
+              <div id="dash-sec-templates" className="scroll-mt-[6.5rem] md:scroll-mt-4">
+                <TemplateSection items={templateItems} />
+              </div>
+            )}
+          </div>
+        </>
       )}
     </main>
   );

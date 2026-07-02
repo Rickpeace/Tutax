@@ -192,20 +192,32 @@ export function HubBrowser({
                   key={t.slug}
                   href={`/h/${accountSlug}/${t.slug}`}
                   data-tx="card"
-                  className="flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
+                  className="group flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
                   style={{
+                    // Akzent-Dosierung (REVIEW G): Kartenrahmen neutral, erst bei Hover
+                    // Akzent — statt jeden Rahmen dauerhaft in der CI-Farbe. Fläche/Radius/
+                    // Schatten bleiben Token-gesteuert (Kunden-CI).
                     background: "var(--brand-card-bg, #fff)",
-                    border: "var(--brand-card-bw, 1px) solid var(--brand-card-border, rgba(16,21,36,0.1))",
+                    borderWidth: "var(--brand-card-bw, 1px)",
+                    borderStyle: "solid",
+                    borderColor: "rgba(16,21,36,0.08)",
                     borderRadius: "var(--brand-radius, 12px)",
                     boxShadow: "var(--brand-card-shadow, none)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--brand-accent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(16,21,36,0.08)";
                   }}
                 >
                   <div
                     className="flex size-10 shrink-0 items-center justify-center"
                     style={{
-                      background: "var(--brand-icon-bg, var(--brand-soft))",
+                      // Akzent-Dosierung: dezenter Akzent-Tint als Fläche + Akzent-Icon,
+                      // statt eines harten Akzent-Rahmens ums Icon-Quadrat.
+                      background: "color-mix(in srgb, var(--brand-accent) 10%, white)",
                       color: "var(--brand-accent)",
-                      border: "var(--brand-card-bw, 1px) solid var(--brand-card-border, transparent)",
                       borderRadius: "var(--brand-radius, 10px)",
                     }}
                   >
@@ -214,9 +226,11 @@ export function HubBrowser({
                   <div className="min-w-0 flex-1">
                     <div
                       data-tx="card-title"
-                      className="font-bold"
+                      className="text-base font-bold"
                       style={{
-                        color: "var(--brand-title, var(--brand-ink))",
+                        // Akzent-Dosierung: Titel in Ink (nicht in der Akzentfarbe), damit
+                        // die CI auf Logo/Topbar/Buttons/Chat konzentriert bleibt.
+                        color: "var(--brand-ink)",
                         fontFamily: "var(--brand-font-heading)",
                         fontWeight: "var(--brand-heading-weight, 700)",
                       }}
@@ -229,7 +243,8 @@ export function HubBrowser({
                       </div>
                     )}
                   </div>
-                  <ChevronRight className="size-5 shrink-0" style={{ color: "var(--brand-accent)", opacity: 0.5 }} />
+                  {/* Akzent-Dosierung: Chevron neutral statt in der Akzentfarbe. */}
+                  <ChevronRight className="size-5 shrink-0" style={{ color: "var(--brand-ink)", opacity: 0.3 }} />
                 </Link>
               ))}
             </div>
