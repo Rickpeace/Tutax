@@ -61,7 +61,7 @@ type StepForSpeech = {
  * später verbessert, genügt ein Hochzählen dieser Zahl, um KONTROLLIERT alle Audios
  * neu erzeugen zu lassen — ohne jeden Text von Hand anfassen zu müssen.
  */
-export const SPEECH_SCRIPT_VERSION = 1;
+export const SPEECH_SCRIPT_VERSION = 2;
 
 /**
  * Injizierte Synthese-Funktion: Text rein, MP3-Buffer raus (Welle 19). tts-core bleibt
@@ -80,6 +80,22 @@ export type DbClient = any;
  * — genau die Segmente, die auch übersetzt/angezeigt werden). Bei ~MAX_TTS_CHARS
  * hart gekappt. Leerer Titel UND leerer Body -> "" (Aufrufer erzeugt dann kein Audio).
  */
+/**
+ * NUR der Erklärtext (ohne Titel) — das ist die Sprech-Basis: die Überschrift steht
+ * sichtbar auf dem Bildschirm; sie zusätzlich vorzulesen klingt nach Folien-Roboter
+ * (Richard-Feedback 02.07.). Der Titel bleibt Kontext für den Sprechtext-Pass und
+ * Teil des HASH-Quelltexts (stepSpeechText), damit Titeländerungen weiter erneuern.
+ */
+export function bodySpeechText(step: { body: unknown }): string {
+  const parts: string[] = [];
+  for (const seg of bodySegments(step.body)) {
+    const s = seg.trim();
+    if (s) parts.push(s);
+  }
+  const text = parts.join(". ").replace(/\s+/g, " ").trim();
+  return text.length > MAX_TTS_CHARS ? text.slice(0, MAX_TTS_CHARS) : text;
+}
+
 export function stepSpeechText(step: { title: string | null; body: unknown }): string {
   const parts: string[] = [];
   if (typeof step.title === "string" && step.title.trim()) parts.push(step.title.trim());
@@ -171,7 +187,9 @@ export async function ensureStepAudioCore(
   if (typeof speechTextOverride === "function") override = await speechTextOverride();
   else override = speechTextOverride;
   // Was tatsächlich gesprochen wird: der natürliche Sprechertext, sonst der Quelltext.
-  const spoken = override?.trim() ? override.trim() : sourceText;
+  const spoken = override?.trim()
+    ? override.trim()
+    : bodySpeechText(step) || sourceText; // Fallback: Erklärtext ohne Titel
 
   const path = audioPath(cfg.accountId, cfg.tutorialId, step.id);
   const buf = await synthesize(spoken);

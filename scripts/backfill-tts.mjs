@@ -1,3 +1,6 @@
+// SPIEGEL-HINWEIS: Der lokale speechScript-Spiegel entspricht noch v1 (mit Titel).
+// Produktion (src/lib/tts.ts) nutzt seit 02.07. v2 (Titel nur Kontext, TTS-Regeln) —
+// bei grossem Backfill vorher angleichen.
 // Vorlesen-Backfill: erzeugt TTS-Audios für ALLE bereits veröffentlichten, öffentlichen
 // Tutorials eines Kontos (normalerweise passiert das beim Publish; für Bestands-Tutorials
 // einmal nachziehen). Nutzt exakt den produktiven Kern (src/lib/tts-core.ts) + Hash-Cache:

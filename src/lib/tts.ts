@@ -5,9 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isBusiness } from "@/lib/plan";
 import {
   ensureStepAudioCore,
+  bodySpeechText,
   removeStepAudioCore,
   removeTutorialAudioCore,
-  stepSpeechText,
   type Synthesize,
 } from "@/lib/tts-core";
 
@@ -25,25 +25,33 @@ import {
 // flüssigen SPRECHERtext formen. Wirkt sofort — auch mit OpenAI-TTS.
 // ---------------------------------------------------------------------------
 
+// v2 (Richard-Feedback 02.07.): geschrieben FÜR eine TTS-Stimme (ElevenLabs) —
+// Pausen entstehen aus Satzzeichen, Anführungszeichen/Klammern verwirren die
+// Betonung, Denglisch klingt unecht. Der Titel wird NIE mitgelesen (steht sichtbar
+// über dem Schritt), dient aber als Kontext.
 const SPEECH_SYSTEM =
-  "Sie sind Sprecher-Redakteur für eine freundliche Software-Anleitung. Aus dem " +
-  "Bildschirmtext eines EINZELNEN Anleitungsschritts formen Sie einen natürlich " +
-  "klingenden, flüssig vorlesbaren Sprechertext auf Deutsch (deutsches Deutsch, " +
-  "Sie-Form). Sie erfinden NICHTS dazu: keine Fakten, keine Schaltflächen, keine " +
-  "Menüs, keine Schritte, die nicht im Text stehen. Namen von Schaltflächen, Menüs " +
-  "und Feldern übernehmen Sie WÖRTLICH und setzen sie in Anführungszeichen. Sie " +
-  "dürfen leicht ausführlicher und wärmer formulieren und natürliche Überleitungen " +
-  "verwenden (etwa „Als Nächstes …“ oder „Jetzt wird es einfach: …“), aber niemals " +
-  "den Sinn verändern. WICHTIG: Schreiben Sie den Text NIE wörtlich ab — formulieren " +
-  "Sie ihn IMMER hörbar um, so wie man es einem Menschen nebenbei erklären würde " +
-  "(geschriebene Knappheit wird zu gesprochener Wärme). Keine Emojis, keine " +
-  "Sonderzeichen, keine Aufzählungszeichen — reiner Fließtext zum Vorlesen.";
+  "Sie schreiben Sprechertexte für eine Text-zu-Sprache-Stimme in einer freundlichen " +
+  "deutschen Software-Anleitung (Sie-Form). Aus dem Erklärtext EINES Schritts machen " +
+  "Sie einen natürlich gesprochenen Absatz — wie ein Kollege, der nebenbei erklärt, " +
+  "nicht wie eine Dokumentation. REGELN FÜRS SPRECHEN: Kurze Sätze. Sprechpausen " +
+  "entstehen durch Kommas und Punkte; für eine kleine Denkpause dürfen Sie sparsam " +
+  "drei Punkte verwenden. KEINE Anführungszeichen, keine Klammern, keine " +
+  "Doppelpunkte, keine Aufzählungen, keine Emojis. Namen von Schaltflächen, Menüs " +
+  "und Feldern übernehmen Sie WÖRTLICH, aber ohne Anführungszeichen, natürlich in " +
+  "den Satz eingebettet. Natürliches, echtes Deutsch — KEIN Denglisch, keine " +
+  "Anglizismen außer festen Begriffen der Oberfläche, keine Marketing-Floskeln. " +
+  "Sie erfinden NICHTS dazu: keine Fakten, keine Elemente, keine Schritte. Der " +
+  "mitgelieferte TITEL ist nur Kontext — lesen Sie ihn NICHT vor und wiederholen " +
+  "Sie ihn nicht als ersten Satz; steigen Sie direkt menschlich in die Handlung ein. " +
+  "Schreiben Sie den Erklärtext NIE wörtlich ab — immer hörbar umformulieren, gern " +
+  "leicht ausführlicher und wärmer, mit natürlichen Überleitungen.";
 
-function buildSpeechUser(sourceText: string): string {
+function buildSpeechUser(title: string, bodyText: string): string {
   return (
-    "Hier ist der Bildschirmtext des Schritts (Titel und Erklärung):\n" +
+    (title ? "Titel des Schritts (NUR Kontext, nicht vorlesen): " + title + "\n\n" : "") +
+    "Erklärtext des Schritts:\n" +
     "---\n" +
-    sourceText +
+    bodyText +
     "\n---\n\n" +
     "Formulieren Sie daraus EINEN zusammenhängenden Sprechertext. Antworten Sie " +
     'AUSSCHLIESSLICH als JSON-Objekt: { "speech": "der Sprechertext" }. ' +
@@ -62,8 +70,8 @@ const SPEECH_HARD_CAP = 900;
  * Fehler/Timeout/leere Antwort ⇒ Fallback auf den Quelltext (blockiert NIE das Publish).
  * Kappung: max. ~1,6× Quelllänge, hart bei SPEECH_HARD_CAP Zeichen.
  */
-export async function speechScript(sourceText: string): Promise<string> {
-  const source = sourceText.trim();
+export async function speechScript(title: string, bodyText: string): Promise<string> {
+  const source = bodyText.trim();
   if (!source || !aiConfigured()) return source;
 
   try {
@@ -71,7 +79,7 @@ export async function speechScript(sourceText: string): Promise<string> {
       model: AI.models.chat,
       messages: [
         { role: "system", content: SPEECH_SYSTEM },
-        { role: "user", content: buildSpeechUser(source) },
+        { role: "user", content: buildSpeechUser(title.trim(), source) },
       ],
       response_format: { type: "json_object" },
       max_completion_tokens: 700,
@@ -175,7 +183,7 @@ export async function ensureTutorialAudio(accountId: string, tutorialId: string)
     try {
       // Lazy-Resolver: der Sprechtext-Pass (LLM-Call) läuft NUR bei echtem Cache-Miss.
       await ensureStepAudioCore(admin, fn, cfg, step, () =>
-        speechScript(stepSpeechText(step)),
+        speechScript(step.title ?? "", bodySpeechText(step)),
       );
     } catch (e) {
       console.error(
@@ -213,7 +221,7 @@ export async function ensureStepAudio(stepId: string): Promise<void> {
       synthesize(),
       { ...providerCfg(), accountId: tut.account_id, tutorialId: step.tutorial_id },
       step,
-      () => speechScript(stepSpeechText(step)),
+      () => speechScript(step.title ?? "", bodySpeechText(step)),
     );
   } catch (e) {
     console.error(
