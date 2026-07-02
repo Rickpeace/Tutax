@@ -16,6 +16,12 @@ export function SiteHeader() {
           <Link href="/#how" className="hover:text-ink">
             So funktioniert&apos;s
           </Link>
+          <Link href="/#preise" className="hover:text-ink">
+            Preise
+          </Link>
+          <Link href="/#faq" className="hover:text-ink">
+            FAQ
+          </Link>
           <Link href="/anleitung" className="hover:text-ink">
             Anleitung
           </Link>
