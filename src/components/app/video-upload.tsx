@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square, Info, Link2 } from "lucide-react";
+import { toast } from "sonner";
+import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square, Info, Link2, MousePointerClick } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,42 @@ type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "don
 
 // Fortschritt je Datei im Bulk-Upload (mehrere Dateien auf einmal).
 type BulkItem = { name: string; status: "pending" | "uploading" | "done" | "error"; error?: string };
+
+// Ein Klick-Marker aus dem Steply Recorder (clicks.json). Vertrag siehe extension/README.md
+// bzw. Migration 0020 (video_jobs.clicks): [{ t, x:0..1, y:0..1, label? }].
+type Click = { t: number; x: number; y: number; label?: string };
+
+// clicks.json einlesen + streng validieren. Wirft mit klarer deutscher Meldung bei
+// Ungültigkeit (der Aufrufer zeigt sie als toast.error). Bei Erfolg: bereinigte Klicks
+// (x/y geklemmt auf 0..1, label auf 60 Zeichen gekappt). x/y nur „knapp daneben" wird
+// geklemmt — grob unsinnige Werte (>2 bzw. <-1) gelten als kaputt.
+async function parseClicksFile(file: File): Promise<Click[]> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await file.text());
+  } catch {
+    throw new Error("Die Klick-Datei ist kein gültiges JSON.");
+  }
+  if (!Array.isArray(raw)) throw new Error("Die Klick-Datei muss eine JSON-Liste sein.");
+  if (raw.length === 0) throw new Error("Die Klick-Datei enthält keine Einträge.");
+  if (raw.length > 500) throw new Error("Die Klick-Datei hat zu viele Einträge (max. 500).");
+  const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+  const out: Click[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i] as Record<string, unknown> | null;
+    const where = `Eintrag ${i + 1}`;
+    if (!c || typeof c !== "object") throw new Error(`Klick-Datei: ${where} ist kein Objekt.`);
+    const { t, x, y, label } = c as { t?: unknown; x?: unknown; y?: unknown; label?: unknown };
+    if (typeof t !== "number" || !Number.isFinite(t) || t < 0) throw new Error(`Klick-Datei: ${where} hat kein gültiges „t" (Sekunden ≥ 0).`);
+    if (typeof x !== "number" || !Number.isFinite(x) || x < -1 || x > 2) throw new Error(`Klick-Datei: ${where} hat kein gültiges „x" (0..1).`);
+    if (typeof y !== "number" || !Number.isFinite(y) || y < -1 || y > 2) throw new Error(`Klick-Datei: ${where} hat kein gültiges „y" (0..1).`);
+    if (label !== undefined && typeof label !== "string") throw new Error(`Klick-Datei: ${where} hat ein ungültiges „label".`);
+    const click: Click = { t, x: clamp01(x), y: clamp01(y) };
+    if (typeof label === "string" && label.length > 0) click.label = label.slice(0, 60);
+    out.push(click);
+  }
+  return out;
+}
 
 export function VideoUpload({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +70,10 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [importing, setImporting] = useState(false);
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [clicksName, setClicksName] = useState<string | null>(null); // Anzeige des gewählten clicks.json
+  const [clicksCount, setClicksCount] = useState<number | null>(null); // Anzahl akzeptierter Klick-Marker (für UI-Feedback)
   const fileRef = useRef<HTMLInputElement>(null);
+  const clicksRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamsRef = useRef<MediaStream[]>([]);
@@ -69,24 +109,30 @@ export function VideoUpload({ accountId }: { accountId: string }) {
 
   // Kern: Datei hochladen + einen video_job einreihen, jobId zurückgeben.
   // Setzt KEINE Komponenten-States — Einzel- und Bulk-Flow steuern die UI selbst.
-  async function uploadOne(blob: Blob, ext: string, niceName: string): Promise<{ jobId: string }> {
+  // `clicks` optional: nur der Einzel-Upload reicht validierte Steply-Klick-Marker durch;
+  // Bulk/URL/Aufnahme lassen das Feld weg (Row ohne `clicks`).
+  async function uploadOne(blob: Blob, ext: string, niceName: string, clicks?: Click[]): Promise<{ jobId: string }> {
     const supabase = createClient();
     const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });
     if (upErr) throw upErr;
+    const row: Record<string, unknown> = { account_id: accountId, video_path: vpath, title: niceName, status: "queued" };
+    if (clicks && clicks.length > 0) row.clicks = clicks;
     const { data: job, error: jErr } = await supabase
       .from("video_jobs")
-      .insert({ account_id: accountId, video_path: vpath, title: niceName, status: "queued" })
+      .insert(row)
       .select("id").single();
     if (jErr) throw jErr;
     return { jobId: job.id };
   }
 
   // Einzel-Flow: wie bisher (Phase uploading -> queued, Polling via setJobId).
-  async function uploadAndQueue(blob: Blob, ext: string, niceName: string) {
+  // `clicks` optional (nur Einzel-Upload) — steuert auch das „mit N Klick-Markern"-Feedback.
+  async function uploadAndQueue(blob: Blob, ext: string, niceName: string, clicks?: Click[]) {
     setPhase("uploading");
+    setClicksCount(clicks && clicks.length > 0 ? clicks.length : null);
     try {
-      const { jobId } = await uploadOne(blob, ext, niceName);
+      const { jobId } = await uploadOne(blob, ext, niceName, clicks);
       setJobId(jobId);
       setPhase("queued");
     } catch (err) {
@@ -121,7 +167,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
 
   // Gemeinsamer Einstieg für Datei-Input UND Drag&Drop: 1 Datei = Einzel-Flow (wie
   // bisher), mehrere = Bulk-Flow. Nicht-Video-Dateien werden ignoriert/gemeldet.
-  function handleFiles(list: FileList | File[]) {
+  // Nur der Einzel-Upload wertet ein optional gewähltes clicks.json aus: ist es kaputt,
+  // toast.error + Upload läuft OHNE Klicks weiter. Bulk ignoriert das Feld komplett.
+  async function handleFiles(list: FileList | File[]) {
     const files = Array.from(list).filter((f) => f.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(f.name));
     if (files.length === 0) {
       setError("Bitte eine Video-Datei auswählen.");
@@ -131,7 +179,19 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     if (files.length === 1) {
       const f = files[0];
       setError(null); setTutorialId(null);
-      uploadAndQueue(f, extOf(f.name), baseName(f.name));
+      let clicks: Click[] | undefined;
+      const clickFile = clicksRef.current?.files?.[0];
+      if (clickFile) {
+        try {
+          clicks = await parseClicksFile(clickFile);
+        } catch (err) {
+          clicks = undefined;
+          toast.error(err instanceof Error ? err.message : "Die Klick-Datei konnte nicht gelesen werden.", {
+            description: "Das Tutorial wird trotzdem erstellt — nur ohne Klick-Marker.",
+          });
+        }
+      }
+      uploadAndQueue(f, extOf(f.name), baseName(f.name), clicks);
     } else {
       uploadBulk(files);
     }
@@ -141,6 +201,12 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     const list = e.target.files;
     if (!list || list.length === 0) return;
     handleFiles(list);
+  }
+
+  // Nur Anzeige des gewählten clicks.json — validiert/gelesen wird erst beim Upload
+  // (in handleFiles), damit der Fehlerfall den Upload sauber ohne Klicks fortsetzt.
+  function onPickClicks(e: React.ChangeEvent<HTMLInputElement>) {
+    setClicksName(e.target.files?.[0]?.name ?? null);
   }
 
   function onDropVideo(e: React.DragEvent) {
@@ -228,7 +294,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setProgress(null); setSecs(0); setNoMic(false);
     setShowUrl(false); setImportUrl(""); setImporting(false); setBulkItems([]); setDragActive(false);
+    setClicksName(null); setClicksCount(null);
     if (fileRef.current) fileRef.current.value = "";
+    if (clicksRef.current) clicksRef.current.value = "";
   };
 
   const mmss = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
@@ -273,12 +341,44 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             </div>
 
             <input ref={fileRef} type="file" accept="video/*" multiple onChange={onPick} className="hidden" />
+            <input ref={clicksRef} type="file" accept=".json,application/json" onChange={onPickClicks} className="hidden" />
             <Button className="w-full" onClick={startRecording}>
               <Circle className="size-4 fill-current text-no" /> Jetzt aufnehmen (Bildschirm + Mikro)
             </Button>
             <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
               <UploadCloud className="size-4" /> {dragActive ? "Videos hier ablegen" : "Datei(en) hochladen oder hierher ziehen"}
             </Button>
+
+            {/* Optionales zweites Feld: Klick-Daten vom Steply Recorder. Dezent, nur beim
+                Einzel-Upload wirksam (bei mehreren Dateien wird es ignoriert). */}
+            <button
+              type="button"
+              onClick={() => clicksRef.current?.click()}
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-line-2 bg-muted/20 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MousePointerClick className="size-3.5 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 truncate">
+                {clicksName ? (
+                  <>Klick-Daten: <b className="text-ink">{clicksName}</b></>
+                ) : (
+                  "Klick-Daten (clicks.json, optional — vom Steply Recorder)"
+                )}
+              </span>
+              {clicksName && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setClicksName(null); if (clicksRef.current) clicksRef.current.value = ""; }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setClicksName(null); if (clicksRef.current) clicksRef.current.value = ""; } }}
+                  className="shrink-0 rounded px-1 text-muted-foreground hover:text-ink"
+                >
+                  entfernen
+                </span>
+              )}
+            </button>
+            <p className="-mt-1 px-1 text-[11px] leading-snug text-muted-foreground/80">
+              Nur bei einer einzelnen Datei: setzt exakte Schrittgrenzen und Markierungen.
+            </p>
             {!showUrl ? (
               <Button variant="ghost" className="w-full" onClick={() => setShowUrl(true)}>
                 <Link2 className="size-4" /> Von URL importieren
@@ -339,6 +439,11 @@ export function VideoUpload({ accountId }: { accountId: string }) {
                 ? `${progress} …`
                 : "KI erstellt das Tutorial …"}
             </p>
+            {clicksCount !== null && (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                <MousePointerClick className="size-3.5 shrink-0" /> mit {clicksCount} {clicksCount === 1 ? "Klick-Marker" : "Klick-Markern"}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Sie können das Fenster schließen – der Entwurf erscheint auf dem Dashboard.
             </p>
