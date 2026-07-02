@@ -7,6 +7,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+// Welle 17: Struktur-Pass (gesprochene Fallunterscheidung -> Verzweigung) + Wiring-Planer.
+import { analyzeStructure, planWiring } from "./structure.mjs";
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -149,6 +151,56 @@ function detectScenes(videoPath, duration) {
   return scenes;
 }
 
+// Welle 17: den (reinen) Wiring-Plan tatsächlich in der DB anwenden. `rows` sind die bereits
+// linear eingefügten Steps (mit .segIndex). Reihenfolge des Umbaus ist bewusst konsistent:
+//   1) betroffene lineare Ausgangs-Branches löschen,
+//   2) neue (gelabelte Ast- + Rejoin-)Branches einfügen,
+//   3) Frage-Schritte auf is_decision=true setzen.
+// Ein Fehler in irgendeinem Schritt wirft -> der Aufrufer stellt die lineare Kette wieder her.
+async function applyStructure(tutId, rows, plan) {
+  const wiring = planWiring(rows.map((r) => ({ id: r.id, segIndex: r.segIndex })), plan);
+  if (!wiring.branches.length && !wiring.decisionStepIds.length) return; // nichts zu tun
+  if (wiring.skipped) console.log(`  Struktur-Umbau: ${wiring.skipped} Frage(n) übersprungen (Frame fehlte).`);
+
+  // 1) Lineare Ausgangs-Branches der umzuverdrahtenden Schritte löschen.
+  if (wiring.removeBranchesFromStepIds.length) {
+    const { error } = await sb.from("step_branches").delete().in("step_id", wiring.removeBranchesFromStepIds);
+    if (error) throw new Error("Alte Branches löschen: " + error.message);
+  }
+  // 2) Neue Branches (mit IDs) einfügen.
+  if (wiring.branches.length) {
+    const toInsert = wiring.branches.map((b) => ({
+      id: uuid(), step_id: b.step_id, label: b.label, color: b.color, target_step_id: b.target_step_id, position: b.position,
+    }));
+    const { error } = await sb.from("step_branches").insert(toInsert);
+    if (error) throw new Error("Neue Branches anlegen: " + error.message);
+  }
+  // 3) Frage-Schritte als Entscheidung markieren.
+  if (wiring.decisionStepIds.length) {
+    const { error } = await sb.from("steps").update({ is_decision: true }).in("id", wiring.decisionStepIds);
+    if (error) throw new Error("is_decision setzen: " + error.message);
+  }
+  console.log(`  ✓ Struktur-Umbau: ${wiring.decisionStepIds.length} Frage(n), ${wiring.branches.length} Branch(es) verdrahtet.`);
+}
+
+// Welle 17 (Fallback): die rein LINEARE Verkabelung wiederherstellen, falls ein Struktur-Umbau
+// mittendrin scheitert. Alle vorhandenen Branches der Tutorial-Schritte wegräumen, is_decision
+// überall zurücksetzen und die Schritte in Row-Reihenfolge wieder linear verketten.
+async function rewireLinear(tutId, rows) {
+  const ids = rows.map((r) => r.id);
+  if (ids.length) { try { await sb.from("step_branches").delete().in("step_id", ids); } catch {} }
+  try { await sb.from("steps").update({ is_decision: false }).eq("tutorial_id", tutId); } catch {}
+  const linear = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    linear.push({ id: uuid(), step_id: rows[i].id, label: null, color: null, target_step_id: rows[i + 1].id, position: 0 });
+  }
+  if (linear.length) {
+    const { error } = await sb.from("step_branches").insert(linear);
+    if (error) throw new Error("Lineare Kette neu anlegen: " + error.message);
+  }
+  await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
+}
+
 async function buildTutorial(job, videoPath, dir) {
   let duration = NaN;
   try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
@@ -288,6 +340,35 @@ async function buildTutorial(job, videoPath, dir) {
     }
   }
   segSteps = segSteps.slice(0, 14);
+  // Jedem Segment einen STABILEN Index geben (Array-Position). Der Struktur-Pass und der
+  // Wiring-Planer referenzieren Segmente über diesen Index; nicht jedes Segment ergibt
+  // zwingend eine eingefügte Row (kaputter Frame), darum wird er später auf die Rows gemappt.
+  segSteps.forEach((s, i) => { s.segIndex = i; });
+
+  // 3a) STRUKTUR-PASS (Welle 17): EIN LLM-Call auf den Segment-Texten. Findet AUSGESPROCHENE
+  //     Fallunterscheidungen ("wenn … dann … ansonsten", "zwei Möglichkeiten") und liefert
+  //     einen Verzweigungs-Plan. KONSERVATIV: im Zweifel/ohne Transkript -> linear (plan.mode
+  //     "linear"). Läuft VOR dem Live-Aufbau, wirkt aber erst als finaler Umbau-Pass danach —
+  //     so bleibt der sichtbare Live-Aufbau ("Schritt X/Y") unverändert, das Tutorial kann sich
+  //     am Ende aber sichtbar "umorganisieren" (aus linear wird eine Frage mit Ästen).
+  //     Ohne Transkript (stummes Video) haben die Segmente keine narration -> kein Struktur-Pass.
+  const hasNarration = segSteps.some((s) => (s.narration || "").trim().length > 0);
+  let structurePlan = { mode: "linear", questions: [] };
+  if (hasNarration) {
+    try {
+      structurePlan = await analyzeStructure(
+        segSteps.map((s) => ({ index: s.segIndex, narration: s.narration || "" })),
+        (messages, max) => json("gpt-5.4-mini", messages, max),
+        { log: (m) => console.log("  " + m) },
+      );
+      if (structurePlan.mode === "branched")
+        console.log(`  Struktur-Pass: ${structurePlan.questions.length} Frage(n) erkannt -> Umbau nach dem Live-Aufbau.`);
+    } catch (e) {
+      // Jede Unklarheit/Fehler -> linear (kein Crash). Struktur ist optional.
+      console.error("  Struktur-Pass fehlgeschlagen -> linear:", String(e?.message || e).slice(0, 160));
+      structurePlan = { mode: "linear", questions: [] };
+    }
+  }
 
   // 3) LIVE-AUFBAU: Tutorial FRÜH anlegen, dann pro fertigem Schritt einzeln inserten.
   //    So erscheint der Entwurf schon während der Verarbeitung auf dem Dashboard und
@@ -347,7 +428,7 @@ async function buildTutorial(job, videoPath, dir) {
           { role: "system", content: STEP_SYS },
           { role: "user", content },
         ], 300);
-        return { local, videoTime: at, narration, p, clickHl: seg.clickHl || null };
+        return { local, videoTime: at, narration, p, clickHl: seg.clickHl || null, segIndex: seg.segIndex };
       }));
 
       // (b) INSERT sequenziell in Reihenfolge -> Live-Aufbau + lineare Branch vom Vorgänger.
@@ -369,7 +450,8 @@ async function buildTutorial(job, videoPath, dir) {
         const { error: sErr } = await sb.from("steps").insert(row);
         if (sErr) throw new Error("Schritt anlegen: " + sErr.message);
         const prev = rows[rows.length - 1] || null;
-        rows.push(row);
+        // segIndex NUR im Speicher mitführen (keine steps-Spalte) -> Wiring mappt Segment->Row.
+        rows.push({ ...row, segIndex: a.segIndex });
         if (rows.length === 1) {
           // Nach dem 1. Schritt: root_step_id setzen.
           await sb.from("tutorials").update({ root_step_id: id }).eq("id", tutId);
@@ -385,6 +467,26 @@ async function buildTutorial(job, videoPath, dir) {
       await sb.from("video_jobs").update({ progress: `Schritt ${rows.length} von ${segSteps.length}`, updated_at: new Date().toISOString() }).eq("id", job.id);
     }
     if (!rows.length) throw new Error("Keine Schritte erkannt (Aufnahme evtl. zu kurz/leer). Bitte erneut aufnehmen.");
+
+    // 3b) STRUKTUR-UMBAU (Welle 17, FINALER PASS): Das Tutorial ist jetzt linear verkabelt
+    //     und sichtbar aufgebaut. Wenn der Struktur-Pass eine echte Verzweigung fand, wird
+    //     hier UMORGANISIERT: Frage-Schritt -> is_decision, lineare Weiter-Branches der
+    //     betroffenen Schritte gelöscht und durch gelabelte Ast-Branches + Wiedereinmündung
+    //     (Rejoin) ersetzt. Das Tutorial kann sich dadurch am Ende sichtbar umbauen (aus einer
+    //     linearen Kette wird eine Frage mit Ja/Nein-Ästen).
+    //     ROBUSTHEIT: Der Umbau geschieht in EINEM konsistenten Schub: erst ALLE zu ersetzenden
+    //     linearen Branches löschen, dann ALLE neuen Branches einfügen, dann is_decision setzen.
+    //     Scheitert irgendetwas dabei, wird der Umbau rückgängig gemacht und das (funktionierende)
+    //     LINEARE Tutorial per Neuaufbau der linearen Kette wiederhergestellt — lieber linear als
+    //     ein halb umgebautes, kaputtes Tutorial. Der Fehler ist dann NICHT fatal (Job bleibt done).
+    if (structurePlan.mode === "branched") {
+      try {
+        await applyStructure(tutId, rows, structurePlan);
+      } catch (e) {
+        console.error("  Struktur-Umbau fehlgeschlagen -> lineare Kette wiederhergestellt:", String(e?.message || e).slice(0, 200));
+        try { await rewireLinear(tutId, rows); } catch (e2) { console.error("  Lineare Wiederherstellung fehlgeschlagen:", String(e2?.message || e2).slice(0, 160)); }
+      }
+    }
 
     // 4) Titel generieren -> Tutorial-Titel aktualisieren.
     const title = (await json("gpt-5.4-mini", [{ role: "system", content: TITLE_SYS }, { role: "user", content: "Schritte: " + rows.map((r) => r.title).join("; ") + "\nErzählung: " + (tr.text || "").slice(0, 500) }], 60)).title || job.title || "Anleitung";
