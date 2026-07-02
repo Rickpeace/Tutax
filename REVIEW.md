@@ -77,6 +77,20 @@ Kunden-Hubs nicht (1h-Deckel) · Publish-Invalidierung in Prod einmal gegenprüf
 **Opus Welle 7b:** Lint-Altbestand 31→**0** (typografische Quotes, begründete
 disables für Hydration-Patterns, echter refs-Fix in builder.tsx) → **CI-Lint jetzt
 blockierend**.
+**Opus Wellen 8a/8b/8c (Feature-Finale, reviewt+gemerged):**
+⏰ **Aktualitäts-Autopilot** (Vercel-Cron Mo 6:00, max 10 Checks/Lauf, Owner-Digest-
+Mail via Resend; fail-closed — **Richard: CRON_SECRET in Vercel setzen!**) ·
+🙋 **„Ich komme hier nicht weiter"** pro Wizard-Schritt (→ Insights-Wissenslücken) ·
+🖨️ **Druckansicht** `/h/…/drucken` (nummerierte Schritte, Verzweigungen als
+„Wenn X → Schritt N", cached) · 🧹 **Bulk-Aufräumen** im Dashboard ·
+⭐ **Klick-Modus im Worker** (clicks jsonb, Migration 0020: Schrittgrenzen + Highlights
+exakt aus Klicks, Vision-Highlight wird ignoriert) · 🎬 **Szenen-Erkennung** als
+Fallback ohne Ton (Kette: Klicks→Schnitt→KI→Szenen→Gleichverteilung) ·
+📧 „Fertig"-Mail (env-gated; Hetzner braucht RESEND_API_KEY+NEXT_PUBLIC_APP_URL) ·
+🔗 **Video-Import per URL** (SSRF-geschützt, 200 MB) · 🧩 **Steply Recorder
+Browser-Extension v1** (`extension/`: nimmt Screencast auf + zeichnet Klicks auf →
+aufnahme.webm + clicks.json; manueller Chrome-Test durch Richard nötig).
+⚠️ Worker-Teile wirken erst nach `deploy.sh`.
 
 ---
 
