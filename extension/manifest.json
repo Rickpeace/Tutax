@@ -3,8 +3,11 @@
   "name": "Steply Recorder",
   "version": "1.0.0",
   "description": "Nimmt einen Bildschirm-Screencast auf und zeichnet Ihre Klicks auf. Am Ende erhalten Sie zwei Dateien fuer den Upload in Steply (Aus Video).",
-  "default_locale": "de",
-  "permissions": ["activeTab", "scripting", "downloads"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Steply Recorder",
