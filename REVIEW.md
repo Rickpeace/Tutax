@@ -49,6 +49,11 @@ progress „Schritt X/Y", Crash-Waisen-Bereinigung, Cleanup erhalten) · `steps.
 Whisper-Marker-Bias + „cut" · Vision parallel (3er-Batches) · Retry/Backoff ·
 schärfster-Frame-Heuristik · Vision-Bilder 1280px (Kosten) · „Wird erstellt…"-Karte im
 Dashboard. ⚠️ **Worker-Teil ungetestet bis `deploy.sh` + Test-Video (Richard!).**
+**Opus Welle 6a (reviewt+gemerged):** 📊 **Insights-Karte** im Dashboard (Aufrufe,
+Chat-Fragen, Feedback-Quote, Top-3 unbeantwortete Fragen = Wissenslücken) ·
+↕️ **Schritt-Umordnen** im Builder (Hoch/Runter, reines Branch-Rewiring, Trace für
+Mitte/Root/Blatt/Entscheidung verifiziert) · 🔍 **Semantische Hub-Suche**
+(api/hub-search via pgvector, „Meinten Sie:"-Vorschläge bei 0 Titel-Treffern).
 
 ---
 
