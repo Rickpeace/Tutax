@@ -34,8 +34,10 @@ const SPEECH_SYSTEM =
   "und Feldern übernehmen Sie WÖRTLICH und setzen sie in Anführungszeichen. Sie " +
   "dürfen leicht ausführlicher und wärmer formulieren und natürliche Überleitungen " +
   "verwenden (etwa „Als Nächstes …“ oder „Jetzt wird es einfach: …“), aber niemals " +
-  "den Sinn verändern. Keine Emojis, keine Sonderzeichen, keine Aufzählungszeichen " +
-  "— reiner Fließtext zum Vorlesen.";
+  "den Sinn verändern. WICHTIG: Schreiben Sie den Text NIE wörtlich ab — formulieren " +
+  "Sie ihn IMMER hörbar um, so wie man es einem Menschen nebenbei erklären würde " +
+  "(geschriebene Knappheit wird zu gesprochener Wärme). Keine Emojis, keine " +
+  "Sonderzeichen, keine Aufzählungszeichen — reiner Fließtext zum Vorlesen.";
 
 function buildSpeechUser(sourceText: string): string {
   return (
@@ -79,9 +81,16 @@ export async function speechScript(sourceText: string): Promise<string> {
     };
     const raw = typeof parsed.speech === "string" ? parsed.speech.trim() : "";
     if (!raw) return source;
-    // Weiche Grenze relativ zur Quelle + harte Grenze — je kleiner, desto besser.
-    const softCap = Math.min(SPEECH_HARD_CAP, Math.ceil(source.length * 1.6));
-    return raw.length > softCap ? raw.slice(0, softCap) : raw;
+    // Weiche Grenze relativ zur Quelle (mit Mindest-Spielraum für sehr kurze Schritte,
+    // sonst kann kein natürlicher Satz entstehen) + harte Grenze.
+    const softCap = Math.min(SPEECH_HARD_CAP, Math.max(220, Math.ceil(source.length * 1.6)));
+    if (raw.length <= softCap) return raw;
+    // NIE mitten im Wort abschneiden — die Stimme liest den Schnitt sonst mit.
+    const cut = raw.slice(0, softCap);
+    const sentenceEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    if (sentenceEnd > softCap * 0.5) return cut.slice(0, sentenceEnd + 1);
+    const lastSpace = cut.lastIndexOf(" ");
+    return lastSpace > 0 ? cut.slice(0, lastSpace) + "." : cut;
   } catch (e) {
     console.error("[tts] Sprechtext-Pass fehlgeschlagen, nutze Quelltext:", e instanceof Error ? e.message : e);
     return source;

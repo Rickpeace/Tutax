@@ -56,7 +56,9 @@ async function speechScript(sourceText, client = openai) {
           "Bildschirmtext eines EINZELNEN Anleitungsschritts formen Sie einen natürlich " +
           "klingenden, flüssig vorlesbaren Sprechertext auf Deutsch (Sie-Form). Sie erfinden " +
           "NICHTS dazu. Namen von Schaltflächen und Menüs übernehmen Sie WÖRTLICH in " +
-          "Anführungszeichen. Keine Emojis, keine Sonderzeichen, reiner Fließtext." },
+          "Anführungszeichen. WICHTIG: Schreiben Sie den Text NIE wörtlich ab — " +
+          "formulieren Sie ihn IMMER hörbar um, so wie man es einem Menschen nebenbei " +
+          "erklären würde. Keine Emojis, keine Sonderzeichen, reiner Fließtext." },
         { role: "user", content:
           "Bildschirmtext:\n---\n" + source + "\n---\n\n" +
           'Antworten Sie AUSSCHLIESSLICH als JSON: { "speech": "der Sprechertext" }.' },
@@ -67,8 +69,13 @@ async function speechScript(sourceText, client = openai) {
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
     const raw = typeof parsed.speech === "string" ? parsed.speech.trim() : "";
     if (!raw) return source;
-    const softCap = Math.min(SPEECH_HARD_CAP, Math.ceil(source.length * 1.6));
-    return raw.length > softCap ? raw.slice(0, softCap) : raw;
+    const softCap = Math.min(SPEECH_HARD_CAP, Math.max(220, Math.ceil(source.length * 1.6)));
+    if (raw.length <= softCap) return raw;
+    const cut = raw.slice(0, softCap);
+    const se = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    if (se > softCap * 0.5) return cut.slice(0, se + 1);
+    const sp = cut.lastIndexOf(" ");
+    return sp > 0 ? cut.slice(0, sp) + "." : cut;
   } catch {
     return source; // Fehler/Timeout -> Fallback auf Quelltext (blockiert nie).
   }
@@ -173,11 +180,11 @@ try {
 
   // --- (g) speechScript: echter Mini-Call liefert flüssigeren Text ≠ Quelltext ---
   //   Quelltext enthält einen wörtlichen Schaltflächen-Namen, der im Sprechertext auftauchen muss.
-  const gSource = 'Klicken Sie auf die Schaltfläche "Weiter", um fortzufahren.';
+  const gSource = 'Öffnen Sie zuerst die Einstellungen. Wählen Sie dort den Reiter Sicherheit aus. Klicken Sie anschließend auf die Schaltfläche "Weiter", um fortzufahren. Prüfen Sie am Ende, ob die Änderung gespeichert wurde.';
   const gSpeech = await speechScript(gSource);
   ok(gSpeech && gSpeech !== gSource, `(g) speechScript: Text ≠ Quelltext (len ${gSpeech.length} vs ${gSource.length})`);
   ok(gSpeech.includes("Weiter"), `(g) speechScript: wörtlicher Schaltflächen-Name "Weiter" enthalten`);
-  ok(gSpeech.length <= Math.min(SPEECH_HARD_CAP, Math.ceil(gSource.length * 1.6)), "(g) speechScript: innerhalb Längen-Kappung");
+  ok(gSpeech.length <= Math.min(SPEECH_HARD_CAP, Math.max(220, Math.ceil(gSource.length * 1.6))), "(g) speechScript: innerhalb Längen-Kappung");
 
   // --- (h) Fallback: kaputter LLM-Call (Mock) -> Quelltext ---
   const brokenClient = { chat: { completions: { create: async () => { throw new Error("boom"); } } } };
