@@ -64,6 +64,8 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     position,
     is_decision: false,
     video_time: null,
+    audio_path: null,
+    audio_hash: null,
     created_at: new Date().toISOString(),
   };
 }
