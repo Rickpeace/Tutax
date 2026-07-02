@@ -3,7 +3,7 @@
 // Env (.env): SUPABASE_URL, SUPABASE_SECRET_KEY, OPENAI_API_KEY
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -121,6 +121,34 @@ function grabSharpestFrame(videoPath, at, duration, dst, dir, idx) {
   return dst;
 }
 
+// Szenen-Erkennung (Fallback ohne Ton): ffmpeg-scdet-Pass sucht harte Bildschnitte
+// (neuer Screen). `-f null -` schreibt NICHTS nach stdout, alle pts_time-Zeilen landen
+// auf STDERR und der Prozess endet mit Exit 0. execFileSync gibt aber IMMER nur stdout
+// zurück (stderr nur am Fehler-Objekt) -> hier spawnSync, das stdout UND stderr liefert,
+// unabhängig vom Exit-Code. Liefert sortierte, entzerrte Szenen-Zeiten (max 12, min 1.2s).
+function detectScenes(videoPath, duration) {
+  let stderr = "";
+  try {
+    const r = spawnSync("ffmpeg", ["-i", videoPath, "-vf", "select='gt(scene,0.22)',showinfo", "-f", "null", "-"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    stderr = String(r.stderr || "");
+  } catch { stderr = ""; }
+  const times = [];
+  const re = /pts_time:([0-9]+(?:\.[0-9]+)?)/g;
+  let m;
+  while ((m = re.exec(stderr))) {
+    const t = parseFloat(m[1]);
+    if (isFinite(t) && t > 0.5 && t < duration - 0.3) times.push(t);
+  }
+  times.sort((a, b) => a - b);
+  const scenes = [];
+  for (const t of times) {
+    if (!scenes.length || t - scenes[scenes.length - 1] >= 1.2) scenes.push(t);
+    if (scenes.length >= 12) break;
+  }
+  return scenes;
+}
+
 async function buildTutorial(job, videoPath, dir) {
   let duration = NaN;
   try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
@@ -145,20 +173,64 @@ async function buildTutorial(job, videoPath, dir) {
   const segs = (tr.segments || []).map((s) => ({ start: +s.start.toFixed(1), text: s.text.trim() }));
 
   // 2) Schritte bestimmen. Jeder Schritt liefert: { shot (Screenshot-Sekunde), tB (Vorher-Frame), narration }.
+  //    Optional bei Klick-Modus zusätzlich: { clickHl (fixe Highlight-Box aus dem Klick),
+  //    clickLabel (Extension-Label für den Vision-Prompt) }.
   const norm = (s) => (s || "").toLowerCase().replace(/[^a-zäöüß]/g, "");
+  // Marker-Wörter ("Schnitt"/"cut") — früh deklariert, weil narrationBetween sie schon
+  // im Klick-Modus (vor dem Marker-Block) zum Herausfiltern nutzt.
+  const MARKERS = ["schnitt", "cut"];
+  // Narration im Zeitfenster [from, to) aus Wort-Zeitstempeln (bestehendes Muster).
+  const narrationBetween = (from, to) => (tr.words || [])
+    .filter((w) => w.start >= from && w.start < to && !MARKERS.includes(norm(w.word)))
+    .map((w) => w.word).join(" ").replace(/\s+/g, " ").trim();
+  const clamp01 = (n) => Math.min(Math.max(n, 0), 1);
+  let note = null;
+  let segSteps = [];
+
+  // (0) KLICK-MODUS (HÖCHSTE PRIORITÄT, vor "Schnitt"): Die Browser-Extension (Welle 8c)
+  //     liefert echte Klick-Telemetrie in job.clicks: [{ t, x:0..1, y:0..1, label? }].
+  //     Daraus werden Schrittgrenzen + Highlight-Boxen EXAKT bestimmt (kein Vision-Raten).
+  const rawClicks = Array.isArray(job.clicks)
+    ? job.clicks.filter((c) => c && typeof c.t === "number" && isFinite(c.t) && c.t >= 0 && c.t <= duration
+        && typeof c.x === "number" && typeof c.y === "number").sort((a, b) => a.t - b.t)
+    : [];
+  // Doppel-/Folgeklicks (<0.8s Abstand zum Vorgänger) zu EINEM Schritt zusammenfassen —
+  // der LETZTE Klick der Gruppe zählt (dort ist die UI-Reaktion vollständig).
+  const clicks = [];
+  for (const c of rawClicks) {
+    if (clicks.length && c.t - clicks[clicks.length - 1].t < 0.8) clicks[clicks.length - 1] = c;
+    else clicks.push(c);
+  }
+  if (clicks.length >= 1) {
+    for (let i = 0; i < clicks.length; i++) {
+      const c = clicks[i];
+      // Schritt i endet ~0.6s nach dem Klick (geclampt, aber nicht über den nächsten Klick hinaus).
+      const nextT = i + 1 < clicks.length ? clicks[i + 1].t : duration;
+      const stepEnd = Math.min(c.t + 0.6, nextT, duration);
+      const shot = Math.min(Math.max(c.t + 0.45, 0.1), duration - 0.1); // UI hat reagiert
+      const tB = Math.min(Math.max(c.t - 0.3, 0), shot - 0.3);           // 0.3s VOR dem Klick (für den Diff)
+      const start = i === 0 ? 0 : clicks[i - 1].t;
+      const narration = narrationBetween(start, stepEnd);
+      // Highlight DIREKT aus dem Klick: 0.14 x 0.09 Box, zentriert auf (x,y), geclampt.
+      const w = 0.14, h = 0.09;
+      const hx = clamp01(clamp01(c.x) - w / 2), hy = clamp01(clamp01(c.y) - h / 2);
+      const clickHl = { x: hx, y: hy, w: Math.min(w, 1 - hx), h: Math.min(h, 1 - hy) };
+      const clickLabel = typeof c.label === "string" && c.label.trim() ? c.label.trim().slice(0, 120) : null;
+      segSteps.push({ shot, tB, narration, clickHl, clickLabel });
+    }
+  }
+
   // (A) MARKER-MODUS: Das Wort "Schnitt" markiert das ENDE eines Schritts (Regie-Logik:
   //     erst Schritt machen + Maus aufs Ziel, dann "Schnitt" sagen). Schnitt genau dort,
   //     Screenshot KURZ DAVOR (Maus auf dem Ziel) — kein Sekunden-Zählen nötig.
-  const MARKERS = ["schnitt", "cut"];
   const cuts = (tr.words || []).filter((w) => MARKERS.includes(norm(w.word))).map((w) => +w.start).sort((a, b) => a - b);
   // Nutzer hat "Schnitt" gesprochen, aber es kamen keine Marker an (fehlende Wort-Zeitstempel
   // von Whisper) -> ehrlicher Hinweis, statt still auf den schwächeren Fallback zu gehen.
-  let note = null;
+  //    (Im Klick-Modus KEIN Schnitt-Hinweis setzen — Klicks sind die Schrittgrenze.)
   const saidSchnitt = /schnitt/i.test(tr.text || "") || segs.some((s) => /schnitt/i.test(s.text));
-  if (saidSchnitt && !cuts.length)
+  if (!segSteps.length && saidSchnitt && !cuts.length)
     note = "Du hast \"Schnitt\" gesagt, aber die Schnitt-Marker konnten nicht sauber erkannt werden. Die Schritte wurden automatisch geschätzt – bitte im Editor prüfen.";
-  let segSteps = [];
-  if (cuts.length >= 1) {
+  if (!segSteps.length && cuts.length >= 1) {
     const ends = [...cuts];
     if (duration - ends[ends.length - 1] > 1.5) ends.push(duration); // letzter Schritt ohne "Schnitt" am Ende
     for (let i = 0; i < ends.length; i++) {
@@ -167,21 +239,52 @@ async function buildTutorial(job, videoPath, dir) {
       if (end - start < 0.8) continue; // zu kurz -> kein eigener Schritt
       const shot = Math.min(Math.max(end - 0.4, start + 0.2), duration - 0.1);
       const tB = Math.min(Math.max(start + 0.2, 0), shot - 0.4);
-      const narration = (tr.words || []).filter((w) => w.start >= start && w.start < end && !MARKERS.includes(norm(w.word))).map((w) => w.word).join(" ").replace(/\s+/g, " ").trim();
-      segSteps.push({ shot, tB, narration });
+      segSteps.push({ shot, tB, narration: narrationBetween(start, end) });
     }
   }
   // (B) FALLBACK ohne "Schnitt": KI segmentiert aus dem Transkript; Screenshot ~2s nach Ansage.
   if (!segSteps.length) {
     const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
     let llm = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
-    if (llm.length < 2) { llm = []; const n = Math.min(6, Math.max(2, Math.round(duration/6))); for (let i=0;i<n;i++) llm.push({ t: +(i*(duration/n)).toFixed(1), narration: "" }); }
     llm = llm.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t);
-    for (let i = 0; i < llm.length; i++) {
-      const nextT = i + 1 < llm.length ? llm[i + 1].t : duration;
-      const shot = Math.min(Math.max(llm[i].t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
-      const tB = Math.min(Math.max(llm[i].t - 0.6, 0), shot - 0.4);
-      segSteps.push({ shot, tB, narration: (llm[i].narration || "").trim() });
+    if (llm.length >= 2) {
+      for (let i = 0; i < llm.length; i++) {
+        const nextT = i + 1 < llm.length ? llm[i + 1].t : duration;
+        const shot = Math.min(Math.max(llm[i].t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
+        const tB = Math.min(Math.max(llm[i].t - 0.6, 0), shot - 0.4);
+        segSteps.push({ shot, tB, narration: (llm[i].narration || "").trim() });
+      }
+    }
+  }
+  // (C) SZENEN-ERKENNUNG (REVIEW I): weder Klicks noch "Schnitt" noch brauchbare
+  //     LLM-Segmentierung -> ffmpeg-scdet-Pass findet harte Bildschnitte (neuer Screen)
+  //     als Schrittgrenzen. Erst wenn AUCH das < 2 Treffer hat -> Gleichverteilung (D).
+  if (!segSteps.length) {
+    const scenes = detectScenes(videoPath, duration);
+    if (scenes.length >= 2) {
+      // Wie Marker-Modus: jeder Szenenwechsel ENDET einen Schritt (Screenshot kurz davor).
+      const ends = [...scenes];
+      if (duration - ends[ends.length - 1] > 1.5) ends.push(duration);
+      for (let i = 0; i < ends.length; i++) {
+        const start = i === 0 ? 0 : ends[i - 1];
+        const end = ends[i];
+        if (end - start < 1.0) continue;
+        const shot = Math.min(Math.max(end - 0.4, start + 0.2), duration - 0.1);
+        const tB = Math.min(Math.max(start + 0.2, 0), shot - 0.4);
+        segSteps.push({ shot, tB, narration: narrationBetween(start, end) });
+      }
+    }
+  }
+  // (D) LETZTER FALLBACK: Gleichverteilung, wenn nichts anderes griff.
+  if (segSteps.length < 2) {
+    segSteps = [];
+    const n = Math.min(6, Math.max(2, Math.round(duration / 6)));
+    for (let i = 0; i < n; i++) {
+      const t = +(i * (duration / n)).toFixed(1);
+      const nextT = i + 1 < n ? (i + 1) * (duration / n) : duration;
+      const shot = Math.min(Math.max(t + 2.0, 0.4), Math.max(Math.min(nextT - 0.8, duration - 0.1), 0.4));
+      const tB = Math.min(Math.max(t - 0.6, 0), shot - 0.4);
+      segSteps.push({ shot, tB, narration: narrationBetween(t, nextT) });
     }
   }
   segSteps = segSteps.slice(0, 14);
@@ -228,9 +331,14 @@ async function buildTutorial(job, videoPath, dir) {
         const diffSmall = diffPath ? scaleForVision(diffPath) : null;
         const content = [
           { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
-          { type: "text", text: "BILD 1 (Screenshot):" },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridSmall).toString("base64")}` } },
         ];
+        // Klick-Modus: der KI mitteilen, dass an einer bekannten Stelle geklickt wurde
+        // (hilft Titel/Body). Ihr highlight-Feld wird beim Insert trotzdem ignoriert.
+        if (seg.clickHl) {
+          content.push({ type: "text", text: `Hinweis: Der Nutzer hat an der markierten Stelle geklickt${seg.clickLabel ? ` (Element: "${seg.clickLabel}")` : ""}.` });
+        }
+        content.push({ type: "text", text: "BILD 1 (Screenshot):" });
+        content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridSmall).toString("base64")}` } });
         if (diffSmall) {
           content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
           content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffSmall).toString("base64")}` } });
@@ -239,7 +347,7 @@ async function buildTutorial(job, videoPath, dir) {
           { role: "system", content: STEP_SYS },
           { role: "user", content },
         ], 300);
-        return { local, videoTime: at, narration, p };
+        return { local, videoTime: at, narration, p, clickHl: seg.clickHl || null };
       }));
 
       // (b) INSERT sequenziell in Reihenfolge -> Live-Aufbau + lineare Branch vom Vorgänger.
@@ -251,7 +359,11 @@ async function buildTutorial(job, videoPath, dir) {
         const { error: upErr } = await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(a.local), { contentType: "image/jpeg", upsert: true });
         if (upErr) { console.error("  Bild-Upload fehlgeschlagen, Schritt übersprungen:", upErr.message); continue; }
         uploaded.push(ipath);
-        const hl = a.p.highlight && [a.p.highlight.x, a.p.highlight.y, a.p.highlight.w, a.p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
+        // Klick-Modus hat VORRANG: existieren Klick-Koordinaten, das highlight-Feld der
+        // Vision-KI IGNORIEREN und die feste Box aus dem echten Klick verwenden.
+        const hl = a.clickHl
+          ? [{ id: uuid(), type: "rect", x: a.clickHl.x, y: a.clickHl.y, w: a.clickHl.w, h: a.clickHl.h, color: "#3d4ee6", rounded: true }]
+          : a.p.highlight && [a.p.highlight.x, a.p.highlight.y, a.p.highlight.w, a.p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
           ? [{ id: uuid(), type: "rect", x: a.p.highlight.x, y: a.p.highlight.y, w: a.p.highlight.w, h: a.p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
         const row = { id, tutorial_id: tutId, title: a.p.title || `Schritt ${rows.length + 1}`, body: mkBody(a.p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl, video_time: a.videoTime };
         const { error: sErr } = await sb.from("steps").insert(row);
@@ -357,6 +469,43 @@ async function reapStale() {
   } catch (e) { console.error("reapStale-Fehler:", e.message); }
 }
 
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+// „Fertig"-Mail (env-gated): nach status=done die Owner des Kontos benachrichtigen.
+// Braucht RESEND_API_KEY + INVITE_FROM_EMAIL + NEXT_PUBLIC_APP_URL — auf Hetzner ggf.
+// noch nicht gesetzt -> still überspringen. Fehler sind NIE fatal (try/catch + log).
+async function sendDoneEmail(job, tutId, title) {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.INVITE_FROM_EMAIL;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/[/*\s]+$/, "");
+  if (!key || !from || !appUrl) return; // nicht konfiguriert -> still skip
+  try {
+    // Owner-User-IDs des Kontos -> deren E-Mails via Admin-API.
+    const { data: owners } = await sb.from("account_members").select("user_id").eq("account_id", job.account_id).eq("role", "owner");
+    const ids = (owners || []).map((o) => o.user_id).filter(Boolean);
+    if (!ids.length) return;
+    const users = await Promise.all(ids.map((id) => sb.auth.admin.getUserById(id)));
+    const to = users.map((u) => u.data?.user?.email).filter((e) => typeof e === "string" && e.includes("@"));
+    if (!to.length) return;
+    const link = `${appUrl}/app/tutorials/${tutId}`;
+    const safeTitle = escapeHtml(title || "Anleitung");
+    const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#101524">
+    <h2 style="margin:0 0 8px">Ihr Tutorial-Entwurf ist fertig</h2>
+    <p style="color:#3b4254;line-height:1.55">Der Entwurf „<b>${safeTitle}</b>" wurde aus Ihrem Video erstellt und wartet im Builder auf den Feinschliff.</p>
+    <p style="margin:24px 0"><a href="${link}" style="background:#3d4ee6;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Im Builder öffnen</a></p>
+    <p style="color:#6b7280;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>${link}</p>
+  </div>`;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to, subject: `Ihr Tutorial-Entwurf „${title || "Anleitung"}" ist fertig`, html }),
+    });
+    if (!res.ok) console.error("  Fertig-Mail: Resend antwortete", res.status);
+    else console.log(`  ✉ Fertig-Mail an ${to.length} Inhaber gesendet.`);
+  } catch (e) { console.error("  Fertig-Mail-Fehler (nicht fatal):", String(e?.message || e).slice(0, 160)); }
+}
+
 async function loop() {
   let ran = false;
   try {
@@ -375,6 +524,7 @@ async function loop() {
           await reapOrphanTutorial(claimedJob);
           const res = await processJob(claimedJob);
           await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, note: res.note ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
+          await sendDoneEmail(claimedJob, res.tutId, res.title); // env-gated, nie fatal
         } catch (e) {
           const raw = String(e?.message || "Unbekannter Fehler");
           console.error("✗ Job", job.id, raw);
