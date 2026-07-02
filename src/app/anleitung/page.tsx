@@ -66,6 +66,17 @@ export default function AnleitungPage() {
           In wenigen Minuten zur ersten veröffentlichten Anleitung.
         </p>
 
+        {/* Dogfooding: unsere eigene Hilfe läuft auf Steply — bester Beweis + echte Doku. */}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-accent/40 p-4">
+          <p className="text-sm text-ink-2">
+            <b className="text-ink">Alle Funktionen als klickbare Anleitungen</b> — auf
+            unserer eigenen Steply-Hilfe-Seite (natürlich mit Steply gebaut).
+          </p>
+          <Button size="sm" nativeButton={false} render={<Link href="/h/steply" target="_blank" />}>
+            Steply-Hilfe öffnen <ArrowRight className="size-4" />
+          </Button>
+        </div>
+
         <div className="mt-10 space-y-4">
           {steps.map((s) => (
             <div key={s.t} className="flex gap-4 rounded-2xl border border-border bg-card p-5">
