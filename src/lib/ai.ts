@@ -30,9 +30,11 @@ export const AI = {
    * Kein Settings-UI: die Wahl kommt allein aus Umgebungsvariablen.
    */
   elevenLabsKey: process.env.ELEVENLABS_API_KEY ?? "",
-  // Stimme für ElevenLabs. ANPASSEN: Default ist „Rachel" (multilingual, gut für v2) —
-  // eine deutsche/multilinguale Stimme kann per ELEVENLABS_VOICE_ID gesetzt werden.
-  elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM",
+  // Stimme für ElevenLabs — kein Geheimnis, daher Code-Standard statt Env-Pflicht:
+  // „German Narration — Helmut Clark" (professionelle deutsche Erzählstimme,
+  // Richards Wahl 02.07.). ELEVENLABS_VOICE_ID übersteuert bei Bedarf; die
+  // Pro-Konto-Stimmwahl kommt mit TTS v2 (TODO).
+  elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID ?? "TUKJhQmz3RPYBNAgC5A1",
   elevenLabsModel: "eleven_multilingual_v2",
 } as const;
 

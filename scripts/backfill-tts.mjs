@@ -21,7 +21,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000,
 // --- Provider-Wahl (env-basiert, wie src/lib/ai.ts / src/lib/tts.ts) ---
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 // ANPASSEN: Default „Rachel" (multilingual) — per ELEVENLABS_VOICE_ID überschreibbar.
-const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM";
+const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID ?? "TUKJhQmz3RPYBNAgC5A1";
 const ELEVEN_MODEL = "eleven_multilingual_v2";
 const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
 const OPENAI_VOICE = "onyx";
