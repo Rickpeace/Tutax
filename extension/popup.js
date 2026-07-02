@@ -1,12 +1,23 @@
 "use strict";
 
 // Steply Recorder - Popup.
-// Aufgabe: Content-Script in den AKTIVEN Tab injizieren (sammelt Klicks) und
-// danach den Aufnahme-Tab (recorder.html) oeffnen. Die eigentliche Aufnahme
-// laeuft im Aufnahme-Tab, damit sie das Schliessen des Popups ueberlebt.
+// Aufgaben:
+//  1) Verbindungs-Token + App-URL verwalten (chrome.storage.local, ueberlebt Neustarts).
+//  2) Aufnahme-Tab (recorder.html) oeffnen. Die eigentliche Aufnahme laeuft dort, damit
+//     sie das Schliessen des Popups ueberlebt.
+//
+// Das Content-Script ist jetzt DEKLARATIV im Manifest registriert (laeuft auf jeder
+// http(s)-Seite) - wir muessen hier NICHTS mehr injizieren. Wir pruefen nur noch, ob
+// die aktuelle Seite eine Browser-Systemseite ist, um den Hinweis passend zu setzen.
 
 const startBtn = document.getElementById("start");
 const statusEl = document.getElementById("status");
+const tokenInput = document.getElementById("token");
+const appUrlInput = document.getElementById("appUrl");
+const saveBtn = document.getElementById("saveCfg");
+const cfgStatus = document.getElementById("cfgStatus");
+
+const DEFAULT_APP_URL = "https://app.steply.de";
 
 function setStatus(text, kind) {
   statusEl.textContent = text || "";
@@ -22,19 +33,50 @@ async function getActiveTab() {
   return tab;
 }
 
-// Manche Seiten koennen kein Content-Script aufnehmen (chrome://, Web Store,
-// PDF-Viewer, ...). Dann nehmen wir trotzdem auf - nur ohne Klick-Erfassung.
-function isInjectableUrl(url) {
+// Normale Website (http/https) -> Klicks moeglich. Systemseiten (chrome://, Web Store,
+// PDF-Viewer, about:, file:, ...) -> keine Klick-Erfassung (das Content-Script laeuft
+// dort nicht). Wir nutzen das nur fuer den Hinweistext im Aufnahme-Tab.
+function isNormalWebPage(url) {
   if (!url) return false;
-  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://");
+  if (!/^https?:\/\//i.test(url)) return false;
+  // Chrome Web Store: dort sind Content-Scripts gesperrt.
+  if (/^https?:\/\/chromewebstore\.google\.com\//i.test(url)) return false;
+  if (/^https?:\/\/chrome\.google\.com\/webstore\//i.test(url)) return false;
+  return true;
 }
 
-async function injectContentScript(tabId) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ["content.js"],
-  });
+// Gespeicherte Konfiguration ins Formular laden.
+async function loadCfg() {
+  try {
+    const res = await chrome.storage.local.get(["steplyToken", "steplyAppUrl"]);
+    if (tokenInput) tokenInput.value = (res && res.steplyToken) || "";
+    if (appUrlInput) appUrlInput.value = (res && res.steplyAppUrl) || "";
+    if (appUrlInput) appUrlInput.placeholder = DEFAULT_APP_URL;
+  } catch (err) {
+    /* ignore */
+  }
 }
+
+async function saveCfg() {
+  const token = (tokenInput?.value || "").trim();
+  const appUrl = (appUrlInput?.value || "").trim().replace(/\/+$/, "");
+  try {
+    await chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl });
+    if (cfgStatus) {
+      cfgStatus.textContent = token
+        ? "Gespeichert. Aufnahmen werden direkt zu Steply hochgeladen."
+        : "Gespeichert. Ohne Token werden zwei Dateien heruntergeladen.";
+      cfgStatus.className = "status status-ok";
+    }
+  } catch (err) {
+    if (cfgStatus) {
+      cfgStatus.textContent = "Konnte nicht gespeichert werden.";
+      cfgStatus.className = "status status-error";
+    }
+  }
+}
+
+if (saveBtn) saveBtn.addEventListener("click", saveCfg);
 
 startBtn.addEventListener("click", async () => {
   setBusy(true);
@@ -42,33 +84,20 @@ startBtn.addEventListener("click", async () => {
 
   try {
     const tab = await getActiveTab();
-    if (!tab || tab.id == null) {
-      throw new Error("Kein aktiver Tab gefunden.");
-    }
+    const normal = tab && tab.id != null && isNormalWebPage(tab.url);
 
-    let clicksTabId = null;
-    if (isInjectableUrl(tab.url)) {
-      try {
-        await injectContentScript(tab.id);
-        clicksTabId = tab.id;
-      } catch (err) {
-        // Injektion fehlgeschlagen (z. B. durch Seiten-Policy): weiter ohne Klicks.
-        console.warn("Steply: Content-Script konnte nicht injiziert werden:", err);
-        clicksTabId = null;
-      }
-    }
-
-    // Aufnahme-Tab oeffnen. clicksTabId als Query, damit der Recorder weiss,
-    // aus welchem Tab er Klicks akzeptiert (und dem Nutzer den Zustand zeigt).
+    // Aufnahme-Tab oeffnen. Bei normalen Seiten die Tab-ID mitgeben (clicksTab), damit
+    // der Recorder Klicks NUR aus diesem Tab zaehlt - auch ueber Seitenwechsel hinweg.
+    // Bei Systemseiten ohne ID -> der Recorder zeigt den passenden Hinweis.
     const url = chrome.runtime.getURL(
-      "recorder.html?clicksTab=" + (clicksTabId == null ? "" : String(clicksTabId))
+      "recorder.html" + (normal ? "?clicksTab=" + String(tab.id) : "")
     );
     await chrome.tabs.create({ url, active: true });
 
     setStatus(
-      clicksTabId == null
-        ? "Aufnahme-Tab geoeffnet. Hinweis: Auf dieser Seite koennen keine Klicks erfasst werden."
-        : "Aufnahme-Tab geoeffnet - dort geht es weiter.",
+      normal
+        ? "Aufnahme-Tab geoeffnet - dort geht es weiter."
+        : "Aufnahme-Tab geoeffnet. Hinweis: Auf dieser Systemseite koennen keine Klicks erfasst werden.",
       "ok"
     );
 
@@ -80,3 +109,5 @@ startBtn.addEventListener("click", async () => {
     setBusy(false);
   }
 });
+
+loadCfg();

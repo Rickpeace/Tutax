@@ -13,20 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { validateClicks, type Click } from "@/lib/clicks";
 
 type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed" | "bulk" | "bulkDone";
 
 // Fortschritt je Datei im Bulk-Upload (mehrere Dateien auf einmal).
 type BulkItem = { name: string; status: "pending" | "uploading" | "done" | "error"; error?: string };
 
-// Ein Klick-Marker aus dem Steply Recorder (clicks.json). Vertrag siehe extension/README.md
-// bzw. Migration 0020 (video_jobs.clicks): [{ t, x:0..1, y:0..1, label? }].
-type Click = { t: number; x: number; y: number; label?: string };
-
-// clicks.json einlesen + streng validieren. Wirft mit klarer deutscher Meldung bei
-// Ungültigkeit (der Aufrufer zeigt sie als toast.error). Bei Erfolg: bereinigte Klicks
-// (x/y geklemmt auf 0..1, label auf 60 Zeichen gekappt). x/y nur „knapp daneben" wird
-// geklemmt — grob unsinnige Werte (>2 bzw. <-1) gelten als kaputt.
+// clicks.json einlesen + streng validieren (Logik in src/lib/clicks.ts — eine Quelle
+// der Wahrheit, geteilt mit /api/recorder/complete). Wirft mit klarer deutscher Meldung
+// bei Ungültigkeit (der Aufrufer zeigt sie als toast.error).
 async function parseClicksFile(file: File): Promise<Click[]> {
   let raw: unknown;
   try {
@@ -34,25 +30,7 @@ async function parseClicksFile(file: File): Promise<Click[]> {
   } catch {
     throw new Error("Die Klick-Datei ist kein gültiges JSON.");
   }
-  if (!Array.isArray(raw)) throw new Error("Die Klick-Datei muss eine JSON-Liste sein.");
-  if (raw.length === 0) throw new Error("Die Klick-Datei enthält keine Einträge.");
-  if (raw.length > 500) throw new Error("Die Klick-Datei hat zu viele Einträge (max. 500).");
-  const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
-  const out: Click[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw[i] as Record<string, unknown> | null;
-    const where = `Eintrag ${i + 1}`;
-    if (!c || typeof c !== "object") throw new Error(`Klick-Datei: ${where} ist kein Objekt.`);
-    const { t, x, y, label } = c as { t?: unknown; x?: unknown; y?: unknown; label?: unknown };
-    if (typeof t !== "number" || !Number.isFinite(t) || t < 0) throw new Error(`Klick-Datei: ${where} hat kein gültiges „t" (Sekunden ≥ 0).`);
-    if (typeof x !== "number" || !Number.isFinite(x) || x < -1 || x > 2) throw new Error(`Klick-Datei: ${where} hat kein gültiges „x" (0..1).`);
-    if (typeof y !== "number" || !Number.isFinite(y) || y < -1 || y > 2) throw new Error(`Klick-Datei: ${where} hat kein gültiges „y" (0..1).`);
-    if (label !== undefined && typeof label !== "string") throw new Error(`Klick-Datei: ${where} hat ein ungültiges „label".`);
-    const click: Click = { t, x: clamp01(x), y: clamp01(y) };
-    if (typeof label === "string" && label.length > 0) click.label = label.slice(0, 60);
-    out.push(click);
-  }
-  return out;
+  return validateClicks(raw);
 }
 
 export function VideoUpload({ accountId }: { accountId: string }) {

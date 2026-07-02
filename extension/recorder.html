@@ -52,14 +52,28 @@
 
       <section id="done" hidden>
         <div class="done-check">✓</div>
-        <h2>Fertig - 2 Dateien heruntergeladen</h2>
-        <p class="lead">
-          Laden Sie <strong>beide</strong> Dateien in Steply hoch (Aus Video):
-        </p>
-        <ul class="filelist">
-          <li id="fileVideo">aufnahme.webm</li>
-          <li id="fileClicks">clicks.json</li>
-        </ul>
+        <h2>Aufnahme fertig</h2>
+
+        <!-- Direkt-Upload zu Steply (nur wenn ein Verbindungs-Token gesetzt ist). -->
+        <div id="uploadBox" hidden>
+          <p id="uploadProgress" class="lead" role="status" aria-live="polite"></p>
+          <div id="uploadDone" hidden>
+            <p class="lead">Hochgeladen - das Tutorial wird erstellt.</p>
+            <button id="openApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
+          </div>
+        </div>
+
+        <!-- Fallback: Datei-Downloads (ohne Token oder wenn der Upload scheitert). -->
+        <div id="downloadBox" hidden>
+          <p class="lead">
+            Laden Sie <strong>beide</strong> Dateien in Steply hoch (Aus Video):
+          </p>
+          <ul class="filelist">
+            <li id="fileVideo">aufnahme.webm</li>
+            <li id="fileClicks">clicks.json</li>
+          </ul>
+        </div>
+
         <button id="again" class="btn" type="button">Neue Aufnahme</button>
       </section>
 

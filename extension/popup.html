@@ -23,6 +23,27 @@
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
+    <details class="cfg">
+      <summary>Direkt-Upload zu Steply (optional)</summary>
+      <p class="note">
+        Fuegen Sie den Verbindungs-Token aus Steply (Einstellungen &rarr; Einbetten
+        &rarr; Steply Recorder verbinden) ein. Dann landet die Aufnahme automatisch in
+        Steply - ohne Datei-Umweg. Ohne Token erhalten Sie zwei Dateien zum Hochladen.
+      </p>
+      <label class="field">
+        <span>Verbindungs-Token</span>
+        <input id="token" type="text" autocomplete="off" spellcheck="false"
+          placeholder="z. B. 3f9a1c2e-..." />
+      </label>
+      <label class="field">
+        <span>Steply-App-URL</span>
+        <input id="appUrl" type="url" autocomplete="off" spellcheck="false"
+          placeholder="https://app.steply.de" />
+      </label>
+      <button id="saveCfg" class="btn" type="button">Speichern</button>
+      <p id="cfgStatus" class="status" role="status" aria-live="polite"></p>
+    </details>
+
     <div class="hint">
       <strong>So geht's:</strong>
       <ol>
@@ -33,9 +54,10 @@
         <li>Laden Sie beide Dateien in Steply hoch (Aus Video).</li>
       </ol>
       <p class="note">
-        v1: Klicks werden nur im gestarteten Browser-Tab erfasst. Wechseln Sie
-        den Tab oder das Programm, fehlen dort die Klicks - das Video wird aber
-        vollstaendig aufgenommen.
+        Klicks werden im aufgenommenen Browser-Tab erfasst - auch ueber
+        Seitenwechsel hinweg. Wechseln Sie in einen anderen Tab oder ein anderes
+        Programm, fehlen dort die Klicks; das Video wird aber vollstaendig
+        aufgenommen.
       </p>
     </div>
 
