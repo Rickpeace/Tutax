@@ -13,9 +13,11 @@ import {
   QrCode,
   Check,
   Lock,
+  Film,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
+import { VideoExport } from "@/components/app/video-export";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +56,7 @@ export function TutorialCard({
   const [pending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [title, setTitle] = useState(tutorial.title);
 
   // Optimistischer „Auf Hilfe-Seite"-Zustand (= veröffentlicht).
@@ -241,6 +244,17 @@ export function TutorialCard({
                   <QrCode className="size-4" /> QR-Code öffnen
                 </DropdownMenuItem>
               )}
+              {live && !internal && tutorial.slug && (
+                // Video-Export (Welle 18): nur für öffentlich veröffentlichte Tutorials.
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExportOpen(true);
+                  }}
+                >
+                  <Film className="size-4" /> Als Video exportieren
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setRenameOpen(true)}>
                 Umbenennen
@@ -294,6 +308,11 @@ export function TutorialCard({
             <Eye className="size-4" /> Ansehen
           </Button>
         </div>
+
+        {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte). */}
+        {live && !internal && tutorial.slug && (
+          <VideoExport tutorialId={tutorial.id} open={exportOpen} onOpenChange={setExportOpen} />
+        )}
       </div>
 
       {/* Umbenennen */}
