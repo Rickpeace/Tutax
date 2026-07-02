@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Agent-Skill-Stores (git-ignoriert bzw. Fremdcode — kein Lint-Gegenstand):
     ".agents/**",
     ".claude/**",
+    // Browser-Extension: Vanilla-JS für Chrome, kein Next-/React-Code:
+    "extension/**",
   ]),
 ]);
 
