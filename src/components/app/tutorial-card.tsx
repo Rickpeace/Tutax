@@ -13,6 +13,7 @@ import {
   QrCode,
   Check,
   Lock,
+  GraduationCap,
   Film,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
@@ -201,12 +202,14 @@ export function TutorialCard({
                   <Lock className="size-3" /> Intern
                 </span>
               )}
+              {/* KEIN Schloss: das Tutorial ist öffentlich — der Chip sagt nur
+                  „läuft ZUSÄTZLICH als Team-Schulung" (Richard-Feedback 03.07.). */}
               {teamToo && (
                 <span
                   className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-medium text-ink-2"
-                  title="Zusätzlich im Team-Lernbereich (mit Schulungsnachweis)"
+                  title="Öffentlich auf der Hilfe-Seite UND zusätzlich im Team-Lernbereich (mit Schulungsnachweis)"
                 >
-                  <Lock className="size-3" /> Team
+                  <GraduationCap className="size-3" /> + Team
                 </span>
               )}
             </div>
