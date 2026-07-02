@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,6 +9,7 @@ import { VideoUpload } from "@/components/app/video-upload";
 import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
+import { InsightsCard } from "@/components/app/insights-card";
 import { Layers, Loader2 } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -181,6 +183,12 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Insights über den Tutorial-Sektionen; streamt nach (blockiert das Dashboard
+          nicht) und rendert sich selbst weg, wenn es keine Events gibt. */}
+      <Suspense fallback={null}>
+        <InsightsCard accountId={account.id} />
+      </Suspense>
 
       {nothing ? (
         <div className="mt-8 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">

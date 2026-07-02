@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Layers, ChevronRight } from "lucide-react";
+import { Search, Layers, ChevronRight, Loader2 } from "lucide-react";
 
 export type HubTutorial = {
   title: string;
@@ -40,6 +40,51 @@ export function HubBrowser({
     return order.filter((c) => m.has(c)).map((c) => ({ name: c, items: m.get(c)! }));
   }, [q, items, order]);
 
+  // Semantische Fallback-Suche: greift nur, wenn die lokale Titel-/Beschreibungs-Suche
+  // 0 Treffer hat UND die Anfrage ≥ 3 Zeichen ist. Debounced (500 ms), damit nicht bei
+  // jedem Tastendruck das RAG angefragt wird. Slugs der lokalen Treffer werden
+  // ausgeblendet (hier per Titel-Match verhindert man Doppel-Vorschläge nicht nötig,
+  // da die semantische Suche nur bei 0 lokalen Treffern läuft).
+  const [sem, setSem] = useState<{ title: string; slug: string }[]>([]);
+  const [semLoading, setSemLoading] = useState(false);
+  const term = q.trim();
+  const noLocal = groups.length === 0 && items.length > 0;
+  // Semantische Suche nur, wenn lokal nichts gefunden wurde und die Eingabe ≥ 3 Zeichen ist.
+  const semEligible = noLocal && term.length >= 3;
+
+  useEffect(() => {
+    if (!semEligible) return; // Reset erfolgt beim Rendern über semEligible (kein setState nötig).
+    // Loading-Zustand vor dem debounced Fetch – bewusst im Effekt (Debounce-Muster).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSemLoading(true);
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/hub-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountSlug, q: term }),
+          signal: ctrl.signal,
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!ctrl.signal.aborted) {
+          setSem(Array.isArray(j?.results) ? j.results.slice(0, 5) : []);
+          setSemLoading(false);
+        }
+      } catch {
+        // abgebrochen oder Netzfehler -> keine Vorschläge, kein sichtbarer Fehler.
+        if (!ctrl.signal.aborted) {
+          setSem([]);
+          setSemLoading(false);
+        }
+      }
+    }, 500);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [semEligible, term, accountSlug]);
+
   return (
     <div data-tx="browser">
       <div data-tx="search" className="mb-5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 py-3">
@@ -70,7 +115,62 @@ export function HubBrowser({
             >
               Suche zurücksetzen
             </button>
-            <p className="mt-4 max-w-xs text-xs text-muted-foreground">
+
+            {semEligible && semLoading && sem.length === 0 && (
+              <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" /> Ähnliche Anleitungen
+                werden gesucht …
+              </p>
+            )}
+
+            {semEligible && sem.length > 0 && (
+              <div className="mt-5 w-full max-w-sm text-left">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Meinten Sie:
+                </p>
+                <div className="space-y-2">
+                  {sem.map((t) => (
+                    <Link
+                      key={t.slug}
+                      href={`/h/${accountSlug}/${t.slug}`}
+                      className="flex items-center gap-3 p-3 transition-transform hover:-translate-y-px"
+                      style={{
+                        background: "var(--brand-card-bg, #fff)",
+                        border: "var(--brand-card-bw, 1px) solid var(--brand-card-border, rgba(16,21,36,0.1))",
+                        borderRadius: "var(--brand-radius, 12px)",
+                        boxShadow: "var(--brand-card-shadow, none)",
+                      }}
+                    >
+                      <div
+                        className="flex size-8 shrink-0 items-center justify-center"
+                        style={{
+                          background: "var(--brand-icon-bg, var(--brand-soft))",
+                          color: "var(--brand-accent)",
+                          borderRadius: "var(--brand-radius, 10px)",
+                        }}
+                      >
+                        <Layers className="size-4" />
+                      </div>
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm font-bold"
+                        style={{
+                          color: "var(--brand-title, var(--brand-ink))",
+                          fontFamily: "var(--brand-font-heading)",
+                        }}
+                      >
+                        {t.title}
+                      </span>
+                      <ChevronRight
+                        className="size-4 shrink-0"
+                        style={{ color: "var(--brand-accent)", opacity: 0.5 }}
+                      />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="mt-5 max-w-xs text-xs text-muted-foreground">
               Nicht das Richtige dabei? Fragen Sie den Hilfe-Assistenten unten
               rechts.
             </p>

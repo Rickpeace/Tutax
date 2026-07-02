@@ -34,6 +34,7 @@ import {
   updateBranch,
   deleteBranch,
   deleteStep,
+  setRootStep,
 } from "@/app/app/tutorials/[id]/actions";
 import { YES, NO } from "@/lib/builder/constants";
 
@@ -336,6 +337,141 @@ export function Builder({
     [steps, branches, rootId, tutorialId, persist],
   );
 
+  // ── Schritt-Umordnen (Hoch/Runter) ──────────────────────────────────────────
+  // Reines Branch-Rewiring: Positionen werden NICHT umgeschrieben (die Fluss-
+  // Reihenfolge kommt aus dem Tree). Getauscht wird nur mit dem LINEAREN Nachbarn,
+  // und nur wenn der Tausch eindeutig ist (siehe canMove).
+  const outgoingOf = useCallback(
+    (id: string) => branches.filter((b) => b.step_id === id),
+    [branches],
+  );
+  // Predecessor-Kanten: Branches, deren Ziel dieser Schritt ist.
+  const incomingOf = useCallback(
+    (id: string) => branches.filter((b) => b.target_step_id === id),
+    [branches],
+  );
+
+  /**
+   * Liefert das eindeutige lineare Paar (A→B) für einen Tausch, oder null wenn
+   * nicht eindeutig. Für Richtung "down" ist A=stepId; für "up" wird der eindeutige
+   * Vorgänger P gesucht und (A=P, B=stepId) getauscht. Bedingungen (beide Richtungen):
+   * weder A noch B ist Entscheidung, beide haben ≤1 ausgehende Kante, und A→B ist
+   * die einzige verbindende Nicht-Entscheidungs-Kante.
+   */
+  const swapPair = useCallback(
+    (stepId: string, dir: "up" | "down"): { a: Step; b: Step } | null => {
+      const stepById = new Map(steps.map((s) => [s.id, s]));
+      const self = stepById.get(stepId);
+      if (!self) return null;
+
+      let a: Step | undefined;
+      let b: Step | undefined;
+      if (dir === "down") {
+        a = self;
+        const outA = outgoingOf(a.id);
+        if (outA.length !== 1 || !outA[0].target_step_id) return null;
+        b = stepById.get(outA[0].target_step_id);
+      } else {
+        b = self;
+        // Eindeutiger Vorgänger: genau eine eingehende Kante.
+        const inB = incomingOf(b.id);
+        if (inB.length !== 1) return null;
+        a = stepById.get(inB[0].step_id);
+      }
+      if (!a || !b || a.id === b.id) return null;
+
+      // Beide dürfen keine Entscheidung sein und höchstens eine ausgehende Kante haben.
+      if (a.is_decision || b.is_decision) return null;
+      if (outgoingOf(a.id).length > 1 || outgoingOf(b.id).length > 1) return null;
+      // A muss über GENAU eine Kante auf B zeigen (die verbindende Kante).
+      const aToB = outgoingOf(a.id).filter((br) => br.target_step_id === b.id);
+      if (aToB.length !== 1) return null;
+      return { a, b };
+    },
+    [steps, outgoingOf, incomingOf],
+  );
+
+  const canMove = useCallback(
+    (stepId: string, dir: "up" | "down") => swapPair(stepId, dir) !== null,
+    [swapPair],
+  );
+
+  const handleMoveStep = useCallback(
+    (stepId: string, dir: "up" | "down") => {
+      const pair = swapPair(stepId, dir);
+      if (!pair) return;
+      const { a, b } = pair; // Fluss: Vorgänger → A → B → Nachfolger
+      const outA = outgoingOf(a.id).find((br) => br.target_step_id === b.id)!; // A→B
+      const outB = outgoingOf(b.id)[0] ?? null; // B→Nachfolger (oder Blatt)
+      const succ = outB?.target_step_id ?? null;
+      const aIsRoot = rootId === a.id;
+      // Vorgänger-Kanten (nur wenn A nicht Wurzel): Kanten, die auf A zeigen → B.
+      const preds = aIsRoot ? [] : incomingOf(a.id);
+      // Nur relevant, wenn B ein Blatt ist (keine ausgehende Kante) → neue Kante B→A.
+      const newBranchId = crypto.randomUUID();
+
+      // ── Optimistischer State ──
+      setBranches((prev) => {
+        let next = prev;
+        // 1) Vorgänger → B statt A.
+        if (preds.length) {
+          const predIds = new Set(preds.map((p) => p.id));
+          next = next.map((br) =>
+            predIds.has(br.id) ? { ...br, target_step_id: b.id } : br,
+          );
+        }
+        // 2) A→B wird A→Nachfolger.
+        next = next.map((br) =>
+          br.id === outA.id ? { ...br, target_step_id: succ } : br,
+        );
+        // 3) B→Nachfolger wird B→A; falls B Blatt war, neue Kante B→A anlegen.
+        if (outB) {
+          next = next.map((br) =>
+            br.id === outB.id ? { ...br, target_step_id: a.id } : br,
+          );
+        } else {
+          next = [
+            ...next,
+            {
+              id: newBranchId,
+              step_id: b.id,
+              label: null,
+              color: null,
+              target_step_id: a.id,
+              position: 0,
+              created_at: "",
+            },
+          ];
+        }
+        return next;
+      });
+      if (aIsRoot) setRootId(b.id);
+      // Auswahl bleibt auf demselben Schritt (stepId), Flow spiegelt die neue Reihenfolge.
+
+      // ── Persist (dieselbe Reihenfolge; existierende Actions) ──
+      persist(async () => {
+        if (preds.length) {
+          for (const p of preds) await updateBranch(p.id, { target_step_id: b.id });
+        }
+        await updateBranch(outA.id, { target_step_id: succ });
+        if (outB) {
+          await updateBranch(outB.id, { target_step_id: a.id });
+        } else {
+          await addBranch({
+            id: newBranchId,
+            step_id: b.id,
+            label: null,
+            color: null,
+            target_step_id: a.id,
+            position: 0,
+          });
+        }
+        if (aIsRoot) await setRootStep(tutorialId, b.id);
+      });
+    },
+    [swapPair, outgoingOf, incomingOf, rootId, tutorialId, persist],
+  );
+
   const setStepImage = useCallback(
     (
       stepId: string,
@@ -410,6 +546,9 @@ export function Builder({
         hasNext={selIndex >= 0 && selIndex < ordered.length - 1}
         onPrev={goPrev}
         onNext={goNext}
+        canMoveUp={!!selectedStep && canMove(selectedStep.id, "up")}
+        canMoveDown={!!selectedStep && canMove(selectedStep.id, "down")}
+        onMove={handleMoveStep}
         onSaveStep={saveStep}
         onDirtyChange={(d) => {
           dirtyRef.current = d;

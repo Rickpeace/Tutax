@@ -192,6 +192,20 @@ export async function deleteStep(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Wurzel-Schritt eines Tutorials setzen (Schritt-Umordnen: wenn der bisherige
+ * Startschritt getauscht wird, wird der Nachbar zur neuen Wurzel). Additiv —
+ * persistiert nur, die UI führt optimistisch.
+ */
+export async function setRootStep(tutorialId: string, stepId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tutorials")
+    .update({ root_step_id: stepId })
+    .eq("id", tutorialId);
+  if (error) throw new Error(error.message);
+}
+
 /** Kategorie anlegen (§7.3, „on the fly" aus der Combobox). */
 export async function createCategory(name: string): Promise<{ id: string; name: string }> {
   const clean = name.trim();

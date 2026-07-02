@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight, X } from "lucide-react";
+import { Plus, Trash2, GitBranch, Loader2, Sparkles, Save, ChevronLeft, ChevronRight, ArrowRight, ArrowUp, ArrowDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,9 @@ export function StepPanel({
   hasNext,
   onPrev,
   onNext,
+  canMoveUp,
+  canMoveDown,
+  onMove,
   onSaveStep,
   onDirtyChange,
   onSetImage,
@@ -51,6 +54,9 @@ export function StepPanel({
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMove: (id: string, dir: "up" | "down") => void;
   onSaveStep: (id: string, patch: { title: string; body: unknown }) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   onSetImage: (
@@ -183,6 +189,27 @@ export function StepPanel({
           </span>
           <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
             {hasNext ? <ChevronRight className="size-4" /> : <Plus className="size-4" />}
+          </Button>
+          <span className="mx-0.5 h-4 w-px bg-line-2" aria-hidden />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={!canMoveUp}
+            onClick={() => onMove(step.id, "up")}
+            title={canMoveUp ? "Schritt nach oben" : "Bei Verzweigungen bitte über die Antwort-Ziele umhängen"}
+            aria-label="Schritt nach oben"
+          >
+            <ArrowUp className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={!canMoveDown}
+            onClick={() => onMove(step.id, "down")}
+            title={canMoveDown ? "Schritt nach unten" : "Bei Verzweigungen bitte über die Antwort-Ziele umhängen"}
+            aria-label="Schritt nach unten"
+          >
+            <ArrowDown className="size-4" />
           </Button>
         </div>
         <div className="flex items-center gap-2">
