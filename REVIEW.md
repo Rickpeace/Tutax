@@ -40,6 +40,16 @@ Drift-Cooldown (60 Min, 429) + „Hinweise ansehen"-Link · kb.ts wirft/loggt Fe
 deutsche Auth-Fehler überall (lib/auth-errors.ts) · Category-Rollback ·
 Preview-Promise.all · Highlight-Clamp 0..1.
 
+**Fable (Runde 3):** events-Tabelle (Migration 0018) + „**War das hilfreich?** 👍/👎" am
+Wizard-Ende + View-Tracking (after()) + Chat-Frage/Status-Logging (Frage-Lücken-Basis) ·
+Wizard-**Resume** (sessionStorage) · ViewerImage aspect-ratio/lazy/alt (Layout-Shift).
+**Opus Welle 3 (reviewt+gemerged):** Worker-**Live-Aufbau** (Tutorial wächst sichtbar,
+progress „Schritt X/Y", Crash-Waisen-Bereinigung, Cleanup erhalten) · `steps.video_time`
+→ **Frame-Picker im Builder** („Bild aus Video wählen", Canvas-Capture, RLS-Gate) ·
+Whisper-Marker-Bias + „cut" · Vision parallel (3er-Batches) · Retry/Backoff ·
+schärfster-Frame-Heuristik · Vision-Bilder 1280px (Kosten) · „Wird erstellt…"-Karte im
+Dashboard. ⚠️ **Worker-Teil ungetestet bis `deploy.sh` + Test-Video (Richard!).**
+
 ---
 
 ## Was gut ist (von 4 unabhängigen Reviews bestätigt)
