@@ -746,6 +746,19 @@ async function processJob(job) {
 async function reapOrphanTutorial(job) {
   const oldTutId = job.tutorial_id;
   if (!oldTutId) return;
+  // SCHUTZGITTER (Lehre vom 02.07.): Crash-Waisen sind IMMER unveroeffentlichte
+  // Entwuerfe dieser Pipeline. Alles andere (published/intern/fremder Job-Typ) wird
+  // NIE geloescht - der alte Worker hat so ein echtes Tutorial zerstoert, als er
+  // einen render-Job faelschlich als Create-Waise interpretierte.
+  if (job.kind && job.kind !== "create") return;
+  try {
+    const { data: guardTut } = await sb.from("tutorials").select("status").eq("id", oldTutId).maybeSingle();
+    if (!guardTut) { job.tutorial_id = null; return; }
+    if (guardTut.status !== "draft") {
+      console.log(`  ! Waisen-Cleanup uebersprungen: Tutorial ${oldTutId} ist '${guardTut.status}' (kein Entwurf).`);
+      return;
+    }
+  } catch { return; }
   console.log(`  ↻ Räume Crash-Waise auf: altes Teil-Tutorial ${oldTutId} von Job ${job.id}.`);
   try {
     const { data: stepRows } = await sb.from("steps").select("id, image_path").eq("tutorial_id", oldTutId);
