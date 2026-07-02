@@ -298,7 +298,7 @@ export function HighlightEditor({
       </div>
       <p className="text-xs text-muted-foreground">
         Werkzeug wählen, dann über dem Bild ziehen. Form anklicken zum Verschieben,
-        an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern. „Blur"
+        an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern. „Blur“
         schwärzt sensible Daten.
       </p>
     </div>

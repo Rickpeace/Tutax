@@ -30,6 +30,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
     Object.fromEntries(items.map((i) => [i.templateId, i.enabled])),
   );
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: optimistischen Schalter-Zustand mit neuen Server-Daten resyncen (nach Fork/Reset), kein Cascade
     setEnabledMap(Object.fromEntries(items.map((i) => [i.templateId, i.enabled])));
   }, [items]);
 
@@ -152,8 +153,8 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         ))}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        „Standard" wird zentral von Steply gepflegt – Updates erscheinen automatisch.
-        Beim Anpassen entsteht Ihre eigene Kopie („Angepasst").
+        „Standard“ wird zentral von Steply gepflegt – Updates erscheinen automatisch.
+        Beim Anpassen entsteht Ihre eigene Kopie („Angepasst“).
       </p>
     </section>
   );

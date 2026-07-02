@@ -310,7 +310,7 @@ export function StepPanel({
           <Label>Antwort-Optionen</Label>
           {branches.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Noch keine Antworten. Fügen Sie z. B. „Ja" und „Nein" hinzu.
+              Noch keine Antworten. Fügen Sie z. B. „Ja“ und „Nein“ hinzu.
             </p>
           )}
           {branches

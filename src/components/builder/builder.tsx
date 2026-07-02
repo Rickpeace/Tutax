@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -170,7 +170,7 @@ export function Builder({
     }
     persist(() => addStep(tutorialId, { id, title: newStep.title ?? "Neuer Schritt", position }, setRoot, wire));
     setSelectedId(id);
-  }, [steps, branches, rootId, tutorialId, persist]);
+  }, [steps, branches, tutorialId, persist]);
 
   // §7.4: Schritt gezielt in einen Ast einfügen (B → N → altes Ziel).
   function insertIntoBranch(branchId: string) {
@@ -526,13 +526,13 @@ export function Builder({
     else handleAddStep(); // am Ende: neuen Schritt anlegen + auswählen
   }, [selIndex, ordered, handleAddStep]);
 
-  const closeEditor = () => {
+  const closeEditor = useCallback(() => {
     if (dirtyRef.current && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
     dirtyRef.current = false;
     setSelectedId(null);
-  };
+  }, []);
 
-  const renderPanel = (onClose?: () => void) =>
+  const renderPanel = (withClose = false) =>
     selectedStep ? (
       <StepPanel
         key={selectedStep.id}
@@ -562,7 +562,7 @@ export function Builder({
         onDeleteStep={handleDeleteStep}
         onOpenStep={(id) => setSelectedId(id)}
         onInsertIntoBranch={insertIntoBranch}
-        onClose={onClose}
+        onClose={withClose ? closeEditor : undefined}
       />
     ) : null;
 
@@ -608,7 +608,7 @@ export function Builder({
           // top-[4.5rem] = unter dem 56px hohen, stickyen App-Header (sonst verschwindet der Panel-Kopf dahinter).
           <aside className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[440px] shrink-0 flex-col self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm xl:w-[520px]">
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-              {renderPanel(closeEditor)}
+              {renderPanel(true)}
             </div>
           </aside>
         )}

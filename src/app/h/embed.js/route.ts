@@ -1,4 +1,3 @@
-import { type NextRequest } from "next/server";
 import { appBaseUrl } from "@/lib/url";
 
 /**
@@ -13,7 +12,7 @@ import { appBaseUrl } from "@/lib/url";
  */
 
 // (force-static entfiel mit cacheComponents; CDN-Caching regelt der Cache-Control-Header.)
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const origin = appBaseUrl();
 
   // origin wird als JSON in den String eingesetzt -> sicher escaped, kein Template-Leak.

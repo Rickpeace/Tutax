@@ -55,6 +55,7 @@ export function TutorialCard({
 
   // Optimistischer „Auf Hilfe-Seite"-Zustand (= veröffentlicht).
   const [live, setLive] = useState(tutorial.status === "published");
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: optimistischen live-Zustand mit neuem Server-Status resyncen, kein Cascade
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
 
@@ -264,7 +265,7 @@ export function TutorialCard({
             <DialogTitle>Tutorial löschen?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            „{tutorial.title}" wird mit allen Schritten dauerhaft gelöscht. Das
+            „{tutorial.title}“ wird mit allen Schritten dauerhaft gelöscht. Das
             kann nicht rückgängig gemacht werden.
           </p>
           <DialogFooter>

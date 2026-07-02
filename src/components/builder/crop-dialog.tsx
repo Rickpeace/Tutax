@@ -37,6 +37,7 @@ export function CropDialog({
 
   useEffect(() => {
     const u = URL.createObjectURL(file);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Object-URL wird im Effect erzeugt und in der Cleanup wieder freigegeben (externer Ressourcen-Lifecycle), kein Cascade
     setSrc(u);
     return () => URL.revokeObjectURL(u);
   }, [file]);
@@ -54,6 +55,7 @@ export function CropDialog({
       h = 0.92;
       w = h * lockRel;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: unabhängige Crop-Box (auch per Drag mutiert) auf Seitenverhältnis-Wahl neu zentrieren, kein Cascade
     setBox({ x: (1 - w) / 2, y: (1 - h) / 2, w, h });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aspect, natural.w, natural.h]);

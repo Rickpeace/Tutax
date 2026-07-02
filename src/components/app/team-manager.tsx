@@ -107,7 +107,7 @@ export function TeamManager({
             </div>
           )}
           <p className="mt-2 text-xs text-muted-foreground">
-            „Bearbeiter" darf Anleitungen, Wissen & Branding bearbeiten. Konto/Abo bleiben dem Inhaber.
+            „Bearbeiter“ darf Anleitungen, Wissen & Branding bearbeiten. Konto/Abo bleiben dem Inhaber.
           </p>
         </section>
       )}

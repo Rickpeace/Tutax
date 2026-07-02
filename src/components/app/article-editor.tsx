@@ -132,7 +132,7 @@ export function ArticleEditor({ article }: { article: Article }) {
 
       {published && dirty && (
         <p className="mt-3 text-xs text-muted-foreground">
-          Nicht gespeicherte Änderungen – erst nach „Speichern" im Chatbot-Wissen aktiv.
+          Nicht gespeicherte Änderungen – erst nach „Speichern“ im Chatbot-Wissen aktiv.
         </p>
       )}
     </main>

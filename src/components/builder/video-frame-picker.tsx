@@ -50,6 +50,7 @@ export function VideoFramePicker({
   // Beim Öffnen: Startzeit übernehmen und Ladezustand zurücksetzen.
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Dialog-Zustand beim Öffnen einmalig zurücksetzen (Startzeit/Ladezustand), kein Cascade
     setReady(false);
     setBusy(false);
     setTime(startTime ?? 0);
@@ -121,7 +122,6 @@ export function VideoFramePicker({
 
         <div className="space-y-3">
           <div className="overflow-hidden rounded-lg border border-border bg-black">
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={videoRef}
               src={videoUrl}
