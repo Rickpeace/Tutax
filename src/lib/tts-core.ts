@@ -56,19 +56,19 @@ type StepForSpeech = {
   audio_hash?: string | null;
 };
 
-/** Minimal-Interface des OpenAI-Speech-Clients (leicht mockbar). */
-export type SpeechClient = {
-  audio: {
-    speech: {
-      create: (args: {
-        model: string;
-        voice: string;
-        input: string;
-        response_format: "mp3";
-      }) => Promise<{ arrayBuffer: () => Promise<ArrayBuffer> }>;
-    };
-  };
-};
+/**
+ * Version des Sprechtext-Passes (Welle 19). Teil des Hashes: Wird der SPEECH-Prompt
+ * später verbessert, genügt ein Hochzählen dieser Zahl, um KONTROLLIERT alle Audios
+ * neu erzeugen zu lassen — ohne jeden Text von Hand anfassen zu müssen.
+ */
+export const SPEECH_SCRIPT_VERSION = 1;
+
+/**
+ * Injizierte Synthese-Funktion: Text rein, MP3-Buffer raus (Welle 19). tts-core bleibt
+ * dadurch provider-frei — die konkrete Anbindung (OpenAI ODER ElevenLabs) baut der
+ * Aufrufer (src/lib/tts.ts bzw. scripts/backfill-tts.mjs). Fehler werden geworfen.
+ */
+export type Synthesize = (text: string) => Promise<Buffer>;
 
 /** Minimal-Interface des Supabase-Clients (nur die genutzten Ketten). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,13 +93,25 @@ export function stepSpeechText(step: { title: string | null; body: unknown }): s
 }
 
 /**
- * Kurzer, stabiler Hash als Cache-Schlüssel (sha256, gekürzt). Modell + Stimme gehören
- * MIT in den Hash: ein Stimmen-/Modellwechsel erzeugt so automatisch alle Audios neu,
- * statt in der alten Stimme kleben zu bleiben.
+ * Kurzer, stabiler Hash als Cache-Schlüssel (sha256, gekürzt). Anbieter + Modell +
+ * Stimme + Sprechtext-Version gehören MIT in den Hash: ein Anbieter-/Stimmen-/Modell-
+ * Wechsel ODER ein Hochzählen von SPEECH_SCRIPT_VERSION erzeugt so automatisch alle
+ * Audios neu, statt in der alten Stimme kleben zu bleiben.
+ *
+ * WICHTIG: `text` ist IMMER der QUELLtext (Titel + Bildschirmtext), NICHT der per LLM
+ * erzeugte Sprechertext — sonst würde jeder LLM-Zufallslauf einen neuen Hash liefern
+ * und das Audio bei jedem Publish teuer neu erzeugen. Der Sprechertext-Pass ist über
+ * `scriptVersion` versioniert, nicht über seinen (nicht-deterministischen) Inhalt.
  */
-export function speechHash(text: string, model = "", voice = ""): string {
+export function speechHash(
+  text: string,
+  model = "",
+  voice = "",
+  provider = "",
+  scriptVersion: number = SPEECH_SCRIPT_VERSION,
+): string {
   return createHash("sha256")
-    .update(`${model}|${voice}|${text}`, "utf8")
+    .update(`${provider}|${model}|${voice}|v${scriptVersion}|${text}`, "utf8")
     .digest("hex")
     .slice(0, 32);
 }
@@ -113,7 +125,17 @@ export function audioPath(accountId: string, tutorialId: string, stepId: string)
  * Sicherstellen, dass der Schritt eine aktuelle Audio-Datei hat (idempotent).
  *  - Leerer Sprech-Text -> vorhandenes Audio entfernen, Spalten nullen, fertig.
  *  - Hash unverändert + audio_path gesetzt -> NO-OP (Cache-Treffer, kein Kostencall).
- *  - Sonst: OpenAI TTS -> MP3 in den public Bucket (upsert) -> audio_path/audio_hash setzen.
+ *  - Sonst: `synthesize()` (Provider injiziert) -> MP3 in den public Bucket (upsert)
+ *    -> audio_path/audio_hash setzen.
+ *
+ * Welle 19 — natürlicherer Sprechtext:
+ *  - `synthesize` ersetzt den fest verdrahteten OpenAI-Client (Provider-Abstraktion).
+ *  - `speechTextOverride` (optional): der per LLM erzeugte, natürliche SPRECHERtext, der
+ *    tatsächlich synthetisiert wird. Entweder ein fertiger String ODER — bevorzugt — ein
+ *    LAZY-Resolver `() => Promise<string>`, der ERST NACH dem Cache-Check aufgerufen wird.
+ *    So kostet ein Cache-Treffer keinen LLM-Call. Der HASH läuft immer über den QUELLtext
+ *    (`stepSpeechText(step)`) + Provider/Modell/Stimme/scriptVersion — sonst würde ein
+ *    nicht-deterministischer LLM-Lauf das Audio bei jedem Publish neu erzeugen.
  *
  * Fehler werden GEWORFEN (der Aufrufer im Publish-Flow loggt je Schritt und macht
  * weiter — der Publish selbst darf daran nie scheitern).
@@ -122,33 +144,37 @@ export function audioPath(accountId: string, tutorialId: string, stepId: string)
  */
 export async function ensureStepAudioCore(
   admin: DbClient,
-  speech: SpeechClient,
-  cfg: { model: string; voice: string; accountId: string; tutorialId: string; instructions?: string },
+  synthesize: Synthesize,
+  cfg: { model: string; voice: string; provider?: string; accountId: string; tutorialId: string },
   step: StepForSpeech,
+  speechTextOverride?: string | (() => Promise<string>),
 ): Promise<"skipped" | "created" | "removed"> {
-  const text = stepSpeechText(step);
+  // QUELLtext: Basis für Hash UND Fallback für die Synthese.
+  const sourceText = stepSpeechText(step);
 
   // Kein Sprech-Text -> kein Audio; ein evtl. vorhandenes entfernen.
-  if (!text) {
+  if (!sourceText) {
     if (step.audio_path)
       await removeStepAudioCore(admin, { id: step.id, audio_path: step.audio_path });
     return "removed";
   }
 
-  const hash = speechHash(text, cfg.model, cfg.voice);
-  // Cache: Text/Modell/Stimme unverändert und Datei existiert bereits -> nichts tun.
+  // Hash IMMER über den Quelltext (+ Provider/Modell/Stimme/scriptVersion) — nie über
+  // den LLM-Sprechertext (der ist nicht-deterministisch, siehe speechHash-Doku).
+  const hash = speechHash(sourceText, cfg.model, cfg.voice, cfg.provider);
+  // Cache: Quelltext/Anbieter/Modell/Stimme unverändert und Datei existiert -> nichts tun.
+  // WICHTIG: vor dem (evtl. teuren) Sprechertext-Resolver — Cache-Treffer = kein LLM-Call.
   if (step.audio_hash === hash && step.audio_path) return "skipped";
 
+  // Erst JETZT (Cache-Miss) den Sprechertext auflösen: String direkt, Funktion lazy.
+  let override: string | undefined;
+  if (typeof speechTextOverride === "function") override = await speechTextOverride();
+  else override = speechTextOverride;
+  // Was tatsächlich gesprochen wird: der natürliche Sprechertext, sonst der Quelltext.
+  const spoken = override?.trim() ? override.trim() : sourceText;
+
   const path = audioPath(cfg.accountId, cfg.tutorialId, step.id);
-  const res = await speech.audio.speech.create({
-    model: cfg.model,
-    voice: cfg.voice,
-    input: text,
-    response_format: "mp3",
-    // Stil-Anweisung (nur gpt-4o-mini-tts versteht das Feld) — tts-1 würde es ablehnen.
-    ...(cfg.instructions ? { instructions: cfg.instructions } : {}),
-  });
-  const buf = Buffer.from(await res.arrayBuffer());
+  const buf = await synthesize(spoken);
 
   const { error: upErr } = await admin.storage
     .from(PUBLIC_BUCKET)
