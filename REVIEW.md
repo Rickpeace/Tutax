@@ -120,6 +120,12 @@ Konto-Token (handshake→signierte Storage-URL→complete; Vercel-Body-Limit umg
 CORS ohne ambient authority) · Fixes: Frame-Picker in JEDEM Schritt, CI-treuer
 Hub-Ladescreen (persistentes /h-Layout), Extension-Manifest, Landing v2 mit
 CI-Schieberegler/Schulungs-Sektion/Bento-Miniaturen.
+**Opus Wellen 14/16 + Fable (Abend):** 🔊 **Vorlesen** (TTS beim Publish, Hash-Cache,
+Business) mit ▶ je Schritt; /h/steply komplett vertont (backfill-tts.mjs) ·
+**Audio-UX**: Auto-Play nach erster Geste, persistenter Ton-Schalter, **Auto-Modus**
+(Tour: spielt + blättert selbst, pausiert an Fragen/Hintergrund-Tab) ·
+💰 **Tarife free/pro/business** (Migration 0024) mit Server-Gates + Preistabelle 0/29/79 ·
+Doku-Landkarte (OVERVIEW/STATUS) auf Stand gebracht.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
