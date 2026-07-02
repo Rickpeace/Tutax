@@ -13,7 +13,7 @@ import {
   saveArticle,
   setArticlePublished,
   deleteArticle,
-} from "@/app/app/knowledge/actions";
+} from "@/app/app/assistent/wissen/actions";
 
 type Article = { id: string; title: string; body: unknown; status: string };
 
@@ -81,7 +81,7 @@ export function ArticleEditor({ article }: { article: Article }) {
         try {
           await deleteArticle(article.id);
           toast.success("Artikel gelöscht");
-          router.push("/app/knowledge");
+          router.push("/app/assistent/wissen");
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Fehler");
         }
@@ -89,9 +89,9 @@ export function ArticleEditor({ article }: { article: Article }) {
   };
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-6">
+    <div className="mx-auto w-full max-w-3xl">
       <Link
-        href="/app/knowledge"
+        href="/app/assistent/wissen"
         onClick={(e) => {
           if (!confirmLeave()) e.preventDefault();
         }}
@@ -135,6 +135,6 @@ export function ArticleEditor({ article }: { article: Article }) {
           Nicht gespeicherte Änderungen – erst nach „Speichern“ im Chatbot-Wissen aktiv.
         </p>
       )}
-    </main>
+    </div>
   );
 }

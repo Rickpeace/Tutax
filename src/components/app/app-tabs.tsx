@@ -2,12 +2,12 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Layers, BookOpen, GraduationCap, Loader2 } from "lucide-react";
+import { Layers, Bot, GraduationCap, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const tabs = [
   { href: "/app", label: "Tutorials", icon: Layers, match: (p: string) => p === "/app" || p.startsWith("/app/tutorials") },
-  { href: "/app/knowledge", label: "Wissensdatenbank", icon: BookOpen, match: (p: string) => p.startsWith("/app/knowledge") },
+  { href: "/app/assistent", label: "Assistent", icon: Bot, match: (p: string) => p.startsWith("/app/assistent") || p.startsWith("/app/knowledge") },
   { href: "/app/lernen", label: "Lernen", icon: GraduationCap, match: (p: string) => p.startsWith("/app/lernen") },
 ];
 

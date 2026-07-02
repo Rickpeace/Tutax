@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { BarChart3, MessageCircleQuestion, ThumbsUp } from "lucide-react";
+import { ArrowRight, BarChart3, MessageCircleQuestion, ThumbsUp } from "lucide-react";
 import { GapAction } from "@/components/app/gap-action";
+import { loadOpenGaps } from "@/lib/gaps";
 
 /**
  * Insights-Karte fürs Dashboard (letzte 30 Tage). Zeigt kompakt:
@@ -31,27 +33,15 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
     { count: unanswered },
     { count: up },
     { count: down },
-    { data: noAnswerRows },
+    // Top-3 offene Fragen aus der geteilten Quelle (dieselbe Logik wie /app/assistent/fragen).
+    topGaps,
   ] = await Promise.all([
     base().eq("type", "view"),
     base().eq("type", "chat"),
     base().eq("type", "chat").eq("status", "no_answer"),
     base().eq("type", "feedback").eq("helpful", true),
     base().eq("type", "feedback").eq("helpful", false),
-    // Unbeantwortete Fragen im Klartext für die Top-3-Lücken-Liste.
-    // Nur noch OFFENE Fragen: bereits in einen Entwurf überführte (handled_at gesetzt)
-    // fliegen raus (Frage-Lücken-Miner, REVIEW H1).
-    supabase
-      .from("events")
-      .select("question")
-      .eq("account_id", accountId)
-      .eq("type", "chat")
-      .eq("status", "no_answer")
-      .is("handled_at", null)
-      .not("question", "is", null)
-      .gte("created_at", since)
-      .order("created_at", { ascending: false })
-      .limit(300),
+    loadOpenGaps(accountId, 3),
   ]);
 
   const viewCount = views ?? 0;
@@ -64,18 +54,6 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
   // Nichts los -> Karte gar nicht zeigen (kein leerer Platzhalter).
   const anyEvents = viewCount + chatCount + feedbackTotal > 0;
   if (!anyEvents) return null;
-
-  // Top-3 unbeantwortete Fragen, case-insensitiv dedupliziert + gezählt.
-  const dedup = new Map<string, { question: string; count: number }>();
-  for (const r of noAnswerRows ?? []) {
-    const raw = (r.question ?? "").trim();
-    if (!raw) continue;
-    const key = raw.toLowerCase();
-    const e = dedup.get(key);
-    if (e) e.count += 1;
-    else dedup.set(key, { question: raw, count: 1 });
-  }
-  const topGaps = [...dedup.values()].sort((a, b) => b.count - a.count).slice(0, 3);
 
   const feedbackPct =
     feedbackTotal > 0 ? Math.round((upCount / feedbackTotal) * 100) : null;
@@ -151,6 +129,12 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
               </li>
             ))}
           </ul>
+          <Link
+            href="/app/assistent/fragen"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
+          >
+            Alle offenen Fragen <ArrowRight className="size-3.5" />
+          </Link>
         </div>
       )}
     </section>

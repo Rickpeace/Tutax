@@ -51,5 +51,5 @@ export async function saveEscalation(input: EscalationIn) {
 
   const { error } = await supabase.from("accounts").update({ escalation }).eq("id", account.id);
   if (error) throw new Error(error.message);
-  revalidatePath("/app/settings/eskalation");
+  revalidatePath("/app/assistent/eskalation");
 }
