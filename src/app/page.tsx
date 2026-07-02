@@ -55,7 +55,16 @@ export default function Home() {
             <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
               Kostenlos starten <ArrowRight className="size-4" />
             </Button>
-            <Button size="lg" variant="outline" nativeButton={false} render={<Link href="/anleitung" />}>
+            {/* Echte, öffentliche Demo-Hilfeseite (Konto „Muster GmbH") — stärkster Beweis. */}
+            <Button
+              size="lg"
+              variant="outline"
+              nativeButton={false}
+              render={<Link href="/h/demo" target="_blank" />}
+            >
+              Live-Demo ansehen <ArrowUpRight className="size-4" />
+            </Button>
+            <Button size="lg" variant="ghost" nativeButton={false} render={<Link href="/anleitung" />}>
               So funktioniert&apos;s
             </Button>
           </div>
