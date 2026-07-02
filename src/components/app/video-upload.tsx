@@ -33,8 +33,30 @@ async function parseClicksFile(file: File): Promise<Click[]> {
   return validateClicks(raw);
 }
 
-export function VideoUpload({ accountId }: { accountId: string }) {
-  const [open, setOpen] = useState(false);
+export function VideoUpload({
+  accountId,
+  categoryId = null,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+}: {
+  accountId: string;
+  /** Kategorie durchreichen (Welle 20): wird beim video_jobs-Insert gesetzt. */
+  categoryId?: string | null;
+  /** Kontrolliertes Öffnen (Welle 20, aus der Neues-Tutorial-Weiche). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Eigenen Trigger-Button ausblenden (wenn extern gesteuert). */
+  hideTrigger?: boolean;
+}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (o: boolean) => {
+    onOpenChange?.(o);
+    if (controlledOpen === undefined) setUncontrolledOpen(o);
+  };
+  // Optionales Thema (Welle 20): „Worum geht es?" — dient der KI als Kontext (title).
+  const [topic, setTopic] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [noMic, setNoMic] = useState(false);
@@ -94,7 +116,11 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });
     if (upErr) throw upErr;
-    const row: Record<string, unknown> = { account_id: accountId, video_path: vpath, title: niceName, status: "queued" };
+    // Thema (Welle 20) hat Vorrang vor dem Dateinamen: dient der KI als Kontext (title).
+    const title = topic.trim() || niceName;
+    const row: Record<string, unknown> = { account_id: accountId, video_path: vpath, title, status: "queued" };
+    // Kategorie durchreichen (Welle 20): der Worker übernimmt sie beim Tutorial-Anlegen.
+    if (categoryId) row.category_id = categoryId;
     if (clicks && clicks.length > 0) row.clicks = clicks;
     const { data: job, error: jErr } = await supabase
       .from("video_jobs")
@@ -205,7 +231,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
       const res = await fetch("/api/video-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, categoryId, topic: topic.trim() || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.jobId) {
@@ -272,7 +298,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setProgress(null); setSecs(0); setNoMic(false);
     setShowUrl(false); setImportUrl(""); setImporting(false); setBulkItems([]); setDragActive(false);
-    setClicksName(null); setClicksCount(null);
+    setClicksName(null); setClicksCount(null); setTopic("");
     if (fileRef.current) fileRef.current.value = "";
     if (clicksRef.current) clicksRef.current.value = "";
   };
@@ -286,7 +312,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
       setOpen(o);
       if (!o) reset();
     }}>
-      <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
+      {!hideTrigger && (
+        <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
+      )}
       <DialogContent className="sm:max-w-md" showCloseButton={phase !== "recording" && phase !== "uploading" && phase !== "bulk"}>
         <DialogHeader><DialogTitle>Tutorial aus Video erstellen</DialogTitle></DialogHeader>
 
@@ -304,6 +332,24 @@ export function VideoUpload({ accountId }: { accountId: string }) {
               Mach die Aufgabe einmal vor und erklär dabei ganz normal. Nach jedem Schritt sagst du
               <b> „Schnitt“</b> — daraus wird ein Schritt mit Screenshot und Markierung.
             </p>
+
+            {/* Optionales Thema (Welle 20): gibt der KI Kontext und wird der Titel. */}
+            <div className="space-y-1">
+              <label htmlFor="video-topic" className="text-xs font-medium text-ink">
+                Worum geht es? (optional)
+              </label>
+              <input
+                id="video-topic"
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="z. B. Rechnung in DATEV buchen"
+                className="w-full rounded-md border border-line-2 bg-background px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <p className="text-[11px] leading-snug text-muted-foreground/80">
+                Hilft der KI beim Erkennen der Schritte. Leer lassen ist okay.
+              </p>
+            </div>
 
             <div className="space-y-2 rounded-lg border border-line-2 bg-muted/40 p-3 text-xs text-muted-foreground">
               <p className="flex items-center gap-1.5 font-semibold text-ink">

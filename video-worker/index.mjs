@@ -241,6 +241,12 @@ async function buildTutorial(job, videoPath, dir) {
   let note = null;
   let segSteps = [];
 
+  // Welle 20: optionales Thema (job.title) als Kontext für die KI. Als Prompt-Zeile,
+  // die vor Segmentierung UND Vision mitgegeben wird ("" wenn kein Titel).
+  const topicLine = (job.title || "").trim()
+    ? `Das Video behandelt: ${(job.title || "").trim()}\n`
+    : "";
+
   // (0) KLICK-MODUS (HÖCHSTE PRIORITÄT, vor "Schnitt"): Die Browser-Extension (Welle 8c)
   //     liefert echte Klick-Telemetrie in job.clicks: [{ t, x:0..1, y:0..1, label? }].
   //     Daraus werden Schrittgrenzen + Highlight-Boxen EXAKT bestimmt (kein Vision-Raten).
@@ -299,7 +305,7 @@ async function buildTutorial(job, videoPath, dir) {
   // (B) FALLBACK ohne "Schnitt": KI segmentiert aus dem Transkript; Screenshot ~2s nach Ansage.
   if (!segSteps.length) {
     const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
-    let llm = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
+    let llm = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`${topicLine}Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
     llm = llm.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t);
     if (llm.length >= 2) {
       for (let i = 0; i < llm.length; i++) {
@@ -382,7 +388,10 @@ async function buildTutorial(job, videoPath, dir) {
   let tutInserted = false;
   try {
     // Tutorial-Hülle + Job-Verknüpfung sofort setzen -> Dashboard-Karte + Crash-Sichtbarkeit.
-    const { error: tErr } = await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title: job.title || "Anleitung", status: "draft" });
+    // Welle 20: Kategorie aus dem Job übernehmen (falls beim Upload gesetzt).
+    const tutRow = { id: tutId, account_id: job.account_id, title: job.title || "Anleitung", status: "draft" };
+    if (job.category_id) tutRow.category_id = job.category_id;
+    const { error: tErr } = await sb.from("tutorials").insert(tutRow);
     if (tErr) throw new Error("Tutorial anlegen: " + tErr.message);
     tutInserted = true;
     await sb.from("video_jobs").update({ tutorial_id: tutId, updated_at: new Date().toISOString() }).eq("id", job.id);
@@ -412,9 +421,10 @@ async function buildTutorial(job, videoPath, dir) {
         // Nur die an die KI gesendeten Bilder auf 1280px verkleinern; `local` bleibt Original.
         const gridSmall = scaleForVision(gridImg(local));
         const diffSmall = diffPath ? scaleForVision(diffPath) : null;
-        const content = [
-          { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
-        ];
+        const content = [];
+        // Welle 20: Thema-Kontext voranstellen (falls gesetzt) — hilft Titel/Text zu erden.
+        if (topicLine) content.push({ type: "text", text: topicLine.trim() });
+        content.push({ type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` });
         // Klick-Modus: der KI mitteilen, dass an einer bekannten Stelle geklickt wurde
         // (hilft Titel/Body). Ihr highlight-Feld wird beim Insert trotzdem ignoriert.
         if (seg.clickHl) {
