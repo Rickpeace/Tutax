@@ -54,7 +54,7 @@ export default async function AlertsPage() {
           <h2 className="mt-4 font-bold text-ink">Alles aktuell</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             Keine offenen Hinweise. Im Editor können Sie ein Tutorial jederzeit per
-            „Jetzt prüfen" checken.
+            „Jetzt prüfen“ checken.
           </p>
         </div>
       ) : (

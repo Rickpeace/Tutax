@@ -56,6 +56,7 @@ export function Wizard({
       const validCur = s.cur === null || (typeof s.cur === "string" && stepById.has(s.cur));
       const validHist = s.history.every((h) => typeof h === "string" && stepById.has(h));
       if (validCur && validHist && (s.cur !== rootId || s.history.length > 0)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Positions-Wiederherstellung aus sessionStorage nach Mount (hydration-sicher), kein Cascade
         setCur(s.cur ?? null);
         setHistory(s.history);
       }

@@ -154,7 +154,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Mach die Aufgabe einmal vor und erklär dabei ganz normal. Nach jedem Schritt sagst du
-              <b> „Schnitt"</b> — daraus wird ein Schritt mit Screenshot und Markierung.
+              <b> „Schnitt“</b> — daraus wird ein Schritt mit Screenshot und Markierung.
             </p>
 
             <div className="space-y-2 rounded-lg border border-line-2 bg-muted/40 p-3 text-xs text-muted-foreground">
@@ -164,8 +164,8 @@ export function VideoUpload({ accountId }: { accountId: string }) {
               <ol className="list-decimal space-y-1 pl-4 marker:text-muted-foreground">
                 <li>Zeig die Aufgabe <b>einmal in Ruhe</b> vor und sprich dabei, als würdest du sie einem Kollegen erklären.</li>
                 <li>Bewege die <b>Maus aufs Ziel</b> (Knopf/Feld) und halt kurz drauf, bevor du klickst.</li>
-                <li>Ist der Schritt fertig, sag <b>„Schnitt"</b> — das trennt sauber zum nächsten Schritt.</li>
-                <li>Ruhig arbeiten, nicht hetzen. Am Ende auf <b>„Aufnahme beenden"</b>.</li>
+                <li>Ist der Schritt fertig, sag <b>„Schnitt“</b> — das trennt sauber zum nächsten Schritt.</li>
+                <li>Ruhig arbeiten, nicht hetzen. Am Ende auf <b>„Aufnahme beenden“</b>.</li>
               </ol>
               <p className="pt-0.5">Kein Sekunden-Zählen, keine anderen Zauberwörter nötig. Feinschliff geht danach im Editor.</p>
             </div>
@@ -185,12 +185,12 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             <div className="flex items-center gap-2 text-no">
               <Circle className="size-3 animate-pulse fill-current" /> <span className="font-mono text-lg">{mmss}</span>
             </div>
-            <p className="text-sm text-muted-foreground">Aufnahme läuft – mach den Schritt, sag dann <b>„Schnitt"</b>. So entsteht jeder Schritt sauber.</p>
+            <p className="text-sm text-muted-foreground">Aufnahme läuft – mach den Schritt, sag dann <b>„Schnitt“</b>. So entsteht jeder Schritt sauber.</p>
             {noMic && (
               <div className="flex items-start gap-2 rounded-lg border border-no/30 bg-no/5 p-2.5 text-left text-xs text-no">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  <b>Kein Mikrofon.</b> Ohne Ton wird „Schnitt" nicht erkannt und die Schritte werden schlechter.
+                  <b>Kein Mikrofon.</b> Ohne Ton wird „Schnitt“ nicht erkannt und die Schritte werden schlechter.
                   Für beste Ergebnisse abbrechen, Mikro erlauben und neu starten.
                 </span>
               </div>

@@ -117,6 +117,7 @@ function StepThumb({ imagePath, bust }: { imagePath: string | null; bust?: numbe
         if (active) setUrl(u);
       });
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Teil eines async Signier-Effects (mit active-Flag/Cleanup); ohne Pfad kein Bild anzeigen, kein Cascade
       setUrl(null);
     }
     return () => {

@@ -141,9 +141,9 @@ export async function hybridSearch(
 // ============================================
 
 import { sql } from 'drizzle-orm';
-import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
-export async function drizzleSemanticSearch<T extends PgDatabase<any>>(
+export async function drizzleSemanticSearch<T extends PgDatabase<PgQueryResultHKT>>(
   db: T,
   query: string,
   options: {

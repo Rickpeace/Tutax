@@ -56,6 +56,7 @@ export function ChatWidget({
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Gesprächs-Wiederherstellung aus localStorage nach Mount (hydration-sicher), kein Cascade
         if (Array.isArray(saved?.msgs) && saved.msgs.length) setMsgs(saved.msgs);
         if (typeof saved?.open === "boolean") setOpen(saved.open);
       }

@@ -114,7 +114,7 @@ export function CategoryPicker({
                   disabled={busy}
                   className="flex w-full items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-accent"
                 >
-                  <Plus className="size-4" /> Anlegen: „{query.trim()}"
+                  <Plus className="size-4" /> Anlegen: „{query.trim()}“
                 </button>
               )}
             </div>

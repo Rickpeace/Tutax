@@ -37,6 +37,7 @@ export function CollapsibleSection({
     if (!storageKey) return;
     try {
       const v = localStorage.getItem(storageKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Wiederherstellung aus localStorage nach Mount (SSR/erstes Client-Render müssen identisch bleiben, kein Cascade)
       if (v !== null) setOpen(v === "1");
     } catch {
       /* localStorage nicht verfügbar – Standard beibehalten */
