@@ -73,11 +73,14 @@ export function Builder({
   steps: initialSteps,
   branches: initialBranches,
   rootStepId: initialRoot,
+  hasSourceVideo = false,
 }: {
   tutorialId: string;
   steps: Step[];
   branches: StepBranch[];
   rootStepId: string | null;
+  /** Tutorial hat ein Quell-Video -> „Bild aus Video wählen" in jedem Schritt anbieten. */
+  hasSourceVideo?: boolean;
 }) {
   const router = useRouter();
   const mobile = useMedia("(max-width: 767px)");
@@ -553,6 +556,7 @@ export function Builder({
         onDirtyChange={(d) => {
           dirtyRef.current = d;
         }}
+        hasSourceVideo={hasSourceVideo}
         onSetImage={setStepImage}
         onSetHighlights={setStepHighlights}
         onSetDecision={handleSetDecision}

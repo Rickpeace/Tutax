@@ -45,10 +45,15 @@ export function ViewerImage({
   return (
     <div
       ref={wrapRef}
-      className={`relative overflow-hidden border border-black/5 ${loaded ? "" : "animate-pulse bg-black/5"}`}
+      className={`relative overflow-hidden border border-black/5 ${loaded ? "" : "animate-pulse"}`}
       style={{
         borderRadius: "var(--brand-radius, 12px)",
         ...(width && height ? { aspectRatio: `${width} / ${height}` } : {}),
+        // Lade-Platzhalter folgt dem Kunden-CI (dezente Tönung aus der Brand-Tinte) —
+        // ein neutralgrauer Block wirkt in fremden Designs wie ein Fremdkörper.
+        ...(loaded
+          ? {}
+          : { background: "color-mix(in srgb, var(--brand-ink, #101524) 7%, transparent)" }),
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

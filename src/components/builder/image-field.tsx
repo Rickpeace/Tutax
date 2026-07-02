@@ -26,6 +26,7 @@ export function ImageField({
   imagePath,
   highlights,
   videoTime,
+  hasSourceVideo = false,
   onSetImage,
   onSetHighlights,
 }: {
@@ -34,6 +35,8 @@ export function ImageField({
   imagePath: string | null;
   highlights: Highlight[];
   videoTime?: number | null;
+  /** Tutorial hat ein Quell-Video -> Frame-Picker auch ohne vorhandenes Bild anbieten. */
+  hasSourceVideo?: boolean;
   onSetImage: (
     stepId: string,
     img: {
@@ -229,19 +232,21 @@ export function ImageField({
               )}{" "}
               Bild ersetzen
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || loadingVideo}
-              onClick={openFramePicker}
-            >
-              {loadingVideo ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Film className="size-4" />
-              )}{" "}
-              Bild aus Video wählen
-            </Button>
+            {hasSourceVideo && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || loadingVideo}
+                onClick={openFramePicker}
+              >
+                {loadingVideo ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Film className="size-4" />
+                )}{" "}
+                Bild aus Video wählen
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -320,6 +325,25 @@ export function ImageField({
             </span>
           )}
         </button>
+      )}
+
+      {/* Auch ohne Bild anbieten: manuell angelegte Schritte in Video-Tutorials
+          sollen genauso einen Frame aus dem Quell-Video ziehen können. */}
+      {!imagePath && hasSourceVideo && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={busy || loadingVideo}
+          onClick={openFramePicker}
+        >
+          {loadingVideo ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Film className="size-4" />
+          )}{" "}
+          Bild aus Video wählen
+        </Button>
       )}
 
       {pendingFile && (

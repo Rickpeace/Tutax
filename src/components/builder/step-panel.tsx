@@ -33,6 +33,7 @@ export function StepPanel({
   onMove,
   onSaveStep,
   onDirtyChange,
+  hasSourceVideo = false,
   onSetImage,
   onSetHighlights,
   onSetDecision,
@@ -48,6 +49,7 @@ export function StepPanel({
   tutorialId: string;
   allSteps: Step[];
   branches: StepBranch[];
+  hasSourceVideo?: boolean;
   index: number;
   total: number;
   hasPrev: boolean;
@@ -246,6 +248,7 @@ export function StepPanel({
         imagePath={step.image_path}
         highlights={step.highlights ?? []}
         videoTime={step.video_time}
+        hasSourceVideo={hasSourceVideo}
         onSetImage={onSetImage}
         onSetHighlights={onSetHighlights}
       />
