@@ -24,6 +24,10 @@ import {
   FileVideo,
   Bot,
   Users,
+  Camera,
+  Crop,
+  ChevronRight,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
@@ -435,10 +439,10 @@ export default function Home() {
             </div>
             <div className="order-1 lg:order-2">
               <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-                Mitarbeiter-Schulung
+                Fürs Team: Prozesse &amp; Schulungen
               </div>
               <h2 className="mt-3 max-w-md text-4xl font-bold tracking-tight text-ink">
-                Auch nach innen: Schulungen mit Nachweis.
+                Auch nach innen: Prozesse dokumentiert, Schulungen mit Nachweis.
               </h2>
               <p className="mt-4 max-w-md text-ink-2">
                 Dieselben klickbaren Anleitungen funktionieren auch fürs eigene Team:
@@ -448,9 +452,10 @@ export default function Home() {
               </p>
               <ul className="mt-6 space-y-3 text-sm text-ink-2">
                 {[
+                  { icon: Layers, t: <>Interne Prozesse als Klick-Anleitung: Onboarding, Urlaubsvertretung, „Wie machen wir X?“ – Schritt für Schritt statt Wiki-Friedhof.</> },
                   { icon: GraduationCap, t: <>Eigener „Lernen“-Bereich: Ihr Team sieht auf einen Blick, was offen und was absolviert ist.</> },
-                  { icon: Check, t: <>„Als absolviert markieren“ – mit Datum. Ideal für Onboarding, Datenschutz- und Sicherheits-Unterweisungen.</> },
-                  { icon: ShieldCheck, t: <>Schulungsnachweis für Sie als Inhaber: wer hat welche Schulung wann absolviert – dokumentiert, falls jemand fragt.</> },
+                  { icon: Check, t: <>„Als absolviert markieren“ – mit Datum. Ideal für Datenschutz- und Sicherheits-Unterweisungen.</> },
+                  { icon: ShieldCheck, t: <>Schulungsnachweis für Sie als Inhaber: wer hat was wann absolviert – dokumentiert, falls jemand fragt.</> },
                 ].map((f, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
@@ -491,11 +496,21 @@ export default function Home() {
             <MiniBranch />
           </div>
 
-          <BentoCell icon={ScanSearch} t="Highlights & Lupe" d="Rechteck, Kreis, Pfeil – plus eine Lupe, die das markierte Element vergrößert." />
-          <BentoCell icon={ShieldCheck} t="Schwärzen, das hält" d="Blur wird beim Veröffentlichen unwiderruflich ins Bild gebrannt. DSGVO ohne Bauchweh." />
-          <BentoCell icon={Users} t="Team & Organisationen" d="Gemeinsam pflegen: Inhaber und Bearbeiter, mehrere Organisationen – sauber getrennt." />
-          <BentoCell icon={RefreshCw} t="Bleibt aktuell" d="Der Autopilot prüft wöchentlich, ob Ihre Anleitungen noch stimmen." />
-          <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy." />
+          <BentoCell icon={ScanSearch} t="Highlights & Lupe" d="Rechteck, Kreis, Pfeil – plus eine Lupe, die das markierte Element vergrößert.">
+            <DemoHighlight />
+          </BentoCell>
+          <BentoCell icon={ShieldCheck} t="Schwärzen, das hält" d="Blur wird beim Veröffentlichen unwiderruflich ins Bild gebrannt. DSGVO ohne Bauchweh.">
+            <DemoBlur />
+          </BentoCell>
+          <BentoCell icon={Users} t="Team & Organisationen" d="Gemeinsam pflegen: Inhaber und Bearbeiter, mehrere Organisationen – sauber getrennt.">
+            <DemoTeam />
+          </BentoCell>
+          <BentoCell icon={RefreshCw} t="Bleibt aktuell" d="Der Autopilot prüft wöchentlich, ob Ihre Anleitungen noch stimmen.">
+            <DemoAutopilot />
+          </BentoCell>
+          <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy.">
+            <DemoMobile />
+          </BentoCell>
         </div>
       </section>
 
@@ -657,7 +672,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Können wir Steply auch intern nutzen?",
-    a: "Ja. Anleitungen lassen sich auf „Intern“ stellen – dann sind sie nur für Ihr Team sichtbar, nie auf der öffentlichen Hilfe-Seite. Inklusive Schulungsnachweis: Sie sehen, wer welche Schulung wann absolviert hat.",
+    a: "Ja. Anleitungen lassen sich auf „Intern“ stellen – dann sind sie nur für Ihr Team sichtbar, nie auf der öffentlichen Hilfe-Seite. Damit dokumentieren Sie interne Prozesse (Onboarding, Abläufe, Vertretungen) und führen Schulungen mit Nachweis durch: Sie sehen, wer was wann absolviert hat.",
   },
   {
     q: "Wie kommt die Hilfe auf meine Website?",
@@ -718,14 +733,17 @@ function BentoCell({
   t,
   d,
   soon,
+  children,
 }: {
   icon: typeof GitBranch;
   t: string;
   d: string;
   soon?: boolean;
+  /** Kleine Produkt-Miniatur am Kachel-Fuß (füllt den Weißraum mit Beweis). */
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-border bg-card p-6">
+    <div className="flex flex-col rounded-3xl border border-border bg-card p-6">
       <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
         <Icon className="size-5" />
       </div>
@@ -738,6 +756,100 @@ function BentoCell({
         )}
       </div>
       <p className="mt-1.5 text-sm text-ink-2">{d}</p>
+      {children && <div className="mt-auto pt-5">{children}</div>}
+    </div>
+  );
+}
+
+/* ---- Kachel-Miniaturen: kleine Produkt-Beweise statt leerem Weißraum ---- */
+
+/** Markierter Button + Lupe, die ihn vergrößert. */
+function DemoHighlight() {
+  return (
+    <div className="relative rounded-xl border border-border bg-background p-3 pb-9">
+      <div className="h-2 w-3/5 rounded bg-line-2" />
+      <div className="mt-1.5 h-2 w-2/5 rounded bg-line-2" />
+      <div className="mt-3 inline-block rounded-md border-2 border-primary bg-card px-2.5 py-0.5 text-[11px] font-bold text-ink">
+        Absenden
+      </div>
+      <div className="absolute bottom-2 right-3 rounded-full border-2 border-primary bg-card px-3.5 py-1.5 text-sm font-extrabold text-ink shadow-lg">
+        Absenden
+      </div>
+    </div>
+  );
+}
+
+/** Geblurte IBAN — das bleibt auch im veröffentlichten Bild so. */
+function DemoBlur() {
+  return (
+    <div className="rounded-xl border border-border bg-background p-3 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-ink">IBAN</span>
+        <span aria-hidden className="select-none rounded bg-ink/10 px-1.5 font-mono text-ink-2 [filter:blur(4px)]">
+          DE89 3704 0044 05
+        </span>
+      </div>
+      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-yes">
+        <Check className="size-3.5" /> unwiderruflich – auch im Original
+      </div>
+    </div>
+  );
+}
+
+/** Avatar-Stapel + Rollen. */
+function DemoTeam() {
+  return (
+    <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex -space-x-2">
+        {[
+          ["A", "bg-primary"],
+          ["L", "bg-yes"],
+          ["M", "bg-ink"],
+        ].map(([i, c]) => (
+          <span
+            key={i}
+            className={`flex size-8 items-center justify-center rounded-full border-2 border-card text-xs font-bold text-white ${c}`}
+          >
+            {i}
+          </span>
+        ))}
+      </div>
+      <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-primary">Inhaber</span>
+      <span className="rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+        Bearbeiter
+      </span>
+    </div>
+  );
+}
+
+/** Beispiel-Meldung des Aktualitäts-Checks. */
+function DemoAutopilot() {
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-border bg-background p-3 text-xs">
+      <span className="mt-1 size-2 shrink-0 rounded-full bg-[#f7b955]" />
+      <div>
+        <div className="font-semibold text-ink">„Login-Maske hat sich geändert“</div>
+        <div className="mt-0.5 text-muted-foreground">Schritt 3 prüfen · montags automatisch</div>
+      </div>
+    </div>
+  );
+}
+
+/** Handy-Workflow in drei Chips. */
+function DemoMobile() {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-ink-2">
+      <span className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1">
+        <Camera className="size-3 text-primary" /> Foto
+      </span>
+      <ChevronRight className="size-3 shrink-0 text-line" />
+      <span className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1">
+        <Crop className="size-3 text-primary" /> Zuschnitt
+      </span>
+      <ChevronRight className="size-3 shrink-0 text-line" />
+      <span className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1">
+        <ScanSearch className="size-3 text-primary" /> Markieren
+      </span>
     </div>
   );
 }
