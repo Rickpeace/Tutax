@@ -126,6 +126,11 @@ Business) mit ▶ je Schritt; /h/steply komplett vertont (backfill-tts.mjs) ·
 (Tour: spielt + blättert selbst, pausiert an Fragen/Hintergrund-Tab) ·
 💰 **Tarife free/pro/business** (Migration 0024) mit Server-Gates + Preistabelle 0/29/79 ·
 Doku-Landkarte (OVERVIEW/STATUS) auf Stand gebracht.
+**Opus Welle 17 + Fable:** 🌳 **Verzweigungen aus dem Gesprochenen** — Struktur-Pass im
+Worker erkennt EXPLIZITE Fallunterscheidungen („wenn/falls … ansonsten", „drei
+Möglichkeiten") und baut Frage + Äste + Rejoin; konservativ (Zweifel = linear,
+false-positive-Test), Fallback stellt lineare Kette wieder her (⚠️ wirkt nach deploy.sh) ·
+TTS auf **onyx** + gpt-4o-mini-tts umgestellt (Modell+Stimme im Hash → Auto-Neuvertonung).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
