@@ -11,7 +11,14 @@ import { rotateRecorderToken } from "@/app/app/settings/einbetten/actions";
 // Kopierfeld. `initialHasToken` (Server) steuert nur die Startbeschriftung — den Wert
 // selbst zeigen wir aus Sicherheitsgründen erst NACH dem (Neu-)Erzeugen an; einen
 // bestehenden Token lesen wir bewusst nicht ins DOM (er lässt sich jederzeit erneuern).
-export function RecorderConnect({ initialHasToken }: { initialHasToken: boolean }) {
+export function RecorderConnect({
+  initialHasToken,
+  appUrl,
+}: {
+  initialHasToken: boolean;
+  /** Echte App-Basis-URL — die Extension braucht sie zusätzlich zum Token. */
+  appUrl: string;
+}) {
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [hasToken, setHasToken] = useState(initialHasToken);
@@ -44,6 +51,12 @@ export function RecorderConnect({ initialHasToken }: { initialHasToken: boolean 
             Kopieren Sie diesen Token und fügen Sie ihn in der Steply-Recorder-Extension
             unter „Verbindungs-Token“ ein. Aufnahmen landen dann automatisch in Steply –
             ohne Datei-Umweg. Bewahren Sie den Token wie ein Passwort auf.
+          </p>
+          {/* Die Default-URL der Extension muss nicht zu dieser Installation passen —
+              deshalb die echte Adresse gleich zum Kopieren dazu. */}
+          <CopyField value={appUrl} />
+          <p className="text-xs text-muted-foreground">
+            Tragen Sie diese Adresse in der Extension unter „Steply-App-URL“ ein.
           </p>
           <Button variant="outline" size="sm" onClick={generate} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}

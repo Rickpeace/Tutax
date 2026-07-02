@@ -119,7 +119,7 @@ export default async function EinbettenPage() {
           Erzeugen Sie dafür einen Verbindungs-Token und fügen Sie ihn in der Extension ein.
         </p>
         <div className="mt-3">
-          <RecorderConnect initialHasToken={hasRecorderToken} />
+          <RecorderConnect initialHasToken={hasRecorderToken} appUrl={appUrl} />
         </div>
         <ol className="mt-4 list-decimal space-y-1 pl-5 text-xs text-muted-foreground marker:text-muted-foreground">
           <li>Extension installieren (Ordner <code>extension/</code>, siehe Anleitung).</li>
