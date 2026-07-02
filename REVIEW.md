@@ -60,6 +60,12 @@ als erledigt via events.handled_at; Free-Limit greift) · ⭐ **Script-Chat-Bubb
 (`<script src=…/h/embed.js?account=slug>` → KI-Hilfe auf jeder Firmen-Website;
 iframe-isoliert, transparent, resize per postMessage; Snippet auf der Einbetten-Seite) ·
 **QR-Codes** (api/qr nur eingeloggt + nur /h-URLs; Einbetten-Seite + Karten-Menü).
+**Fable + Opus Welle 7a:** öffentlicher **Demo-Hub `/h/demo`** (Konto „Muster GmbH",
+6 Beispiel-Anleitungen) + „Live-Demo ansehen"-Button im Landing-Hero ·
+**Akzent-Dosierung** Hub-Karten (Rahmen/Chevron neutral, Icon-Tint; Commit `61c371c`,
+revertierbar — Titel folgen weiter dem Kunden-`ink`-Token!) · Endkunden-Typo größer ·
+Fonts-Preconnect · mobile Kategorie-Sprungleiste · Chat-Panel ohne Leerraum.
+E-Mail ändern + Onboarding-Wiederholung + Header-Anker (Konto-Politur).
 
 ---
 
