@@ -51,7 +51,7 @@
 - [x] ~~Tier-Gates~~ **GEBAUT (02.07., Fable):** plan 'business' (Migration 0024),
   Gates: Sprachen/KI-CI/Intern/TTS = Business (serverseitig), Admin-Schalter 3-stufig,
   neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
-  → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft клientseitig via
+  → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft klientseitig via
   RLS — braucht Policy/Trigger, kommt mit der LemonSqueezy-Welle); Team-bis-5 ebenso.
 - [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
