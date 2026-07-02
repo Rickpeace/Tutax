@@ -106,6 +106,20 @@ NIE auf /h, nie im Chat-RAG, nie im public Bucket (anon-RLS + Guards + Trace-Tes
 neuer Tab **„Lernen"** (/app/lernen) mit signierten Privat-Bildern, „Als absolviert
 markieren", Owner-Tabelle „wer hat was wann absolviert" + Team-Fortschritt;
 `setTutorialVisibility` schaltet published sauber um (Bilder/Embeddings/Cache).
+**Opus Wellen 12/13/15 (reviewt+gemerged, 02.07. nachmittags):**
+📥 **Wissens-Import** (W12): „Von Ihrer Website" (SSRF-sicher via lib/ssrf, Startseite
++5 Unterseiten, 40k-Kappe) + „Aus Dokument" (PDF/DOCX/TXT/MD via unpdf/mammoth,
+10 MB/60k) → KI macht 3–8 kb_articles als ENTWÜRFE (nie auto-publish) ·
+🌍 **Mehrsprachigkeit** (W13, Migration 0022): EN/PL/TR mit AUTO-SYNC — Publish
+übersetzt voll via after(), Edits delta-übersetzen nur das geänderte Stück,
+Sprachaktivierung backfillt; ?lang= im Cache-Key, Umschalter, DE-Fallback pro Feld,
+UI-Wörterbuch lib/i18n-hub; anon-RLS-dicht (intern bleibt intern) ·
+🖱️ **Recorder v2** (W15, Migration 0023): Klicks überleben Navigation
+(host_permissions + deklaratives Content-Script) + **Direkt-Upload** per
+Konto-Token (handshake→signierte Storage-URL→complete; Vercel-Body-Limit umgangen;
+CORS ohne ambient authority) · Fixes: Frame-Picker in JEDEM Schritt, CI-treuer
+Hub-Ladescreen (persistentes /h-Layout), Extension-Manifest, Landing v2 mit
+CI-Schieberegler/Schulungs-Sektion/Bento-Miniaturen.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

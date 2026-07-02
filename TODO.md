@@ -37,14 +37,20 @@
 - [x] ~~Recorder v2: clicks.json im „Aus Video"-Dialog~~ **GEBAUT (02.07., Welle 10a).**
   → Zusammen mit Extension-Test einmal Ende-zu-Ende probieren (Aufnahme → beide
   Dateien hochladen → exakte Schrittgrenzen; wirkt erst nach `deploy.sh`).
-- [ ] **Mehrsprachige Hilfe-Seite + Tutorials** (Richard, 02.07.): DE/EN/PL/TR o. ä. —
-  KI übersetzt Tutorials + Hub-UI, Sprach-Umschalter auf /h, Übersetzungen als
-  eigene Zeilen (tutorial_translations) mit „veraltet"-Markierung bei Änderung.
-- [ ] **Ton/Vorlesen** (Richard, 02.07.): Schritt-Texte per KI-Stimme (OpenAI TTS),
-  MP3 je Schritt beim Veröffentlichen erzeugen + im Storage cachen (Hash über Text),
-  ▶-Knopf im Wizard; Stimme pro Konto wählbar. Kostenarm, da nur bei Textänderung neu.
+- [x] ~~Mehrsprachige Hilfe-Seite~~ **GEBAUT (02.07., Welle 13):** EN/PL/TR mit
+  Auto-Sync (Publish=Vollübersetzung, Edits=Delta). → Unter Branding Sprachen
+  anhaken und einmal live ansehen. Offen v1: Kategorienamen + Druckansicht deutsch.
+- [ ] **Ton/Vorlesen** (Welle 14 LÄUFT): OpenAI-TTS beim Publish, ▶ im Wizard.
+  Offen danach: Stimme wählbar, Audio auch für Übersetzungen.
 - [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
   + Team-Beitrittslink/QR statt Einzel-Einladungen, optional Domain-Filter.
+- [ ] **Echtzeit-Aufbau während der Aufnahme** (Richard, 02.07.): Extension zieht
+  bei jedem Klick sofort einen Frame aus dem Stream + legt Schritt-Skelett an
+  (Screenshot + Markierung live), KI-Texte füllen nach Aufnahme-Ende nach.
+  Bausteine (Klick-Erfassung, Direkt-Upload) existieren seit Welle 15.
+- [ ] **Tier-Gates nachziehen** (Fable, nach Welle 14): plan 'business' einführen;
+  Sprachen/KI-CI/Intern/TTS = Business, Video→Tutorial im Free auf 3 begrenzen
+  (serverseitig!), Admin-Schalter auf 3 Stufen. Preistabelle/Landing macht Fable.
 - [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)
