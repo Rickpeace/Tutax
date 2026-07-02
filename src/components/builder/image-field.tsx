@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -257,31 +258,35 @@ export function ImageField({
             </Button>
           </div>
 
-          {big && (
-            <div
-              className="fixed inset-0 z-[100] flex flex-col bg-black/60 p-3 sm:p-6"
-              onClick={() => setBig(false)}
-            >
+          {big &&
+            // PORTAL auf document.body: der Editor liegt sonst tief in der Seitenspalte —
+            // ein Vorfahr-Stacking-Kontext ließ die Navbar ÜBER dem Overlay erscheinen.
+            createPortal(
               <div
-                className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden rounded-xl bg-popover p-4 shadow-2xl ring-1 ring-foreground/10"
-                onClick={(e) => e.stopPropagation()}
+                className="fixed inset-0 z-[100] flex flex-col bg-black/60 p-3 sm:p-6"
+                onClick={() => setBig(false)}
               >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="font-semibold text-ink">Screenshot bearbeiten</span>
-                  <Button variant="ghost" size="icon-sm" onClick={() => setBig(false)} aria-label="Schließen">
-                    <X className="size-4" />
-                  </Button>
+                <div
+                  className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden rounded-xl bg-popover p-4 shadow-2xl ring-1 ring-foreground/10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-ink">Screenshot bearbeiten</span>
+                    <Button variant="ghost" size="icon-sm" onClick={() => setBig(false)} aria-label="Schließen">
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <HighlightEditor
+                      url={url}
+                      highlights={highlights}
+                      onChange={(h) => onSetHighlights(stepId, h)}
+                    />
+                  </div>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <HighlightEditor
-                    url={url}
-                    highlights={highlights}
-                    onChange={(h) => onSetHighlights(stepId, h)}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+              </div>,
+              document.body,
+            )}
         </div>
       ) : (
         <button
