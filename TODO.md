@@ -37,7 +37,15 @@
 - [x] ~~Recorder v2: clicks.json im „Aus Video"-Dialog~~ **GEBAUT (02.07., Welle 10a).**
   → Zusammen mit Extension-Test einmal Ende-zu-Ende probieren (Aufnahme → beide
   Dateien hochladen → exakte Schrittgrenzen; wirkt erst nach `deploy.sh`).
-- [ ] i18n der Endkunden-Seiten (alles hart deutsch)
+- [ ] **Mehrsprachige Hilfe-Seite + Tutorials** (Richard, 02.07.): DE/EN/PL/TR o. ä. —
+  KI übersetzt Tutorials + Hub-UI, Sprach-Umschalter auf /h, Übersetzungen als
+  eigene Zeilen (tutorial_translations) mit „veraltet"-Markierung bei Änderung.
+- [ ] **Ton/Vorlesen** (Richard, 02.07.): Schritt-Texte per KI-Stimme (OpenAI TTS),
+  MP3 je Schritt beim Veröffentlichen erzeugen + im Storage cachen (Hash über Text),
+  ▶-Knopf im Wizard; Stimme pro Konto wählbar. Kostenarm, da nur bei Textänderung neu.
+- [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
+  + Team-Beitrittslink/QR statt Einzel-Einladungen, optional Domain-Filter.
+- [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)
 
