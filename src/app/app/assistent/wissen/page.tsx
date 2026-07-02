@@ -5,19 +5,24 @@ import { createClient } from "@/lib/supabase/server";
 import { embeddingsConfigured } from "@/lib/ai";
 import { relativeDe } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { KbImport } from "@/components/app/kb-import";
 import { createArticle } from "./actions";
 
 export default async function KnowledgePage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
-  const { data: articles } = await supabase
-    .from("kb_articles")
-    .select("id, title, status, updated_at")
-    .eq("account_id", account.id)
-    .order("updated_at", { ascending: false });
+  const [{ data: articles }, { data: theme }] = await Promise.all([
+    supabase
+      .from("kb_articles")
+      .select("id, title, status, updated_at")
+      .eq("account_id", account.id)
+      .order("updated_at", { ascending: false }),
+    supabase.from("themes").select("source_url").eq("account_id", account.id).single(),
+  ]);
 
   const list = articles ?? [];
   const aiOn = embeddingsConfigured();
+  const accountWebsite = theme?.source_url ?? "";
 
   return (
     <>
@@ -28,11 +33,14 @@ export default async function KnowledgePage() {
             Freies Organisations-Wissen, das der Chatbot zusätzlich zu den Tutorials nutzt.
           </p>
         </div>
-        <form action={createArticle}>
-          <Button type="submit">
-            <Plus className="size-4" /> Neuer Artikel
-          </Button>
-        </form>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {aiOn && <KbImport accountWebsite={accountWebsite} />}
+          <form action={createArticle}>
+            <Button type="submit">
+              <Plus className="size-4" /> Neuer Artikel
+            </Button>
+          </form>
+        </div>
       </div>
 
       <div className="mt-4 flex items-start gap-2 rounded-xl border border-border bg-accent/40 p-3 text-sm text-ink-2">
