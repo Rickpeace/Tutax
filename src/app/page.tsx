@@ -23,10 +23,12 @@ import {
   MousePointerClick,
   FileVideo,
   Bot,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { SiteFooter } from "@/components/marketing/site-footer";
+import { CompareSlider } from "@/components/marketing/compare-slider";
 import { PLANS } from "@/lib/pricing";
 
 export default function Home() {
@@ -89,10 +91,11 @@ export default function Home() {
           {/* Echtes Produkt: Demo-Hilfeseite im Browser-Rahmen + Wizard am Handy */}
           <div className="relative mt-14">
             <div className="relative mx-auto max-w-4xl">
-              <BrowserFrame url="steply.app/h/muster-gmbh">
+              {/* Dogfooding: unsere eigene Hilfe-Seite, mit Steply gebaut. */}
+              <BrowserFrame url="steply.app/h/steply">
                 <Image
-                  src="/marketing/hub-demo.webp"
-                  alt="Echte Steply-Hilfeseite der Muster GmbH mit Suchfeld, Kategorien und Chat"
+                  src="/marketing/hub-steply.webp"
+                  alt="Die echte Steply-Hilfeseite mit Suchfeld, Kategorien und Chat – selbst mit Steply gebaut"
                   width={1280}
                   height={800}
                   priority
@@ -310,15 +313,22 @@ export default function Home() {
               </ul>
             </div>
 
-            <BrowserFrame url="steply.app/h/steply/ihr-erstes-tutorial-erstellen">
-              <Image
-                src="/marketing/wizard-step.webp"
-                alt="Ein Tutorial-Schritt mit echtem Screenshot und blauer Markierung im Wizard"
-                width={1100}
-                height={820}
-                className="block w-full"
+            <div>
+              {/* Dieselbe Kanzlei-Hilfeseite, einmal Standard, einmal KI-Design — zum Ziehen. */}
+              <CompareSlider
+                beforeSrc="/marketing/ci-off.webp"
+                beforeLabel="Steply-Standard"
+                afterSrc="/marketing/ci-on.webp"
+                afterLabel="KI-Design von Ihrer Website"
+                width={1280}
+                height={760}
+                alt="Dieselbe Hilfe-Seite einer Kanzlei: links im Steply-Standard, rechts im automatisch übernommenen Corporate Design"
               />
-            </BrowserFrame>
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Regler ziehen: dieselbe Hilfe-Seite – rechts das Design, das die KI
+                automatisch aus der Website der Kanzlei übernommen hat.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -400,11 +410,56 @@ export default function Home() {
               <p className="mt-3 flex items-start gap-2 rounded-xl bg-accent/50 p-3 text-xs text-ink-2">
                 <RefreshCw className="mt-0.5 size-3.5 shrink-0 text-primary" />
                 <span>
-                  Der <b className="font-semibold text-ink">Aktualitäts-Autopilot</b> prüft
-                  Ihre Anleitungen wöchentlich gegen das Web und meldet, wenn sich z.&nbsp;B.
-                  eine Software-Oberfläche geändert hat.
+                  Der <b className="font-semibold text-ink">Aktualitäts-Autopilot</b>{" "}
+                  prüft Ihre Anleitungen wöchentlich gegen das Web und meldet, wenn sich
+                  z.&nbsp;B. eine Software-Oberfläche geändert hat.
                 </span>
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== MITARBEITER-SCHULUNG ===== */}
+      <section className="border-b border-border bg-card/50">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+            <div className="order-2 lg:order-1">
+              <Image
+                src="/marketing/schulung.webp"
+                alt="Abgeschlossene interne Schulung mit „Als absolviert markieren“ und Schulungsnachweis-Tabelle"
+                width={1280}
+                height={860}
+                className="block w-full rounded-2xl border border-border shadow-[0_30px_80px_-20px_rgba(16,21,36,0.3)]"
+              />
+            </div>
+            <div className="order-1 lg:order-2">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                Mitarbeiter-Schulung
+              </div>
+              <h2 className="mt-3 max-w-md text-4xl font-bold tracking-tight text-ink">
+                Auch nach innen: Schulungen mit Nachweis.
+              </h2>
+              <p className="mt-4 max-w-md text-ink-2">
+                Dieselben klickbaren Anleitungen funktionieren auch fürs eigene Team:
+                Stellen Sie eine Anleitung auf <b className="font-semibold text-ink">„Intern“</b> –
+                dann ist sie nur für Mitarbeitende sichtbar, nie auf der öffentlichen
+                Hilfe-Seite.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm text-ink-2">
+                {[
+                  { icon: GraduationCap, t: <>Eigener „Lernen“-Bereich: Ihr Team sieht auf einen Blick, was offen und was absolviert ist.</> },
+                  { icon: Check, t: <>„Als absolviert markieren“ – mit Datum. Ideal für Onboarding, Datenschutz- und Sicherheits-Unterweisungen.</> },
+                  { icon: ShieldCheck, t: <>Schulungsnachweis für Sie als Inhaber: wer hat welche Schulung wann absolviert – dokumentiert, falls jemand fragt.</> },
+                ].map((f, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+                      <f.icon className="size-3.5" />
+                    </span>
+                    <span>{f.t}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
@@ -438,7 +493,7 @@ export default function Home() {
 
           <BentoCell icon={ScanSearch} t="Highlights & Lupe" d="Rechteck, Kreis, Pfeil – plus eine Lupe, die das markierte Element vergrößert." />
           <BentoCell icon={ShieldCheck} t="Schwärzen, das hält" d="Blur wird beim Veröffentlichen unwiderruflich ins Bild gebrannt. DSGVO ohne Bauchweh." />
-          <BentoCell icon={GraduationCap} t="Interne Schulungen" d="Anleitungen nur fürs Team – mit Nachweis, wer was wann absolviert hat." />
+          <BentoCell icon={Users} t="Team & Organisationen" d="Gemeinsam pflegen: Inhaber und Bearbeiter, mehrere Organisationen – sauber getrennt." />
           <BentoCell icon={RefreshCw} t="Bleibt aktuell" d="Der Autopilot prüft wöchentlich, ob Ihre Anleitungen noch stimmen." />
           <BentoCell icon={Smartphone} t="Mobil-first" d="Foto aufnehmen, zuschneiden, markieren – alles am Handy." />
         </div>
