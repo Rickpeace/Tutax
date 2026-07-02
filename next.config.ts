@@ -16,6 +16,10 @@ const FRAME_PROTECTED = [
 ];
 
 const nextConfig: NextConfig = {
+  // Cache Components / PPR: statische Shells + gecachte Daten (/h) + Suspense-Streams.
+  // Daten-Caching der öffentlichen Seiten via 'use cache' + cacheTag/updateTag.
+  cacheComponents: true,
+
   async headers() {
     return [
       {

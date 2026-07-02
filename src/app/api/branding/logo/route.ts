@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicImageUrl } from "@/lib/public-image";
 import { activeAccountId } from "@/lib/account";
+import { revalidateHubByAccountId } from "@/lib/cache-tags";
 
 const PUBLIC_BUCKET = "tutorial-images-public";
 
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
 
   await supabase.from("themes").update({ [col]: path }).eq("account_id", accountId);
 
+  await revalidateHubByAccountId(accountId); // /h-Cache aktualisieren
   return NextResponse.json({ logoPath: path, url: publicImageUrl(path) });
 }
 
@@ -66,5 +68,6 @@ export async function DELETE(req: NextRequest) {
     await admin.storage.from(PUBLIC_BUCKET).remove([oldPath]);
   }
   await supabase.from("themes").update({ [col]: null }).eq("account_id", accountId);
+  await revalidateHubByAccountId(accountId); // /h-Cache aktualisieren
   return NextResponse.json({ ok: true });
 }

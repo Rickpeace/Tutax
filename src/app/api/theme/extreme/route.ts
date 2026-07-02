@@ -7,6 +7,7 @@ import { EXTREME_SYSTEM, extremeUser, EXTREME_REFINE_SYSTEM, extremeRefineUser }
 import { sanitizeSkinCss } from "@/lib/skin-css";
 import { safeFetch } from "@/lib/ssrf";
 import { activeAccountId } from "@/lib/account";
+import { revalidateHubByAccountId } from "@/lib/cache-tags";
 
 export const maxDuration = 60;
 
@@ -272,6 +273,7 @@ export async function POST(req: NextRequest) {
       await supabase.from("themes").update(update).eq("account_id", accountId);
     }
 
+    if (accountId) await revalidateHubByAccountId(accountId); // /h-Cache aktualisieren
     return NextResponse.json({ configured: true, ok: true, tokens, css, layout, logo: logoPath });
   } catch (e) {
     return NextResponse.json(

@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { SessionFromHash } from "@/components/auth/session-from-hash";
 import { safeNext } from "@/lib/url";
 
-export const dynamic = "force-dynamic";
 export const metadata = { title: "Anmeldung", robots: { index: false } };
 
 /**

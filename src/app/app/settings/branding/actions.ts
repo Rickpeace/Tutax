@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
+import { invalidateHubTag } from "@/lib/cache-tags";
 import { slugify } from "@/lib/slug";
 
 export type BrandingInput = {
@@ -53,6 +54,9 @@ export async function saveBranding(
     .eq("account_id", account.id);
   if (te) return { ok: false, error: te.message };
 
+  // Öffentlichen Hub-Cache räumen — alter UND neuer Slug (Slug kann sich ändern).
+  invalidateHubTag(account.slug);
+  invalidateHubTag(slug);
   revalidatePath("/app/settings/branding");
   revalidatePath("/app");
   return { ok: true, slug };
@@ -68,6 +72,7 @@ export async function setThemeMode(mode: "manual" | "ai" | "extreme") {
     .update({ mode: clean })
     .eq("account_id", account.id);
   if (error) throw new Error(error.message);
+  invalidateHubTag(account.slug); // Design-Wechsel sofort öffentlich sichtbar
   revalidatePath("/app/settings/branding");
   revalidatePath("/app");
 }

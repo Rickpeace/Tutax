@@ -1,9 +1,10 @@
-import { cache } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
+import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { hubTag, tutTag } from "@/lib/cache-tags";
 import { recordEvent } from "@/lib/events";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
@@ -15,8 +16,12 @@ import { ChatWidget } from "@/components/viewer/chat-widget";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
-// Per-Request via React cache(): generateMetadata + Seite teilen sich EINE Ausführung.
-const load = cache(async (accountSlug: string, tutorialSlug: string) => {
+// Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
+// Mutationen invalidieren via lib/cache-tags, Rest fängt cacheLife('hours') ab.
+async function load(accountSlug: string, tutorialSlug: string) {
+  "use cache";
+  cacheTag(hubTag(accountSlug), tutTag(accountSlug, tutorialSlug));
+  cacheLife("hours");
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
@@ -52,7 +57,7 @@ const load = cache(async (accountSlug: string, tutorialSlug: string) => {
     .single();
 
   return { account, tutorial, steps: steps ?? [], branches: branches ?? [], theme };
-});
+}
 
 export async function generateMetadata({
   params,

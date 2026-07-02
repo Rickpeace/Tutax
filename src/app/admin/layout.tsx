@@ -1,13 +1,22 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { requireAdmin } from "@/lib/admin";
 import { Button } from "@/components/ui/button";
 
-export default async function AdminLayout({
+/**
+ * WICHTIG (PPR): Das Admin-Gate muss die children UMSCHLIESSEN (nicht parallel
+ * streamen) — sonst könnten Admin-Inhalte rausgehen, bevor der redirect greift.
+ */
+async function AdminGate({ children }: { children: React.ReactNode }) {
+  await requireAdmin(); // redirect("/app") für Nicht-Admins — VOR dem Rendern der Kinder
+  return <>{children}</>;
+}
+
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireAdmin();
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-ink text-white">
@@ -31,7 +40,15 @@ export default async function AdminLayout({
           </Button>
         </div>
       </header>
-      {children}
+      <Suspense
+        fallback={
+          <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
+            <div className="h-6 w-52 animate-pulse rounded-md bg-line-2" />
+          </main>
+        }
+      >
+        <AdminGate>{children}</AdminGate>
+      </Suspense>
     </div>
   );
 }

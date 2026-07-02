@@ -6,6 +6,7 @@ import { openai } from "@/lib/openai";
 import { CI_ANALYSIS_SYSTEM, ciAnalysisUser } from "@/lib/ai-prompts";
 import { safeFetch } from "@/lib/ssrf";
 import { activeAccountId } from "@/lib/account";
+import { revalidateHubByAccountId } from "@/lib/cache-tags";
 
 export const maxDuration = 60;
 
@@ -299,6 +300,7 @@ export async function POST(req: NextRequest) {
       if (aiLogoPath) update.ai_logo_path = aiLogoPath;
       await supabase.from("themes").update(update).eq("account_id", accountId);
     }
+    if (accountId) await revalidateHubByAccountId(accountId); // /h-Cache aktualisieren
     return NextResponse.json({ configured: true, ok: true, tokens, logo: aiLogoPath });
   } catch (e) {
     if (accountId) await supabase.from("themes").update({ status: "failed" }).eq("account_id", accountId);

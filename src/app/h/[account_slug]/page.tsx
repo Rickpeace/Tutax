@@ -1,6 +1,7 @@
-import { cache } from "react";
 import { notFound } from "next/navigation";
+import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
+import { hubTag } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { sanitizeSkinCss } from "@/lib/skin-css";
@@ -9,9 +10,13 @@ import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 
-// Per-Request via React cache(): generateMetadata + Seite teilen sich EINE Ausführung
-// (statt die DB-Queries pro Aufruf zu verdoppeln).
-const load = cache(async (accountSlug: string) => {
+// Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
+// Konto. Mutationen (publish/theme/…) invalidieren via updateTag (lib/cache-tags);
+// verpasste Pfade fängt cacheLife('hours') ab. Dedup generateMetadata/Seite inklusive.
+async function load(accountSlug: string) {
+  "use cache";
+  cacheTag(hubTag(accountSlug));
+  cacheLife("hours");
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
@@ -38,7 +43,12 @@ const load = cache(async (accountSlug: string) => {
   ]);
 
   return { account, catalog, categories: categories ?? [], theme };
-});
+}
+
+/** Statische Shell: Demo-Hub zur Build-Zeit; weitere Slugs zur Laufzeit (Fallback-Shell). */
+export function generateStaticParams() {
+  return [{ account_slug: "demo" }];
+}
 
 export async function generateMetadata({
   params,

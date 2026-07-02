@@ -12,8 +12,7 @@ import { appBaseUrl } from "@/lib/url";
  * Alles inline, Vanilla JS, IIFE, defensiv gegen doppelte Einbindung.
  */
 
-export const dynamic = "force-static";
-
+// (force-static entfiel mit cacheComponents; CDN-Caching regelt der Cache-Control-Header.)
 export async function GET(_req: NextRequest) {
   const origin = appBaseUrl();
 

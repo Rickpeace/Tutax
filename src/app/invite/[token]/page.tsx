@@ -5,7 +5,6 @@ import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 import { InviteConfirm } from "@/components/auth/invite-confirm";
 
-export const dynamic = "force-dynamic";
 export const metadata = { title: "Einladung", robots: { index: false } };
 
 /**

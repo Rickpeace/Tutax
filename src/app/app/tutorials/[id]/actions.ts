@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { burnBlur, hasBlur } from "@/lib/redact";
+import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import { YES } from "@/lib/builder/constants";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
@@ -44,6 +45,7 @@ export async function addStep(
     });
     if (be) throw new Error(be.message);
   }
+  await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
 }
 
 /** Titel/Text/Bild speichern (stiller Auto-Save). */
@@ -72,6 +74,7 @@ export async function updateStep(
       console.error("Public-Bild-Refresh fehlgeschlagen:", e instanceof Error ? e.message : e),
     );
   }
+  await invalidateStepTags(stepId); // nur wirksam, wenn veröffentlicht
 }
 
 /** Öffentliche Kopie des Schritt-Bilds neu erzeugen (Blur eingebrannt). */
@@ -127,6 +130,7 @@ export async function setDecision(stepId: string, isDecision: boolean) {
       if (rest.length) await supabase.from("step_branches").delete().in("id", rest);
     }
   }
+  await invalidateStepTags(stepId);
 }
 
 /** Antwort-Option anlegen (Client liefert id/color/position). */
@@ -141,6 +145,7 @@ export async function addBranch(branch: {
   const supabase = await createClient();
   const { error } = await supabase.from("step_branches").insert(branch);
   if (error) throw new Error(error.message);
+  await invalidateStepTags(branch.step_id);
 }
 
 export async function updateBranch(
@@ -153,10 +158,12 @@ export async function updateBranch(
     .update(patch)
     .eq("id", branchId);
   if (error) throw new Error(error.message);
+  await invalidateBranchTags(branchId);
 }
 
 export async function deleteBranch(branchId: string) {
   const supabase = await createClient();
+  await invalidateBranchTags(branchId); // VOR dem Delete (Lookup braucht die Zeile)
   const { error } = await supabase
     .from("step_branches")
     .delete()
@@ -190,6 +197,7 @@ export async function deleteStep(
 
   const { error } = await supabase.from("steps").delete().eq("id", stepId);
   if (error) throw new Error(error.message);
+  await invalidateTutorialTags(tutorialId);
 }
 
 /**
@@ -204,6 +212,7 @@ export async function setRootStep(tutorialId: string, stepId: string) {
     .update({ root_step_id: stepId })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
+  await invalidateTutorialTags(tutorialId);
 }
 
 /** Kategorie anlegen (§7.3, „on the fly" aus der Combobox). */
@@ -236,6 +245,7 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
     .update({ title: clean })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
+  await invalidateTutorialTags(tutorialId);
 }
 
 /**
@@ -282,4 +292,5 @@ export async function setTutorialCategory(
     .update({ category_id: categoryId })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
+  await invalidateTutorialTags(tutorialId);
 }

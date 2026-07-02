@@ -8,6 +8,7 @@ import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
+import { invalidateTutorialTags } from "@/lib/cache-tags";
 import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -87,12 +88,14 @@ export async function renameTutorial(id: string, title: string) {
     .update({ title: clean, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await invalidateTutorialTags(id);
   revalidatePath("/app");
 }
 
 export async function deleteTutorial(id: string) {
   const supabase = await createClient();
   await removeTutorialEmbeddings(supabase, id).catch(() => {});
+  await invalidateTutorialTags(id); // VOR dem Delete (danach ist der Slug-Lookup weg)
   const { error } = await supabase.from("tutorials").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/app");
@@ -259,6 +262,7 @@ export async function publishTutorial(tutorialId: string) {
   // Für den Chatbot indizieren (no-op ohne OPENAI_API_KEY)
   await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
 
+  await invalidateTutorialTags(tutorialId); // öffentliche /h-Caches sofort aktualisieren
   revalidatePath("/app");
   return { slug, accountSlug: account.slug };
 }
@@ -287,5 +291,7 @@ export async function unpublishTutorial(tutorialId: string) {
 
   await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
 
+  // force: Status ist gerade eben draft geworden — Cache trotzdem sofort räumen.
+  await invalidateTutorialTags(tutorialId, { force: true });
   revalidatePath("/app");
 }

@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { indexTutorial } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
+import { invalidateHubTag } from "@/lib/cache-tags";
 import type { Step, StepBranch } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -46,6 +47,7 @@ export async function setTemplateEnabled(templateId: string, enabled: boolean) {
     if (enabled) await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
     else await dropEmbeddings(account.id, templateId);
   }
+  invalidateHubTag(account.slug); // Hub zeigt Standard-Anleitungen sofort an/aus
   // Kein revalidatePath: das Dashboard aktualisiert den Schalter optimistisch (snappy).
 }
 
@@ -160,6 +162,7 @@ export async function forkTemplate(templateId: string) {
   await dropEmbeddings(account.id, templateId);
   await indexTutorial(createAdminClient(), account.id, forkId).catch(() => {});
 
+  invalidateHubTag(account.slug);
   revalidatePath("/app");
   redirect(`/app/tutorials/${forkId}`);
 }
@@ -187,5 +190,6 @@ export async function resetTemplate(templateId: string) {
   // Wieder zentrale Version: als Standard neu indexieren (wenn aktiv).
   if (row?.enabled) await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
 
+  invalidateHubTag(account.slug);
   revalidatePath("/app");
 }
