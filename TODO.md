@@ -44,6 +44,15 @@
   Offen danach: Stimme wählbar, Audio auch für Übersetzungen.
 - [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
   + Team-Beitrittslink/QR statt Einzel-Einladungen, optional Domain-Filter.
+- [ ] **Video-Export** (Richard-Idee 02.07., Fable-Favorit): MP4 aus Screenshots + TTS-Ton
+  rendern (Bild liegt so lange wie sein Audio, Markierungen eingebrannt via SVG-Composite,
+  ffmpeg auf dem Hetzner-Worker als neuer Job-Typ) → „Als Video exportieren"-Knopf.
+  Verzweigte Tutorials: v1 Hauptpfad. YouTube-/Social-tauglich. Braucht deploy.sh.
+- [ ] **Verzweigungen aus Video/Sprache** (Richard, 02.07.): KI-Nachbearbeitung nach der
+  linearen Pipeline — Transkript auf Fallunterscheidungen prüfen („falls…", „wenn Sie…")
+  → Vorschlag „Schritt X in Frage + Äste umwandeln?" mit 1-Klick-Umbau; dazu generelle
+  Builder-Aktion „Schritt in Frage umwandeln (KI schlägt Äste vor)".
+- [ ] **TTS v2**: Audio auch für Übersetzungen (EN/PL/TR-Stimmen) + Stimme/Tempo pro Konto.
 - [ ] **Echtzeit-Aufbau während der Aufnahme** (Richard, 02.07.): Extension zieht
   bei jedem Klick sofort einen Frame aus dem Stream + legt Schritt-Skelett an
   (Screenshot + Markierung live), KI-Texte füllen nach Aufnahme-Ende nach.
