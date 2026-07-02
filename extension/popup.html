@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steply Recorder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="popup">
+    <header class="brand">
+      <span class="dot"></span>
+      <h1>Steply Recorder</h1>
+    </header>
+
+    <p class="lead">
+      Nehmen Sie einen kurzen Bildschirm-Screencast auf. Ihre Klicks werden
+      mitgezaehlt und als exakte Schrittgrenzen an Steply uebergeben.
+    </p>
+
+    <button id="start" class="btn btn-primary" type="button">
+      Aufnahme starten
+    </button>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <div class="hint">
+      <strong>So geht's:</strong>
+      <ol>
+        <li>Oeffnen Sie den Tab, den Sie erklaeren moechten.</li>
+        <li>Klicken Sie auf „Aufnahme starten" - ein Aufnahme-Tab oeffnet sich.</li>
+        <li>Waehlen Sie im Dialog den Tab bzw. das Fenster zum Aufnehmen.</li>
+        <li>Fuehren Sie Ihre Schritte vor, dann „Aufnahme beenden".</li>
+        <li>Laden Sie beide Dateien in Steply hoch (Aus Video).</li>
+      </ol>
+      <p class="note">
+        v1: Klicks werden nur im gestarteten Browser-Tab erfasst. Wechseln Sie
+        den Tab oder das Programm, fehlen dort die Klicks - das Video wird aber
+        vollstaendig aufgenommen.
+      </p>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

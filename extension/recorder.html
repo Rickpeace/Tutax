@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steply - Aufnahme</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="recorder">
+    <main class="card">
+      <header class="brand">
+        <span class="dot"></span>
+        <h1>Steply Recorder</h1>
+      </header>
+
+      <section id="setup">
+        <p class="lead">
+          Klicken Sie auf „Bildschirm waehlen &amp; aufnehmen" und waehlen Sie im
+          Dialog den <strong>Tab</strong> oder das <strong>Fenster</strong>, das
+          Sie erklaeren moechten.
+        </p>
+
+        <label class="checkbox">
+          <input type="checkbox" id="mic" />
+          <span>Mikrofon mit aufnehmen (Ihre Erklaerung als Ton)</span>
+        </label>
+
+        <button id="begin" class="btn btn-primary" type="button">
+          Bildschirm waehlen &amp; aufnehmen
+        </button>
+
+        <p id="clicksTabInfo" class="note"></p>
+      </section>
+
+      <section id="live" hidden>
+        <div class="rec-row">
+          <span class="rec-badge"><span class="rec-pulse"></span> Aufnahme laeuft</span>
+          <span id="timer" class="timer">00:00</span>
+        </div>
+        <p class="clicks-count">
+          Erfasste Klicks: <strong id="clickCount">0</strong>
+        </p>
+        <button id="stop" class="btn btn-stop" type="button">
+          Aufnahme beenden
+        </button>
+        <p class="note">
+          Sie duerfen diesen Tab in den Hintergrund legen und Ihre Schritte
+          vorfuehren. Schliessen Sie diesen Tab nicht, sonst geht die Aufnahme
+          verloren.
+        </p>
+      </section>
+
+      <section id="done" hidden>
+        <div class="done-check">✓</div>
+        <h2>Fertig - 2 Dateien heruntergeladen</h2>
+        <p class="lead">
+          Laden Sie <strong>beide</strong> Dateien in Steply hoch (Aus Video):
+        </p>
+        <ul class="filelist">
+          <li id="fileVideo">aufnahme.webm</li>
+          <li id="fileClicks">clicks.json</li>
+        </ul>
+        <button id="again" class="btn" type="button">Neue Aufnahme</button>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="recorder.js"></script>
+  </body>
+</html>
