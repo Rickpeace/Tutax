@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { AI, aiConfigured } from "@/lib/ai";
 import { openai } from "@/lib/openai";
+import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
 
 /** Tiptap-Doc aus einem Absatz-Text bauen (gleiches Muster wie video-worker/index.mjs). */
 const mkBody = (t: string) => ({
@@ -57,6 +58,23 @@ export async function createDraftFromQuestion(question: string): Promise<{ tutor
 
   const { account } = await requireAccount();
   const supabase = await createClient();
+
+  // Free-Limit gilt auch hier — sonst wäre der Miner ein Gating-Bypass.
+  if (!isPro(account)) {
+    const [{ count: total }, { count: forks }] = await Promise.all([
+      supabase.from("tutorials").select("id", { count: "exact", head: true }).eq("account_id", account.id),
+      supabase
+        .from("account_templates")
+        .select("template_id", { count: "exact", head: true })
+        .eq("account_id", account.id)
+        .not("forked_tutorial_id", "is", null),
+    ]);
+    if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) {
+      throw new Error(
+        `Free-Limit erreicht (${FREE_TUTORIAL_LIMIT} Tutorials). Für unbegrenzte Tutorials bitte auf Pro upgraden.`,
+      );
+    }
+  }
 
   // 1) KI-Entwurfsrahmen erzeugen.
   let frame: DraftFrame;

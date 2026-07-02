@@ -54,6 +54,12 @@ Chat-Fragen, Feedback-Quote, Top-3 unbeantwortete Fragen = Wissenslücken) ·
 ↕️ **Schritt-Umordnen** im Builder (Hoch/Runter, reines Branch-Rewiring, Trace für
 Mitte/Root/Blatt/Entscheidung verifiziert) · 🔍 **Semantische Hub-Suche**
 (api/hub-search via pgvector, „Meinten Sie:"-Vorschläge bei 0 Titel-Treffern).
+**Opus Welle 6b (reviewt+gemerged, + Fable-Quota-Fix):** ⭐ **Frage-Lücken-Miner**
+(„Entwurf erstellen" an jeder unbeantworteten Frage → KI-Rahmen → Builder; Frage gilt
+als erledigt via events.handled_at; Free-Limit greift) · ⭐ **Script-Chat-Bubble**
+(`<script src=…/h/embed.js?account=slug>` → KI-Hilfe auf jeder Firmen-Website;
+iframe-isoliert, transparent, resize per postMessage; Snippet auf der Einbetten-Seite) ·
+**QR-Codes** (api/qr nur eingeloggt + nur /h-URLs; Einbetten-Seite + Karten-Menü).
 
 ---
 
