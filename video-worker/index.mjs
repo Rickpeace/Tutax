@@ -45,10 +45,33 @@ function diffImg(video, tB, tA, dir, idx) {
 }
 const uuid = () => crypto.randomUUID();
 const mkBody = (t) => ({ type: "doc", content: [{ type: "paragraph", content: t ? [{ type: "text", text: t }] : [] }] });
-const json = async (model, messages, max = 400) => {
-  const c = await openai.chat.completions.create({ model, messages, response_format: { type: "json_object" }, max_completion_tokens: max });
-  try { return JSON.parse(c.choices[0].message.content || "{}"); } catch { return {}; }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Retry mit Backoff um ALLE OpenAI-Calls (transiente 429/5xx/Netz-Aussetzer): 2 Versuche
+// (Wartezeiten 2s, 8s). Wirft erst, wenn auch der letzte Versuch scheitert.
+const withRetry = async (fn) => {
+  const delays = [2000, 8000];
+  for (let attempt = 0; ; attempt++) {
+    try { return await fn(); }
+    catch (e) {
+      if (attempt >= delays.length) throw e;
+      console.error(`  OpenAI-Call fehlgeschlagen (Versuch ${attempt + 1}), neuer Versuch in ${delays[attempt] / 1000}s: ${String(e?.message || e).slice(0, 160)}`);
+      await sleep(delays[attempt]);
+    }
+  }
 };
+const json = async (model, messages, max = 400) =>
+  withRetry(async () => {
+    const c = await openai.chat.completions.create({ model, messages, response_format: { type: "json_object" }, max_completion_tokens: max });
+    try { return JSON.parse(c.choices[0].message.content || "{}"); } catch { return {}; }
+  });
+// Bild für die Vision-KI auf max. 1280px Breite verkleinern (nur die Grid-/Diff-Bilder,
+// die an die KI gehen — spart Tokens/Zeit; das gespeicherte Original bleibt voll aufgelöst).
+function scaleForVision(src) {
+  if (!src) return src;
+  const dst = src.replace(/\.jpg$/i, "_s.jpg");
+  try { sh("ffmpeg", ["-y", "-i", src, "-vf", "scale='min(1280,iw)':-2", "-q:v", "3", dst]); return fs.existsSync(dst) ? dst : src; }
+  catch { return src; }
+}
 
 const SEG_SYS = `Du bekommst die Erzählung eines Screencast-Tutorials mit Zeitstempeln und zerlegst sie in Anleitungs-Schritte.
 Gib NUR JSON: {"steps":[{"t": <Sekunde, wann die Handlung passiert>, "narration":"der zugehörige gesprochene Teil"}]}.
@@ -76,6 +99,28 @@ Gib NUR JSON: {"title":"...","body":"...","highlight":{"x":0..1,"y":0..1,"w":0..
 - Stütze dich auf Text UND Bilder. Erfinde nichts. Kein Markdown.`;
 const TITLE_SYS = 'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Tutorial-Titel auf Deutsch (max. 6 Wörter, handlungsorientiert, ohne Anführungszeichen).';
 
+// Schärfsten Frame um `at` ziehen: 3 Kandidaten (at-0.15, at, at+0.15, auf [0.1, dur-0.1]
+// geklemmt) extrahieren und den mit der GRÖSSTEN Dateigröße nehmen — mehr JPEG-Bytes ≈ mehr
+// Detail ≈ schärfer (billige Heuristik, kein neues Tool). Liefert Pfad oder null.
+function grabSharpestFrame(videoPath, at, duration, dst, dir, idx) {
+  const clamp = (t) => Math.min(Math.max(t, 0.1), Math.max(duration - 0.1, 0.1));
+  const offsets = [-0.15, 0, 0.15];
+  let best = null, bestSize = -1;
+  for (let k = 0; k < offsets.length; k++) {
+    const cand = path.join(dir, `_cand_${idx}_${k}.jpg`);
+    try {
+      sh("ffmpeg", ["-y", "-ss", String(clamp(at + offsets[k])), "-i", videoPath, "-frames:v", "1", "-q:v", "3", cand]);
+      if (fs.existsSync(cand)) {
+        const size = fs.statSync(cand).size;
+        if (size >= 500 && size > bestSize) { bestSize = size; best = cand; }
+      }
+    } catch { /* Kandidat übersprungen */ }
+  }
+  if (!best) return null;
+  try { fs.copyFileSync(best, dst); } catch { return null; }
+  return dst;
+}
+
 async function buildTutorial(job, videoPath, dir) {
   let duration = NaN;
   try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
@@ -94,7 +139,9 @@ async function buildTutorial(job, videoPath, dir) {
   // 1) Audio -> Whisper (mit Wort-Zeitstempeln für die Marker-Erkennung)
   const audio = path.join(dir, "audio.mp3");
   sh("ffmpeg", ["-y","-i", videoPath, "-vn","-ac","1","-ar","16000","-b:a","64k", audio]);
-  const tr = await openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de", timestamp_granularities: ["segment", "word"] });
+  // prompt: "Schnitt" biast Whisper darauf, das Marker-Wort sauber zu erkennen. Neuer
+  // ReadStream je Versuch (ein verbrauchter Stream lässt sich nicht erneut senden).
+  const tr = await withRetry(() => openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de", prompt: "Schnitt", timestamp_granularities: ["segment", "word"] }));
   const segs = (tr.segments || []).map((s) => ({ start: +s.start.toFixed(1), text: s.text.trim() }));
 
   // 2) Schritte bestimmen. Jeder Schritt liefert: { shot (Screenshot-Sekunde), tB (Vorher-Frame), narration }.
@@ -102,7 +149,8 @@ async function buildTutorial(job, videoPath, dir) {
   // (A) MARKER-MODUS: Das Wort "Schnitt" markiert das ENDE eines Schritts (Regie-Logik:
   //     erst Schritt machen + Maus aufs Ziel, dann "Schnitt" sagen). Schnitt genau dort,
   //     Screenshot KURZ DAVOR (Maus auf dem Ziel) — kein Sekunden-Zählen nötig.
-  const cuts = (tr.words || []).filter((w) => norm(w.word) === "schnitt").map((w) => +w.start).sort((a, b) => a - b);
+  const MARKERS = ["schnitt", "cut"];
+  const cuts = (tr.words || []).filter((w) => MARKERS.includes(norm(w.word))).map((w) => +w.start).sort((a, b) => a - b);
   // Nutzer hat "Schnitt" gesprochen, aber es kamen keine Marker an (fehlende Wort-Zeitstempel
   // von Whisper) -> ehrlicher Hinweis, statt still auf den schwächeren Fallback zu gehen.
   let note = null;
@@ -119,7 +167,7 @@ async function buildTutorial(job, videoPath, dir) {
       if (end - start < 0.8) continue; // zu kurz -> kein eigener Schritt
       const shot = Math.min(Math.max(end - 0.4, start + 0.2), duration - 0.1);
       const tB = Math.min(Math.max(start + 0.2, 0), shot - 0.4);
-      const narration = (tr.words || []).filter((w) => w.start >= start && w.start < end && norm(w.word) !== "schnitt").map((w) => w.word).join(" ").replace(/\s+/g, " ").trim();
+      const narration = (tr.words || []).filter((w) => w.start >= start && w.start < end && !MARKERS.includes(norm(w.word))).map((w) => w.word).join(" ").replace(/\s+/g, " ").trim();
       segSteps.push({ shot, tB, narration });
     }
   }
@@ -138,68 +186,109 @@ async function buildTutorial(job, videoPath, dir) {
   }
   segSteps = segSteps.slice(0, 14);
 
-  // 3) pro Schritt: Frame + Vision (robust: kaputte Frames überspringen, Job läuft weiter)
+  // 3) LIVE-AUFBAU: Tutorial FRÜH anlegen, dann pro fertigem Schritt einzeln inserten.
+  //    So erscheint der Entwurf schon während der Verarbeitung auf dem Dashboard und
+  //    wächst Schritt für Schritt (statt Big-Bang am Ende).
   const tutId = uuid();
-  const rows = [];
-  const uploaded = []; // erfolgreich hochgeladene Bild-Pfade – bei Abbruch wieder entfernen
+  const rows = [];          // erfolgreich eingefügte Step-Rows (für Cleanup + Wiring)
+  const branchIds = [];     // eingefügte Branch-IDs (für Cleanup)
+  const uploaded = [];      // erfolgreich hochgeladene Bild-Pfade (bei Abbruch entfernen)
   let tutInserted = false;
   try {
-    for (let i = 0; i < segSteps.length; i++) {
-      const at = segSteps[i].shot;
-      const local = path.join(dir, `step_${i + 1}.jpg`);
-      try {
-        sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
-        if (!fs.existsSync(local) || fs.statSync(local).size < 500) continue;
-      } catch { continue; }
-      const narration = (segSteps[i].narration || "").trim();
-      // Diff: Schritt-Anfang vs. Screenshot-Moment -> erdet das Highlight (Maus wandert aufs Ziel).
-      const diffPath = diffImg(videoPath, segSteps[i].tB, at, dir, i + 1);
-      const content = [
-        { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
-        { type: "text", text: "BILD 1 (Screenshot):" },
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridImg(local)).toString("base64")}` } },
-      ];
-      if (diffPath) {
-        content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
-        content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffPath).toString("base64")}` } });
+    // Tutorial-Hülle + Job-Verknüpfung sofort setzen -> Dashboard-Karte + Crash-Sichtbarkeit.
+    const { error: tErr } = await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title: job.title || "Anleitung", status: "draft" });
+    if (tErr) throw new Error("Tutorial anlegen: " + tErr.message);
+    tutInserted = true;
+    await sb.from("video_jobs").update({ tutorial_id: tutId, updated_at: new Date().toISOString() }).eq("id", job.id);
+
+    // Schritt-Analyse (KI) PARALLEL in Batches von 3; der eigentliche INSERT danach
+    // sequenziell in Positions-Reihenfolge (Live-Reihenfolge + korrektes Branch-Wiring).
+    const BATCH = 3;
+    for (let base = 0; base < segSteps.length; base += BATCH) {
+      const chunk = segSteps.slice(base, base + BATCH);
+      // (a) KI-Analyse je Batch parallel. Kaputte Frames -> analyzed=null (Schritt fällt aus).
+      const analyzed = await Promise.all(chunk.map(async (seg, k) => {
+        const idx = base + k;
+        const at = seg.shot;
+        const local = path.join(dir, `step_${idx + 1}.jpg`);
+        // Schärfsten Frame ziehen (3 Kandidaten); scheitert das, klassischer Einzel-Grab.
+        let frame = grabSharpestFrame(videoPath, at, duration, local, dir, idx + 1);
+        if (!frame) {
+          try {
+            sh("ffmpeg", ["-y", "-ss", String(at), "-i", videoPath, "-frames:v", "1", "-q:v", "3", local]);
+            if (fs.existsSync(local) && fs.statSync(local).size >= 500) frame = local;
+          } catch { /* unten null */ }
+        }
+        if (!frame) return null;
+        const narration = (seg.narration || "").trim();
+        // Diff: Schritt-Anfang vs. Screenshot-Moment -> erdet das Highlight (Maus wandert aufs Ziel).
+        const diffPath = diffImg(videoPath, seg.tB, at, dir, idx + 1);
+        // Nur die an die KI gesendeten Bilder auf 1280px verkleinern; `local` bleibt Original.
+        const gridSmall = scaleForVision(gridImg(local));
+        const diffSmall = diffPath ? scaleForVision(diffPath) : null;
+        const content = [
+          { type: "text", text: `Gesprochen: ${narration || "(nichts gesagt – aus dem Bild ableiten)"}` },
+          { type: "text", text: "BILD 1 (Screenshot):" },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(gridSmall).toString("base64")}` } },
+        ];
+        if (diffSmall) {
+          content.push({ type: "text", text: "BILD 2 (Differenz vorher/nachher – hell = verändert):" });
+          content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${fs.readFileSync(diffSmall).toString("base64")}` } });
+        }
+        const p = await json("gpt-5.4-mini", [
+          { role: "system", content: STEP_SYS },
+          { role: "user", content },
+        ], 300);
+        return { local, videoTime: at, narration, p };
+      }));
+
+      // (b) INSERT sequenziell in Reihenfolge -> Live-Aufbau + lineare Branch vom Vorgänger.
+      for (const a of analyzed) {
+        if (!a) continue;
+        const id = uuid();
+        const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
+        // Upload-Fehler NICHT verschlucken: sonst Schritt mit kaputtem Bild-Verweis -> überspringen.
+        const { error: upErr } = await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(a.local), { contentType: "image/jpeg", upsert: true });
+        if (upErr) { console.error("  Bild-Upload fehlgeschlagen, Schritt übersprungen:", upErr.message); continue; }
+        uploaded.push(ipath);
+        const hl = a.p.highlight && [a.p.highlight.x, a.p.highlight.y, a.p.highlight.w, a.p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
+          ? [{ id: uuid(), type: "rect", x: a.p.highlight.x, y: a.p.highlight.y, w: a.p.highlight.w, h: a.p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
+        const row = { id, tutorial_id: tutId, title: a.p.title || `Schritt ${rows.length + 1}`, body: mkBody(a.p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl, video_time: a.videoTime };
+        const { error: sErr } = await sb.from("steps").insert(row);
+        if (sErr) throw new Error("Schritt anlegen: " + sErr.message);
+        const prev = rows[rows.length - 1] || null;
+        rows.push(row);
+        if (rows.length === 1) {
+          // Nach dem 1. Schritt: root_step_id setzen.
+          await sb.from("tutorials").update({ root_step_id: id }).eq("id", tutId);
+        } else if (prev) {
+          // Ab dem 2. Schritt: lineare Branch vom Vorgänger auf diesen Schritt.
+          const bId = uuid();
+          const { error: bErr } = await sb.from("step_branches").insert({ id: bId, step_id: prev.id, label: null, target_step_id: id, position: 0 });
+          if (bErr) throw new Error("Verzweigung anlegen: " + bErr.message);
+          branchIds.push(bId);
+        }
       }
-      const p = await json("gpt-5.4-mini", [
-        { role: "system", content: STEP_SYS },
-        { role: "user", content },
-      ], 300);
-      const id = uuid();
-      const ipath = `${job.account_id}/${tutId}/step_${rows.length + 1}.jpg`;
-      // Upload-Fehler NICHT verschlucken: sonst Schritt mit kaputtem Bild-Verweis. Dann Schritt überspringen.
-      const { error: upErr } = await sb.storage.from("tutorial-images").upload(ipath, fs.readFileSync(local), { contentType: "image/jpeg", upsert: true });
-      if (upErr) { console.error("  Bild-Upload fehlgeschlagen, Schritt übersprungen:", upErr.message); continue; }
-      uploaded.push(ipath);
-      const hl = p.highlight && [p.highlight.x, p.highlight.y, p.highlight.w, p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
-        ? [{ id: uuid(), type: "rect", x: p.highlight.x, y: p.highlight.y, w: p.highlight.w, h: p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
-      rows.push({ id, tutorial_id: tutId, title: p.title || `Schritt ${rows.length + 1}`, body: mkBody(p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl });
+      // Fortschritt für Dialog + Dashboard-Karte („Schritt X von Y …").
+      await sb.from("video_jobs").update({ progress: `Schritt ${rows.length} von ${segSteps.length}`, updated_at: new Date().toISOString() }).eq("id", job.id);
     }
     if (!rows.length) throw new Error("Keine Schritte erkannt (Aufnahme evtl. zu kurz/leer). Bitte erneut aufnehmen.");
 
-    // 4) Titel
+    // 4) Titel generieren -> Tutorial-Titel aktualisieren.
     const title = (await json("gpt-5.4-mini", [{ role: "system", content: TITLE_SYS }, { role: "user", content: "Schritte: " + rows.map((r) => r.title).join("; ") + "\nErzählung: " + (tr.text || "").slice(0, 500) }], 60)).title || job.title || "Anleitung";
-
-    // 5) Tutorial + Schritte + lineare Verzweigungen (Fehler prüfen -> sonst Cleanup im catch)
-    const { error: tErr } = await sb.from("tutorials").insert({ id: tutId, account_id: job.account_id, title, status: "draft" });
-    if (tErr) throw new Error("Tutorial anlegen: " + tErr.message);
-    tutInserted = true;
-    const { error: sErr } = await sb.from("steps").insert(rows);
-    if (sErr) throw new Error("Schritte anlegen: " + sErr.message);
-    await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
-    const br = [];
-    for (let i = 0; i < rows.length - 1; i++) br.push({ id: uuid(), step_id: rows[i].id, label: null, target_step_id: rows[i + 1].id, position: 0 });
-    if (br.length) await sb.from("step_branches").insert(br);
+    await sb.from("tutorials").update({ title }).eq("id", tutId);
+    // progress leeren (der Job wird gleich in loop() auf status=done gesetzt).
+    await sb.from("video_jobs").update({ progress: null, updated_at: new Date().toISOString() }).eq("id", job.id);
     return { tutId, title, count: rows.length, note };
   } catch (e) {
-    // Teil-Ergebnisse aufräumen: verwaiste Bilder + halb angelegtes Tutorial entfernen.
+    // Cleanup: verwaiste Bilder + Branches + Steps + Tutorial entfernen UND tutorial_id nullen,
+    // damit kein halbes Tutorial + keine tote Job-Verknüpfung zurückbleibt.
     if (uploaded.length) { try { await sb.storage.from("tutorial-images").remove(uploaded); } catch {} }
     if (tutInserted) {
-      try { await sb.from("step_branches").delete().in("step_id", rows.map((r) => r.id)); } catch {}
+      if (rows.length) { try { await sb.from("step_branches").delete().in("step_id", rows.map((r) => r.id)); } catch {} }
       try { await sb.from("steps").delete().eq("tutorial_id", tutId); } catch {}
       try { await sb.from("tutorials").delete().eq("id", tutId); } catch {}
+      try { await sb.from("video_jobs").update({ tutorial_id: null, progress: null, updated_at: new Date().toISOString() }).eq("id", job.id); } catch {}
     }
     throw e;
   }
@@ -231,6 +320,27 @@ async function processJob(job) {
   }
 }
 
+// Crash-Waise aufräumen: Ein via reapStale requeuter Job kann noch eine tutorial_id von
+// einem abgestürzten Lauf tragen. Vor dem Neu-Verarbeiten dieses halbe Teil-Tutorial (samt
+// Steps/Branches/Bildern) löschen und tutorial_id nullen — sonst entstehen Doppel-Tutorials.
+async function reapOrphanTutorial(job) {
+  const oldTutId = job.tutorial_id;
+  if (!oldTutId) return;
+  console.log(`  ↻ Räume Crash-Waise auf: altes Teil-Tutorial ${oldTutId} von Job ${job.id}.`);
+  try {
+    const { data: stepRows } = await sb.from("steps").select("id, image_path").eq("tutorial_id", oldTutId);
+    const stepIds = (stepRows || []).map((s) => s.id);
+    const imgs = (stepRows || []).map((s) => s.image_path).filter(Boolean);
+    if (imgs.length) { try { await sb.storage.from("tutorial-images").remove(imgs); } catch {} }
+    if (stepIds.length) { try { await sb.from("step_branches").delete().in("step_id", stepIds); } catch {} }
+    try { await sb.from("steps").delete().eq("tutorial_id", oldTutId); } catch {}
+    try { await sb.from("tutorials").delete().eq("id", oldTutId); } catch {}
+  } catch (e) { console.error("  Crash-Waisen-Cleanup-Fehler:", e.message); }
+  // tutorial_id am Job nullen, damit der frische Lauf sauber startet.
+  try { await sb.from("video_jobs").update({ tutorial_id: null, progress: null, updated_at: new Date().toISOString() }).eq("id", job.id); } catch {}
+  job.tutorial_id = null;
+}
+
 // Vom Vorgänger (Absturz/Neustart) hängengebliebene Jobs (>15 Min in "processing")
 // zurück in die Warteschlange. Läuft nur zwischen Jobs (loop() await-et sonst processJob),
 // kollidiert also nie mit einem aktiv laufenden Job dieser (einzigen) Instanz.
@@ -258,8 +368,12 @@ async function loop() {
       const { data: claimed } = await sb.from("video_jobs").update({ status: "processing", updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "queued").select();
       if (claimed?.length) {
         ran = true;
+        // Frisch geclaimte Row nutzen (aktueller DB-Stand); trägt sie noch eine tutorial_id,
+        // ist das eine Crash-Waise (requeut via reapStale) -> vor dem Lauf aufräumen.
+        const claimedJob = claimed[0];
         try {
-          const res = await processJob(job);
+          await reapOrphanTutorial(claimedJob);
+          const res = await processJob(claimedJob);
           await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, note: res.note ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
         } catch (e) {
           const raw = String(e?.message || "Unbekannter Fehler");

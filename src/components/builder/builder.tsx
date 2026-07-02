@@ -62,6 +62,7 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     highlights: [],
     position,
     is_decision: false,
+    video_time: null,
     created_at: new Date().toISOString(),
   };
 }

@@ -23,6 +23,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [tutorialId, setTutorialId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [secs, setSecs] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
@@ -47,11 +48,11 @@ export function VideoUpload({ accountId }: { accountId: string }) {
       }
       const { data, error } = await supabase
         .from("video_jobs")
-        .select("status, tutorial_id, error, note")
+        .select("status, tutorial_id, error, note, progress")
         .eq("id", jobId)
         .maybeSingle();
       if (error || !data) return; // transienter Fehler -> weiter pollen bis Timeout
-      if (data.status === "processing") setPhase("processing");
+      if (data.status === "processing") { setPhase("processing"); setProgress(data.progress ?? null); }
       if (data.status === "done") { setTutorialId(data.tutorial_id); setNote(data.note ?? null); setPhase("done"); clearInterval(iv); }
       if (data.status === "failed") { setError(data.error || "Verarbeitung fehlgeschlagen."); setPhase("failed"); clearInterval(iv); }
     }, 4000);
@@ -132,7 +133,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
     streamsRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
-    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setSecs(0); setNoMic(false);
+    setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setProgress(null); setSecs(0); setNoMic(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -202,9 +203,17 @@ export function VideoUpload({ accountId }: { accountId: string }) {
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <Loader2 className="size-8 animate-spin text-primary" />
             <p className="text-sm font-medium text-ink">
-              {phase === "uploading" ? "Video wird hochgeladen …" : phase === "queued" ? "In der Warteschlange …" : "KI erstellt das Tutorial …"}
+              {phase === "uploading"
+                ? "Video wird hochgeladen …"
+                : phase === "queued"
+                ? "In der Warteschlange …"
+                : progress
+                ? `${progress} …`
+                : "KI erstellt das Tutorial …"}
             </p>
-            <p className="text-xs text-muted-foreground">Das kann ein paar Minuten dauern. Fenster offen lassen.</p>
+            <p className="text-xs text-muted-foreground">
+              Sie können das Fenster schließen – der Entwurf erscheint auf dem Dashboard.
+            </p>
           </div>
         )}
 

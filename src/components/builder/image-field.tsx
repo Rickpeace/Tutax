@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X } from "lucide-react";
+import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { HighlightEditor } from "@/components/builder/highlight-editor";
 import { CropDialog } from "@/components/builder/crop-dialog";
+import { VideoFramePicker } from "@/components/builder/video-frame-picker";
 import { compressAndUpload, signedImageUrl } from "@/lib/upload";
+import { getTutorialVideoUrl, updateStep } from "@/app/app/tutorials/[id]/actions";
 import type { Highlight } from "@/lib/types";
 
 export function ImageField({
@@ -22,6 +24,7 @@ export function ImageField({
   stepId,
   imagePath,
   highlights,
+  videoTime,
   onSetImage,
   onSetHighlights,
 }: {
@@ -29,6 +32,7 @@ export function ImageField({
   stepId: string;
   imagePath: string | null;
   highlights: Highlight[];
+  videoTime?: number | null;
   onSetImage: (
     stepId: string,
     img: {
@@ -46,7 +50,29 @@ export function ImageField({
   // Nach dem Ersetzen (Bild + vorhandene Markierungen): fragen, ob die Markierungen
   // behalten oder gelöscht werden sollen (sie sitzen sonst evtl. am falschen Ort).
   const [askHighlights, setAskHighlights] = useState(false);
+  // Frame-Picker: URL wird lazy beim Klick geholt (null = kein Quell-Video).
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [loadingVideo, setLoadingVideo] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Beim Klick auf „Bild aus Video wählen": signierte URL lazy holen; null -> Hinweis.
+  async function openFramePicker() {
+    setLoadingVideo(true);
+    try {
+      const u = videoUrl ?? (await getTutorialVideoUrl(tutorialId));
+      if (!u) {
+        toast.error("Zu diesem Tutorial gibt es kein Quell-Video.");
+        return;
+      }
+      setVideoUrl(u);
+      setPickerOpen(true);
+    } catch {
+      toast.error("Quell-Video konnte nicht geladen werden.");
+    } finally {
+      setLoadingVideo(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -135,6 +161,19 @@ export function ImageField({
               Bild ersetzen
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || loadingVideo}
+              onClick={openFramePicker}
+            >
+              {loadingVideo ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Film className="size-4" />
+              )}{" "}
+              Bild aus Video wählen
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               disabled={busy}
@@ -199,6 +238,23 @@ export function ImageField({
           onConfirm={(f) => {
             setPendingFile(null);
             void doUpload(f);
+          }}
+        />
+      )}
+
+      {videoUrl && (
+        <VideoFramePicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          videoUrl={videoUrl}
+          tutorialId={tutorialId}
+          stepId={stepId}
+          startTime={videoTime ?? null}
+          onApply={({ image_path, image_width, image_height, video_time }) => {
+            // Bild optimistisch setzen (bestehender Pfad) + video_time separat persistieren,
+            // damit der Picker beim nächsten Öffnen wieder an der richtigen Stelle startet.
+            onSetImage(stepId, { image_path, image_width, image_height });
+            void updateStep(stepId, { video_time }).catch(() => {});
           }}
         />
       )}
