@@ -106,6 +106,13 @@ NIE auf /h, nie im Chat-RAG, nie im public Bucket (anon-RLS + Guards + Trace-Tes
 neuer Tab **„Lernen"** (/app/lernen) mit signierten Privat-Bildern, „Als absolviert
 markieren", Owner-Tabelle „wer hat was wann absolviert" + Team-Fortschritt;
 `setTutorialVisibility` schaltet published sauber um (Bilder/Embeddings/Cache).
+**Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
+(alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
+Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
+Wissenslücken bis 25 mit „Entwurf erstellen"; geteilte Quelle lib/gaps.ts mit der
+Dashboard-Karte) · Kontakt & Eskalation (aus den Einstellungen umgezogen);
+Quick-Links „Chat testen" + „Chat-Bubble einbetten"; alte URLs leiten weiter;
+Steply-Hilfe-Texte + Screenshots auf die neuen Pfade nachgezogen.
 
 ---
 

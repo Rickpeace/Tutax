@@ -95,8 +95,8 @@ const TUTORIALS = [
     desc: "Ihr Chatbot antwortet nur mit Ihren Inhalten.",
     steps: [
       ["Was der Assistent weiß", "Der Chat auf Ihrer Hilfe-Seite beantwortet Kundenfragen ausschließlich aus Ihren veröffentlichten Anleitungen und Ihrer Wissensdatenbank – er erfindet nichts dazu."],
-      ["Wissensdatenbank füllen", "Unter „Wissensdatenbank“ legen Sie freies Wissen an: Öffnungszeiten, Zuständigkeiten, FAQs. Veröffentlichte Artikel fließen automatisch in den Chat ein."],
-      ["Ansprechpartner hinterlegen", "Unter Einstellungen → Eskalation legen Sie fest, an wen der Chat verweist, wenn er nicht weiterweiß – inklusive Terminbuchung, E-Mail und Telefon pro Fachgebiet."],
+      ["Wissensdatenbank füllen", "Unter „Assistent“ → „Wissensdatenbank“ legen Sie freies Wissen an: Öffnungszeiten, Zuständigkeiten, FAQs. Veröffentlichte Artikel fließen automatisch in den Chat ein."],
+      ["Ansprechpartner hinterlegen", "Unter „Assistent“ → „Kontakt & Eskalation“ legen Sie fest, an wen der Chat verweist, wenn er nicht weiterweiß – inklusive Terminbuchung, E-Mail und Telefon pro Fachgebiet."],
       ["Semantische Suche", "Auch das Suchfeld der Hilfe-Seite denkt mit: Findet die Titelsuche nichts, schlägt die KI passende Anleitungen vor („Meinten Sie …“)."],
     ],
   },
@@ -105,7 +105,7 @@ const TUTORIALS = [
     desc: "Aufrufe, Feedback – und was noch fehlt.",
     steps: [
       ["Die Insights-Karte", "Sobald Ihre Hilfe-Seite genutzt wird, zeigt das Dashboard: Aufrufe, gestellte Chat-Fragen und die Zufriedenheit („War das hilfreich?“)."],
-      ["Wissenslücken erkennen", "Das Wertvollste: Fragen, die der Chat NICHT beantworten konnte, werden gesammelt – Sie sehen genau, welche Anleitung noch fehlt."],
+      ["Wissenslücken erkennen", "Das Wertvollste: Fragen, die der Chat NICHT beantworten konnte, werden gesammelt – auf dem Dashboard und vollständig unter „Assistent“ → „Offene Fragen“. Sie sehen genau, welche Anleitung noch fehlt."],
       ["Entwurf per Klick", "Neben jeder offenen Frage gibt es „Entwurf erstellen“: Die KI baut ein Anleitungs-Gerüst, Sie ergänzen nur noch Screenshots und Details."],
       ["Automatisch aktuell bleiben", "Der Aktualitäts-Check prüft Ihre Anleitungen regelmäßig gegen das Web und meldet, wenn sich z. B. eine Software-Oberfläche geändert hat."],
     ],

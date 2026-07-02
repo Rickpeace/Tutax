@@ -151,10 +151,13 @@ await pg.goto(BASE + "/app/settings/branding"); await settle(2200);
 await capture("branding", { modus: () => pg.getByText(/KI-Design/).first() });
 await pg.goto(BASE + "/app/settings/team"); await settle(2000);
 await capture("team", { einladen: () => pg.getByRole("button", { name: /inladen/ }) });
-await pg.goto(BASE + "/app/settings/eskalation"); await settle(2000);
+await pg.goto(BASE + "/app/assistent/eskalation"); await settle(2000);
 await capture("eskalation", {});
-await pg.goto(BASE + "/app/knowledge"); await settle(2000);
+await pg.goto(BASE + "/app/assistent/wissen"); await settle(2000);
 await capture("knowledge", { neu: () => pg.getByRole("button", { name: /Neuer Artikel/ }) });
+// Neue Seite „Offene Fragen" (Welle 11) — Leerzustand reicht als Doku-Bild.
+await pg.goto(BASE + "/app/assistent/fragen"); await settle(2000);
+await capture("fragen", {});
 
 // Öffentlich: Hub + Chat, semantische Suche, Druck-Link im Wizard
 await pg.goto(BASE + "/h/demo"); await settle(1500);
@@ -205,7 +208,7 @@ const MAP = [
   ["Der KI-Hilfe-Assistent und die Wissensdatenbank", 3, "eskalation", null],
   ["Der KI-Hilfe-Assistent und die Wissensdatenbank", 4, "hub-suche", "vorschlag"],
   ["Insights: sehen, was Ihre Kunden brauchen", 1, "dashboard", "insights"],
-  ["Insights: sehen, was Ihre Kunden brauchen", 2, "dashboard", "insights"],
+  ["Insights: sehen, was Ihre Kunden brauchen", 2, "fragen", null],
   ["Team einladen und Organisationen", 1, "team", "einladen"],
   ["Team einladen und Organisationen", 3, "dashboard", "switcher"],
 ];
