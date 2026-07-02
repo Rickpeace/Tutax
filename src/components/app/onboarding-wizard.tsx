@@ -100,6 +100,19 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
               {pending ? "Wird gespeichert …" : "Fertig & loslegen"}
             </Button>
           </div>
+
+          {/* Dogfooding-Verweis: unsere Doku ist selbst eine Steply-Hilfe-Seite. */}
+          <p className="mt-5 border-t border-line-2 pt-4 text-center text-xs text-muted-foreground">
+            Fragen zu Steply? Alle Funktionen erklären wir als klickbare Anleitungen in der{" "}
+            <a
+              href="/h/steply"
+              target="_blank"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Steply-Hilfe
+            </a>{" "}
+            – Sie finden sie später jederzeit über das <b>?</b> oben rechts.
+          </p>
         </div>
       )}
     </div>

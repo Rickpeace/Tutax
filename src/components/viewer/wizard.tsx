@@ -48,7 +48,12 @@ export function Wizard({
 
   const [cur, setCur] = useState<string | null>(rootId);
   const [history, setHistory] = useState<string[]>([]);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    url: string;
+    highlights: NonNullable<Step["highlights"]>;
+    image_width: number | null;
+    image_height: number | null;
+  } | null>(null);
   const [feedback, setFeedback] = useState<"sent" | null>(null);
   // Schritt-IDs, für die schon „komme nicht weiter" gemeldet wurde (1×/Schritt).
   const [stuckSent, setStuckSent] = useState<Set<string>>(() => new Set());
@@ -208,7 +213,14 @@ export function Wizard({
           {imageUrls[step.id] ? (
             <button
               type="button"
-              onClick={() => setLightbox(imageUrls[step.id])}
+              onClick={() =>
+                setLightbox({
+                  url: imageUrls[step.id],
+                  highlights: step.highlights ?? [],
+                  image_width: step.image_width,
+                  image_height: step.image_height,
+                })
+              }
               aria-label="Bild vergrößern"
               className="mb-4 block w-full cursor-zoom-in"
             >
@@ -409,13 +421,25 @@ export function Wizard({
           aria-modal="true"
           aria-label="Bildvorschau"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightbox}
-            alt=""
-            className="max-h-[95vh] max-w-[95vw] object-contain"
+          {/* Gleiche Darstellung wie im Schritt — inkl. Markierungen (nicht nur das
+              rohe Bild). Breite so, dass Bild samt Seitenverhältnis in 92vh/95vw passt. */}
+          <div
             onClick={(e) => e.stopPropagation()}
-          />
+            style={{
+              width:
+                lightbox.image_width && lightbox.image_height
+                  ? `min(95vw, calc(92vh * ${lightbox.image_width / lightbox.image_height}))`
+                  : "min(95vw, 1100px)",
+            }}
+          >
+            <ViewerImage
+              url={lightbox.url}
+              highlights={lightbox.highlights}
+              width={lightbox.image_width}
+              height={lightbox.image_height}
+              alt=""
+            />
+          </div>
           <button
             type="button"
             onClick={() => setLightbox(null)}

@@ -21,7 +21,11 @@ export function ViewerImage({
   alt?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // Markierungen erst zeigen, wenn das Bild wirklich da ist — der aspect-ratio-Wrapper
+  // reserviert die Fläche sofort, sonst schweben Highlights über leerem Grund.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -33,18 +37,30 @@ export function ViewerImage({
     return () => ro.disconnect();
   }, []);
 
+  // Bei URL-Wechsel zurücksetzen; aus dem Cache geladene Bilder sind sofort complete.
+  useEffect(() => {
+    setLoaded(imgRef.current?.complete ?? false);
+  }, [url]);
+
   return (
     <div
       ref={wrapRef}
-      className="relative overflow-hidden border border-black/5"
+      className={`relative overflow-hidden border border-black/5 ${loaded ? "" : "animate-pulse bg-black/5"}`}
       style={{
         borderRadius: "var(--brand-radius, 12px)",
         ...(width && height ? { aspectRatio: `${width} / ${height}` } : {}),
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={alt} loading="lazy" className="block w-full" />
-      {size.w > 0 && (
+      <img
+        ref={imgRef}
+        src={url}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        className="block w-full"
+      />
+      {loaded && size.w > 0 && (
         <svg width={size.w} height={size.h} className="pointer-events-none absolute inset-0">
           <defs>
             <filter id="vi-blur">

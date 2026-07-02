@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { ExternalLink, Settings, Bell, ShieldCheck, LogOut } from "lucide-react";
+import { ExternalLink, Settings, Bell, ShieldCheck, LogOut, CircleHelp } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
 import { AppTabs } from "@/components/app/app-tabs";
 import { AccountSwitcher } from "@/components/app/account-switcher";
@@ -84,6 +84,22 @@ async function HeaderContent() {
             <span className="hidden sm:inline">Admin</span>
           </Button>
         )}
+        {/* Unsere eigene Doku (auf Steply gebaut) — jede Funktion als klickbare Anleitung. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          nativeButton={false}
+          render={
+            <Link
+              href="/h/steply"
+              target="_blank"
+              aria-label="Steply-Hilfe: alle Funktionen erklärt"
+              title="Steply-Hilfe: alle Funktionen erklärt"
+            />
+          }
+        >
+          <CircleHelp className="size-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"
