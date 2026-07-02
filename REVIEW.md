@@ -91,6 +91,21 @@ Fallback ohne Ton (Kette: Klicks→Schnitt→KI→Szenen→Gleichverteilung) ·
 Browser-Extension v1** (`extension/`: nimmt Screencast auf + zeichnet Klicks auf →
 aufnahme.webm + clicks.json; manueller Chrome-Test durch Richard nötig).
 ⚠️ Worker-Teile wirken erst nach `deploy.sh`.
+**Fable + Opus Wellen 9/10 (Selbst-Doku + Recorder v2 + Lernen):**
+📚 **Steply-Hilfe-Hub `/h/steply`** (7 Anleitungen, 33 Schritte — Dogfooding: unsere
+eigene Doku läuft auf Steply; Verweis auf /anleitung) · 📸 **Shoot-Pipeline v2**
+(`scripts/shoot-steply-help.mjs`): echte UI-Screenshots + **automatische blaue
+Markierungen** aus Playwright-BoundingBoxen an allen Hilfe-Schritten ·
+🐛 **Vollbild-Bildeditor-Fix**: „Groß bearbeiten" lag hinter der App-Navbar
+(Stacking-Context) → createPortal an document.body, per Screenshot bewiesen ·
+🖱️ **Recorder v2** (Welle 10a): clicks.json optional im „Aus Video"-Dialog
+(streng validiert, Fehlerfall degradiert sanft, nur Einzel-Upload) ·
+🎓 **Interne Tutorials + Schulungsnachweis v1** (Welle 10b, Migration 0021):
+Sichtbarkeit „Öffentlich | Intern (nur Team)" im Builder; interne Anleitungen
+NIE auf /h, nie im Chat-RAG, nie im public Bucket (anon-RLS + Guards + Trace-Tests);
+neuer Tab **„Lernen"** (/app/lernen) mit signierten Privat-Bildern, „Als absolviert
+markieren", Owner-Tabelle „wer hat was wann absolviert" + Team-Fortschritt;
+`setTutorialVisibility` schaltet published sauber um (Bilder/Embeddings/Cache).
 
 ---
 

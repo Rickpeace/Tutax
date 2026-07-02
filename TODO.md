@@ -28,11 +28,13 @@
 
 - [ ] **LemonSqueezy-Anbindung** (Checkout + Webhook → plan; Gating existiert schon)
 - [ ] **Custom Domain** `hilfe.firma.de` (Vercel-Domains-Setup zusammen durchgehen)
-- [ ] **Interne Tutorials + Schulungsnachweis** (Zugriffsschutz + „Mitarbeiter X hat Y
-  absolviert ✓" — neuer Markt, braucht ein kurzes gemeinsames Konzept)
+- [x] ~~Interne Tutorials + Schulungsnachweis~~ **GEBAUT (02.07., Welle 10b):**
+  Builder-Schalter „Öffentlich | Intern", Tab „Lernen", Absolviert-Haken,
+  Owner-Nachweis-Tabelle. → Einmal selbst durchklicken.
 - [ ] **Landing-Hero: echter Produkt-Screenshot** (Material: /h/demo + /h/steply)
-- [ ] Recorder-Extension v2: clicks.json direkt im „Aus Video"-Dialog mit hochladen
-  (Feld existiert noch nicht; Worker versteht clicks bereits)
+- [x] ~~Recorder v2: clicks.json im „Aus Video"-Dialog~~ **GEBAUT (02.07., Welle 10a).**
+  → Zusammen mit Extension-Test einmal Ende-zu-Ende probieren (Aufnahme → beide
+  Dateien hochladen → exakte Schrittgrenzen; wirkt erst nach `deploy.sh`).
 - [ ] i18n der Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)
