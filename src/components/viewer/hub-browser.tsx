@@ -226,7 +226,7 @@ export function HubBrowser({
                   <div className="min-w-0 flex-1">
                     <div
                       data-tx="card-title"
-                      className="font-bold"
+                      className="text-base font-bold"
                       style={{
                         // Akzent-Dosierung: Titel in Ink (nicht in der Akzentfarbe), damit
                         // die CI auf Logo/Topbar/Buttons/Chat konzentriert bleibt.

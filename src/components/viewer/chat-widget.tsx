@@ -212,7 +212,10 @@ export function ChatWidget({
             embedded
               ? // Im iFrame gibt das Fenster die Größe vor -> Panel füllt es komplett.
                 "fixed inset-0 z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)]"
-              : "fixed bottom-24 right-3 left-3 z-40 flex h-[min(30rem,calc(100dvh-7rem))] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
+              : // Dynamische Hoehe (REVIEW G): kurze Gespraeche zeigen weniger Leerraum
+                // (h-auto + min-h), lange werden bei max-h scrollbar. Nachrichtenliste
+                // bleibt flex-1, Input unten. Embedded-Modus (inset-0) unveraendert.
+                "fixed bottom-24 right-3 left-3 z-40 flex h-auto max-h-[min(30rem,calc(100dvh-7rem))] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
           }
         >
           <div

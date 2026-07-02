@@ -119,7 +119,15 @@ export default async function ViewerPage({
       className={`min-h-screen ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
-      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+      {fontsHref && (
+        <>
+          {/* Preconnect vor dem Stylesheet (React 19 hoisted beides in den <head>) →
+              vermeidet FOUT bei Kunden-Brand-Fonts (REVIEW A). */}
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={fontsHref} />
+        </>
+      )}
       {mode === "extreme" && skinCss && (
         <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}

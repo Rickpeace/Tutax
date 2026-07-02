@@ -57,7 +57,15 @@ export default async function ChatEmbedPage({
       {/* Das iFrame gibt die Größe vor; die Seite selbst bleibt transparent, damit
           die Bubble (rund/eckig) frei „schwebt". */}
       <style>{"html,body{background:transparent!important}"}</style>
-      {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+      {fontsHref && (
+        <>
+          {/* Preconnect vor dem Stylesheet (React 19 hoisted beides in den <head>) →
+              vermeidet FOUT bei Kunden-Brand-Fonts (REVIEW A). */}
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={fontsHref} />
+        </>
+      )}
       <ChatWidget
         accountSlug={account.slug}
         accountName={account.name}

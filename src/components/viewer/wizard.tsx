@@ -185,7 +185,7 @@ export function Wizard({
               {step.title}
             </h2>
           )}
-          <div data-tx="step-body" className="mt-1.5 text-sm text-ink-2">
+          <div data-tx="step-body" className="mt-1.5 text-base leading-relaxed text-ink-2">
             <RichTextView doc={step.body} />
           </div>
 
