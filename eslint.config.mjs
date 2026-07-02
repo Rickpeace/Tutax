@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent-Skill-Stores (git-ignoriert bzw. Fremdcode — kein Lint-Gegenstand):
+    ".agents/**",
+    ".claude/**",
   ]),
 ]);
 

@@ -66,6 +66,17 @@ iframe-isoliert, transparent, resize per postMessage; Snippet auf der Einbetten-
 revertierbar — Titel folgen weiter dem Kunden-`ink`-Token!) · Endkunden-Typo größer ·
 Fonts-Preconnect · mobile Kategorie-Sprungleiste · Chat-Panel ohne Leerraum.
 E-Mail ändern + Onboarding-Wiederholung + Header-Anker (Konto-Politur).
+**Fable — Next.js-Finale:** ⚡ **cacheComponents/PPR aktiv** — /h/demo statisch
+prerendered (1h/1d), alle Routen als Partial Prerender; /h-`load()` via `'use cache'`
++ Tags, **Invalidierung in ~20 Mutationen verdrahtet** (publish/unpublish/delete/
+Builder-Edits/Branding/Theme/Logo/Templates; Draft-Edits schonen den Cache);
+/app-Header + Tabs streamen in statische Shell; /admin-Gate umschließt children
+(Sicherheits-Reihenfolge); Boundaries für auth/invite/onboarding; deprecated
+force-dynamic/-static entfernt. Offen: Admin-Template-Publish invalidiert
+Kunden-Hubs nicht (1h-Deckel) · Publish-Invalidierung in Prod einmal gegenprüfen.
+**Opus Welle 7b:** Lint-Altbestand 31→**0** (typografische Quotes, begründete
+disables für Hydration-Patterns, echter refs-Fix in builder.tsx) → **CI-Lint jetzt
+blockierend**.
 
 ---
 

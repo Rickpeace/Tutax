@@ -18,8 +18,5 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
-      # Lint hat noch ~26 Alt-Findings im Bestand -> informativ, nicht blockierend.
-      # Sobald der Bestand aufgeräumt ist: continue-on-error entfernen.
-      - name: Lint (informativ)
+      - name: Lint
         run: npm run lint
-        continue-on-error: true
