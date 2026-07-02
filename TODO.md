@@ -44,10 +44,12 @@
   Offen danach: Stimme wählbar, Audio auch für Übersetzungen.
 - [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
   + Team-Beitrittslink/QR statt Einzel-Einladungen, optional Domain-Filter.
-- [ ] **Video-Export** (Richard-Idee 02.07., Fable-Favorit): MP4 aus Screenshots + TTS-Ton
-  rendern (Bild liegt so lange wie sein Audio, Markierungen eingebrannt via SVG-Composite,
-  ffmpeg auf dem Hetzner-Worker als neuer Job-Typ) → „Als Video exportieren"-Knopf.
-  Verzweigte Tutorials: v1 Hauptpfad. YouTube-/Social-tauglich. Braucht deploy.sh.
+- [x] ~~Video-Export~~ **GEBAUT (02.07., Welle 18):** „Als Video exportieren" in ZWEI
+  Stilen (Klassisch/Screencast, vergleichbar), Brand-Intro + QR-Outro, Untertitel,
+  Kapitelmarken, Verzweigungen vollständig. ⚠️ Wirkt erst nach deploy.sh; auf dem
+  Server einmal prüfen: DejaVu-Fonts (fonts-dejavu-core) + NEXT_PUBLIC_APP_URL im
+  Worker-Env (QR-/Outro-Link). → Folgewelle: 9:16-Hochformat + Musikbett (Format-
+  Parameter existiert schon).
 - [x] ~~Verzweigungen aus Video/Sprache~~ **GEBAUT (02.07., Welle 17):** Struktur-Pass
   im Worker erkennt gesprochene Fallunterscheidungen → Frage + Äste + Rejoin
   (konservativ, Fallback linear). ⚠️ Wirkt erst nach deploy.sh.

@@ -131,6 +131,12 @@ Worker erkennt EXPLIZITE Fallunterscheidungen („wenn/falls … ansonsten", „
 Möglichkeiten") und baut Frage + Äste + Rejoin; konservativ (Zweifel = linear,
 false-positive-Test), Fallback stellt lineare Kette wieder her (⚠️ wirkt nach deploy.sh) ·
 TTS auf **onyx** + gpt-4o-mini-tts umgestellt (Modell+Stimme im Hash → Auto-Neuvertonung).
+**Opus Welle 18 + Fable:** 🎬 **Video-Export** — Tutorial → 1080p-MP4 in ZWEI Stilen
+(classic: Ken-Burns zur Markierung + Puls-Overlay | screencast: echte Quellvideo-Clips
++ Cursor aus Klickdaten, Hybrid-Fallback), Brand-Intro/QR-Outro, eingebrannte
+Untertitel + Bauchbinde, xfade, Verzweigungen als „Fall:"-Kapitel, YouTube-Kapitelmarken;
+Business-Gate; echtes Mini-Rendering lokal bewiesen (ffmpeg 8) — E2E nach deploy.sh;
+sharp als Worker-Dep nachgezogen (Fable). 9:16 + Musikbett als Folgewelle vorbereitet.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
