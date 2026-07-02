@@ -71,7 +71,9 @@ type Key =
   | "didYouMean"
   | "searchingSimilar"
   | "notRight"
-  | "subtitle";
+  | "subtitle"
+  | "readAloud"
+  | "pauseAloud";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -103,6 +105,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     notRight:
       "Nicht das Richtige dabei? Fragen Sie den Hilfe-Assistenten unten rechts.",
     subtitle: "Hilfe & Anleitungen",
+    readAloud: "Schritt vorlesen",
+    pauseAloud: "Vorlesen pausieren",
   },
   en: {
     next: "Next",
@@ -132,6 +136,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     notRight:
       "Not what you were looking for? Ask the help assistant in the bottom right.",
     subtitle: "Help & Guides",
+    readAloud: "Read step aloud",
+    pauseAloud: "Pause reading",
   },
   pl: {
     next: "Dalej",
@@ -161,6 +167,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     notRight:
       "Nie znalazłeś tego, czego szukasz? Zapytaj asystenta pomocy w prawym dolnym rogu.",
     subtitle: "Pomoc i instrukcje",
+    readAloud: "Przeczytaj krok na głos",
+    pauseAloud: "Wstrzymaj czytanie",
   },
   tr: {
     next: "İleri",
@@ -190,6 +198,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     notRight:
       "Aradığınız bu değil mi? Sağ alttaki yardım asistanına sorun.",
     subtitle: "Yardım ve Kılavuzlar",
+    readAloud: "Adımı sesli oku",
+    pauseAloud: "Okumayı duraklat",
   },
 };
 

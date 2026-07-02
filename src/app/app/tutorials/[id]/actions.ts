@@ -16,6 +16,7 @@ import {
   translateTitleDelta,
   translateBranchDelta,
 } from "@/app/app/actions-translate";
+import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
@@ -91,6 +92,9 @@ export async function updateStep(
   if ("title" in patch || "body" in patch) {
     await markTranslationsStaleByStep(stepId); // sofort veraltet …
     after(() => translateStepDelta(stepId)); // … und im Hintergrund nachziehen (Delta-Sync)
+    // Vorlesen: Text geändert -> Audio nachziehen (nur published+public, Hash-Cache
+    // vermeidet Doppelkosten). ensureStepAudio wirft nicht -> stört den Save nie.
+    after(() => ensureStepAudio(stepId));
   }
 }
 
@@ -211,6 +215,15 @@ export async function deleteStep(
   wasRoot: boolean,
 ) {
   const supabase = await createClient();
+
+  // Vorlese-Audio des Schritts VOR dem Delete aus dem public Bucket räumen (danach
+  // ist der Pfad weg; der DB-Row-Delete wird durch das Nullen nicht behindert).
+  const { data: victim } = await supabase
+    .from("steps")
+    .select("id, audio_path")
+    .eq("id", stepId)
+    .maybeSingle();
+  if (victim?.audio_path) await removeStepAudio({ id: victim.id, audio_path: victim.audio_path });
 
   await supabase
     .from("step_branches")

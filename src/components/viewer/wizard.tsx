@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2, Volume2, Pause } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
@@ -14,6 +14,7 @@ export function Wizard({
   steps,
   branches,
   imageUrls,
+  audioUrls = {},
   placeholders = false,
   accountSlug,
   tutorialSlug,
@@ -27,6 +28,8 @@ export function Wizard({
   steps: Step[];
   branches: StepBranch[];
   imageUrls: Record<string, string>;
+  /** Vorlese-Audio je Schritt (Welle 14). Nur öffentlicher Viewer; sonst leer. */
+  audioUrls?: Record<string, string>;
   placeholders?: boolean;
   accountSlug?: string;
   tutorialSlug?: string;
@@ -143,6 +146,17 @@ export function Wizard({
 
   const titleRef = useRef<HTMLHeadingElement>(null);
 
+  // Vorlesen (Welle 14): ein einziges <audio>-Element, per Ref gesteuert. Beim
+  // Schrittwechsel stoppt die Wiedergabe (siehe Effekt weiter unten).
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const toggleAudio = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => setPlaying(false));
+    else el.pause();
+  };
+
   // Linear = keine Verzweigungen: kein Schritt ist eine Entscheidung UND kein
   // Schritt hat mehr als einen Ausgang. Nur dann ist „Schritt x von y" ehrlich.
   const linearTotal = useMemo(() => {
@@ -184,6 +198,17 @@ export function Wizard({
   useEffect(() => {
     if (step) titleRef.current?.focus();
   }, [cur, step]);
+
+  // Schrittwechsel stoppt die Wiedergabe und setzt den Play-Button zurück.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (el) {
+      el.pause();
+      el.currentTime = 0;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Play-Zustand beim Schrittwechsel zurücksetzen
+    setPlaying(false);
+  }, [cur]);
 
   // Lightbox per Escape schließen.
   useEffect(() => {
@@ -244,20 +269,50 @@ export function Wizard({
               <StepPlaceholder title={step.title} />
             </div>
           ) : null}
-          {step.title && (
-            <h2
-              ref={titleRef}
-              tabIndex={-1}
-              data-tx="step-title"
-              className="text-lg font-bold outline-none sm:text-xl"
-              style={{
-                color: "var(--brand-title, var(--brand-ink))",
-                fontFamily: "var(--brand-font-heading)",
-                fontWeight: "var(--brand-heading-weight, 700)",
-              }}
-            >
-              {step.title}
-            </h2>
+          {(step.title || audioUrls[step.id]) && (
+            <div className="flex items-start gap-2">
+              {step.title ? (
+                <h2
+                  ref={titleRef}
+                  tabIndex={-1}
+                  data-tx="step-title"
+                  className="min-w-0 flex-1 text-lg font-bold outline-none sm:text-xl"
+                  style={{
+                    color: "var(--brand-title, var(--brand-ink))",
+                    fontFamily: "var(--brand-font-heading)",
+                    fontWeight: "var(--brand-heading-weight, 700)",
+                  }}
+                >
+                  {step.title}
+                </h2>
+              ) : (
+                <span className="flex-1" />
+              )}
+              {/* Vorlesen (Welle 14): kleiner runder Play/Pause-Knopf, nur wenn der
+                  Schritt eine Audio-URL hat. Ein <audio>-Element via Ref (oben). */}
+              {audioUrls[step.id] && (
+                <>
+                  <button
+                    type="button"
+                    data-tx="tts"
+                    onClick={toggleAudio}
+                    aria-label={playing ? L.pauseAloud : L.readAloud}
+                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+                    style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
+                  >
+                    {playing ? <Pause className="size-4" /> : <Volume2 className="size-4" />}
+                  </button>
+                  <audio
+                    ref={audioRef}
+                    src={audioUrls[step.id]}
+                    preload="none"
+                    onPlay={() => setPlaying(true)}
+                    onPause={() => setPlaying(false)}
+                    onEnded={() => setPlaying(false)}
+                  />
+                </>
+              )}
+            </div>
           )}
           <div data-tx="step-body" className="mt-1.5 text-base leading-relaxed text-ink-2">
             <RichTextView doc={step.body} />

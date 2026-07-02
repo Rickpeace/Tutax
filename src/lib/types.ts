@@ -70,6 +70,8 @@ export type Step = {
   position: number;
   is_decision: boolean;
   video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker
+  audio_path: string | null; // Vorlesen (Welle 14): MP3 im public Bucket
+  audio_hash: string | null; // Hash über den Sprech-Text -> Neu-Erzeugung nur bei Textänderung
   created_at: string;
 };
 

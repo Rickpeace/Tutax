@@ -12,6 +12,7 @@ import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
 import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
+import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
 import { isExtraLang } from "@/lib/i18n-hub";
 import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
@@ -337,6 +338,15 @@ export async function publishTutorial(tutorialId: string) {
     );
   }
 
+  // Vorlesen (Welle 14): Schritt-Audios beim Veröffentlichen erzeugen — via after(),
+  // damit der Publish schnell bleibt. Hash-Cache verhindert Doppelkosten; nur DE (v1).
+  // Nur öffentlicher Pfad (interne Tutorials sieht niemand -> kein Audio).
+  after(() =>
+    ensureTutorialAudio(account.id, tutorialId).catch((e) =>
+      console.error("Auto-Vorlesen beim Publish:", e instanceof Error ? e.message : e),
+    ),
+  );
+
   revalidatePath("/app");
   return { slug, accountSlug: account.slug };
 }
@@ -376,6 +386,8 @@ export async function setTutorialVisibility(
       await removePublicImages(supabase, tutorialId).catch((e) =>
         console.error("Public-Bilder entfernen fehlgeschlagen:", e instanceof Error ? e.message : e),
       );
+      // Vorlesen: public Bucket darf keine Audios interner Tutorials behalten.
+      await removeTutorialAudio(tutorialId);
       await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
       await invalidateTutorialTags(tutorialId, { force: true });
     }
@@ -407,6 +419,12 @@ export async function setTutorialVisibility(
           ),
         );
       }
+      // Wird wieder öffentlich sichtbar -> Vorlese-Audios (neu) erzeugen (Hash-Cache).
+      after(() =>
+        ensureTutorialAudio(account.id, tutorialId).catch((e) =>
+          console.error("Auto-Vorlesen (Sichtbarkeit):", e instanceof Error ? e.message : e),
+        ),
+      );
     }
   }
 
@@ -435,6 +453,8 @@ export async function unpublishTutorial(tutorialId: string) {
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
 
+  // Vorlesen: zurückgezogenes Tutorial darf keine Audios im public Bucket behalten.
+  await removeTutorialAudio(tutorialId);
   await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
 
   // force: Status ist gerade eben draft geworden — Cache trotzdem sofort räumen.

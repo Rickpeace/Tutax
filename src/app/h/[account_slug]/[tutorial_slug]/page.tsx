@@ -9,7 +9,7 @@ import { recordEvent } from "@/lib/events";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { sanitizeSkinCss } from "@/lib/skin-css";
-import { publicImageUrl } from "@/lib/public-image";
+import { publicImageUrl, publicAudioUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
 import { ChatWidget } from "@/components/viewer/chat-widget";
@@ -195,6 +195,10 @@ export default async function ViewerPage({
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
   const imageUrls: Record<string, string> = {};
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
+  // Vorlesen (Welle 14): öffentliche MP3-URL je Schritt (v1 nur DE-Originaltext;
+  // audio_path liegt auf der Original-Zeile und übersteht das Übersetzungs-Merge).
+  const audioUrls: Record<string, string> = {};
+  for (const s of steps) if (s.audio_path) audioUrls[s.id] = publicAudioUrl(s.audio_path);
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
   const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
@@ -297,6 +301,7 @@ export default async function ViewerPage({
           steps={steps}
           branches={branches}
           imageUrls={imageUrls}
+          audioUrls={audioUrls}
           placeholders={tutorial.is_template}
           accountSlug={account.slug}
           tutorialSlug={tutorial_slug}
