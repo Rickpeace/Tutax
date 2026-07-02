@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, Thu
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
-import { recordFeedback } from "@/app/h/actions";
+import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
 
 export function Wizard({
   rootId,
@@ -40,6 +40,8 @@ export function Wizard({
   const [history, setHistory] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<"sent" | null>(null);
+  // Schritt-IDs, für die schon „komme nicht weiter" gemeldet wurde (1×/Schritt).
+  const [stuckSent, setStuckSent] = useState<Set<string>>(() => new Set());
 
   // Position übersteht Reload/Zurück (REVIEW A1): pro Tutorial in sessionStorage.
   // Nur wiederherstellen, wenn alle gespeicherten Schritt-IDs noch existieren
@@ -75,6 +77,12 @@ export function Wizard({
   const sendFeedback = (helpful: boolean) => {
     setFeedback("sent"); // optimistisch — Tracking darf den Endkunden nie blockieren
     if (accountSlug && tutorialSlug) void recordFeedback(accountSlug, tutorialSlug, helpful);
+  };
+
+  const sendStuck = (stepId: string, stepTitle: string | null) => {
+    setStuckSent((s) => new Set(s).add(stepId)); // optimistisch, 1×/Schritt
+    if (accountSlug && tutorialSlug)
+      void recordStepFeedback(accountSlug, tutorialSlug, stepTitle ?? "");
   };
 
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -223,6 +231,28 @@ export function Wizard({
               >
                 <ChevronLeft className="size-4" /> Zurück
               </button>
+            )}
+
+            {/* Inline-Feedback pro Schritt (REVIEW H): dezenter Ausweg, wenn der
+                Nutzer nicht weiterkommt. Landet als negatives Feedback-Event mit
+                Schritt-Titel -> taucht als Wissenslücke in der Insights-Karte auf. */}
+            {accountSlug && tutorialSlug && (
+              <div className="mt-3 text-center" data-tx="stuck">
+                {stuckSent.has(step.id) ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Danke – wir schauen uns diesen Schritt an. Nutzen Sie gern den
+                    Hilfe-Assistenten unten rechts.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendStuck(step.id, step.title)}
+                    className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-[var(--brand-ink)]"
+                  >
+                    Ich komme hier nicht weiter
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </>

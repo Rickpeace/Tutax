@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { hubTag, tutTag } from "@/lib/cache-tags";
 import { recordEvent } from "@/lib/events";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -202,6 +202,18 @@ export default async function ViewerPage({
           accountSlug={account.slug}
           tutorialSlug={tutorial_slug}
         />
+
+        <div className="mt-4 text-center">
+          <Link
+            href={`/h/${account.slug}/${tutorial_slug}/drucken`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-tx="print-link"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
+          >
+            <Printer className="size-4" /> Zum Ausdrucken
+          </Link>
+        </div>
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
           Bereitgestellt von {account.name} · powered by Steply
