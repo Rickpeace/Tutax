@@ -10,6 +10,7 @@ import {
   Eye,
   ExternalLink,
   ImageIcon,
+  QrCode,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import {
@@ -160,6 +161,22 @@ export function TutorialCard({
                   }
                 >
                   <ExternalLink className="size-4" /> Live-Seite öffnen
+                </DropdownMenuItem>
+              )}
+              {live && tutorial.slug && (
+                // QR-Code öffnen (H6): führt zur öffentlichen Anleitung; nur die eigene
+                // Hilfe-URL wird an /api/qr übergeben (serverseitig zusätzlich geprüft).
+                <DropdownMenuItem
+                  onClick={() => {
+                    const url = `${window.location.origin}/h/${accountSlug}/${tutorial.slug}`;
+                    window.open(
+                      `/api/qr?url=${encodeURIComponent(url)}`,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                >
+                  <QrCode className="size-4" /> QR-Code öffnen
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
