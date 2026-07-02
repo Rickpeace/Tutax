@@ -137,6 +137,16 @@ TTS auf **onyx** + gpt-4o-mini-tts umgestellt (Modell+Stimme im Hash → Auto-Ne
 Untertitel + Bauchbinde, xfade, Verzweigungen als „Fall:"-Kapitel, YouTube-Kapitelmarken;
 Business-Gate; echtes Mini-Rendering lokal bewiesen (ffmpeg 8) — E2E nach deploy.sh;
 sharp als Worker-Dep nachgezogen (Fable). 9:16 + Musikbett als Folgewelle vorbereitet.
+**Opus Wellen 17/19/20 + Fable (Nacht 02./03.07.):** 🌳 Verzweigungen aus dem
+Gesprochenen (Struktur-Pass, konservativ) · 🎙️ TTS v2: Sprechtext-KI (v2: Titel nur
+Kontext, TTS-Satzzeichen, kein Denglisch) + **ElevenLabs live** (Helmut Clark,
+Creator-Plan; Voice-ID = Code-Standard, nur Key als Env) · 🧰 UX-Paket: Schritt-Titel
+optional, leere Kategorien löschbar + „Aufräumen"→„Löschen", Sichtbarkeit als
+HÄKCHEN (Hilfe-Seite/Lern-Bereich, in_lernen, Migration 0026) + Dashboard-Filter,
+Neues-Tutorial-Weiche (Selbst bauen | Aus Video, Kategorie+Thema bis in die
+Worker-Prompts) · KI-Bild-Vorschlag entfernt (Route+Knopf+Doku-Schritt) ·
+Landing-Demo-Links → /h/steply · Worker-Schutzgitter (Waisen-Cleanup nur
+create+draft — nach Datenverlust „Kinderlieder" durch Alt-Worker).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

@@ -53,7 +53,6 @@ const TUTORIALS = [
       ["Screenshot hinzufügen", "Fügen Sie pro Schritt einen Screenshot hinzu: anklicken, per Drag & Drop ablegen oder mit Strg+V einfügen. Der Zuschnitt-Dialog hilft beim Rahmen."],
       ["Markierungen setzen", "Markieren Sie das Wichtige direkt im Bild: Rechteck, Kreis, Pfeil – eine Lupe vergrößert Details, und „Blur“ schwärzt sensible Daten unwiderruflich."],
       ["Schritte ordnen", "Mit den Pfeilen im Editor-Kopf ordnen Sie Schritte um; über die Einfügepunkte im Fluss fügen Sie neue Schritte genau dort ein, wo sie hingehören."],
-      ["KI-Vorschlag nutzen", "Zu jedem Screenshot kann die KI Titel, Text und Markierung vorschlagen – prüfen, anpassen, speichern. Fertig ist der Schritt."],
     ],
   },
   {

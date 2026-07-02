@@ -124,7 +124,6 @@ await capture("builder", {
   titel: () => pg.locator("#step-title"),
   rechteck: () => pg.locator('[title="Rechteck"]'),
   frage: () => pg.getByRole("button", { name: /Frage \/ Verzweigung/ }),
-  ki: () => pg.getByText(/KI: Titel/),
   video: () => pg.getByText(/Bild aus Video wählen/),
   hoch: () => pg.locator('[title*="oben"], [aria-label*="oben"]'),
 });
@@ -186,7 +185,6 @@ const MAP = [
   ["Ihr erstes Tutorial erstellen", 3, "builder", "video"],
   ["Ihr erstes Tutorial erstellen", 4, "builder", "rechteck"],
   ["Ihr erstes Tutorial erstellen", 5, "builder", "hoch"],
-  ["Ihr erstes Tutorial erstellen", 6, "builder", "ki"],
   ["Tutorial aus einem Video erstellen", 1, "dashboard", "ausvideo"],
   ["Tutorial aus einem Video erstellen", 2, "video-dialog", "infobox"],
   ["Tutorial aus einem Video erstellen", 3, "video-dialog", "aufnehmen"],
