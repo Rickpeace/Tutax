@@ -218,6 +218,7 @@ export function StepPanel({
         stepId={step.id}
         imagePath={step.image_path}
         highlights={step.highlights ?? []}
+        videoTime={step.video_time}
         onSetImage={onSetImage}
         onSetHighlights={onSetHighlights}
       />

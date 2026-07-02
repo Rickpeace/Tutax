@@ -56,6 +56,7 @@ export async function updateStep(
     image_width?: number | null;
     image_height?: number | null;
     highlights?: unknown;
+    video_time?: number | null;
   },
 ) {
   const supabase = await createClient();
@@ -221,6 +222,39 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
     .update({ title: clean })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Signierte URL des Quell-Videos zu diesem Tutorial (Frame-Picker im Builder).
+ * RLS-Check: nur wenn das Tutorial für den Nutzer sichtbar ist; dann via Admin-Client
+ * die neueste video_jobs-Zeile mit video_path suchen und signierte URL (3600s) liefern.
+ * Null, wenn kein Quell-Video existiert (manuell gebautes Tutorial) oder nicht erlaubt.
+ */
+export async function getTutorialVideoUrl(tutorialId: string): Promise<string | null> {
+  const supabase = await createClient();
+  // RLS-Gate: liefert nur eigene Tutorials -> unsichtbar = kein Zugriff.
+  const { data: tut } = await supabase
+    .from("tutorials")
+    .select("id")
+    .eq("id", tutorialId)
+    .maybeSingle();
+  if (!tut) return null;
+
+  const admin = createAdminClient();
+  const { data: job } = await admin
+    .from("video_jobs")
+    .select("video_path")
+    .eq("tutorial_id", tutorialId)
+    .not("video_path", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!job?.video_path) return null;
+
+  const { data: signed } = await admin.storage
+    .from("tutorial-videos")
+    .createSignedUrl(job.video_path, 3600);
+  return signed?.signedUrl ?? null;
 }
 
 /** Tutorial einer Kategorie zuordnen (oder lösen mit null). */

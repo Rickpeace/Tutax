@@ -8,13 +8,13 @@ import { VideoUpload } from "@/components/app/video-upload";
 import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
-import { Layers } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 
 export default async function DashboardPage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }] =
+  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }, { data: activeJobs }] =
     await Promise.all([
       supabase
         .from("tutorials")
@@ -42,6 +42,13 @@ export default async function DashboardPage() {
         .select("id, name, position")
         .is("account_id", null)
         .order("position", { ascending: true }),
+      // Laufende Video-Jobs (queued/processing) des Kontos für die „Wird erstellt…"-Karte.
+      supabase
+        .from("video_jobs")
+        .select("id, title, status, progress")
+        .eq("account_id", account.id)
+        .in("status", ["queued", "processing"])
+        .order("created_at", { ascending: true }),
     ]);
 
   const allOwn = tutorials ?? [];
@@ -132,6 +139,7 @@ export default async function DashboardPage() {
     ...(byCat.has("__none") ? [{ id: null, name: "Sonstiges", items: byCat.get("__none")! }] : []),
   ].filter((s) => s.items.length > 0 || s.id !== null);
 
+  const jobs = activeJobs ?? [];
   const nothing = own.length === 0 && templateItems.length === 0;
 
   return (
@@ -148,6 +156,31 @@ export default async function DashboardPage() {
           <NewTutorialButton />
         </div>
       </div>
+
+      {jobs.length > 0 && (
+        <div className="mt-6 space-y-2">
+          {jobs.map((j) => (
+            <div
+              key={j.id}
+              className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-accent/50 px-4 py-3"
+            >
+              <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">
+                  {j.title?.trim() || "Anleitung"} wird erstellt …
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {j.status === "queued"
+                    ? "In der Warteschlange …"
+                    : j.progress
+                    ? `${j.progress} …`
+                    : "KI verarbeitet das Video …"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {nothing ? (
         <div className="mt-8 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">

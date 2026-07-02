@@ -67,6 +67,7 @@ export type Step = {
   highlights: Highlight[];
   position: number;
   is_decision: boolean;
+  video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker
   created_at: string;
 };
 
