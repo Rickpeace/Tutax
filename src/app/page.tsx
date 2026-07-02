@@ -80,12 +80,12 @@ export default function Home() {
             <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
               Kostenlos starten <ArrowRight className="size-4" />
             </Button>
-            {/* Echte, öffentliche Demo-Hilfeseite (Konto „Muster GmbH") — stärkster Beweis. */}
+            {/* Live-Demo = unsere eigene Steply-Hilfe (mit Steply gebaut, inkl. Vorlesen) — stärkster Beweis. */}
             <Button
               size="lg"
               variant="outline"
               nativeButton={false}
-              render={<Link href="/h/demo" target="_blank" />}
+              render={<Link href="/h/steply" target="_blank" />}
             >
               Live-Demo ansehen <ArrowUpRight className="size-4" />
             </Button>
@@ -636,7 +636,7 @@ export default function Home() {
                 size="lg"
                 variant="outline"
                 nativeButton={false}
-                render={<Link href="/h/demo" target="_blank" />}
+                render={<Link href="/h/steply" target="_blank" />}
               >
                 Erst die Demo ansehen
               </Button>

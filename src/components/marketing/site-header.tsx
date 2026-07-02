@@ -25,7 +25,7 @@ export function SiteHeader() {
           <Link href="/anleitung" className="hover:text-ink">
             Anleitung
           </Link>
-          <Link href="/h/demo" target="_blank" className="font-semibold text-primary hover:text-primary/80">
+          <Link href="/h/steply" target="_blank" className="font-semibold text-primary hover:text-primary/80">
             Live-Demo
           </Link>
         </nav>
