@@ -2,6 +2,7 @@ import "server-only";
 import { openai } from "@/lib/openai";
 import { AI, aiConfigured } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isBusiness } from "@/lib/plan";
 import {
   ensureStepAudioCore,
   removeStepAudioCore,
@@ -27,6 +28,9 @@ const speech = (): SpeechClient => openai() as unknown as SpeechClient;
 export async function ensureTutorialAudio(accountId: string, tutorialId: string): Promise<void> {
   if (!aiConfigured()) return;
   const admin = createAdminClient();
+  // Vorlesen ist ein Business-Feature — leiser No-op darunter (kein Publish-Fehler).
+  const { data: acc } = await admin.from("accounts").select("plan").eq("id", accountId).maybeSingle();
+  if (!isBusiness(acc ?? {})) return;
   const { data: steps } = await admin
     .from("steps")
     .select("id, title, body, audio_path, audio_hash")
@@ -65,6 +69,9 @@ export async function ensureStepAudio(stepId: string): Promise<void> {
   const tut = Array.isArray(step.tutorials) ? step.tutorials[0] : step.tutorials;
   // Gleiches Gate wie Übersetzung/public-Bilder: nur published + public.
   if (tut?.status !== "published" || tut?.visibility !== "public") return;
+  // Vorlesen ist ein Business-Feature — leiser No-op darunter.
+  const { data: acc } = await admin.from("accounts").select("plan").eq("id", tut.account_id).maybeSingle();
+  if (!isBusiness(acc ?? {})) return;
 
   try {
     await ensureStepAudioCore(

@@ -7,6 +7,7 @@ import { requireAccount } from "@/lib/account";
 import { invalidateHubTag } from "@/lib/cache-tags";
 import { slugify } from "@/lib/slug";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
+import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import { backfillAccountTranslations } from "@/app/app/actions-translate";
 
 export type BrandingInput = {
@@ -74,6 +75,10 @@ export async function saveLanguages(
   langs: string[],
 ): Promise<{ ok: true; languages: ExtraLang[] } | { ok: false; error: string }> {
   const { account } = await requireAccount();
+  // Mehrsprachigkeit ist ein Business-Feature (Abschalten/Leeren bleibt immer erlaubt).
+  if (langs.some(isExtraLang) && !isBusiness(account)) {
+    return { ok: false, error: BUSINESS_REQUIRED };
+  }
   const supabase = await createClient();
 
   // Vorherige Sprachen für den Delta-Backfill (nur NEU aktivierte nachziehen).
@@ -116,6 +121,8 @@ export async function saveLanguages(
 /** Aktive Design-Quelle wählen: Standard-CI (manuell), KI-Design oder Extrem. */
 export async function setThemeMode(mode: "manual" | "ai" | "extreme") {
   const { account } = await requireAccount();
+  // KI-Design (ai/extreme) ist ein Business-Feature; zurück auf manuell geht immer.
+  if (mode !== "manual" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
   const supabase = await createClient();
   const clean = mode === "extreme" ? "extreme" : mode === "ai" ? "ai" : "manual";
   const { error } = await supabase

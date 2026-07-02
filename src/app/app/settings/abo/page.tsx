@@ -1,6 +1,6 @@
 import { Check, Crown, TriangleAlert } from "lucide-react";
 import { requireAccount } from "@/lib/account";
-import { isPro, FREE_TUTORIAL_LIMIT } from "@/lib/plan";
+import { isPro, isBusiness, FREE_TUTORIAL_LIMIT } from "@/lib/plan";
 import { PLANS as plans } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 
@@ -12,14 +12,16 @@ export default async function AboPage({
   const { account } = await requireAccount();
   const { limit } = await searchParams;
   const pro = isPro(account);
-  const currentKey = pro ? "pro" : "free";
+  const currentKey = isBusiness(account) ? "business" : pro ? "pro" : "free";
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-bold text-ink">Abo &amp; Tarif</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {pro ? (
+          {currentKey === "business" ? (
+            <>Für dieses Konto ist <b className="text-ink">Business</b> freigeschaltet.</>
+          ) : pro ? (
             <>Für dieses Konto ist <b className="text-ink">Pro</b> freigeschaltet.</>
           ) : (
             <>Sie nutzen aktuell den kostenlosen Tarif.</>
@@ -50,7 +52,7 @@ export default async function AboPage({
             >
               {p.highlight && (
                 <span className="mb-2 inline-flex w-fit items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-primary">
-                  {pro ? <Crown className="size-3" /> : null} {pro && p.key === "pro" ? "Ihr Plan" : "Beliebt"}
+                  {current ? <Crown className="size-3" /> : null} {current ? "Ihr Plan" : "Beliebt"}
                 </span>
               )}
               <div className="font-bold text-ink">{p.name}</div>

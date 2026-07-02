@@ -14,7 +14,7 @@ import { markTranslationsStale } from "@/lib/translate-stale";
 import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
 import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
 import { isExtraLang } from "@/lib/i18n-hub";
-import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
+import { FREE_TUTORIAL_LIMIT, isPro, isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -363,6 +363,8 @@ export async function setTutorialVisibility(
 ) {
   if (visibility !== "public" && visibility !== "internal") return;
   const { account } = await requireAccount();
+  // Interne Tutorials + Schulungsnachweis sind Business (zurück auf öffentlich geht immer).
+  if (visibility === "internal" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
   const supabase = await createClient();
 
   const { data: tutorial, error } = await supabase

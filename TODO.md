@@ -48,9 +48,11 @@
   bei jedem Klick sofort einen Frame aus dem Stream + legt Schritt-Skelett an
   (Screenshot + Markierung live), KI-Texte füllen nach Aufnahme-Ende nach.
   Bausteine (Klick-Erfassung, Direkt-Upload) existieren seit Welle 15.
-- [ ] **Tier-Gates nachziehen** (Fable, nach Welle 14): plan 'business' einführen;
-  Sprachen/KI-CI/Intern/TTS = Business, Video→Tutorial im Free auf 3 begrenzen
-  (serverseitig!), Admin-Schalter auf 3 Stufen. Preistabelle/Landing macht Fable.
+- [x] ~~Tier-Gates~~ **GEBAUT (02.07., Fable):** plan 'business' (Migration 0024),
+  Gates: Sprachen/KI-CI/Intern/TTS = Business (serverseitig), Admin-Schalter 3-stufig,
+  neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
+  → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft клientseitig via
+  RLS — braucht Policy/Trigger, kommt mit der LemonSqueezy-Welle); Team-bis-5 ebenso.
 - [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)

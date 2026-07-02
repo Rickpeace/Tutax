@@ -28,6 +28,8 @@ import {
   Crop,
   ChevronRight,
   Layers,
+  Languages,
+  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
@@ -274,7 +276,7 @@ export default function Home() {
           </div>
 
           <div className="mt-8 flex flex-wrap gap-2 text-xs font-semibold text-ink-2">
-            {["Bildschirm-Aufnahme im Browser", "Datei-Upload (auch mehrere auf einmal)", "Import per Video-URL", "Browser-Extension mit Klick-Erkennung"].map((c) => (
+            {["Bildschirm-Aufnahme im Browser", "Datei-Upload (auch mehrere auf einmal)", "Import per Video-URL", "Steply Recorder: Klicks + Direkt-Upload"].map((c) => (
               <span key={c} className="rounded-full border border-border bg-card px-3 py-1.5">
                 {c}
               </span>
@@ -304,6 +306,8 @@ export default function Home() {
                   { icon: Sparkles, t: <>Die KI übernimmt Ihr CI automatisch von Ihrer Website – Farben, Schriften, Look &amp; Feel.</> },
                   { icon: Search, t: <>Semantische Suche: Wer „Geld zurück“ tippt, findet auch „Erstattung beantragen“.</> },
                   { icon: MessageCircle, t: <>Chat-Bubble für Ihre eigene Website – eine Zeile Code, KI-Hilfe überall.</> },
+                  { icon: Languages, t: <>Mehrsprachig auf Knopfdruck: Englisch, Polnisch, Türkisch – automatisch übersetzt und immer synchron zum deutschen Original.</> },
+                  { icon: Volume2, t: <>Vorlesen: jede Anleitung bekommt eine KI-Stimme – ein ▶ pro Schritt.</> },
                   { icon: QrCode, t: <>QR-Codes für Briefe und Aushänge, Druckansicht für alle, die Papier mögen.</> },
                   { icon: Link2, t: <>Verlinken, einbetten oder beides – Sie entscheiden.</> },
                 ].map((f, i) => (
@@ -349,7 +353,9 @@ export default function Home() {
           <p className="mt-4 max-w-xl text-ink-2">
             Der Chat auf Ihrer Hilfe-Seite erfindet nichts dazu: Er antwortet ausschließlich
             aus Ihren Anleitungen und Ihrer Wissensdatenbank – und verweist sonst an den
-            richtigen Ansprechpartner.
+            richtigen Ansprechpartner. Das Wissen füttern Sie bequem:{" "}
+            <b className="font-semibold text-ink">Website einlesen lassen oder PDF/Word
+            hochladen</b> – die KI macht Entwürfe daraus, Sie geben frei.
           </p>
 
           <div className="mt-10 grid gap-4 md:grid-cols-2">
@@ -564,6 +570,7 @@ export default function Home() {
                   </span>
                 )}
                 <div className="font-bold text-ink">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{p.tagline}</div>
                 <div className="mt-1 flex items-baseline gap-1">
                   <span className="font-display text-3xl font-extrabold text-ink">
                     {p.price}
@@ -648,7 +655,7 @@ export default function Home() {
 const FAQS: { q: string; a: string }[] = [
   {
     q: "Was kostet Steply?",
-    a: "Der Einstieg ist kostenlos: eine Hilfe-Seite mit bis zu 5 Tutorials, Highlights und Verzweigungen. Pro (29 €/Monat) hebt das Limit auf, bringt eigenes Logo, CI-Farben, den Hilfe-Chatbot und entfernt das Steply-Branding. Premium (79 €/Monat) ergänzt eigene Domain, Drift-Überwachung und Analytics.",
+    a: "Der Einstieg ist kostenlos: eine Hilfe-Seite mit bis zu 5 Tutorials, dem vollen Builder und 3 Video→Tutorials zum Antesten. Pro (29 €/Monat) hebt die Limits auf und bringt KI-Chatbot samt Wissensdatenbank, Chat-Bubble, Insights, eigenes Logo & Farben. Business (79 €/Monat) ergänzt das KI-Design von Ihrer Website, Mehrsprachigkeit, Vorlesen per KI-Stimme, den Aktualitäts-Autopiloten und interne Schulungen mit Nachweis.",
   },
   {
     q: "Wie funktioniert Video → Tutorial genau?",

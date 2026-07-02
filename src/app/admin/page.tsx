@@ -49,7 +49,7 @@ export default async function AdminTemplatesPage() {
         </h2>
         <div className="mt-3 space-y-2">
           {accs.map((a) => {
-            const pro = a.plan === "pro";
+            const plan = a.plan === "business" ? "business" : a.plan === "pro" ? "pro" : "free";
             return (
               <div
                 key={a.id}
@@ -57,23 +57,31 @@ export default async function AdminTemplatesPage() {
               >
                 <span
                   className={
-                    pro
+                    plan !== "free"
                       ? "flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
                       : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground"
                   }
                 >
-                  {pro && <Crown className="size-3" />} {pro ? "Pro" : "Free"}
+                  {plan !== "free" && <Crown className="size-3" />}{" "}
+                  {plan === "business" ? "Business" : plan === "pro" ? "Pro" : "Free"}
                 </span>
                 <span className="font-bold text-ink">{a.name}</span>
                 <span className="text-xs text-muted-foreground">/h/{a.slug}</span>
-                <form
-                  action={setAccountPlan.bind(null, a.id, pro ? "free" : "pro")}
-                  className="ml-auto"
-                >
-                  <Button type="submit" variant={pro ? "ghost" : "outline"} size="sm">
-                    {pro ? "Auf Free zurückstufen" : "Pro freischalten"}
-                  </Button>
-                </form>
+                {/* Drei-Stufen-Schalter: aktive Stufe ist hervorgehoben und inaktiv. */}
+                <div className="ml-auto flex gap-1">
+                  {(["free", "pro", "business"] as const).map((p) => (
+                    <form key={p} action={setAccountPlan.bind(null, a.id, p)}>
+                      <Button
+                        type="submit"
+                        variant={plan === p ? "default" : "outline"}
+                        size="sm"
+                        disabled={plan === p}
+                      >
+                        {p === "business" ? "Business" : p === "pro" ? "Pro" : "Free"}
+                      </Button>
+                    </form>
+                  ))}
+                </div>
               </div>
             );
           })}
