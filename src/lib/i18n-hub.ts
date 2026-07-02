@@ -73,7 +73,11 @@ type Key =
   | "notRight"
   | "subtitle"
   | "readAloud"
-  | "pauseAloud";
+  | "pauseAloud"
+  | "soundOn"
+  | "soundOff"
+  | "autoOn"
+  | "autoOff";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -107,6 +111,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     subtitle: "Hilfe & Anleitungen",
     readAloud: "Schritt vorlesen",
     pauseAloud: "Vorlesen pausieren",
+    soundOn: "Ton an",
+    soundOff: "Ton aus",
+    autoOn: "Automatisch abspielen",
+    autoOff: "Automatik aus",
   },
   en: {
     next: "Next",
@@ -138,6 +146,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     subtitle: "Help & Guides",
     readAloud: "Read step aloud",
     pauseAloud: "Pause reading",
+    soundOn: "Sound on",
+    soundOff: "Sound off",
+    autoOn: "Play automatically",
+    autoOff: "Autoplay off",
   },
   pl: {
     next: "Dalej",
@@ -169,6 +181,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     subtitle: "Pomoc i instrukcje",
     readAloud: "Przeczytaj krok na głos",
     pauseAloud: "Wstrzymaj czytanie",
+    soundOn: "Dźwięk włączony",
+    soundOff: "Dźwięk wyłączony",
+    autoOn: "Odtwarzaj automatycznie",
+    autoOff: "Autoodtwarzanie wyłączone",
   },
   tr: {
     next: "İleri",
@@ -200,6 +216,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     subtitle: "Yardım ve Kılavuzlar",
     readAloud: "Adımı sesli oku",
     pauseAloud: "Okumayı duraklat",
+    soundOn: "Ses açık",
+    soundOff: "Ses kapalı",
+    autoOn: "Otomatik oynat",
+    autoOff: "Otomatik oynatma kapalı",
   },
 };
 

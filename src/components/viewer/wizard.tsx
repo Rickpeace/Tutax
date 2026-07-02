@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2, Volume2, Pause } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2, Volume2, VolumeX, Pause, PlayCircle, PauseCircle } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
@@ -56,6 +56,13 @@ export function Wizard({
 
   const [cur, setCur] = useState<string | null>(rootId);
   const [history, setHistory] = useState<string[]>([]);
+
+  // Hat das Tutorial ÜBERHAUPT Audio? Nur dann erscheinen Ton-/Auto-Schalter.
+  // (lernen/internalMode/Vorschau reichen keine audioUrls -> hier immer false.)
+  const hasAudio = useMemo(
+    () => Object.keys(audioUrls).some((k) => audioUrls[k]),
+    [audioUrls],
+  );
   const [lightbox, setLightbox] = useState<{
     url: string;
     highlights: NonNullable<Step["highlights"]>;
@@ -150,11 +157,82 @@ export function Wizard({
   // Schrittwechsel stoppt die Wiedergabe (siehe Effekt weiter unten).
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+
+  // --- Audio-UX Welle 16 (nur öffentlicher Wizard, hasAudio) ---
+  // Ton-Schalter: persistent (localStorage, EIN globaler Key, Default: Ton AN).
+  // Wegen Browser-Autoplay-Policy startet Auto-Play trotzdem erst nach einer Geste.
+  const MUTE_KEY = "steply-tts-muted";
+  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- einmalige Übernahme des persistenten Stumm-Zustands nach Mount (hydration-sicher: Server rendert immer „Ton an“)
+      if (localStorage.getItem(MUTE_KEY) === "1") setMuted(true);
+    } catch {}
+  }, []);
+
+  // Auto-Modus: NICHT persistent (bewusst pro Besuch). Impliziert Ton an.
+  const [auto, setAuto] = useState(false);
+  // „Hatten wir schon eine User-Geste?“ (Start eines Tons ODER Weiter/Zurück).
+  // Erst dann darf ein neuer Schritt automatisch vorgelesen werden (Autoplay-Policy).
+  const gestureRef = useRef(false);
+  // Timer für audiolose Schritte im Auto-Modus (4 s -> weiter).
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAutoTimer = useCallback(() => {
+    if (autoTimerRef.current) {
+      clearTimeout(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+  }, []);
+
+  // Wiedergabe versuchen; bei Block durch die Autoplay-Policy still zurückfallen
+  // (kein Fehler-Toast) — der ▶-Knopf bleibt der Einstieg.
+  const tryPlay = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    void el.play().catch(() => setPlaying(false));
+  }, []);
+
   const toggleAudio = () => {
     const el = audioRef.current;
     if (!el) return;
-    if (el.paused) void el.play().catch(() => setPlaying(false));
+    gestureRef.current = true; // erster Ton = Geste vorhanden
+    if (el.paused) tryPlay();
     else el.pause();
+  };
+
+  // Ton-Schalter umlegen. Stumm ⇒ laufende Wiedergabe stoppen + Auto-Modus aus.
+  const toggleMuted = () => {
+    setMuted((m) => {
+      const next = !m;
+      try {
+        localStorage.setItem(MUTE_KEY, next ? "1" : "0");
+      } catch {}
+      if (next) {
+        audioRef.current?.pause();
+        setAuto(false);
+        clearAutoTimer();
+      }
+      return next;
+    });
+  };
+
+  // Auto-Modus umlegen. Aktivieren impliziert Ton an + zählt als Geste.
+  const toggleAuto = () => {
+    setAuto((a) => {
+      const next = !a;
+      if (next) {
+        gestureRef.current = true;
+        if (muted) {
+          setMuted(false);
+          try {
+            localStorage.setItem(MUTE_KEY, "0");
+          } catch {}
+        }
+      } else {
+        clearAutoTimer();
+      }
+      return next;
+    });
   };
 
   // Linear = keine Verzweigungen: kein Schritt ist eine Entscheidung UND kein
@@ -177,22 +255,36 @@ export function Wizard({
   }, [steps, branchesByStep, stepById, rootId]);
 
   const go = (target: string | null) => {
+    gestureRef.current = true; // Navigation = Geste vorhanden (erlaubt Auto-Play)
     setHistory((h) => (cur != null ? [...h, cur] : h));
     setCur(target);
   };
-  const back = () =>
+  const back = () => {
+    gestureRef.current = true;
     setHistory((h) => {
       if (!h.length) return h;
       const n = [...h];
       setCur(n.pop() ?? rootId);
       return n;
     });
+  };
   const restart = () => {
     setCur(rootId);
     setHistory([]);
   };
 
   const step = cur != null ? stepById.get(cur) : null;
+
+  // Auto-Modus: zum nächsten Schritt entlang des Standard-Ausgangs (branches[0]).
+  // Nur für NICHT-Entscheidungsschritte gedacht (Entscheidungen warten auf Klick).
+  const goNext = useCallback(() => {
+    setCur((c) => {
+      if (c == null) return c;
+      const target = branchesByStep.get(c)?.[0]?.target_step_id ?? null;
+      setHistory((h) => [...h, c]);
+      return target;
+    });
+  }, [branchesByStep]);
 
   // Nach Schrittwechsel Fokus auf den Schritt-Titel (A11y: Screenreader/Tastatur).
   useEffect(() => {
@@ -209,6 +301,60 @@ export function Wizard({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Play-Zustand beim Schrittwechsel zurücksetzen
     setPlaying(false);
   }, [cur]);
+
+  // Auto-Play pro Schritt + Auto-Modus-Steuerung. Läuft bei jedem Schrittwechsel.
+  // Bedingungen (öffentlicher Wizard mit Audio):
+  //  - Ton nicht stumm UND (schon eine Geste ODER Auto-Modus) UND der Schritt hat Audio
+  //    -> automatisch abspielen (play()-Promise fällt still zurück, siehe tryPlay).
+  //  - Auto-Modus + Schritt OHNE Audio -> nach 4 s weiter (audiolose Schritte).
+  // Der ▶-Knopf am ersten Schritt bleibt der Einstieg, weil ohne Geste nichts startet.
+  useEffect(() => {
+    clearAutoTimer();
+    if (!hasAudio || muted || step == null) return;
+    const stepHasAudio = !!(cur && audioUrls[cur]);
+    if (stepHasAudio) {
+      if (gestureRef.current || auto) tryPlay();
+      // ended-Handler (im <audio>) übernimmt das Weiterschalten im Auto-Modus.
+      return;
+    }
+    // Schritt ohne Audio: im Auto-Modus nach 4 s weiter (aber nicht an Entscheidungen).
+    if (auto && !step.is_decision) {
+      autoTimerRef.current = setTimeout(goNext, 4000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gezielt auf Schrittwechsel + Moduswechsel reagieren; Refs (gesture) sind stabil
+  }, [cur, auto, muted, hasAudio]);
+
+  // Auto-Modus pausiert, wenn der Tab in den Hintergrund geht (visibilitychange).
+  useEffect(() => {
+    if (!auto) return;
+    const onVis = () => {
+      if (document.hidden) {
+        audioRef.current?.pause();
+        clearAutoTimer();
+      } else {
+        // Zurück im Vordergrund: laufenden Schritt fortsetzen.
+        const stepHasAudio = !!(cur && audioUrls[cur]);
+        if (stepHasAudio) tryPlay();
+        else if (step && !step.is_decision && !autoTimerRef.current)
+          autoTimerRef.current = setTimeout(goNext, 4000);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, cur]);
+
+  // Auto-Modus endet am Fertig-Screen (kein aktueller Schritt mehr).
+  useEffect(() => {
+    if (auto && step == null) {
+      clearAutoTimer();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Auto-Modus am Ende zurücksetzen
+      setAuto(false);
+    }
+  }, [auto, step, clearAutoTimer]);
+
+  // Timer/Audio beim Unmount aufräumen.
+  useEffect(() => () => clearAutoTimer(), [clearAutoTimer]);
 
   // Lightbox per Escape schließen.
   useEffect(() => {
@@ -230,6 +376,41 @@ export function Wizard({
         borderWidth: "var(--brand-card-bw, 1px)",
       }}
     >
+      {/* Audio-UX Welle 16: Ton- und Auto-Schalter oben rechts, nur wenn das
+          Tutorial überhaupt Vorlese-Audio hat (also nur im öffentlichen Wizard). */}
+      {hasAudio && (
+        <div className="mb-2 flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            data-tx="tts-auto"
+            onClick={toggleAuto}
+            aria-pressed={auto}
+            aria-label={auto ? L.autoOff : L.autoOn}
+            title={auto ? L.autoOff : L.autoOn}
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors"
+            style={
+              auto
+                ? { background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }
+                : { background: "var(--brand-soft, #f1f2f6)", color: "var(--brand-ink, #3b4254)" }
+            }
+          >
+            {auto ? <PauseCircle className="size-3.5" /> : <PlayCircle className="size-3.5" />}
+            <span>Auto</span>
+          </button>
+          <button
+            type="button"
+            data-tx="tts-mute"
+            onClick={toggleMuted}
+            aria-pressed={muted}
+            aria-label={muted ? L.soundOff : L.soundOn}
+            title={muted ? L.soundOff : L.soundOn}
+            className="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors"
+            style={{ background: "var(--brand-soft, #f1f2f6)", color: "var(--brand-ink, #3b4254)" }}
+          >
+            {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          </button>
+        </div>
+      )}
       {step ? (
         <>
           {linearTotal != null && (
@@ -308,7 +489,12 @@ export function Wizard({
                     preload="none"
                     onPlay={() => setPlaying(true)}
                     onPause={() => setPlaying(false)}
-                    onEnded={() => setPlaying(false)}
+                    onEnded={() => {
+                      setPlaying(false);
+                      // Auto-Modus: nach dem Vorlesen weiter — außer an
+                      // Entscheidungsschritten, die auf die Antwort warten.
+                      if (auto && step && !step.is_decision) goNext();
+                    }}
                   />
                 </>
               )}
