@@ -10,8 +10,10 @@ import { TutorialCard } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { CategoryJump, type JumpSection } from "@/components/app/category-jump";
+import { CategoryDeleteButton } from "@/components/app/category-delete-button";
 import { InsightsCard } from "@/components/app/insights-card";
 import { BulkCleanupProvider, CleanupControls } from "@/components/app/bulk-cleanup";
+import { AudienceFilterProvider, AudienceFilterChips } from "@/components/app/audience-filter";
 import { Layers, Loader2 } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -155,8 +157,16 @@ export default async function DashboardPage() {
       : []),
   ];
 
+  // Gibt es eine Zielgruppen-Vermischung (Kunden UND Team)? Nur dann lohnen die Chips.
+  const hasKunden = own.some((t) => t.visibility === "public");
+  const hasTeam = own.some(
+    (t) => t.visibility === "internal" || (t.visibility === "public" && t.in_lernen),
+  );
+  const showAudienceChips = hasKunden && hasTeam;
+
   return (
     <BulkCleanupProvider>
+    <AudienceFilterProvider>
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -168,7 +178,7 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           {own.length > 0 && <CleanupControls />}
           <VideoUpload accountId={account.id} />
-          <NewTutorialButton />
+          <NewTutorialButton accountId={account.id} />
         </div>
       </div>
 
@@ -213,11 +223,18 @@ export default async function DashboardPage() {
             Eigene Anleitung bauen – oder unten eine Standard-Anleitung aktivieren.
           </p>
           <div className="mt-5">
-            <NewTutorialButton />
+            <NewTutorialButton accountId={account.id} />
           </div>
         </div>
       ) : (
         <>
+          {/* Zielgruppen-Filter (Welle 20): nur wenn Kunden- UND Team-Anleitungen da sind. */}
+          {showAudienceChips && (
+            <div className="mt-6 flex justify-end">
+              <AudienceFilterChips />
+            </div>
+          )}
+
           {/* Mobile Kategorie-Sprungleiste (REVIEW G): rendert sich selbst weg bei < 3 Sektionen. */}
           <CategoryJump sections={jumpSections} />
 
@@ -228,7 +245,17 @@ export default async function DashboardPage() {
                   title={s.name}
                   count={s.items.length}
                   storageKey={`dash:own:${s.id ?? "none"}`}
-                  action={s.id !== null ? <NewTutorialButton compact categoryId={s.id} /> : undefined}
+                  action={
+                    s.id !== null ? (
+                      <div className="flex items-center gap-0.5">
+                        {/* Leere eigene Kategorie: dezenter Papierkorb (Welle 20). */}
+                        {s.items.length === 0 && (
+                          <CategoryDeleteButton categoryId={s.id} categoryName={s.name} />
+                        )}
+                        <NewTutorialButton accountId={account.id} compact categoryId={s.id} />
+                      </div>
+                    ) : undefined
+                  }
                 >
                   {s.items.length === 0 ? (
                     <p className="py-2 text-sm text-muted-foreground">Noch keine Tutorials in dieser Kategorie.</p>
@@ -257,6 +284,7 @@ export default async function DashboardPage() {
         </>
       )}
     </main>
+    </AudienceFilterProvider>
     </BulkCleanupProvider>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
+import { Check, ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,7 +10,7 @@ import { CategoryPicker } from "@/components/builder/category-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
 import { setTutorialTitle } from "@/app/app/tutorials/[id]/actions";
 import { translateTutorial } from "@/app/app/actions-translate";
-import { publishTutorial, setTutorialVisibility, unpublishTutorial } from "@/app/app/actions";
+import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/app/actions";
 import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
 import type { TutorialVisibility } from "@/lib/types";
 
@@ -19,6 +19,8 @@ export function TutorialHeader({
   initialTitle,
   published: initialPublished,
   visibility: initialVisibility,
+  inLernen: initialInLernen,
+  isBusiness,
   categories,
   categoryId,
   languages,
@@ -28,6 +30,8 @@ export function TutorialHeader({
   initialTitle: string;
   published: boolean;
   visibility: TutorialVisibility;
+  inLernen: boolean;
+  isBusiness: boolean;
   categories: { id: string; name: string }[];
   categoryId: string | null;
   languages: ExtraLang[];
@@ -38,6 +42,10 @@ export function TutorialHeader({
   const [editing, setEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
+  // Zwei Häkchen (Welle 20): „Auf der Hilfe-Seite" ⇔ public; „Im Lern-Bereich".
+  // publicOn ist die Ableitung aus der Sichtbarkeit; lernenOn ist bei intern implizit an.
+  const publicOn = visibility === "public";
+  const [inLernen, setInLernen] = useState(initialInLernen);
   const [busy, setBusy] = useState(false);
   const [visBusy, setVisBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
@@ -85,7 +93,7 @@ export function TutorialHeader({
       if (next) await publishTutorial(tutorialId);
       else await unpublishTutorial(tutorialId);
       setPublished(next);
-      const liveMsg = visibility === "internal" ? "Für das Team freigegeben" : "Tutorial ist jetzt live";
+      const liveMsg = !publicOn ? "Für das Team freigegeben" : "Tutorial ist jetzt live";
       toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
@@ -94,21 +102,44 @@ export function TutorialHeader({
     }
   }
 
-  async function chooseVisibility(next: TutorialVisibility) {
-    if (visBusy || next === visibility) return;
-    const prev = visibility;
-    setVisibility(next); // optimistisch
+  // Zielgruppe umschalten (Häkchen). Regeln:
+  //  - „Auf der Hilfe-Seite" (publicOn): an ⇒ visibility public, aus ⇒ internal.
+  //  - „Im Lern-Bereich" (lernenOn): bei intern IMMER an (implizit, disabled). Bei
+  //    öffentlich = in_lernen.
+  //  - Beide aus ist nicht erlaubt: das letzte aktive Häkchen bleibt gesetzt.
+  async function applyAudience(nextPublic: boolean, nextLernen: boolean) {
+    if (visBusy) return;
+    // Hinweis: Ein „beide aus"-Zustand ist über die Häkchen NICHT erreichbar —
+    // Haken1 aus ⇒ visibility internal (= Team sichtbar, Lernen implizit an),
+    // Haken2 ist bei intern disabled-checked und lässt sich nicht abwählen.
+    const prevVis = visibility;
+    const prevLernen = inLernen;
+    // Optimistisch spiegeln (intern ⇒ Lernen implizit an, in_lernen zurückgesetzt).
+    setVisibility(nextPublic ? "public" : "internal");
+    setInLernen(nextPublic ? nextLernen : false);
     setVisBusy(true);
     try {
-      await setTutorialVisibility(tutorialId, next);
-      toast.success(next === "internal" ? "Sichtbarkeit: Intern (nur Team)" : "Sichtbarkeit: Öffentlich");
+      await setTutorialAudience(tutorialId, { publicOn: nextPublic, lernenOn: nextLernen });
+      toast.success(
+        nextPublic
+          ? nextLernen
+            ? "Sichtbar: Kunden + Team-Lernbereich"
+            : "Sichtbar: Kunden (Hilfe-Seite)"
+          : "Sichtbar: Team (Lern-Bereich)",
+      );
     } catch (e) {
-      setVisibility(prev);
+      setVisibility(prevVis);
+      setInLernen(prevLernen);
       toast.error(e instanceof Error ? e.message : "Sichtbarkeit konnte nicht geändert werden");
     } finally {
       setVisBusy(false);
     }
   }
+
+  // Klick auf „Auf der Hilfe-Seite" (Haken 1). Aus ⇒ intern (Lernen implizit).
+  const togglePublic = () => applyAudience(!publicOn, inLernen);
+  // Klick auf „Im Lern-Bereich" (Haken 2). Nur bei öffentlich wirksam (intern = disabled).
+  const toggleLernen = () => applyAudience(publicOn, !inLernen);
 
   return (
     <div className="mb-6">
@@ -172,7 +203,7 @@ export function TutorialHeader({
               title={
                 published
                   ? "Ist veröffentlicht – antippen für Entwurf"
-                  : visibility === "internal"
+                  : !publicOn
                     ? "Ist Entwurf – antippen zum Freigeben fürs Team"
                     : "Ist Entwurf – antippen zum Veröffentlichen"
               }
@@ -181,50 +212,42 @@ export function TutorialHeader({
                 <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${published ? "left-[18px]" : "left-0.5"}`} />
               </span>
               <span className={published ? "font-medium text-ink" : "text-muted-foreground"}>
-                {published ? (visibility === "internal" ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
+                {published ? (!publicOn ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
               </span>
               {busy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
             </button>
             <span className="text-line">·</span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <div
-                    role="group"
-                    aria-label="Sichtbarkeit"
-                    className="inline-flex items-center rounded-md border border-line bg-card p-0.5 text-sm"
+            {/* Zielgruppe als zwei Häkchen (Welle 20): Kunden (Hilfe-Seite) und/oder
+                Team-Lernbereich. Intern ⇒ Lernen implizit an (disabled-checked). */}
+            <div role="group" aria-label="Sichtbarkeit" className="inline-flex items-center gap-2 text-sm">
+              <AudienceCheckbox
+                icon={<Globe className="size-3.5" />}
+                label="Auf der Hilfe-Seite (Kunden)"
+                checked={publicOn}
+                disabled={visBusy}
+                onToggle={togglePublic}
+              />
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                  <AudienceCheckbox
+                    icon={<Lock className="size-3.5" />}
+                    label="Im Lern-Bereich (Team, mit Nachweis)"
+                    checked={!publicOn ? true : inLernen}
+                    // Bei intern implizit an und nicht abwählbar; ohne Business gesperrt.
+                    disabled={visBusy || !publicOn || !isBusiness}
+                    onToggle={toggleLernen}
                   />
-                }
-              >
-                <button
-                  type="button"
-                  onClick={() => chooseVisibility("public")}
-                  disabled={visBusy}
-                  aria-pressed={visibility === "public"}
-                  className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 transition-colors disabled:opacity-70 ${
-                    visibility === "public" ? "bg-accent font-medium text-ink" : "text-muted-foreground hover:text-ink"
-                  }`}
-                >
-                  <Globe className="size-3.5" /> Öffentlich
-                </button>
-                <button
-                  type="button"
-                  onClick={() => chooseVisibility("internal")}
-                  disabled={visBusy}
-                  aria-pressed={visibility === "internal"}
-                  className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 transition-colors disabled:opacity-70 ${
-                    visibility === "internal" ? "bg-accent font-medium text-ink" : "text-muted-foreground hover:text-ink"
-                  }`}
-                >
-                  <Lock className="size-3.5" /> Intern (nur Team)
-                </button>
-                {visBusy && <Loader2 className="ml-1 size-3.5 animate-spin text-muted-foreground" />}
-              </TooltipTrigger>
-              <TooltipContent>
-                Öffentlich: auf der Hilfe-Seite und im Chatbot sichtbar. Intern: nur für
-                eingeloggte Team-Mitglieder unter „Lernen&ldquo; — nie öffentlich.
-              </TooltipContent>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {!isBusiness
+                    ? "Der Lern-Bereich (Team-Schulung mit Nachweis) ist im Business-Tarif enthalten."
+                    : !publicOn
+                      ? "Interne Anleitungen sind immer im Lern-Bereich — nie auf der Hilfe-Seite."
+                      : "Zusätzlich im Team-Lernbereich zeigen (mit Schulungsnachweis)."}
+                </TooltipContent>
+              </Tooltip>
+              {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+            </div>
             <span className="text-line">·</span>
             <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
           </div>
@@ -272,5 +295,42 @@ export function TutorialHeader({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Häkchen für die Zielgruppen-Wahl (Welle 20): kleine Box + Label, Base-UI-frei. */
+function AudienceCheckbox({
+  icon,
+  label,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onToggle}
+      className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <span
+        className={`flex size-4 shrink-0 items-center justify-center rounded border transition-colors ${
+          checked ? "border-primary bg-primary text-white" : "border-line bg-card"
+        }`}
+      >
+        {checked && <Check className="size-3" />}
+      </span>
+      <span className={`inline-flex items-center gap-1 ${checked ? "font-medium text-ink" : ""}`}>
+        {icon} {label}
+      </span>
+    </button>
   );
 }

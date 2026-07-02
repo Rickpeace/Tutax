@@ -35,6 +35,8 @@ export type Tutorial = {
   is_template: boolean;
   status: TutorialStatus;
   visibility: TutorialVisibility;
+  /** Öffentliche Anleitung zusätzlich im Team-Lernbereich (mit Nachweis) zeigen (Welle 20). */
+  in_lernen: boolean;
   freshness: Freshness;
   slug: string | null;
   public_token: string | null;

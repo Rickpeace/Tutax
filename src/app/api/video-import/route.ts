@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   let url = String(body?.url ?? "").trim();
+  // Optional (Welle 20): Kategorie durchreichen + Thema als Titel (KI-Kontext).
+  const categoryId = typeof body?.categoryId === "string" && body.categoryId ? body.categoryId : null;
+  const topic = typeof body?.topic === "string" ? body.topic.trim().slice(0, 120) : "";
   if (!url) return NextResponse.json({ error: "URL fehlt" }, { status: 400 });
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   try {
@@ -124,9 +127,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Video konnte nicht gespeichert werden." }, { status: 500 });
   }
 
+  const insertRow: Record<string, unknown> = {
+    account_id: accountId,
+    video_path: vpath,
+    title: topic || titleFromUrl(url),
+    status: "queued",
+    created_by: user.id,
+  };
+  // Kategorie nur übernehmen, wenn sie WIRKLICH dem Konto gehört (kein Fremd-Verweis).
+  if (categoryId) {
+    const { data: cat } = await admin
+      .from("categories")
+      .select("id")
+      .eq("id", categoryId)
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (cat) insertRow.category_id = categoryId;
+  }
   const { data: job, error: jErr } = await admin
     .from("video_jobs")
-    .insert({ account_id: accountId, video_path: vpath, title: titleFromUrl(url), status: "queued", created_by: user.id })
+    .insert(insertRow)
     .select("id")
     .single();
   if (jErr || !job) {

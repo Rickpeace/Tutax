@@ -81,6 +81,10 @@ function StepCard({
 }) {
   const isQ = !!node.branches;
   const bodyText = plainBody(node.step.body);
+  const hasTitle = !!node.step.title?.trim();
+  // Titel ist optional (Welle 20): ohne Titel den Anfang des Erklärtexts als
+  // gedimmte, kursive Beschriftung zeigen; fehlt auch der Text → „Schritt {n}".
+  const bodyLabel = bodyText.length > 40 ? `${bodyText.slice(0, 40).trimEnd()}…` : bodyText;
   return (
     <button
       type="button"
@@ -94,10 +98,16 @@ function StepCard({
       <StepThumb imagePath={node.step.image_path} bust={bust} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-ink">
-          {node.step.title?.trim() || "Ohne Titel"}
+          {hasTitle ? (
+            <span className="truncate">{node.step.title}</span>
+          ) : bodyLabel ? (
+            <span className="truncate font-normal italic text-muted-foreground">{bodyLabel}</span>
+          ) : (
+            <span className="italic text-muted-foreground">Schritt {node.step.position}</span>
+          )}
           {isQ && <Tag tone="accent">Frage</Tag>}
         </div>
-        {bodyText && (
+        {hasTitle && bodyText && (
           <div className="truncate text-[11.5px] text-muted-foreground">{bodyText}</div>
         )}
       </div>
