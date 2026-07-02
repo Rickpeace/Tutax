@@ -13,19 +13,22 @@ import { publicImageUrl } from "@/lib/public-image";
 import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
 import { ChatWidget } from "@/components/viewer/chat-widget";
+import { LangSwitcher } from "@/components/viewer/lang-switcher";
+import { resolveLang, labelsFor, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
+// `lang` ist Teil des Cache-Keys (Funktionsargument) -> DE/EN/PL/TR getrennt gecacht.
 // Mutationen invalidieren via lib/cache-tags, Rest fängt cacheLife('hours') ab.
-async function load(accountSlug: string, tutorialSlug: string) {
+async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
   "use cache";
   cacheTag(hubTag(accountSlug), tutTag(accountSlug, tutorialSlug));
   cacheLife("hours");
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug")
+    .select("id, name, slug, languages")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -56,30 +59,111 @@ async function load(accountSlug: string, tutorialSlug: string) {
     .eq("account_id", account.id)
     .single();
 
-  return { account, tutorial, steps: steps ?? [], branches: branches ?? [], theme };
+  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+
+  // Übersetzungen laden + in Titel/Steps/Branches mergen (DE-Fallback pro Feld).
+  let mergedTitle = tutorial.title;
+  let mergedSteps = steps ?? [];
+  let mergedBranches = branches ?? [];
+  if (lang !== "de") {
+    const [{ data: tutTr }, { data: stepTr }, { data: branchTr }] = await Promise.all([
+      admin
+        .from("tutorial_translations")
+        .select("title")
+        .eq("tutorial_id", tutorial.id)
+        .eq("lang", lang)
+        .maybeSingle(),
+      stepIds.length
+        ? admin
+            .from("step_translations")
+            .select("step_id, title, body")
+            .eq("lang", lang)
+            .in("step_id", stepIds)
+        : Promise.resolve({ data: [] as { step_id: string; title: string | null; body: unknown }[] }),
+      stepIds.length
+        ? admin
+            .from("branch_translations")
+            .select("branch_id, label")
+            .eq("lang", lang)
+            .in("branch_id", (branches ?? []).map((b) => b.id))
+        : Promise.resolve({ data: [] as { branch_id: string; label: string | null }[] }),
+    ]);
+
+    if (tutTr?.title?.trim()) mergedTitle = tutTr.title;
+
+    const stepTrById = new Map(
+      (stepTr ?? []).map((r) => [r.step_id as string, r]),
+    );
+    mergedSteps = (steps ?? []).map((s) => {
+      const tr = stepTrById.get(s.id);
+      if (!tr) return s;
+      return {
+        ...s,
+        // Fallback pro Feld: fehlt Titel/Body in der Übersetzung -> Original behalten.
+        title: tr.title?.trim() ? tr.title : s.title,
+        body: tr.body ?? s.body,
+      };
+    });
+
+    const branchTrById = new Map(
+      (branchTr ?? []).map((r) => [r.branch_id as string, r]),
+    );
+    mergedBranches = (branches ?? []).map((b) => {
+      const tr = branchTrById.get(b.id);
+      if (!tr) return b;
+      return { ...b, label: tr.label?.trim() ? tr.label : b.label };
+    });
+  }
+
+  return {
+    account,
+    tutorial: { ...tutorial, title: mergedTitle },
+    steps: mergedSteps,
+    branches: mergedBranches,
+    theme,
+    languages,
+  };
 }
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string; tutorial_slug: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }): Promise<Metadata> {
   const { account_slug, tutorial_slug } = await params;
-  const data = await load(account_slug, tutorial_slug);
-  if (!data) return { title: "Nicht gefunden" };
-  const { account, tutorial } = data;
+  const { lang: langParam } = await searchParams;
+  // Erst DE laden (Sprachen/Existenz), dann ggf. in Zielsprache für den Titel.
+  const probe = await load(account_slug, tutorial_slug, "de");
+  if (!probe) return { title: "Nicht gefunden" };
+  const lang = resolveLang(langParam, probe.languages);
+  const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
+  const { account, tutorial, languages } = data;
   const title = `${tutorial.title} · ${account.name}`;
   const description =
     tutorial.description?.trim() ||
     `Schritt-für-Schritt-Anleitung von ${account.name}: ${tutorial.title}.`;
+  const base = `/h/${account.slug}/${tutorial_slug}`;
+  const alternates =
+    languages.length > 0
+      ? {
+          languages: {
+            [LANG_BCP47.de]: base,
+            ...Object.fromEntries(languages.map((l) => [LANG_BCP47[l], `${base}?lang=${l}`])),
+          },
+        }
+      : undefined;
   const { logoPath } = resolveTheme(data.theme);
   return {
     title,
     description,
+    ...(alternates ? { alternates } : {}),
     openGraph: {
       title,
       description,
       siteName: account.name,
+      locale: LANG_BCP47[lang],
       ...(logoPath ? { images: [publicImageUrl(logoPath)] } : {}),
     },
   };
@@ -90,14 +174,17 @@ export default async function ViewerPage({
   searchParams,
 }: {
   params: Promise<{ account_slug: string; tutorial_slug: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; lang?: string }>;
 }) {
   const { account_slug, tutorial_slug } = await params;
-  const { preview } = await searchParams;
-  const data = await load(account_slug, tutorial_slug);
-  if (!data) notFound();
+  const { preview, lang: langParam } = await searchParams;
+  const probe = await load(account_slug, tutorial_slug, "de");
+  if (!probe) notFound();
+  const lang = resolveLang(langParam, probe.languages);
+  const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
 
-  const { account, tutorial, steps, branches } = data;
+  const { account, tutorial, steps, branches, languages } = data;
+  const labels = labelsFor(lang);
 
   // Aufruf zählen — NACH der Antwort (blockiert das Rendering nicht). Näherung:
   // Prefetch zählt kaum mit (dynamische Route ohne loading.tsx wird nicht geprefetcht).
@@ -113,7 +200,12 @@ export default async function ViewerPage({
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;
-  const previewQ = previewMode ? `?preview=${previewMode}` : "";
+  // Query-Bausteine: preview + lang zusammensetzen und an interne Links reichen.
+  const qs = [
+    previewMode ? `preview=${previewMode}` : "",
+    lang === "de" ? "" : `lang=${lang}`,
+  ].filter(Boolean);
+  const queryStr = qs.length ? `?${qs.join("&")}` : "";
   const skinClass =
     mode === "extreme"
       ? `tutax-skin tx-h-${layout?.header ?? "left"} tx-c-${layout?.cards ?? "grid"} tx-hero-${layout?.hero ?? "none"}`
@@ -157,7 +249,7 @@ export default async function ViewerPage({
               {initial}
             </div>
           )}
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <div
               data-tx="title"
               className="text-xl font-extrabold"
@@ -169,16 +261,23 @@ export default async function ViewerPage({
             >
               {account.name}
             </div>
-            <div data-tx="subtitle" className="text-sm text-muted-foreground">Hilfe &amp; Anleitungen</div>
+            <div data-tx="subtitle" className="text-sm text-muted-foreground">{labels.subtitle}</div>
           </div>
+          {languages.length > 0 && (
+            <LangSwitcher
+              current={lang}
+              languages={languages}
+              basePath={`/h/${account.slug}/${tutorial_slug}`}
+            />
+          )}
         </div>
 
         <Link
-          href={`/h/${account.slug}${previewQ}`}
+          href={`/h/${account.slug}${queryStr}`}
           data-tx="back"
           className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
         >
-          <ArrowLeft className="size-4" /> Alle Anleitungen
+          <ArrowLeft className="size-4" /> {labels.allTutorials}
         </Link>
 
         <h1
@@ -201,9 +300,11 @@ export default async function ViewerPage({
           placeholders={tutorial.is_template}
           accountSlug={account.slug}
           tutorialSlug={tutorial_slug}
+          labels={labels}
         />
 
         <div className="mt-4 text-center">
+          {/* Druckansicht bleibt v1 auf Deutsch (kein ?lang durchreichen). */}
           <Link
             href={`/h/${account.slug}/${tutorial_slug}/drucken`}
             target="_blank"
@@ -211,7 +312,7 @@ export default async function ViewerPage({
             data-tx="print-link"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
           >
-            <Printer className="size-4" /> Zum Ausdrucken
+            <Printer className="size-4" /> {labels.print}
           </Link>
         </div>
 

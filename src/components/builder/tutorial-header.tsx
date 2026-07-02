@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Eye, Globe, Loader2, Lock, Pencil } from "lucide-react";
+import { ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
 import { setTutorialTitle } from "@/app/app/tutorials/[id]/actions";
+import { translateTutorial } from "@/app/app/actions-translate";
 import { publishTutorial, setTutorialVisibility, unpublishTutorial } from "@/app/app/actions";
+import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
 import type { TutorialVisibility } from "@/lib/types";
 
 export function TutorialHeader({
@@ -19,6 +21,8 @@ export function TutorialHeader({
   visibility: initialVisibility,
   categories,
   categoryId,
+  languages,
+  translationsStale,
 }: {
   tutorialId: string;
   initialTitle: string;
@@ -26,6 +30,8 @@ export function TutorialHeader({
   visibility: TutorialVisibility;
   categories: { id: string; name: string }[];
   categoryId: string | null;
+  languages: ExtraLang[];
+  translationsStale: boolean;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
@@ -34,6 +40,23 @@ export function TutorialHeader({
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
   const [busy, setBusy] = useState(false);
   const [visBusy, setVisBusy] = useState(false);
+  const [trBusy, setTrBusy] = useState(false);
+  const [stale, setStale] = useState(translationsStale);
+
+  async function translate() {
+    if (trBusy) return;
+    setTrBusy(true);
+    try {
+      const res = await translateTutorial(tutorialId);
+      setStale(false);
+      const names = res.languages.map((l) => LANG_LABEL[l]).join(", ");
+      toast.success(names ? `Übersetzt in ${names}` : "Übersetzt");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Übersetzen fehlgeschlagen");
+    } finally {
+      setTrBusy(false);
+    }
+  }
 
   async function saveTitle() {
     const t = title.trim();
@@ -208,6 +231,35 @@ export function TutorialHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {languages.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={translate}
+                    disabled={trBusy}
+                    className="relative"
+                  />
+                }
+              >
+                {trBusy ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
+                Übersetzen
+                {stale && !trBusy && (
+                  <span
+                    aria-hidden
+                    className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-card"
+                  />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                {stale
+                  ? "Übersetzungen sind veraltet oder unvollständig – jetzt aktualisieren."
+                  : `Übersetzt automatisch nach ${languages.map((l) => LANG_LABEL[l]).join(", ")}. Knopf = manuell nachziehen.`}
+              </TooltipContent>
+            </Tooltip>
+          )}
           <DriftCheckButton tutorialId={tutorialId} />
           <Button
             variant="outline"
