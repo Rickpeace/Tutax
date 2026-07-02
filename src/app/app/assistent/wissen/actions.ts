@@ -16,8 +16,8 @@ export async function createArticle() {
     .select("id")
     .single();
   if (error) throw new Error(error.message);
-  revalidatePath("/app/knowledge");
-  redirect(`/app/knowledge/${data.id}`);
+  revalidatePath("/app/assistent/wissen");
+  redirect(`/app/assistent/wissen/${data.id}`);
 }
 
 export async function saveArticle(id: string, title: string, body: unknown) {
@@ -34,7 +34,7 @@ export async function saveArticle(id: string, title: string, body: unknown) {
   if (data?.status === "published") {
     await indexArticle(createAdminClient(), account.id, id).catch(() => {});
   }
-  revalidatePath("/app/knowledge");
+  revalidatePath("/app/assistent/wissen");
 }
 
 export async function setArticlePublished(id: string, published: boolean) {
@@ -48,7 +48,7 @@ export async function setArticlePublished(id: string, published: boolean) {
   const admin = createAdminClient();
   if (published) await indexArticle(admin, account.id, id).catch(() => {});
   else await removeArticleEmbeddings(admin, id).catch(() => {});
-  revalidatePath("/app/knowledge");
+  revalidatePath("/app/assistent/wissen");
 }
 
 export async function deleteArticle(id: string) {
@@ -57,7 +57,7 @@ export async function deleteArticle(id: string) {
   await removeArticleEmbeddings(createAdminClient(), id).catch(() => {});
   const { error } = await supabase.from("kb_articles").delete().eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/app/knowledge");
+  revalidatePath("/app/assistent/wissen");
   // Kein redirect() hier: der Client navigiert nach Erfolg (sonst faengt sein
   // try/catch den NEXT_REDIRECT und zeigt ihn faelschlich als Fehler-Toast).
 }

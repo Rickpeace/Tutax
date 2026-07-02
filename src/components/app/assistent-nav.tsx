@@ -4,19 +4,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { href: "/app/settings/branding", label: "Branding" },
-  { href: "/app/settings/team", label: "Team" },
-  { href: "/app/settings/einbetten", label: "Einbetten" },
-  { href: "/app/settings/konto", label: "Konto" },
-  { href: "/app/settings/abo", label: "Abo" },
+  // Wissensdatenbank ist auch auf Unterpfaden (z. B. /app/assistent/wissen/<id>) aktiv.
+  {
+    href: "/app/assistent/wissen",
+    label: "Wissensdatenbank",
+    match: (p: string) => p.startsWith("/app/assistent/wissen"),
+  },
+  {
+    href: "/app/assistent/fragen",
+    label: "Offene Fragen",
+    match: (p: string) => p === "/app/assistent/fragen",
+  },
+  {
+    href: "/app/assistent/eskalation",
+    label: "Kontakt & Eskalation",
+    match: (p: string) => p === "/app/assistent/eskalation",
+  },
 ];
 
-export function SettingsNav() {
+export function AssistentNav() {
   const path = usePathname();
   return (
     <div className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-border [touch-action:pan-x]">
       {tabs.map((t) => {
-        const active = path === t.href;
+        const active = t.match(path);
         return (
           <Link
             key={t.href}
