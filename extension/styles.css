@@ -239,3 +239,54 @@ body {
   margin-bottom: 8px;
   word-break: break-all;
 }
+
+/* Konfiguration im Popup: Verbindungs-Token + App-URL. */
+.cfg {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.cfg > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.field {
+  display: block;
+  margin: 10px 0 0;
+}
+
+.field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.field > input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.field > input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+  border-color: var(--brand);
+}
+
+.cfg .btn {
+  margin-top: 10px;
+}
+
+/* Abstand zwischen "In Steply oeffnen" / Downloads und "Neue Aufnahme". */
+#again {
+  margin-top: 14px;
+}

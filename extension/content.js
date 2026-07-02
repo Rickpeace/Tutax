@@ -1,22 +1,32 @@
 "use strict";
 
-// Steply Recorder - Content-Script (laeuft im aufzunehmenden Tab).
-// Erfasst Klicks und meldet sie an den Aufnahme-Tab (recorder.html).
+// Steply Recorder - Content-Script (laeuft in JEDER http(s)-Seite, deklarativ im
+// Manifest registriert, run_at document_start). Standardmaessig PASSIV: es zeichnet
+// NUR waehrend einer laufenden Aufnahme Klicks auf.
+//
+// WARUM DEKLARATIV STATT PROGRAMMATISCHER INJEKTION (v1-Problem):
+// v1 injizierte das Script per chrome.scripting nur in den aktiven Tab mit activeTab.
+// Das scheiterte auf vielen Seiten und ueberlebte KEINE Navigation - Klicks auf
+// Folge-Seiten fehlten. Deklarativ registriert laeuft das Script auf jeder Seite und
+// in jeder Folge-Seite innerhalb des Tabs automatisch neu. Damit ueberleben Klicks den
+// Seitenwechsel innerhalb des Tabs.
+//
+// WIE ES WEISS, OB AUFGENOMMEN WIRD:
+// Der Aufnahme-Tab (recorder.js) schreibt beim Start { rec: { startedAt } } nach
+// chrome.storage.local und loescht es beim Stopp. Dieses Content-Script liest den
+// Zustand beim Laden UND lauscht auf storage-Aenderungen (chrome.storage.onChanged).
+// So braucht es KEINE direkte Nachricht - eine frisch geladene Folge-Seite sieht den
+// laufenden Zustand sofort.
 //
 // UHR-SYNCHRONISATION (bewusst einfach + robust):
-// Content-Script und Aufnahme-Tab laufen auf DERSELBEN Maschine und teilen sich
-// damit dieselbe Wanduhr (Date.now()). Der Recorder schickt beim Aufnahmestart
-// eine Nachricht "steply-rec-start" mit startEpoch = Date.now(). Fuer jeden Klick
-// berechnen wir t = (Date.now() - startEpoch) / 1000. Kein Abgleich von
+// Content-Script und Aufnahme-Tab laufen auf DERSELBEN Maschine und teilen sich damit
+// dieselbe Wanduhr (Date.now()). startedAt ist Date.now() aus dem Aufnahme-Tab. Fuer
+// jeden Klick gilt t = (Date.now() - startedAt) / 1000. Kein Abgleich von
 // performance.now()-Zeiturspruengen ueber Kontextgrenzen noetig.
 
 (() => {
-  // Doppel-Injektion vermeiden (falls der Nutzer mehrfach startet).
-  if (window.__steplyRecorderInstalled) {
-    // Bereits installiert -> nur den Zustand zuruecksetzen, falls eine neue
-    // Aufnahme beginnt. Der vorhandene Listener uebernimmt.
-    return;
-  }
+  // Doppel-Registrierung vermeiden (z. B. wenn Chrome das Script mehrfach laedt).
+  if (window.__steplyRecorderInstalled) return;
   window.__steplyRecorderInstalled = true;
 
   let recording = false;
@@ -85,7 +95,7 @@
     try {
       chrome.runtime.sendMessage({ type: "steply-click", click });
     } catch (err) {
-      // Recorder-Tab evtl. geschlossen -> Aufnahme gilt als beendet.
+      // Extension-Kontext evtl. weg (Reload) -> als beendet betrachten.
       recording = false;
     }
   }
@@ -93,14 +103,33 @@
   // Capture-Phase: Klick wird erfasst, auch wenn die Seite stopPropagation nutzt.
   document.addEventListener("click", onClick, true);
 
-  // Steuernachrichten vom Recorder.
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (!msg || !msg.type) return;
-    if (msg.type === "steply-rec-start") {
-      startEpoch = typeof msg.startEpoch === "number" ? msg.startEpoch : Date.now();
+  // Aufnahmezustand aus einem storage-Wert uebernehmen.
+  function applyRecState(rec) {
+    if (rec && typeof rec.startedAt === "number") {
+      startEpoch = rec.startedAt;
       recording = true;
-    } else if (msg.type === "steply-rec-stop") {
+    } else {
       recording = false;
     }
-  });
+  }
+
+  // Beim Laden den aktuellen Zustand lesen (deckt frisch geladene Folge-Seiten ab).
+  try {
+    chrome.storage.local.get("rec", (res) => {
+      if (chrome.runtime.lastError) return;
+      applyRecState(res && res.rec);
+    });
+  } catch (err) {
+    // storage nicht verfuegbar (sehr alte Chrome-Version) -> Script bleibt passiv.
+  }
+
+  // Auf Aenderungen des Aufnahmezustands lauschen (Start/Stopp waehrend die Seite offen ist).
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes.rec) return;
+      applyRecState(changes.rec.newValue);
+    });
+  } catch (err) {
+    // ignorieren
+  }
 })();
