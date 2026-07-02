@@ -2,24 +2,28 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Eye, Loader2, Pencil } from "lucide-react";
+import { ChevronLeft, Eye, Globe, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
 import { setTutorialTitle } from "@/app/app/tutorials/[id]/actions";
-import { publishTutorial, unpublishTutorial } from "@/app/app/actions";
+import { publishTutorial, setTutorialVisibility, unpublishTutorial } from "@/app/app/actions";
+import type { TutorialVisibility } from "@/lib/types";
 
 export function TutorialHeader({
   tutorialId,
   initialTitle,
   published: initialPublished,
+  visibility: initialVisibility,
   categories,
   categoryId,
 }: {
   tutorialId: string;
   initialTitle: string;
   published: boolean;
+  visibility: TutorialVisibility;
   categories: { id: string; name: string }[];
   categoryId: string | null;
 }) {
@@ -27,7 +31,9 @@ export function TutorialHeader({
   const [saved, setSaved] = useState(initialTitle);
   const [editing, setEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
+  const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
   const [busy, setBusy] = useState(false);
+  const [visBusy, setVisBusy] = useState(false);
 
   async function saveTitle() {
     const t = title.trim();
@@ -56,11 +62,28 @@ export function TutorialHeader({
       if (next) await publishTutorial(tutorialId);
       else await unpublishTutorial(tutorialId);
       setPublished(next);
-      toast.success(next ? "Tutorial ist jetzt live" : "Auf Entwurf gesetzt");
+      const liveMsg = visibility === "internal" ? "Für das Team freigegeben" : "Tutorial ist jetzt live";
+      toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function chooseVisibility(next: TutorialVisibility) {
+    if (visBusy || next === visibility) return;
+    const prev = visibility;
+    setVisibility(next); // optimistisch
+    setVisBusy(true);
+    try {
+      await setTutorialVisibility(tutorialId, next);
+      toast.success(next === "internal" ? "Sichtbarkeit: Intern (nur Team)" : "Sichtbarkeit: Öffentlich");
+    } catch (e) {
+      setVisibility(prev);
+      toast.error(e instanceof Error ? e.message : "Sichtbarkeit konnte nicht geändert werden");
+    } finally {
+      setVisBusy(false);
     }
   }
 
@@ -123,16 +146,62 @@ export function TutorialHeader({
               disabled={busy}
               className="flex items-center gap-2 rounded-md py-0.5 text-sm disabled:opacity-70"
               aria-pressed={published}
-              title={published ? "Ist veröffentlicht – antippen für Entwurf" : "Ist Entwurf – antippen zum Veröffentlichen"}
+              title={
+                published
+                  ? "Ist veröffentlicht – antippen für Entwurf"
+                  : visibility === "internal"
+                    ? "Ist Entwurf – antippen zum Freigeben fürs Team"
+                    : "Ist Entwurf – antippen zum Veröffentlichen"
+              }
             >
               <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${published ? "bg-yes" : "bg-line"}`}>
                 <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${published ? "left-[18px]" : "left-0.5"}`} />
               </span>
               <span className={published ? "font-medium text-ink" : "text-muted-foreground"}>
-                {published ? "Veröffentlicht" : "Entwurf"}
+                {published ? (visibility === "internal" ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
               </span>
               {busy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
             </button>
+            <span className="text-line">·</span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <div
+                    role="group"
+                    aria-label="Sichtbarkeit"
+                    className="inline-flex items-center rounded-md border border-line bg-card p-0.5 text-sm"
+                  />
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => chooseVisibility("public")}
+                  disabled={visBusy}
+                  aria-pressed={visibility === "public"}
+                  className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 transition-colors disabled:opacity-70 ${
+                    visibility === "public" ? "bg-accent font-medium text-ink" : "text-muted-foreground hover:text-ink"
+                  }`}
+                >
+                  <Globe className="size-3.5" /> Öffentlich
+                </button>
+                <button
+                  type="button"
+                  onClick={() => chooseVisibility("internal")}
+                  disabled={visBusy}
+                  aria-pressed={visibility === "internal"}
+                  className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 transition-colors disabled:opacity-70 ${
+                    visibility === "internal" ? "bg-accent font-medium text-ink" : "text-muted-foreground hover:text-ink"
+                  }`}
+                >
+                  <Lock className="size-3.5" /> Intern (nur Team)
+                </button>
+                {visBusy && <Loader2 className="ml-1 size-3.5 animate-spin text-muted-foreground" />}
+              </TooltipTrigger>
+              <TooltipContent>
+                Öffentlich: auf der Hilfe-Seite und im Chatbot sichtbar. Intern: nur für
+                eingeloggte Team-Mitglieder unter „Lernen&ldquo; — nie öffentlich.
+              </TooltipContent>
+            </Tooltip>
             <span className="text-line">·</span>
             <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
           </div>

@@ -49,6 +49,7 @@ export default async function EditorPage({
         tutorialId={id}
         initialTitle={tutorial.title}
         published={tutorial.status === "published"}
+        visibility={tutorial.visibility}
         categories={categories ?? []}
         categoryId={tutorial.category_id}
       />

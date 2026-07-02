@@ -29,7 +29,7 @@ export async function getCatalog(
   const [{ data: own }, { data: ats }, { data: tpls }] = await Promise.all([
     client
       .from("tutorials")
-      .select("id, title, description, slug, status, freshness, category_id, updated_at")
+      .select("id, title, description, slug, status, freshness, category_id, visibility, updated_at")
       .eq("account_id", accountId),
     client
       .from("account_templates")
@@ -65,7 +65,7 @@ export async function getCatalog(
       categoryId: o.category_id,
       kind: "own",
       enabled: true,
-      visible: o.status === "published",
+      visible: o.status === "published" && o.visibility === "public",
     });
   }
 
@@ -121,6 +121,7 @@ export async function resolveCustomerTutorial(
     .eq("account_id", accountId)
     .eq("slug", slug)
     .eq("status", "published")
+    .eq("visibility", "public")
     .maybeSingle();
   if (own) return own.id;
 
@@ -146,11 +147,11 @@ export async function resolveCustomerTutorial(
   if (at.forked_tutorial_id) {
     const { data: fork } = await client
       .from("tutorials")
-      .select("id, status")
+      .select("id, status, visibility")
       .eq("id", at.forked_tutorial_id)
       .eq("account_id", accountId)
       .maybeSingle();
-    return fork && fork.status === "published" ? fork.id : null;
+    return fork && fork.status === "published" && fork.visibility === "public" ? fork.id : null;
   }
   return tpl.id;
 }

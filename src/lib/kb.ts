@@ -30,10 +30,13 @@ export async function indexTutorial(
 
   const { data: tut } = await admin
     .from("tutorials")
-    .select("title, slug, category_id")
+    .select("title, slug, category_id, visibility")
     .eq("id", tutorialId)
     .single();
   if (!tut) return;
+  // Zentraler Schutz für ALLE Aufrufer (Publish/Miner/Cron): interne Tutorials
+  // dürfen NIE in den Chatbot-RAG-Index. Nur 'public' wird indiziert.
+  if (tut.visibility !== "public") return;
 
   let category: string | null = null;
   if (tut.category_id) {

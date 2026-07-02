@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
 import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
+import { dateDe } from "@/lib/format";
 
 export function Wizard({
   rootId,
@@ -15,6 +16,10 @@ export function Wizard({
   placeholders = false,
   accountSlug,
   tutorialSlug,
+  internalMode = false,
+  completion,
+  onComplete,
+  onUncomplete,
 }: {
   rootId: string | null;
   steps: Step[];
@@ -23,6 +28,11 @@ export function Wizard({
   placeholders?: boolean;
   accountSlug?: string;
   tutorialSlug?: string;
+  /** Interner Lern-Modus (/app/lernen): kein öffentliches Feedback, dafür Schulungsnachweis. */
+  internalMode?: boolean;
+  completion?: { completed: boolean; completedAt: string | null };
+  onComplete?: () => Promise<void>;
+  onUncomplete?: () => Promise<void>;
 }) {
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
   const branchesByStep = useMemo(() => {
@@ -42,6 +52,42 @@ export function Wizard({
   const [feedback, setFeedback] = useState<"sent" | null>(null);
   // Schritt-IDs, für die schon „komme nicht weiter" gemeldet wurde (1×/Schritt).
   const [stuckSent, setStuckSent] = useState<Set<string>>(() => new Set());
+
+  // Interner Schulungsnachweis: optimistischer Absolviert-Zustand.
+  const [done, setDone] = useState<boolean>(completion?.completed ?? false);
+  const [doneAt, setDoneAt] = useState<string | null>(completion?.completedAt ?? null);
+  const [markBusy, setMarkBusy] = useState(false);
+
+  const markDone = async () => {
+    if (markBusy || !onComplete) return;
+    const now = new Date().toISOString();
+    setDone(true);
+    setDoneAt(now); // optimistisch
+    setMarkBusy(true);
+    try {
+      await onComplete();
+    } catch {
+      setDone(false);
+      setDoneAt(null);
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+  const undoDone = async () => {
+    if (markBusy || !onUncomplete) return;
+    const prevAt = doneAt;
+    setDone(false);
+    setDoneAt(null); // optimistisch
+    setMarkBusy(true);
+    try {
+      await onUncomplete();
+    } catch {
+      setDone(true);
+      setDoneAt(prevAt);
+    } finally {
+      setMarkBusy(false);
+    }
+  };
 
   // Position übersteht Reload/Zurück (REVIEW A1): pro Tutorial in sessionStorage.
   // Nur wiederherstellen, wenn alle gespeicherten Schritt-IDs noch existieren
@@ -235,8 +281,9 @@ export function Wizard({
 
             {/* Inline-Feedback pro Schritt (REVIEW H): dezenter Ausweg, wenn der
                 Nutzer nicht weiterkommt. Landet als negatives Feedback-Event mit
-                Schritt-Titel -> taucht als Wissenslücke in der Insights-Karte auf. */}
-            {accountSlug && tutorialSlug && (
+                Schritt-Titel -> taucht als Wissenslücke in der Insights-Karte auf.
+                Intern ausgeblendet: schriebe public-Events (falsche Semantik). */}
+            {!internalMode && accountSlug && tutorialSlug && (
               <div className="mt-3 text-center" data-tx="stuck">
                 {stuckSent.has(step.id) ? (
                   <p className="text-xs text-muted-foreground" role="status">
@@ -269,7 +316,40 @@ export function Wizard({
             Sie haben die Anleitung abgeschlossen.
           </p>
 
-          {accountSlug && tutorialSlug && (
+          {/* Interner Schulungsnachweis statt öffentlichem Feedback. */}
+          {internalMode && (
+            <div className="mt-4">
+              {done ? (
+                <div className="flex flex-col items-center gap-1.5">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-yes" role="status">
+                    <Check className="size-4" /> Absolviert{doneAt ? ` am ${dateDe(doneAt)}` : ""}
+                  </p>
+                  {onUncomplete && (
+                    <button
+                      type="button"
+                      onClick={undoDone}
+                      disabled={markBusy}
+                      className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-ink disabled:opacity-60"
+                    >
+                      Zurücknehmen
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={markDone}
+                  disabled={markBusy || !onComplete}
+                  className="inline-flex items-center gap-2 rounded-xl bg-yes px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-yes/90 disabled:opacity-60"
+                >
+                  {markBusy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                  Als absolviert markieren
+                </button>
+              )}
+            </div>
+          )}
+
+          {!internalMode && accountSlug && tutorialSlug && (
             <div className="mt-4">
               {feedback === "sent" ? (
                 <p className="text-sm font-medium text-muted-foreground" role="status">
