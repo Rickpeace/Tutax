@@ -10,15 +10,16 @@ export default async function LernenPage() {
   const { account, userId } = await requireAccount();
   const supabase = await createClient();
 
-  // Interne, fürs Team freigegebene Anleitungen des aktiven Kontos.
+  // Fürs Team freigegebene Anleitungen des aktiven Kontos: interne ODER öffentliche
+  // mit in_lernen (Welle 20 — öffentliche Anleitung zusätzlich mit Schulungsnachweis).
   const { data: tuts } = await supabase
     .from("tutorials")
-    .select("id, title, description, updated_at")
+    .select("id, title, description, updated_at, visibility")
     .eq("account_id", account.id)
-    .eq("visibility", "internal")
     .eq("status", "published")
+    .or("visibility.eq.internal,in_lernen.eq.true")
     .order("updated_at", { ascending: false })
-    .returns<Pick<Tutorial, "id" | "title" | "description" | "updated_at">[]>();
+    .returns<Pick<Tutorial, "id" | "title" | "description" | "updated_at" | "visibility">[]>();
 
   const list = tuts ?? [];
   const ids = list.map((t) => t.id);

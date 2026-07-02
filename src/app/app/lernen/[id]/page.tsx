@@ -26,9 +26,11 @@ export default async function LernenDetailPage({
 
   // Zugriff: Tutorial gehört zum aktiven Konto.
   if (!tutorial || tutorial.account_id !== account.id) notFound();
-  // Öffentliche Anleitungen gehören nicht in den Lernbereich -> auf die Hilfe-Seite,
+  // Lern-Zugriff (Welle 20): intern ODER öffentlich-mit-in_lernen (beide mit Nachweis).
+  // Öffentliche OHNE in_lernen gehören nicht in den Lernbereich -> auf die Hilfe-Seite,
   // sofern veröffentlicht + Slug vorhanden, sonst notFound.
-  if (tutorial.visibility !== "internal") {
+  const inLernen = tutorial.visibility === "internal" || tutorial.in_lernen;
+  if (!inLernen) {
     if (tutorial.status === "published" && tutorial.slug) {
       redirect(`/h/${account.slug}/${tutorial.slug}`);
     }

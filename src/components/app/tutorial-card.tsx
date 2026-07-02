@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
+import { useAudienceFilter, matchesAudience } from "@/components/app/audience-filter";
 import { VideoExport } from "@/components/app/video-export";
 import {
   DropdownMenu,
@@ -65,6 +66,11 @@ export function TutorialCard({
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
   const internal = tutorial.visibility === "internal";
+  // Öffentliche Anleitung, die zusätzlich im Team-Lernbereich liegt (Welle 20).
+  const teamToo = tutorial.visibility === "public" && tutorial.in_lernen;
+
+  // Zielgruppen-Filter (Welle 20): Chips „Alle | Kunden | Team" über der Liste.
+  const audienceFilter = useAudienceFilter();
 
   // Bulk-Aufräumen (REVIEW G): im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
   const cleanup = useCleanup();
@@ -124,6 +130,9 @@ export function TutorialCard({
         });
     }
   };
+
+  // Zielgruppen-Filter: passt die Karte nicht, gar nicht rendern (nach allen Hooks).
+  if (!matchesAudience(audienceFilter, tutorial)) return null;
 
   return (
     <div
@@ -190,6 +199,14 @@ export function TutorialCard({
                   title="Interne Anleitung – nur für das Team sichtbar"
                 >
                   <Lock className="size-3" /> Intern
+                </span>
+              )}
+              {teamToo && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-medium text-ink-2"
+                  title="Zusätzlich im Team-Lernbereich (mit Schulungsnachweis)"
+                >
+                  <Lock className="size-3" /> Team
                 </span>
               )}
             </div>

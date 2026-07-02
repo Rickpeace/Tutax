@@ -5,6 +5,7 @@ import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { Builder } from "@/components/builder/builder";
 import { TutorialHeader } from "@/components/builder/tutorial-header";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
+import { isBusiness } from "@/lib/plan";
 
 export default async function EditorPage({
   params,
@@ -73,6 +74,8 @@ export default async function EditorPage({
         initialTitle={tutorial.title}
         published={tutorial.status === "published"}
         visibility={tutorial.visibility}
+        inLernen={tutorial.in_lernen}
+        isBusiness={isBusiness(account)}
         categories={categories ?? []}
         categoryId={tutorial.category_id}
         languages={languages}
