@@ -147,6 +147,12 @@ Neues-Tutorial-Weiche (Selbst bauen | Aus Video, Kategorie+Thema bis in die
 Worker-Prompts) · KI-Bild-Vorschlag entfernt (Route+Knopf+Doku-Schritt) ·
 Landing-Demo-Links → /h/steply · Worker-Schutzgitter (Waisen-Cleanup nur
 create+draft — nach Datenverlust „Kinderlieder" durch Alt-Worker).
+**Opus Welle 21 (reviewt+gemerged):** 🧭 **App-Shell-Redesign** — Sidebar links
+(Konto oben, gruppierte Nav Inhalte/Assistent, unten Einstellungen/Hilfe/
+Hilfe-Seite/Abmelden; aktive Pill + Indigo-Bälkchen), schlanke Topbar,
+Mobile-Sheet, **⌘K-Befehlspalette** (Navigation + Aktionen + eigene Tutorials
+via searchMyTutorials); AppTabs entfernt; PPR-Disziplin (statisches Nav-Gerüst,
+Konto streamt); CommandDialog-Fix in ui/command.tsx.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
