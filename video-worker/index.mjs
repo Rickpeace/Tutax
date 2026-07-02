@@ -9,6 +9,8 @@ import os from "node:os";
 import path from "node:path";
 // Welle 17: Struktur-Pass (gesprochene Fallunterscheidung -> Verzweigung) + Wiring-Planer.
 import { analyzeStructure, planWiring } from "./structure.mjs";
+// Welle 18: Video-Export (Tutorial -> MP4). Reine Render-Bausteine + Orchestrierung.
+import { renderVideo } from "./render.mjs";
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -508,6 +510,210 @@ async function buildTutorial(job, videoPath, dir) {
   }
 }
 
+// ============================================================
+// Welle 18: RENDER-JOB (Tutorial -> MP4). Läuft parallel zur create-Pipeline,
+// unterschieden per video_jobs.kind. Alle reinen Render-Bausteine leben in render.mjs.
+// ============================================================
+
+// Font-Pfade (env FONT_PATH übersteuerbar). Auf Hetzner/Debian: dejavu-Paket.
+const FONT_REGULAR = process.env.FONT_PATH || "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+const FONT_BOLD = (process.env.FONT_PATH || "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+  .replace(/DejaVuSans\.ttf$/, "DejaVuSans-Bold.ttf");
+const PUBLIC_BUCKET = "tutorial-images-public"; // Bilder + Vorlese-Audios liegen hier
+const VIDEO_BUCKET = "tutorial-videos"; // Quell-Videos (create) + Render-Ergebnisse
+
+// ffprobe-Dauer einer Mediendatei (Sekunden). Wirft bei Unlesbarkeit.
+function probeDuration(file) {
+  const out = sh("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file]).trim();
+  const d = parseFloat(out);
+  if (!isFinite(d)) throw new Error("Dauer nicht lesbar: " + file);
+  return d;
+}
+
+// ffmpeg mit langem Timeout über spawnSync (Render-Kommandos können groß/lang sein).
+// stderr wird bei Fehler mitgegeben (für klare Diagnose im Log).
+function runFfmpeg(args) {
+  const r = spawnSync("ffmpeg", args, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
+  if (r.status !== 0) {
+    const err = String(r.stderr || r.error?.message || "").split("\n").slice(-8).join("\n");
+    throw new Error(`ffmpeg fehlgeschlagen (exit ${r.status}): ${err.slice(0, 400)}`);
+  }
+  return r;
+}
+
+// Datei aus einem Bucket herunterladen -> lokaler Pfad (oder null bei Fehler/kein Pfad).
+async function downloadTo(bucket, storagePath, dst) {
+  if (!storagePath) return null;
+  const { data, error } = await sb.storage.from(bucket).download(storagePath);
+  if (error || !data) return null;
+  fs.writeFileSync(dst, Buffer.from(await data.arrayBuffer()));
+  return dst;
+}
+
+// Render-Job verarbeiten: Tutorial-Daten laden, Assets herunterladen, MP4 bauen, hochladen.
+async function processRenderJob(job) {
+  // Font-Check ganz früh — ohne Font schlägt drawtext fehl. Klar failen.
+  if (!fs.existsSync(FONT_REGULAR)) {
+    throw new Error(`Schriftdatei fehlt: ${FONT_REGULAR}. Auf dem Server 'fonts-dejavu-core' installieren oder FONT_PATH setzen.`);
+  }
+  const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : FONT_REGULAR;
+
+  // sharp + qrcode erst hier laden (Worker-Env). sharp wird von der App mitgebracht
+  // (src/lib/redact.ts). ANPASSEN bei deploy: liegt der Worker isoliert ohne App-
+  // node_modules, muss sharp dort verfügbar sein (siehe DEPLOY.md / Report).
+  let sharp, qrcode;
+  try {
+    sharp = (await import("sharp")).default;
+    qrcode = (await import("qrcode")).default;
+  } catch (e) {
+    throw new Error("Render-Abhängigkeit fehlt (sharp/qrcode): " + String(e?.message || e));
+  }
+
+  const style = job.render_style === "screencast" ? "screencast" : "classic";
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "render-"));
+  const uploadedPath = `${job.account_id}/renders/${job.tutorial_id}-${style}.mp4`;
+  try {
+    // 1) Tutorial + Konto + Steps + Branches + Theme laden.
+    const { data: tutorial, error: tErr } = await sb
+      .from("tutorials")
+      .select("id, account_id, title, slug, status, visibility, root_step_id")
+      .eq("id", job.tutorial_id)
+      .single();
+    if (tErr || !tutorial) throw new Error("Tutorial nicht gefunden: " + (tErr?.message || ""));
+    if (tutorial.status !== "published" || tutorial.visibility !== "public")
+      throw new Error("Tutorial ist nicht öffentlich veröffentlicht.");
+
+    const { data: account } = await sb.from("accounts").select("id, slug").eq("id", tutorial.account_id).single();
+    const { data: steps } = await sb
+      .from("steps")
+      .select("id, title, body, image_path, highlights, position, is_decision, video_time, audio_path")
+      .eq("tutorial_id", tutorial.id)
+      .order("position");
+    const stepIds = (steps || []).map((s) => s.id);
+    const { data: branches } = stepIds.length
+      ? await sb.from("step_branches").select("step_id, label, color, target_step_id, position").in("step_id", stepIds)
+      : { data: [] };
+    const { data: theme } = await sb
+      .from("themes")
+      .select("mode, tokens, ai_tokens, extreme_tokens, logo_path, ai_logo_path, extreme_logo_path")
+      .eq("account_id", tutorial.account_id)
+      .maybeSingle();
+
+    if (!steps || !steps.length) throw new Error("Tutorial hat keine Schritte.");
+
+    // caption = gesprochener Text (Plain-Text aus dem Tiptap-Body des Schritts).
+    const stepsForPlan = steps.map((s) => ({ ...s, caption: bodyToText(s.body) }));
+
+    // 2) Assets herunterladen: Schritt-Bilder + Audios (public Bucket), Logo, Quell-Video.
+    await sb.from("video_jobs").update({ progress: "Lädt Medien …", updated_at: new Date().toISOString() }).eq("id", job.id);
+    const imageByStep = {}, audioByStep = {};
+    for (const s of steps) {
+      if (s.image_path) {
+        const dst = path.join(tmp, `img_${s.id}.img`);
+        if (await downloadTo(PUBLIC_BUCKET, s.image_path, dst)) imageByStep[s.id] = dst;
+      }
+      if (s.audio_path) {
+        const dst = path.join(tmp, `aud_${s.id}.mp3`);
+        if (await downloadTo(PUBLIC_BUCKET, s.audio_path, dst)) audioByStep[s.id] = dst;
+      }
+    }
+    const brand = resolveBrandLogo(theme);
+    let logoPath = null;
+    if (brand.logoPath) {
+      const dst = path.join(tmp, "logo.img");
+      logoPath = await downloadTo(PUBLIC_BUCKET, brand.logoPath, dst);
+    }
+
+    // Screencast: Quell-Video + Klicks des ursprünglichen create-Jobs holen (falls vorhanden).
+    let sourceVideoPath = null, clicks = [];
+    if (style === "screencast") {
+      const { data: createJob } = await sb
+        .from("video_jobs")
+        .select("video_path, clicks")
+        .eq("tutorial_id", tutorial.id)
+        .eq("kind", "create")
+        .not("video_path", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (createJob?.video_path) {
+        const dst = path.join(tmp, "source.mp4");
+        sourceVideoPath = await downloadTo(VIDEO_BUCKET, createJob.video_path, dst);
+        clicks = Array.isArray(createJob.clicks) ? createJob.clicks : [];
+      }
+    }
+
+    // 3) Rendern (reine Bausteine in render.mjs; deps = echte I/O).
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/[/*\s]+$/, "") || "https://steply.app"; // ANPASSEN falls andere Domain
+    const { outFile, chaptersText } = await renderVideo(
+      {
+        runFfmpeg,
+        ffprobeDuration: async (f) => probeDuration(f),
+        sharp,
+        qrcode,
+        log: (m) => console.log("  " + m),
+      },
+      {
+        tutorial,
+        steps: stepsForPlan,
+        branches: branches || [],
+        rootStepId: tutorial.root_step_id,
+        theme,
+        appUrl,
+        accountSlug: account?.slug || "",
+        files: { imageByStep, audioByStep, logoPath, sourceVideoPath, clicks },
+      },
+      {
+        dir: tmp,
+        format: "16:9", // 9:16 + Musikbett = Folgewelle (Format ist Parameter)
+        style,
+        fontFile: FONT_REGULAR,
+        fontBold,
+        fps: 30,
+        onProgress: async (msg) => {
+          await sb.from("video_jobs").update({ progress: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
+        },
+      },
+    );
+
+    // 4) Ergebnis hochladen (upsert) + output_path/chapters setzen.
+    await sb.from("video_jobs").update({ progress: "Lädt Video hoch …", updated_at: new Date().toISOString() }).eq("id", job.id);
+    const buf = fs.readFileSync(outFile);
+    const { error: upErr } = await sb.storage.from(VIDEO_BUCKET).upload(uploadedPath, buf, { contentType: "video/mp4", upsert: true });
+    if (upErr) throw new Error("Video-Upload: " + upErr.message);
+    const dur = probeDuration(outFile);
+    console.log(`✓ Render ${job.id} -> ${uploadedPath} (${dur.toFixed(1)}s, ${(buf.length / 1e6).toFixed(1)} MB)`);
+    return { outputPath: uploadedPath, chapters: chaptersText };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// Plain-Text aus einem Tiptap-JSON-Body (für eingebrannte Untertitel).
+function bodyToText(body) {
+  if (!body || typeof body !== "object") return "";
+  const parts = [];
+  const walk = (n) => {
+    if (!n) return;
+    if (typeof n.text === "string") parts.push(n.text);
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(body);
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+// Logo-Pfad aus der themes-Zeile (gleiche resolveTheme-Auswahl wie render.mjs.resolveBrand).
+function resolveBrandLogo(theme) {
+  const mode = theme?.mode === "extreme" ? "extreme" : theme?.mode === "ai" ? "ai" : "manual";
+  const logoPath =
+    mode === "extreme"
+      ? (theme?.extreme_logo_path ?? theme?.ai_logo_path ?? theme?.logo_path)
+      : mode === "ai"
+        ? (theme?.ai_logo_path ?? theme?.logo_path)
+        : theme?.logo_path;
+  return { logoPath: logoPath ?? null };
+}
+
 async function processJob(job) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
@@ -623,17 +829,25 @@ async function loop() {
         // ist das eine Crash-Waise (requeut via reapStale) -> vor dem Lauf aufräumen.
         const claimedJob = claimed[0];
         try {
-          await reapOrphanTutorial(claimedJob);
-          const res = await processJob(claimedJob);
-          await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, note: res.note ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
-          await sendDoneEmail(claimedJob, res.tutId, res.title); // env-gated, nie fatal
+          if (claimedJob.kind === "render") {
+            // Welle 18: Tutorial -> MP4. Bestehende create-Pipeline bleibt unberührt.
+            const res = await processRenderJob(claimedJob);
+            await sb.from("video_jobs").update({ status: "done", output_path: res.outputPath, chapters: res.chapters ?? null, progress: null, updated_at: new Date().toISOString() }).eq("id", job.id);
+          } else {
+            await reapOrphanTutorial(claimedJob);
+            const res = await processJob(claimedJob);
+            await sb.from("video_jobs").update({ status: "done", tutorial_id: res.tutId, title: res.title, note: res.note ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
+            await sendDoneEmail(claimedJob, res.tutId, res.title); // env-gated, nie fatal
+          }
         } catch (e) {
           const raw = String(e?.message || "Unbekannter Fehler");
           console.error("✗ Job", job.id, raw);
-          const friendly = /Command failed|ffmpeg|ffprobe/i.test(raw)
-            ? "Video konnte nicht verarbeitet werden (evtl. unvollständige Aufnahme). Bitte erneut aufnehmen."
-            : raw.slice(0, 300);
-          await sb.from("video_jobs").update({ status: "failed", error: friendly, updated_at: new Date().toISOString() }).eq("id", job.id);
+          const friendly = claimedJob.kind === "render"
+            ? raw.slice(0, 300) // Render-Fehler klar durchreichen (Font/sharp/ffmpeg)
+            : /Command failed|ffmpeg|ffprobe/i.test(raw)
+              ? "Video konnte nicht verarbeitet werden (evtl. unvollständige Aufnahme). Bitte erneut aufnehmen."
+              : raw.slice(0, 300);
+          await sb.from("video_jobs").update({ status: "failed", error: friendly, progress: null, updated_at: new Date().toISOString() }).eq("id", job.id);
         }
       }
     }
