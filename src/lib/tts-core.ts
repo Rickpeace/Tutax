@@ -92,9 +92,16 @@ export function stepSpeechText(step: { title: string | null; body: unknown }): s
   return text.length > MAX_TTS_CHARS ? text.slice(0, MAX_TTS_CHARS) : text;
 }
 
-/** Kurzer, stabiler Hash über den Sprech-Text (sha256, gekürzt) — Cache-Schlüssel. */
-export function speechHash(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex").slice(0, 32);
+/**
+ * Kurzer, stabiler Hash als Cache-Schlüssel (sha256, gekürzt). Modell + Stimme gehören
+ * MIT in den Hash: ein Stimmen-/Modellwechsel erzeugt so automatisch alle Audios neu,
+ * statt in der alten Stimme kleben zu bleiben.
+ */
+export function speechHash(text: string, model = "", voice = ""): string {
+  return createHash("sha256")
+    .update(`${model}|${voice}|${text}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
 }
 
 /** Ablagepfad der MP3 im public Bucket: {account}/{tutorial}/audio/{step}.mp3 */
@@ -116,7 +123,7 @@ export function audioPath(accountId: string, tutorialId: string, stepId: string)
 export async function ensureStepAudioCore(
   admin: DbClient,
   speech: SpeechClient,
-  cfg: { model: string; voice: string; accountId: string; tutorialId: string },
+  cfg: { model: string; voice: string; accountId: string; tutorialId: string; instructions?: string },
   step: StepForSpeech,
 ): Promise<"skipped" | "created" | "removed"> {
   const text = stepSpeechText(step);
@@ -128,8 +135,8 @@ export async function ensureStepAudioCore(
     return "removed";
   }
 
-  const hash = speechHash(text);
-  // Cache: Text unverändert und Datei existiert bereits -> nichts tun.
+  const hash = speechHash(text, cfg.model, cfg.voice);
+  // Cache: Text/Modell/Stimme unverändert und Datei existiert bereits -> nichts tun.
   if (step.audio_hash === hash && step.audio_path) return "skipped";
 
   const path = audioPath(cfg.accountId, cfg.tutorialId, step.id);
@@ -138,6 +145,8 @@ export async function ensureStepAudioCore(
     voice: cfg.voice,
     input: text,
     response_format: "mp3",
+    // Stil-Anweisung (nur gpt-4o-mini-tts versteht das Feld) — tts-1 würde es ablehnen.
+    ...(cfg.instructions ? { instructions: cfg.instructions } : {}),
   });
   const buf = Buffer.from(await res.arrayBuffer());
 

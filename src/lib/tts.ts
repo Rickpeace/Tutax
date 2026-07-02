@@ -40,7 +40,7 @@ export async function ensureTutorialAudio(accountId: string, tutorialId: string)
       await ensureStepAudioCore(
         admin,
         speech(),
-        { model: AI.models.tts, voice: AI.ttsVoice, accountId, tutorialId },
+        { model: AI.models.tts, voice: AI.ttsVoice, instructions: AI.ttsInstructions, accountId, tutorialId },
         step,
       );
     } catch (e) {
@@ -77,7 +77,7 @@ export async function ensureStepAudio(stepId: string): Promise<void> {
     await ensureStepAudioCore(
       admin,
       speech(),
-      { model: AI.models.tts, voice: AI.ttsVoice, accountId: tut.account_id, tutorialId: step.tutorial_id },
+      { model: AI.models.tts, voice: AI.ttsVoice, instructions: AI.ttsInstructions, accountId: tut.account_id, tutorialId: step.tutorial_id },
       step,
     );
   } catch (e) {

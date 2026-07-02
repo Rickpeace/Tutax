@@ -21,7 +21,7 @@ const openai = new OpenAI({ apiKey: openaiKey, timeout: 30_000, maxRetries: 1 })
 
 // Client-Adapter mit exakt dem Minimal-Interface, das tts-core erwartet.
 const speech = openai;
-const cfgBase = { model: "tts-1", voice: "alloy" };
+const cfgBase = { model: "gpt-4o-mini-tts", voice: "onyx" };
 
 let failed = false;
 const ok = (c, m) => { console.log(`${c ? "✓" : "✗"} ${m}`); if (!c) failed = true; };
@@ -62,7 +62,7 @@ try {
   // --- Reine Helfer prüfen ---
   const text = stepSpeechText({ title: "Hallo", body: bodyDoc("Kurzer Text.") });
   ok(text === "Hallo. Kurzer Text.", `stepSpeechText: Titel + Body ("${text}")`);
-  ok(speechHash(text).length === 32 && speechHash(text) === speechHash(text), "speechHash: stabil, 32 Zeichen");
+  ok(speechHash(text, cfgBase.model, cfgBase.voice).length === 32 && speechHash(text, cfgBase.model, cfgBase.voice) === speechHash(text, cfgBase.model, cfgBase.voice), "speechHash: stabil, 32 Zeichen");
 
   // --- (a) ensureStepAudio erzeugt MP3 + setzt audio_path/hash ---
   const r1 = await ensureStepAudioCore(admin, speech, cfg, await reloadStep(s1));
@@ -70,7 +70,7 @@ try {
   let step = await reloadStep(s1);
   const expectPath = audioPath(accountId, tutId, s1);
   ok(step.audio_path === expectPath, `(a) audio_path gesetzt (${step.audio_path})`);
-  ok(step.audio_hash === speechHash(text), "(a) audio_hash = Hash des Sprech-Texts");
+  ok(step.audio_hash === speechHash(text, cfgBase.model, cfgBase.voice), "(a) audio_hash = Hash des Sprech-Texts");
   const info1 = await fileInfo(expectPath);
   ok(!!info1, "(a) MP3 liegt im public Bucket");
 
@@ -94,7 +94,7 @@ try {
   ok(r3 === "created", "(c) nach Textänderung -> created (neu erzeugt)");
   step = await reloadStep(s1);
   const newText = stepSpeechText({ title: "Hallo", body: bodyDoc("Ein anderer, längerer Text jetzt.") });
-  ok(step.audio_hash === speechHash(newText) && step.audio_hash !== speechHash(text), "(c) neuer Hash gespeichert");
+  ok(step.audio_hash === speechHash(newText, cfgBase.model, cfgBase.voice) && step.audio_hash !== speechHash(text, cfgBase.model, cfgBase.voice), "(c) neuer Hash gespeichert");
   const info3 = await fileInfo(expectPath);
   ok(info3 && info1 && info3.updated_at !== info1.updated_at, "(c) Datei ersetzt (updated_at geändert)");
 

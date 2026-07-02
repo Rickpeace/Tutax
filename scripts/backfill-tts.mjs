@@ -12,7 +12,11 @@ if (!slug) { console.error("Aufruf: … scripts/backfill-tts.mjs <account_slug>"
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
-const cfgBase = { model: "tts-1", voice: "alloy" }; // wie lib/ai.ts (AI.models.tts / ttsVoice)
+const cfgBase = {
+  model: "gpt-4o-mini-tts",
+  voice: "onyx",
+  instructions: "Sprich klares, natuerliches Deutsch. Freundlich, ruhig und professionell, wie eine gute Software-Anleitung.",
+}; // wie lib/ai.ts (AI.models.tts / ttsVoice / ttsInstructions)
 
 const { data: acc } = await admin.from("accounts").select("id, plan").eq("slug", slug).single();
 if (!acc) { console.error("Konto nicht gefunden:", slug); process.exit(1); }
