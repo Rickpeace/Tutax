@@ -11,6 +11,7 @@ import { TemplateSection, type TemplateItem } from "@/components/app/template-se
 import { CollapsibleSection } from "@/components/app/collapsible-section";
 import { CategoryJump, type JumpSection } from "@/components/app/category-jump";
 import { InsightsCard } from "@/components/app/insights-card";
+import { BulkCleanupProvider, CleanupControls } from "@/components/app/bulk-cleanup";
 import { Layers, Loader2 } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -155,6 +156,7 @@ export default async function DashboardPage() {
   ];
 
   return (
+    <BulkCleanupProvider>
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -163,7 +165,8 @@ export default async function DashboardPage() {
             {own.length === 0 ? "Eigene Anleitungen" : `${own.length} eigene Anleitung${own.length === 1 ? "" : "en"}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {own.length > 0 && <CleanupControls />}
           <VideoUpload accountId={account.id} />
           <NewTutorialButton />
         </div>
@@ -254,5 +257,6 @@ export default async function DashboardPage() {
         </>
       )}
     </main>
+    </BulkCleanupProvider>
   );
 }

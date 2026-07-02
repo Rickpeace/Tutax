@@ -11,8 +11,10 @@ import {
   ExternalLink,
   ImageIcon,
   QrCode,
+  Check,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
+import { useCleanup } from "@/components/app/bulk-cleanup";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +61,14 @@ export function TutorialCard({
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
 
+  // Bulk-Aufräumen (REVIEW G): im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
+  const cleanup = useCleanup();
+  const cleanupActive = cleanup?.active ?? false;
+  const checked = cleanup?.isSelected(tutorial.id) ?? false;
+  useEffect(() => {
+    cleanup?.register(tutorial.id, tutorial.status === "published");
+  }, [cleanup, tutorial.id, tutorial.status]);
+
   function run(fn: () => Promise<void>, success: string) {
     startTransition(async () => {
       try {
@@ -102,9 +112,33 @@ export function TutorialCard({
 
   return (
     <div
-      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all hover:-translate-y-0.5 hover:border-primary/40 sm:p-4"
+      className={`group relative flex gap-3 rounded-xl border bg-card p-3 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all sm:p-4 ${
+        cleanupActive
+          ? checked
+            ? "border-primary ring-2 ring-primary/30"
+            : "border-border"
+          : "border-border hover:-translate-y-0.5 hover:border-primary/40"
+      }`}
       data-pending={pending}
     >
+      {/* Aufräum-Modus: ganze Karte wird zur Auswahl-Fläche (Links deaktiviert). */}
+      {cleanupActive && (
+        <button
+          type="button"
+          onClick={() => cleanup?.toggle(tutorial.id)}
+          aria-pressed={checked}
+          aria-label={`${tutorial.title} ${checked ? "abwählen" : "auswählen"}`}
+          className="absolute inset-0 z-10 cursor-pointer rounded-xl"
+        >
+          <span
+            className={`absolute left-2 top-2 flex size-6 items-center justify-center rounded-md border-2 ${
+              checked ? "border-primary bg-primary text-white" : "border-line-2 bg-white"
+            }`}
+          >
+            {checked && <Check className="size-4" />}
+          </span>
+        </button>
+      )}
       {/* Thumbnail links: erstes Schritt-Bild oder Platzhalter */}
       <Link
         href={`/app/tutorials/${tutorial.id}`}
