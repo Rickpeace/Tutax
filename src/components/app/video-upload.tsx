@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square, Info } from "lucide-react";
+import { Clapperboard, Loader2, CheckCircle2, AlertCircle, UploadCloud, Circle, Square, Info, Link2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,9 @@ export function VideoUpload({ accountId }: { accountId: string }) {
   const [note, setNote] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [secs, setSecs] = useState(0);
+  const [showUrl, setShowUrl] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -86,6 +89,34 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     uploadAndQueue(file, (file.name.split(".").pop() || "mp4").toLowerCase(), file.name.replace(/\.[^.]+$/, ""));
   }
 
+  // Video per direktem Link importieren: der Server lädt es (SSRF-geschützt) und reiht
+  // den Job ein; ab da übernimmt das bestehende Polling (setJobId + Phase queued).
+  async function importFromUrl() {
+    const url = importUrl.trim();
+    if (!url || importing) return;
+    setError(null); setTutorialId(null); setImporting(true);
+    try {
+      const res = await fetch("/api/video-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.jobId) {
+        setError(data?.error || "Import fehlgeschlagen.");
+        setPhase("failed");
+        return;
+      }
+      setJobId(data.jobId);
+      setPhase("queued");
+    } catch {
+      setError("Import fehlgeschlagen. Bitte Link prüfen.");
+      setPhase("failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function startRecording() {
     setError(null); setTutorialId(null); setNoMic(false);
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -134,6 +165,7 @@ export function VideoUpload({ accountId }: { accountId: string }) {
     streamsRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("idle"); setError(null); setTutorialId(null); setJobId(null); setNote(null); setProgress(null); setSecs(0); setNoMic(false);
+    setShowUrl(false); setImportUrl(""); setImporting(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -177,6 +209,32 @@ export function VideoUpload({ accountId }: { accountId: string }) {
             <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
               <UploadCloud className="size-4" /> Stattdessen Datei hochladen
             </Button>
+            {!showUrl ? (
+              <Button variant="ghost" className="w-full" onClick={() => setShowUrl(true)}>
+                <Link2 className="size-4" /> Von URL importieren
+              </Button>
+            ) : (
+              <div className="space-y-2 rounded-lg border border-line-2 bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Direkter Video-Link (MP4/WebM). Loom: über <b>Teilen → Video herunterladen</b> und hier hochladen.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    autoFocus
+                    placeholder="https://…/video.mp4"
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") importFromUrl(); }}
+                    className="min-w-0 flex-1 rounded-md border border-line-2 bg-background px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <Button onClick={importFromUrl} disabled={importing || !importUrl.trim()}>
+                    {importing ? <Loader2 className="size-4 animate-spin" /> : "Importieren"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
