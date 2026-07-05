@@ -8,6 +8,9 @@
 //       Branch-Kette + root gesetzt + Vorlagen-Titel korrekt
 //   (d) rect außerhalb 0..1 wird geclampt
 //   (e) Free-Limit: Konto plan=free mit 5 Tutorials -> guide-complete 403
+//   (f) Selektor-Vorbau (Welle 24): S1 gueltiger selector -> exakt in steps.selector; S2
+//       kaputter selector (falsche Typen/ueberlang/fremde Keys) -> gesaeubert, KEIN 400;
+//       S3 ohne selector -> null (Abwaertskompatibilitaet)
 // Danach: vollstaendiges Cleanup (Tutorials/Steps/Branches via Cascade, Storage, Konten).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-guide-live.mjs
@@ -137,11 +140,14 @@ try {
 
   // ---------- (c/d) complete gueltig: 3 Schritte, einer OHNE Label, rect (d) außerhalb 0..1 ----------
   const steps = [
-    // Schritt 1: click mit Label
-    { path: hs.uploads[0].path, label: "Speichern", action: "click", rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 }, url: "https://app.test/a", title: "Seite A", w: 1280, h: 720 },
-    // Schritt 2: type mit Label, rect (d) AUSSERHALB 0..1 -> muss geclampt werden
-    { path: hs.uploads[1].path, label: "E-Mail", action: "type", rect: { x: -0.5, y: 1.5, w: 3, h: 2 }, url: "https://app.test/b", title: "Seite B", w: 1000, h: 800 },
-    // Schritt 3: OHNE Label -> Titel "Schritt 3"
+    // Schritt 1: click mit Label + GUELTIGEM selector (muss exakt ankommen)
+    { path: hs.uploads[0].path, label: "Speichern", action: "click", rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 }, url: "https://app.test/a", title: "Seite A", w: 1280, h: 720,
+      selector: { css: "#save", text: "Speichern", role: "button" } },
+    // Schritt 2: type mit Label, rect (d) AUSSERHALB 0..1 -> muss geclampt werden; selector
+    // KAPUTT (css falscher Typ, text ueberlang, fremder Key) -> gesaeubert, KEIN 400.
+    { path: hs.uploads[1].path, label: "E-Mail", action: "type", rect: { x: -0.5, y: 1.5, w: 3, h: 2 }, url: "https://app.test/b", title: "Seite B", w: 1000, h: 800,
+      selector: { css: 123, text: "x".repeat(500), role: "textbox", evil: "drop-me", nested: { a: 1 } } },
+    // Schritt 3: OHNE Label und OHNE selector -> Titel "Schritt 3", selector null
     { path: hs.uploads[2].path, label: "", action: "click", rect: { x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, url: "https://app.test/b", title: "Seite B", w: 1000, h: 800 },
   ];
   const compRes = await post("/api/recorder/guide-complete", { token, steps });
@@ -192,6 +198,27 @@ try {
       ok(b1?.target_step_id === s2.id && b1?.label === null, "Branch S1->S2 (label null)");
       ok(b2?.target_step_id === s3.id && b2?.label === null, "Branch S2->S3 (label null)");
       ok(!b3, "S3 hat keinen ausgehenden Branch (Ende)");
+
+      // ---------- Selektor-Vorbau (Welle 24) ----------
+      // S1: gueltiger selector kommt EXAKT an.
+      ok(
+        s1.selector && s1.selector.css === "#save" && s1.selector.text === "Speichern" && s1.selector.role === "button",
+        `S1: selector exakt gespeichert (war ${JSON.stringify(s1.selector)})`,
+      );
+      // S2: kaputter selector wird gesaeubert (css falscher Typ -> weg; text auf <=80 gekappt;
+      // fremde Keys evil/nested weg; role bleibt) - und der Request scheitert NICHT.
+      const s2sel = s2.selector || {};
+      const s2keys = Object.keys(s2sel).sort().join(",");
+      ok(
+        !("css" in s2sel) &&
+          typeof s2sel.text === "string" && s2sel.text.length <= 80 &&
+          s2sel.role === "textbox" &&
+          !("evil" in s2sel) && !("nested" in s2sel) &&
+          (s2keys === "role,text"),
+        `S2: kaputter selector gesaeubert, kein 400 (war ${JSON.stringify(s2.selector)})`,
+      );
+      // S3: ohne selector -> null gespeichert (Abwaertskompatibilitaet).
+      ok(s3.selector === null, `S3: ohne selector -> null (war ${JSON.stringify(s3.selector)})`);
     }
   }
 
