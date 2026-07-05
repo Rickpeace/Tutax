@@ -22,6 +22,27 @@ export const RECORDER_CORS: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+// CORS fuer GET /api/recorder/me (Ein-Klick-Pairing, Welle 25). Der Token reist im
+// Authorization-Header (nicht als Cookie/Query) -> „Access-Control-Allow-Headers:
+// Authorization" ist noetig, damit der Preflight durchgeht. `Origin: *` bleibt
+// unkritisch (dieselbe Begruendung wie oben: keine ambient authority ohne Token).
+export const RECORDER_ME_CORS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+/**
+ * Token aus einem „Authorization: Bearer <token>"-Header ziehen (Ein-Klick-Pairing).
+ * Gibt den rohen Token-String oder "" zurueck (Validierung macht accountForRecorderToken).
+ */
+export function bearerToken(header: string | null): string {
+  if (!header) return "";
+  const m = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return m ? m[1].trim() : "";
+}
+
 export const VIDEO_BUCKET = "tutorial-videos";
 
 // JSON-Antwort mit CORS-Headern (die Extension liest Fehlermeldungen aus).

@@ -58,3 +58,64 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   );
   return true; // Antwort kommt asynchron
 });
+
+// Ein-Klick-Pairing (Welle 25): content.js reicht {type:"steply-pair", token, appUrl}
+// weiter, nachdem die App-Seite es per Klick angestossen hat (Origin-Bindung dort).
+//
+// SICHERHEIT — der Token wird ZUERST gegen die Ziel-App validiert (GET /api/recorder/me
+// mit „Authorization: Bearer <token>"), BEVOR wir irgendetwas speichern:
+//   * Nur bei HTTP 200 mit Kontoname -> chrome.storage.local.set({steplyToken,steplyAppUrl})
+//     und Bestaetigung (inkl. Kontoname) zurueck an den Tab. Die Seite UND das Panel zeigen
+//     den Kontonamen an -> eine Fehlbindung an das falsche Konto faellt sofort auf.
+//   * Bei jedem Fehler (falscher Token, App nicht erreichbar, Timeout): NICHTS speichern,
+//     Ablehnung zurueck. Der Token steht nie in einer URL (nur im Authorization-Header).
+// appUrl muss http(s) sein und wird laengenbegrenzt; Timeout ~8s via AbortController.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "steply-pair") return false;
+  const token = typeof msg.token === "string" ? msg.token.trim() : "";
+  const appUrl =
+    typeof msg.appUrl === "string" ? msg.appUrl.trim().replace(/\/+$/, "") : "";
+  if (!token || token.length > 200 || !/^https?:\/\//i.test(appUrl) || appUrl.length > 300) {
+    sendResponse({ ok: false, error: "Ungueltige Verbindungsdaten." });
+    return true;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  fetch(appUrl + "/api/recorder/me", {
+    method: "GET",
+    headers: { Authorization: "Bearer " + token },
+    signal: controller.signal,
+  })
+    .then((res) =>
+      res
+        .json()
+        .catch(() => ({}))
+        .then((body) => ({ status: res.status, body }))
+    )
+    .then(({ status, body }) => {
+      if (status !== 200 || !body || !body.account) {
+        sendResponse({
+          ok: false,
+          error:
+            status === 401
+              ? "Token wurde von Steply nicht akzeptiert."
+              : "Steply antwortete unerwartet (" + status + ").",
+        });
+        return;
+      }
+      // ERST nach erfolgreicher Validierung speichern.
+      return chrome.storage.local
+        .set({ steplyToken: token, steplyAppUrl: appUrl })
+        .then(() => sendResponse({ ok: true, account: String(body.account) }));
+    })
+    .catch((err) => {
+      const aborted = err && err.name === "AbortError";
+      sendResponse({
+        ok: false,
+        error: aborted ? "Zeitueberschreitung - Steply nicht erreichbar." : "Steply nicht erreichbar.",
+      });
+    })
+    .finally(() => clearTimeout(timer));
+  return true; // Antwort kommt asynchron
+});
