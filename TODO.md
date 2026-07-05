@@ -76,6 +76,12 @@
   nicht, um das Element später wiederzufinden). Selektor-Erfassung als kleiner
   Vorab-Schritt lohnt früh: dann können heute aufgenommene Anleitungen später
   geführt abgespielt werden.
+- [ ] **Autopilot v2: Anleitungs-TÜV per Agent** (05.07., aus Tango-Beobachtung
+  abgeleitet): Statt nur KI-Recherche klickt ein Sandbox-Browser-Agent die
+  Anleitung bei öffentlich erreichbaren Abläufen real nach und meldet den
+  konkreten kaputten Schritt. (Ausführen FÜR den Endkunden — Tango-Stil —
+  bewusst verworfen: Haftung/Vertrauen/Zugangsdaten passen nicht zu unserem
+  Endkunden-Markt.)
 - [ ] **Auto-Schwärzung bei der Aufnahme** (Tango „Automatic blurring", 05.07.):
   Sofort-Modus erkennt sensible Felder (input type=password, E-Mail-/IBAN-Muster
   im Screenshot-Bereich) und setzt Blur-Vorschläge automatisch; Nutzer bestätigt.
