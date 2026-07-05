@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Steply Recorder",
-  "version": "1.1.0",
-  "description": "Nimmt einen Bildschirm-Screencast auf und zeichnet Ihre Klicks auf. Direkt-Upload zu Steply oder zwei Dateien fuer den Upload (Aus Video).",
+  "version": "1.2.0",
+  "description": "Zwei Wege zur Anleitung: Sofort-Anleitung (Screenshot je Klick, ohne Video) oder Video mit KI-Texten. Direkt-Upload zu Steply.",
   "permissions": [
     "activeTab",
     "downloads",

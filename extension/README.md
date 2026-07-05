@@ -1,12 +1,19 @@
 # Steply Recorder (Browser-Extension, v2)
 
 Nordstern-Einstieg **„Klicks statt Zauberwort"**: Statt einen Ablauf in Worte zu
-fassen, klicken Sie ihn einfach vor. Diese Chrome-Extension nimmt einen
-Bildschirm-Screencast auf und zeichnet dabei Ihre Klicks (Zeit, Position,
-Beschriftung) auf.
+fassen, klicken Sie ihn einfach vor.
 
-Steply nutzt die Klicks als **exakte Schrittgrenzen** und für die
-**Highlight-Positionen** im generierten Tutorial.
+Die Extension bietet **zwei Modi** (Wahl im Popup):
+
+- **Sofort-Anleitung (Screenshots je Klick)** — Tango-Stil: Bei jedem Klick
+  entsteht sofort ein Screenshot + das geklickte Element wird ausgelesen
+  (Bounding-Box, Beschriftung, Aktion). Daraus baut Steply in Sekunden einen
+  **fertigen Tutorial-Entwurf** — **ohne Video**, ohne Server-KI-Pipeline. Braucht
+  einen Verbindungs-Token (Direkt-Upload). Details unten unter „Sofort-Anleitung".
+- **Video (mit KI-Texten & Ton)** — der Bestand: nimmt einen
+  Bildschirm-Screencast auf und zeichnet dabei Ihre Klicks (Zeit, Position,
+  Beschriftung) auf. Steply nutzt die Klicks als **exakte Schrittgrenzen** und für
+  die **Highlight-Positionen** im generierten Tutorial (Whisper + Vision im Worker).
 
 **Zwei Wege am Ende der Aufnahme:**
 
@@ -154,3 +161,66 @@ nichts.
 - **CORS `*` ist unkritisch**, weil kein Cookie/keine Session mitgeht: es gibt
   keine ambient authority. Nur wer den (widerrufbaren) Token hat, darf hochladen.
   Token in Steply erneuern = alter sofort ungültig.
+
+---
+
+## Sofort-Anleitung (Tango-Stil) — Screenshots je Klick, ohne Video
+
+Zweiter Modus, gedacht für „in Sekunden zur Anleitung": statt einem Video macht die
+Extension bei **jedem Klick sofort einen Screenshot** und liest das geklickte Element
+aus. Daraus entsteht direkt ein **Tutorial-Entwurf** — kein Worker, keine Whisper/
+Vision-Pipeline.
+
+**Ablauf (nur mit Verbindungs-Token):**
+
+1. Popup → Modus **„Sofort-Anleitung"** → Aufnahme starten (öffnet den Aufnahme-Tab).
+2. Der Aufnahme-Tab setzt `chrome.storage.local` `{ rec: { startedAt, mode: "guide" } }`.
+   Das Content-Script erfasst dann bei jedem `pointerdown` (Capture-Phase, **vor** der
+   Klick-Wirkung/Navigation) die **BoundingClientRect des Elements** (normalisiert 0..1
+   zum Viewport — der Tango-Trick für pixelgenaue Markierungen), das **Label**
+   (aria-label/Text/alt/value, ≤ 60), den **Aktionstyp** (`click` | `type` bei
+   Eingabefeldern), `location.href` und `document.title`.
+3. Pro Klick-Nachricht macht der Aufnahme-Tab **sofort**
+   `chrome.tabs.captureVisibleTab(fensterId, {format:"png"})` — der aufgenommene Tab ist
+   im Moment des Klicks der aktive/sichtbare Tab seines Fensters. PNG → **WebP**
+   (OffscreenCanvas, Qualität 0,85, spart ~70 % Upload). Schritte sammeln sich im
+   Speicher; **Live-Zähler** + **Mini-Vorschau** (letzter Screenshot) + Liste mit **✕**
+   zum Entfernen einzelner Schritte vor dem Upload.
+4. **„Anleitung fertigstellen"** → Upload (s. u.) → Abschluss-Screen mit
+   „In Steply öffnen" (`{appUrl}/app/tutorials/{id}`).
+
+**captureVisibleTab-Grenzen (bewusst behandelt):**
+
+- **Ratenlimit ~2/s** (`MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND`): Captures werden
+  **serialisiert** und auf ≥ 550 ms Abstand gedrosselt; schnelle Doppelklicks werden
+  zusammengefasst (**letzter gewinnt**), statt eine Fehlerflut auszulösen.
+- **Sofortige Navigation:** `pointerdown` feuert früh genug, dass der Screenshot die
+  Ausgangsseite zeigt; scheitert ein Einzel-Screenshot doch (Tab schon weiter), wird der
+  Schritt still übersprungen und ein Hinweis gezeigt.
+- **Berechtigungen:** `captureVisibleTab` ist durch die vorhandenen
+  `host_permissions` (`http/https`) gedeckt — **kein** zusätzliches `"tabs"`-Recht nötig.
+- **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token ist der Sofort-Modus im
+  Popup ausgeblendet (Hinweis: „In Steply verbinden — Einstellungen → Einbetten").
+
+**Direkt-Upload — Server-Routen (privat!):**
+
+- `POST /api/recorder/guide-handshake` `{token, count}` → Token via `accountForRecorderToken`,
+  `count` 1..40 → **count signierte Upload-URLs** für den **PRIVATEN** Bucket
+  `tutorial-images` unter `{accountId}/guide-{uuid}/{i}.webp` (Entwurfs-Bilder sind
+  privat — public entsteht erst beim Veröffentlichen). Extension lädt alle WebPs per `PUT`.
+- `POST /api/recorder/guide-complete` `{token, title?, steps:[{path, label, action,
+  rect:{x,y,w,h}, url, w, h}]}` → validiert (Pfad-Präfix aufs Konto, rect je 0..1
+  geklemmt, Label ≤ 60, ≤ 40 Schritte, Maße plausibel), respektiert `FREE_TUTORIAL_LIMIT`
+  und legt einen **Tutorial-Entwurf** an: Titel = übergeben oder „Anleitung vom {Datum}";
+  je Schritt Vorlagen-Titel/-Text, ein **Highlight-Rechteck** (`#3d4ee6`, rounded) aus
+  `rect`, `image_path/width/height`; **lineare** null-Label-Branch-Kette + `root_step_id`
+  (Verkabelung wie `scripts/seed-steply-help.mjs`). Danach via `after()` **ein** billiger,
+  ausfallsicherer KI-Feinschliff der Texte (kein Vision, keine Bilder) — Fehler ⇒ die
+  Vorlagen bleiben. Antwort `{tutorialId}`.
+- CORS-Begründung wie oben (kein Cookie/keine Session → `*` unkritisch).
+
+> **Test:** `node --env-file=.env.local scripts/test-guide-live.mjs` (Server lokal :3016)
+> deckt Auth, count-Grenzen, privaten Upload, Fremd-Pfad, Entwurf mit 3 Schritten
+> (Highlight/Maße/Branch-Kette/Vorlagen-Titel), rect-Clamping und das Free-Limit ab.
+> Die **Browser-Logik** (`captureVisibleTab` über Navigationen) ist nur im echten Chrome
+> testbar — **manueller Chrome-Test durch Richard nötig**.

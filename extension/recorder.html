@@ -13,7 +13,8 @@
         <h1>Steply Recorder</h1>
       </header>
 
-      <section id="setup">
+      <!-- ============ VIDEO-MODUS (Bestand) ============ -->
+      <section id="setup" hidden>
         <p class="lead">
           Klicken Sie auf „Bildschirm waehlen &amp; aufnehmen" und waehlen Sie im
           Dialog den <strong>Tab</strong> oder das <strong>Fenster</strong>, das
@@ -75,6 +76,44 @@
         </div>
 
         <button id="again" class="btn" type="button">Neue Aufnahme</button>
+      </section>
+
+      <!-- ============ SOFORT-ANLEITUNG (guide-Modus) ============ -->
+      <section id="guideLive" hidden>
+        <div class="rec-row">
+          <span class="rec-badge"><span class="rec-pulse"></span> Sofort-Anleitung laeuft</span>
+        </div>
+        <p class="lead">
+          Fuehren Sie Ihren Ablauf im aufgenommenen Tab vor - <strong>jeder Klick</strong>
+          wird als Schritt (Screenshot + Markierung) festgehalten.
+        </p>
+        <p class="clicks-count">
+          <strong id="guideCount">0</strong> Schritte aufgenommen
+        </p>
+        <div id="guidePreviewWrap" class="preview-wrap" hidden>
+          <img id="guidePreview" class="preview-img" alt="Letzter Screenshot" />
+        </div>
+        <div id="guideList" class="guide-list" aria-live="polite"></div>
+        <button id="guideStop" class="btn btn-primary" type="button">
+          Anleitung fertigstellen
+        </button>
+        <p class="note">
+          Schliessen Sie diesen Tab nicht - sonst gehen die Schritte verloren. Einzelne
+          Schritte koennen Sie oben mit ✕ entfernen.
+        </p>
+      </section>
+
+      <section id="guideDone" hidden>
+        <div class="done-check">✓</div>
+        <h2>Anleitung erstellt</h2>
+        <div id="guideUploadBox">
+          <p id="guideProgress" class="lead" role="status" aria-live="polite"></p>
+          <div id="guideUploadDone" hidden>
+            <p class="lead">Ihre Anleitung ist als Entwurf in Steply.</p>
+            <button id="guideOpenApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
+          </div>
+        </div>
+        <button id="guideAgain" class="btn" type="button">Neue Aufnahme</button>
       </section>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
