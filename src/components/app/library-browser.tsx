@@ -256,7 +256,7 @@ export function LibraryBrowser({
                       Neue Anleitung
                     </span>
                     <span className="mt-0.5 block text-[11.5px] font-semibold">
-                      Screencast oder selbst bauen
+                      Durchklicken, Video oder selbst bauen
                     </span>
                   </span>
                 </button>

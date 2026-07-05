@@ -19,9 +19,9 @@ import { PLANS } from "@/lib/pricing";
 import { Wordmark } from "@/components/wordmark";
 
 export const metadata: Metadata = {
-  title: "Steply – Aus jedem Screencast eine Klick-Anleitung",
+  title: "Steply – Einmal zeigen. Nie wieder erklären.",
   description:
-    "Video hochladen oder Screenshots wählen — Steply macht daraus Schritt-für-Schritt-Anleitungen für Ihre Kunden und Ihr Team.",
+    "Eine Aufgabe einmal durchklicken — Steply macht daraus eine Schritt-für-Schritt-Anleitung mit Bildern und Markierungen. Für Ihre Kunden und Ihr Team.",
 };
 
 /**
@@ -62,14 +62,15 @@ export default function LandingPage() {
       <section className="relative px-4 pt-8 text-center sm:px-10 sm:pt-[52px]">
         <span className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-card px-4 py-1.5 text-[11px] font-extrabold text-muted-foreground sm:text-[12.5px]">
           <span aria-hidden className="size-2 rounded-full bg-teal" />
-          Neu: Schritte automatisch aus Screencasts
+          Neu: Anleitungen einfach beim Durchklicken aufnehmen
         </span>
         <h1 className="mx-auto mt-5 max-w-[760px] text-[33px] font-black leading-[1.1] tracking-[-0.02em] sm:text-[54px] sm:leading-[1.08]">
-          Aus jedem Screencast eine <span className="text-primary">Klick-Anleitung</span>.
+          Einmal zeigen. <span className="text-primary">Nie wieder erklären</span>.
         </h1>
         <p className="mx-auto mt-4 max-w-[300px] text-sm font-bold leading-relaxed text-muted-foreground sm:mt-[18px] sm:max-w-[560px] sm:text-[17px]">
-          Video hochladen oder Screenshots wählen — Steply macht daraus
-          Schritt-für-Schritt-Anleitungen für Ihre Kunden und Ihr Team.
+          Führen Sie eine Aufgabe einmal am Bildschirm vor — Steply macht daraus
+          eine Schritt-für-Schritt-Anleitung mit Bildern, Markierungen und Text.
+          Für Ihre Kunden und Ihr Team.
         </p>
         <div className="mx-auto mt-6 flex max-w-md flex-col justify-center gap-2.5 sm:flex-row sm:gap-3">
           <Link
@@ -133,14 +134,14 @@ export default function LandingPage() {
             {
               n: "1",
               bg: "bg-primary",
-              title: "Aufnehmen oder hochladen",
-              body: "Screencast hochladen oder Screenshots auswählen — beides funktioniert.",
+              title: "Einmal vorführen",
+              body: "Aufnahme starten und die Aufgabe ganz normal durchklicken — mehr nicht.",
             },
             {
               n: "2",
               bg: "bg-teal",
-              title: "Schritte werden erkannt",
-              body: "Steply erkennt jeden Klick, setzt Marker und schreibt die Schritt-Texte vor.",
+              title: "Steply schreibt mit",
+              body: "Aus jedem Klick wird ein Schritt: Bild, Markierung und Text entstehen automatisch.",
             },
             {
               n: "3",
@@ -176,29 +177,29 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-[1000px] items-center gap-8 lg:grid-cols-[1fr_1.1fr] lg:gap-12">
           <div>
             <h2 className="text-[21px] font-black leading-tight sm:text-[32px]">
-              Oder einfach durchklicken.
+              Aufnehmen, während Sie arbeiten.
             </h2>
             <p className="mt-3 text-sm font-bold leading-relaxed text-muted-foreground sm:text-[15px]">
-              Die Steply-Extension nimmt jeden Klick auf — aus einem einzigen
-              Durchlauf wird eine fertige Anleitung mit Screenshots und Markern.
-              Ohne Video, ohne Schnitt, direkt in Ihrer Bibliothek.
+              Die kleine Steply-Erweiterung im Browser merkt sich jeden Klick —
+              aus einem einzigen Durchlauf wird eine fertige Anleitung mit
+              Bildern und Markierungen. Kein Video nötig, nichts zu schneiden.
             </p>
             <div className="mt-5 space-y-2.5">
               {[
                 {
                   icon: MousePointerClick,
-                  title: "Durchklicken",
-                  body: "Extension starten, Aufgabe einmal vorführen — fertig.",
+                  title: "Durchklicken (der schnellste Weg)",
+                  body: "Aufnahme starten, Aufgabe einmal vorführen — fertig.",
                 },
                 {
                   icon: Clapperboard,
-                  title: "Screencast hochladen",
-                  body: "Die KI erkennt Schritte, setzt Marker, schreibt die Texte vor.",
+                  title: "Bildschirm-Video hochladen",
+                  body: "Sie haben schon ein Video? Steply macht daraus die Schritte.",
                 },
                 {
                   icon: PencilLine,
                   title: "Selbst bauen",
-                  body: "Screenshot, Markierung, Text — volle Kontrolle im Builder.",
+                  body: "Bild, Markierung, Text — volle Kontrolle, Schritt für Schritt.",
                 },
               ].map((w) => (
                 <div
@@ -436,7 +437,7 @@ export default function LandingPage() {
           {[
             {
               q: "Wie lange dauert die erste Anleitung wirklich?",
-              a: "Wenige Minuten: Extension starten und die Aufgabe einmal durchklicken — oder einen Screencast hochladen. Steply erzeugt Schritte, Screenshots und Marker; Sie prüfen nur noch den Text.",
+              a: "Wenige Minuten: Aufnahme starten und die Aufgabe einmal durchklicken — oder ein Bildschirm-Video hochladen. Steply erzeugt Schritte, Bilder und Markierungen; Sie prüfen nur noch den Text.",
             },
             {
               q: "Brauchen meine Kunden ein Login?",
