@@ -518,6 +518,14 @@ async function captureFor(pending) {
   guideLastCaptureAt = Date.now();
   if (!dataUrl) return;
 
+  // Klick-Puls im aufgenommenen Tab ausloesen - ERST NACH dem Screenshot, damit der
+  // Puls nie mit im Bild landet. Tango-Gefuehl: Aufleuchten = "Schritt ist im Kasten".
+  try {
+    chrome.tabs.sendMessage(clicksTabId, { type: "steply-guide-captured" });
+  } catch (err) {
+    /* Puls ist optional */
+  }
+
   let img;
   try {
     img = await pngDataUrlToWebp(dataUrl);

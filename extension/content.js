@@ -130,9 +130,14 @@
 
     const el = clickableFor(event.target) || event.target;
     let rect = { x: 0, y: 0, w: 0, h: 0 };
+    // Pixel-Lage fuer den Klick-Puls merken (gezeichnet erst NACH der Screenshot-
+    // Bestaetigung durch den Recorder, damit er nie mit im Bild landet).
+    lastClickPx = { left: 0, top: 0, width: 0, height: 0, cx: event.clientX || 0, cy: event.clientY || 0 };
     try {
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
       if (r && r.width >= 0 && r.height >= 0) {
+        lastClickPx.left = r.left; lastClickPx.top = r.top;
+        lastClickPx.width = r.width; lastClickPx.height = r.height;
         const clamp = (n) => Math.min(1, Math.max(0, n));
         const round = (n) => Math.round(n * 10000) / 10000;
         rect = {
@@ -176,6 +181,53 @@
   // pointerdown feuert VOR click und VOR der Navigation -> der Screenshot zeigt die Seite
   // im Ausgangszustand (mit dem Element, das gleich geklickt wird).
   document.addEventListener("pointerdown", onPointerDown, true);
+
+  // ---- Klick-Puls (Tango-Stil): blaues Aufleuchten um das erfasste Element. ----
+  let lastClickPx = null;
+  function showCapturePulse() {
+    if (!lastClickPx) return;
+    const pad = 4;
+    const el = document.createElement("div");
+    const hasRect = lastClickPx.width > 2 && lastClickPx.height > 2;
+    const st = el.style;
+    st.position = "fixed";
+    st.zIndex = "2147483647";
+    st.pointerEvents = "none";
+    st.border = "3px solid #3d4ee6";
+    st.boxShadow = "0 0 0 4px rgba(61,78,230,0.25)";
+    st.borderRadius = hasRect ? "10px" : "50%";
+    if (hasRect) {
+      st.left = lastClickPx.left - pad + "px";
+      st.top = lastClickPx.top - pad + "px";
+      st.width = lastClickPx.width + pad * 2 + "px";
+      st.height = lastClickPx.height + pad * 2 + "px";
+    } else {
+      // Fallback ohne Element-Box: kleiner Kreis am Klickpunkt.
+      st.left = lastClickPx.cx - 16 + "px";
+      st.top = lastClickPx.cy - 16 + "px";
+      st.width = "32px";
+      st.height = "32px";
+    }
+    (document.documentElement || document.body).appendChild(el);
+    try {
+      el.animate(
+        [
+          { opacity: 0.9, transform: "scale(0.97)" },
+          { opacity: 1, transform: "scale(1.03)", offset: 0.35 },
+          { opacity: 0, transform: "scale(1.0)" },
+        ],
+        { duration: 650, easing: "ease-out" }
+      ).onfinish = () => el.remove();
+    } catch (err) {
+      setTimeout(() => el.remove(), 650);
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === "steply-guide-captured" && recording && mode === "guide") {
+      showCapturePulse();
+    }
+  });
 
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
