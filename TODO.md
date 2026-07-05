@@ -68,6 +68,17 @@
   neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
   → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft klientseitig via
   RLS — braucht Policy/Trigger, kommt mit der LemonSqueezy-Welle); Team-bis-5 ebenso.
+- [ ] **Live-Führung auf der echten Website** (Richard/Tango, 05.07.): Tutorial öffnen
+  → die Extension (oder das Embed-Script) hebt die Buttons DIREKT auf der echten
+  Website hervor und blättert beim Klicken weiter (WalkMe/Tango-Guidance-Prinzip).
+  Technische Brücke: Der Sofort-Modus muss pro Schritt zusätzlich einen robusten
+  ELEMENT-SELEKTOR speichern (CSS-Pfad + Text + Rolle — Rechteck allein reicht
+  nicht, um das Element später wiederzufinden). Selektor-Erfassung als kleiner
+  Vorab-Schritt lohnt früh: dann können heute aufgenommene Anleitungen später
+  geführt abgespielt werden.
+- [ ] **Auto-Schwärzung bei der Aufnahme** (Tango „Automatic blurring", 05.07.):
+  Sofort-Modus erkennt sensible Felder (input type=password, E-Mail-/IBAN-Muster
+  im Screenshot-Bereich) und setzt Blur-Vorschläge automatisch; Nutzer bestätigt.
 - [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)
