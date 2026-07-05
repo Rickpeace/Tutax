@@ -150,6 +150,29 @@ try {
     ok(job2?.clicks == null, "Row OHNE clicks bei kaputten Klick-Daten");
     ok(job2?.title === "Bildschirmaufnahme", "Default-Titel Bildschirmaufnahme ohne title");
   }
+
+  // ---------- (f) GET /api/recorder/me — Ein-Klick-Pairing-Validierung (Welle 25) ----------
+  const { data: accRow } = await admin.from("accounts").select("name, slug").eq("id", accId).single();
+
+  // gueltiger Token -> 200 + Kontoname + slug.
+  const meOk = await fetch(`${BASE}/api/recorder/me`, { headers: { Authorization: "Bearer " + token } });
+  const meBody = await meOk.json().catch(() => ({}));
+  ok(meOk.status === 200, `me mit gueltigem Token -> 200 (war ${meOk.status})`);
+  ok(meBody.account === accRow?.name && meBody.slug === accRow?.slug, `me liefert Kontoname+slug (war ${JSON.stringify(meBody)})`);
+  ok(meOk.headers.get("access-control-allow-origin") === "*", "me liefert CORS-Header *");
+
+  // falscher Token -> 401.
+  const meBad = await fetch(`${BASE}/api/recorder/me`, { headers: { Authorization: "Bearer " + crypto.randomUUID() } });
+  ok(meBad.status === 401, `me mit falschem Token -> 401 (war ${meBad.status})`);
+
+  // fehlender Token (kein Authorization-Header) -> 401.
+  const meNone = await fetch(`${BASE}/api/recorder/me`);
+  ok(meNone.status === 401, `me ohne Authorization -> 401 (war ${meNone.status})`);
+
+  // OPTIONS-Preflight -> 204 + CORS, Authorization-Header erlaubt.
+  const mePre = await fetch(`${BASE}/api/recorder/me`, { method: "OPTIONS" });
+  ok(mePre.status === 204 && mePre.headers.get("access-control-allow-origin") === "*", `me OPTIONS -> 204 + CORS (war ${mePre.status})`);
+  ok((mePre.headers.get("access-control-allow-headers") || "").toLowerCase().includes("authorization"), "me Preflight erlaubt Authorization-Header");
 } catch (e) {
   ok(false, "Fehler: " + e.message);
 } finally {
