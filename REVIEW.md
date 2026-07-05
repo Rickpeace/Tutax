@@ -167,7 +167,23 @@ sidePanel, Tango-Architektur): Panel statt Popup+Fenster, Zustands-Screens
 Robustheit: Multi-Tab-Klicks (Fenster- statt Tab-Bindung), Zustands-Versöhnung
 (nie mehr klemmender Aufnahme-Modus), Mikro-Preflight (kein stummes Video mehr),
 Klick-Puls pro Tab; Server-Verträge unverändert (Tests grün). Vorher: v1.2.1
-Klick-Puls nach Screenshot-Bestätigung (Fable direkt).
+Klick-Puls nach Screenshot-Bestätigung (Fable direkt). **Hotfix v2.0.1 (Fable):**
+captureVisibleTab scheitert im Panel-Kontext an Chromium-Bug crbug.com/40916430 →
+Capture via background.js + Retry + echte Fehlermeldung; Fenster des Klicks statt
+Panel-Fenster; host_permissions `<all_urls>`.
+**Opus Welle 24 + Fable (05.07.):** ✍️ **Extension v2.1.0 — Aufnahme-Qualität**:
+Label-Hygiene (sichtbarer Text statt textContent — styled-components-CSS landete
+wörtlich im Schritttext; Code-Erkennung als Rettungsnetz; DATENSCHUTZ: Feldwerte
+nie mehr als Label, bei Passwortfeldern nichts Inhaltliches) · Blur-basierte
+**Eingabe-Schritte** (Tango-Verhalten: Schritt entsteht beim Verlassen des Felds
+mit geändertem Wert, Screenshot zeigt das ausgefüllte Feld; Klick ins Feld = kein
+Rauschen; pointerdown-vor-blur-Reihenfolge gelöst; Panel-Einzelslot → FIFO-Queue,
+Eingabe+Klick <300 ms teilen einen Screenshot) · **Selektor-Vorbau** (Migration
+0027 `steps.selector` jsonb: {css,text,role} je Schritt, stabile Selektoren ohne
+generierte Klassen/IDs, serverseitig streng gesäubert, wirft nie, abwärts-
+kompatibel — Grundlage für Live-Führung + Anleitungs-TÜV, wird noch nicht
+gelesen) · neuer Headless-Beweis `scripts/test-guide-capture.mjs` (Playwright,
+25 Assertionen: Labels/Editierbarkeit/blur-Reihenfolge/Passwort-Schutz/Selektoren).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

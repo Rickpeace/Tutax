@@ -11,13 +11,16 @@
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
-- [ ] **Extension v2.0.1 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
-  Steply Recorder NEU LADEN (v2.0.1 — Screenshot-Fix: Capture via Service Worker,
-  Chromium-Bug crbug.com/40916430 im Panel-Kontext). Checkliste:
-  bleibt bei Tab-Wechsel offen · Sofort-Anleitung über MEHRERE Tabs (jeder Klick
-  = Schritt mit Thumbnail + blauer Puls) · Abbruch → nächstes Öffnen sauber
-  („unterbrochene Aufnahme verworfen") · Video-Modus zeigt Mikro-Status VOR dem
-  Start · Upload → „In Steply öffnen". Braucht Chrome ≥ 114.
+- [ ] **Extension v2.1.0 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
+  Steply Recorder NEU LADEN (v2.1.0 — Eingabe-Schritte + Label-Fix + Selektoren).
+  Checkliste: Klick auf der styled-components-Seite → Schritttext OHNE CSS-Müll ·
+  Textfeld tippen + direkt „Speichern" klicken → ZWEI Schritte (Eingabe vor Klick),
+  Eingabe-Screenshot zeigt das AUSGEFÜLLTE Feld, kein Extra-Schritt fürs Reinklicken ·
+  Passwortfeld → Schritttext zeigt NIE das Getippte · natives Dropdown ändern +
+  Tab-Wechsel → zählt weiter korrekt · schnelle Klickfolge → nichts geht verloren.
+  Basis-Checks (v2.0): Leiste bleibt bei Tab-Wechsel offen · Abbruch → nächstes
+  Öffnen sauber · Mikro-Status vor Video-Start · Upload → „In Steply öffnen".
+  Braucht Chrome ≥ 114.
 - [ ] **Impressum + Datenschutz: echte Betreiber-Angaben** eintragen
   (`[ANGABE FOLGT — Betreiber]`-Platzhalter in impressum/datenschutz-Seiten).
 - [ ] **LemonSqueezy-Konto** anlegen (Merchant of Record) — dann baue ich die
@@ -76,11 +79,11 @@
 - [ ] **Live-Führung auf der echten Website** (Richard/Tango, 05.07.): Tutorial öffnen
   → die Extension (oder das Embed-Script) hebt die Buttons DIREKT auf der echten
   Website hervor und blättert beim Klicken weiter (WalkMe/Tango-Guidance-Prinzip).
-  Technische Brücke: Der Sofort-Modus muss pro Schritt zusätzlich einen robusten
-  ELEMENT-SELEKTOR speichern (CSS-Pfad + Text + Rolle — Rechteck allein reicht
-  nicht, um das Element später wiederzufinden). Selektor-Erfassung als kleiner
-  Vorab-Schritt lohnt früh: dann können heute aufgenommene Anleitungen später
-  geführt abgespielt werden.
+  Technische Brücke: robuster ELEMENT-SELEKTOR je Schritt. ✅ **Selektor-Vorbau
+  GEBAUT (05.07., Welle 24):** jede Sofort-Aufnahme speichert seither {css,text,
+  role} in `steps.selector` (Migration 0027) — gelesen wird er noch nirgends;
+  die Live-Führung selbst (Overlay auf der Kundenwebsite, Embed/Extension) ist
+  der offene Teil.
 - [ ] **Autopilot v2: Anleitungs-TÜV per Agent** (05.07., aus Tango-Beobachtung
   abgeleitet): Statt nur KI-Recherche klickt ein Sandbox-Browser-Agent die
   Anleitung bei öffentlich erreichbaren Abläufen real nach und meldet den
