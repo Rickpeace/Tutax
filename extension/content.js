@@ -12,15 +12,15 @@
 // Seitenwechsel innerhalb des Tabs.
 //
 // WIE ES WEISS, OB AUFGENOMMEN WIRD:
-// Der Aufnahme-Tab (recorder.js) schreibt beim Start { rec: { startedAt } } nach
+// Die Seitenleiste (panel.js) schreibt beim Start { rec: { startedAt } } nach
 // chrome.storage.local und loescht es beim Stopp. Dieses Content-Script liest den
 // Zustand beim Laden UND lauscht auf storage-Aenderungen (chrome.storage.onChanged).
 // So braucht es KEINE direkte Nachricht - eine frisch geladene Folge-Seite sieht den
 // laufenden Zustand sofort.
 //
 // UHR-SYNCHRONISATION (bewusst einfach + robust):
-// Content-Script und Aufnahme-Tab laufen auf DERSELBEN Maschine und teilen sich damit
-// dieselbe Wanduhr (Date.now()). startedAt ist Date.now() aus dem Aufnahme-Tab. Fuer
+// Content-Script und Seitenleiste laufen auf DERSELBEN Maschine und teilen sich damit
+// dieselbe Wanduhr (Date.now()). startedAt ist Date.now() aus der Seitenleiste. Fuer
 // jeden Klick gilt t = (Date.now() - startedAt) / 1000. Kein Abgleich von
 // performance.now()-Zeiturspruengen ueber Kontextgrenzen noetig.
 
@@ -118,7 +118,7 @@
   // SOFORT-ANLEITUNG (guide-Modus): auf pointerdown (Capture-Phase, VOR der Klick-Wirkung
   // und damit VOR einer moeglichen Navigation) das geklickte Element erfassen. Der TANGO-
   // Trick: nicht nur der Klickpunkt, sondern die BoundingClientRect des Elements,
-  // normalisiert 0..1 zum Viewport -> pixelgenaue Markierung im Bild. Der Aufnahme-Tab
+  // normalisiert 0..1 zum Viewport -> pixelgenaue Markierung im Bild. Die Seitenleiste
   // macht auf diese Nachricht hin SOFORT einen Screenshot (captureVisibleTab).
   function onPointerDown(event) {
     if (!recording || mode !== "guide") return;

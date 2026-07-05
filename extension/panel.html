@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steply Recorder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="panel">
+    <header class="brand">
+      <span class="dot"></span>
+      <h1>Steply Recorder</h1>
+    </header>
+
+    <p id="interruptedHint" class="note note-warn" hidden>
+      Eine unterbrochene Aufnahme wurde verworfen.
+    </p>
+
+    <!-- ============ (a) NICHT VERBUNDEN: Token / App-URL ============ -->
+    <section id="connect" hidden>
+      <p class="lead">Mit Steply verbinden</p>
+      <p class="note">
+        Fuegen Sie den Verbindungs-Token aus Steply ein (Einstellungen &rarr;
+        Einbetten &rarr; Steply Recorder verbinden). Dann landet die Aufnahme
+        automatisch in Steply - ohne Datei-Umweg.
+      </p>
+      <label class="field">
+        <span>Verbindungs-Token</span>
+        <input id="token" type="text" autocomplete="off" spellcheck="false"
+          placeholder="z. B. 3f9a1c2e-..." />
+      </label>
+      <label class="field">
+        <span>Steply-App-URL</span>
+        <input id="appUrl" type="url" autocomplete="off" spellcheck="false"
+          placeholder="https://app.steply.de" />
+      </label>
+      <button id="saveCfg" class="btn btn-primary" type="button">Speichern</button>
+      <p id="cfgStatus" class="status" role="status" aria-live="polite"></p>
+      <button id="skipConnect" class="btn" type="button">
+        Ohne Verbindung fortfahren (nur Video)
+      </button>
+    </section>
+
+    <!-- ============ (b) START: zwei Karten ============ -->
+    <section id="start" hidden>
+      <p class="lead">Wie moechten Sie den Ablauf festhalten?</p>
+
+      <button id="cardGuide" class="card-choice" type="button">
+        <span class="card-emoji" aria-hidden="true">&#9889;</span>
+        <span class="card-body">
+          <strong>Sofort-Anleitung</strong>
+          <em>Screenshot je Klick - fertige Anleitung in Sekunden, ohne Video.</em>
+        </span>
+      </button>
+
+      <button id="cardVideo" class="card-choice" type="button">
+        <span class="card-emoji" aria-hidden="true">&#127909;</span>
+        <span class="card-body">
+          <strong>Video mit Ton</strong>
+          <em>Bildschirm-Aufnahme mit Mikrofon - KI erzeugt Texte &amp; Ton.</em>
+        </span>
+      </button>
+
+      <div id="connInfo" class="conn-info">
+        <span id="connText"></span>
+        <button id="connBtn" type="button"></button>
+      </div>
+    </section>
+
+    <!-- ============ VIDEO: Vorbereitung (Mikro-Preflight) ============ -->
+    <section id="videoSetup" hidden>
+      <button id="videoBack" class="link-back" type="button">&larr; Zurueck</button>
+      <p class="lead">Video mit Ton</p>
+
+      <div id="micStatus" class="mic-status pending">Mikrofon wird geprueft ...</div>
+      <button id="micRetry" class="btn" type="button" hidden>
+        Mikrofon erneut pruefen
+      </button>
+
+      <label class="checkbox">
+        <input type="checkbox" id="noAudio" />
+        <span>Ohne Ton aufnehmen</span>
+      </label>
+
+      <button id="begin" class="btn btn-primary" type="button" disabled>
+        Bildschirm waehlen &amp; aufnehmen
+      </button>
+
+      <p id="clicksTabInfo" class="note">
+        Klicks werden auf normalen Websites erfasst - auch ueber Tab- und
+        Seitenwechsel hinweg. Auf Browser-Systemseiten (chrome://, Web Store)
+        nicht; das Video entsteht trotzdem.
+      </p>
+    </section>
+
+    <!-- ============ (d) VIDEO: Aufnahme laeuft ============ -->
+    <section id="videoLive" hidden>
+      <div class="rec-row">
+        <span class="rec-badge"><span class="rec-pulse"></span> Aufnahme laeuft</span>
+        <span id="timer" class="timer">00:00</span>
+      </div>
+      <p id="micLive" class="mic-live"></p>
+      <p class="clicks-count">
+        Erfasste Klicks: <strong id="clickCount">0</strong>
+      </p>
+      <button id="stop" class="btn btn-stop" type="button">
+        Aufnahme beenden
+      </button>
+      <p class="note">
+        Sie koennen jetzt zwischen Tabs wechseln und Ihre Schritte vorfuehren -
+        die Seitenleiste bleibt offen. Schliessen Sie sie nicht, sonst geht die
+        Aufnahme verloren.
+      </p>
+    </section>
+
+    <!-- ============ (e) VIDEO: Fertig / Upload ============ -->
+    <section id="videoDone" hidden>
+      <div class="done-check">&#10003;</div>
+      <h2>Aufnahme fertig</h2>
+
+      <div id="uploadBox" hidden>
+        <p id="uploadProgress" class="lead" role="status" aria-live="polite"></p>
+        <div id="uploadDone" hidden>
+          <p class="lead">Hochgeladen - das Tutorial wird erstellt.</p>
+          <button id="openApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
+        </div>
+      </div>
+
+      <div id="downloadBox" hidden>
+        <p class="lead">
+          Laden Sie <strong>beide</strong> Dateien in Steply hoch (Aus Video):
+        </p>
+        <ul class="filelist">
+          <li id="fileVideo">aufnahme.webm</li>
+          <li id="fileClicks">clicks.json</li>
+        </ul>
+      </div>
+
+      <button id="again" class="btn" type="button">Neue Aufnahme</button>
+    </section>
+
+    <!-- ============ (c) SOFORT-ANLEITUNG: Aufnahme laeuft ============ -->
+    <section id="guideLive" hidden>
+      <div class="rec-row">
+        <span class="rec-badge"><span class="rec-pulse"></span> Sofort-Anleitung laeuft</span>
+        <span id="guideTimer" class="timer">00:00</span>
+      </div>
+      <p class="clicks-count">
+        <strong id="guideCount">0</strong> Schritte aufgenommen
+      </p>
+      <div id="guideList" class="guide-list" aria-live="polite"></div>
+      <button id="guideStop" class="btn btn-primary" type="button">
+        Anleitung fertigstellen
+      </button>
+      <p class="note">
+        Klicken Sie Ihren Ablauf im Browser durch - <strong>Tab-Wechsel ist
+        erlaubt</strong>. Jeder Klick wird als Schritt (Screenshot + Markierung)
+        festgehalten. Einzelne Schritte oben mit &#10005; entfernen.
+      </p>
+    </section>
+
+    <!-- ============ (e) SOFORT-ANLEITUNG: Fertig / Upload ============ -->
+    <section id="guideDone" hidden>
+      <div class="done-check">&#10003;</div>
+      <h2>Anleitung erstellt</h2>
+      <div id="guideUploadBox">
+        <p id="guideProgress" class="lead" role="status" aria-live="polite"></p>
+        <div id="guideUploadDone" hidden>
+          <p class="lead">Ihre Anleitung ist als Entwurf in Steply.</p>
+          <button id="guideOpenApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
+        </div>
+      </div>
+      <button id="guideAgain" class="btn" type="button">Neue Aufnahme</button>
+    </section>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

@@ -1,35 +1,67 @@
 "use strict";
 
-// Steply Recorder - Aufnahme-Tab.
-// Hier laeuft die eigentliche Aufnahme (getDisplayMedia + MediaRecorder), damit sie
-// nicht mit dem Popup stirbt. Klicks kommen per Runtime-Nachricht aus dem
-// Content-Script (deklarativ auf jeder Seite; siehe content.js).
+// Steply Recorder - Side Panel (v2, Tango-Architektur).
 //
-// AUFNAHMEZUSTAND: Wir schreiben beim Start { rec: { startedAt } } nach
-// chrome.storage.local und loeschen es beim Stopp. Das Content-Script liest/beobachtet
-// diesen Wert und zeichnet NUR dann Klicks auf. So ueberleben Klicks Seitenwechsel
-// innerhalb des Tabs (jede Folge-Seite laedt das Script neu und sieht den Zustand).
+// EIN durchgehendes Panel in der Browser-Seitenleiste ersetzt das alte Popup + den
+// separaten Aufnahme-Tab. Es bleibt beim Navigieren und beim Tab-Wechsel offen (das
+// erledigt Chrome), lebt also die ganze Aufnahme lang - dadurch verschwindet die
+// "Fenster oeffnet/minimiert/vergisst man"-Falle des Bestands.
 //
-// clicks.json-Vertrag (Migration 0020 / Worker):
+// ZUSTAENDE (show(...)):
+//   connect    (a) Nicht verbunden: Token/App-URL eingeben.
+//   start      (b) Zwei Karten: Sofort-Anleitung | Video mit Ton.
+//   videoSetup     Video-Vorbereitung: Mikro-Preflight + "ohne Ton" + Start.
+//   videoLive  (d) Video-Aufnahme laeuft.
+//   videoDone  (e) Upload/Fertig (Video).
+//   guideLive  (c) Sofort-Anleitung laeuft: Live-Zaehler + Schrittliste mit Thumbnails.
+//   guideDone  (e) Upload/Fertig (Sofort-Anleitung).
+//
+// MESSAGE-FLUSS: content.js (deklarativ auf jeder http(s)-Seite) sendet per
+// chrome.runtime.sendMessage:
+//   - "steply-click"       {click:{t,x,y,label}}   (Video-Modus)
+//   - "steply-guide-step"  {step:{rect,label,...}}  (Sofort-Modus)
+// Das offene Panel empfaengt beides via chrome.runtime.onMessage. Wir akzeptieren
+// Nachrichten aus JEDEM http(s)-Tab DES PANEL-FENSTERS (sender.tab.windowId ===
+// panelWindowId) - NICHT mehr an einen einzelnen Tab gebunden. So zaehlt ein Tab-
+// Wechsel mitten in der Anleitung normal mit (Richards Bug: "in anderem Tab geklickt").
+// Zurueck ans jeweilige Content-Script geht der Klick-Puls ("steply-guide-captured")
+// gezielt an sender.tab.id des ausloesenden Schritts.
+//
+// clicks.json-Vertrag (Migration 0020 / Worker) UNVERAENDERT:
 //   [{ t: Sekunden seit Aufnahmestart, x: 0..1, y: 0..1, label: Text (<=60) }]
-//
-// DIREKT-UPLOAD (v2): Ist in den Einstellungen ein Verbindungs-Token hinterlegt, laedt
-// die Extension nach dem Stopp direkt zu Steply hoch (handshake -> PUT an signierte URL
-// -> complete). Ohne Token: heutiges Verhalten (2 Downloads).
 
 const els = {
-  setup: document.getElementById("setup"),
-  live: document.getElementById("live"),
-  done: document.getElementById("done"),
-  begin: document.getElementById("begin"),
-  stop: document.getElementById("stop"),
-  again: document.getElementById("again"),
-  mic: document.getElementById("mic"),
-  timer: document.getElementById("timer"),
-  clickCount: document.getElementById("clickCount"),
+  interruptedHint: document.getElementById("interruptedHint"),
   status: document.getElementById("status"),
+  // connect (a)
+  connect: document.getElementById("connect"),
+  token: document.getElementById("token"),
+  appUrl: document.getElementById("appUrl"),
+  saveCfg: document.getElementById("saveCfg"),
+  cfgStatus: document.getElementById("cfgStatus"),
+  skipConnect: document.getElementById("skipConnect"),
+  // start (b)
+  start: document.getElementById("start"),
+  cardGuide: document.getElementById("cardGuide"),
+  cardVideo: document.getElementById("cardVideo"),
+  connText: document.getElementById("connText"),
+  connBtn: document.getElementById("connBtn"),
+  // videoSetup
+  videoSetup: document.getElementById("videoSetup"),
+  videoBack: document.getElementById("videoBack"),
+  micStatus: document.getElementById("micStatus"),
+  micRetry: document.getElementById("micRetry"),
+  noAudio: document.getElementById("noAudio"),
+  begin: document.getElementById("begin"),
   clicksTabInfo: document.getElementById("clicksTabInfo"),
-  // Upload-UI
+  // videoLive (d)
+  videoLive: document.getElementById("videoLive"),
+  timer: document.getElementById("timer"),
+  micLive: document.getElementById("micLive"),
+  clickCount: document.getElementById("clickCount"),
+  stop: document.getElementById("stop"),
+  // videoDone (e)
+  videoDone: document.getElementById("videoDone"),
   uploadBox: document.getElementById("uploadBox"),
   uploadProgress: document.getElementById("uploadProgress"),
   uploadDone: document.getElementById("uploadDone"),
@@ -37,21 +69,22 @@ const els = {
   downloadBox: document.getElementById("downloadBox"),
   fileVideo: document.getElementById("fileVideo"),
   fileClicks: document.getElementById("fileClicks"),
-  // Sofort-Anleitung (guide-Modus)
+  again: document.getElementById("again"),
+  // guideLive (c)
   guideLive: document.getElementById("guideLive"),
-  guideDone: document.getElementById("guideDone"),
+  guideTimer: document.getElementById("guideTimer"),
   guideCount: document.getElementById("guideCount"),
-  guidePreviewWrap: document.getElementById("guidePreviewWrap"),
-  guidePreview: document.getElementById("guidePreview"),
   guideList: document.getElementById("guideList"),
   guideStop: document.getElementById("guideStop"),
+  // guideDone (e)
+  guideDone: document.getElementById("guideDone"),
   guideProgress: document.getElementById("guideProgress"),
   guideUploadDone: document.getElementById("guideUploadDone"),
   guideOpenApp: document.getElementById("guideOpenApp"),
   guideAgain: document.getElementById("guideAgain"),
 };
 
-// Zustand
+// ---- Zustand ----
 let mediaRecorder = null;
 let recordedChunks = [];
 let clicks = [];
@@ -60,12 +93,15 @@ let micStream = null;
 let startEpoch = 0;
 let timerInterval = null;
 let stopping = false;
-let started = false; // Doppelstart-Schutz
+let started = false; // Doppelstart-Schutz (Video)
+let panelWindowId = null; // Fenster-ID, an dem die Seitenleiste haengt
+let micReady = false; // Mikro-Preflight bestanden?
+let interruptedDiscarded = false; // beim Oeffnen eine klemmende Aufnahme verworfen?
 
 // Konfiguration (Token + App-URL) aus chrome.storage.local.
 let cfg = { token: "", appUrl: "" };
+let hasToken = false;
 
-// Prod-Domain als Default. Feld ist im Popup editierbar (localhost-Tests).
 const DEFAULT_APP_URL = "https://app.steply.de";
 
 function appBase() {
@@ -82,6 +118,7 @@ async function loadConfig() {
     cfg.token = "";
     cfg.appUrl = "";
   }
+  hasToken = !!cfg.token;
 }
 
 function setStatus(text, kind) {
@@ -89,10 +126,13 @@ function setStatus(text, kind) {
   els.status.className = "status" + (kind ? " status-" + kind : "");
 }
 
+// Genau EINEN Abschnitt zeigen.
 function show(section) {
-  els.setup.hidden = section !== "setup";
-  els.live.hidden = section !== "live";
-  els.done.hidden = section !== "done";
+  els.connect.hidden = section !== "connect";
+  els.start.hidden = section !== "start";
+  els.videoSetup.hidden = section !== "videoSetup";
+  els.videoLive.hidden = section !== "videoLive";
+  els.videoDone.hidden = section !== "videoDone";
   els.guideLive.hidden = section !== "guideLive";
   els.guideDone.hidden = section !== "guideDone";
 }
@@ -104,38 +144,107 @@ function fmtTime(totalSeconds) {
   return pad(m) + ":" + pad(s);
 }
 
-function tick() {
-  els.timer.textContent = fmtTime((Date.now() - startEpoch) / 1000);
+function startTimer(el) {
+  stopTimer();
+  el.textContent = "00:00";
+  const t = () => {
+    el.textContent = fmtTime((Date.now() - startEpoch) / 1000);
+  };
+  t();
+  timerInterval = setInterval(t, 500);
 }
 
-// Aus welchem Tab akzeptieren wir Klicks? (vom Popup als Query gesetzt) So zaehlen wir
-// NUR Klicks des aufgenommenen Tabs - auch ueber Seitenwechsel hinweg (gleiche Tab-ID),
-// aber NICHT Klicks aus anderen Tabs (die waeren nicht Teil des Screencasts). Fehlt die
-// ID (Systemseite), akzeptieren wir keine Klicks.
-const params = new URLSearchParams(location.search);
-const rawClicksTab = params.get("clicksTab");
-const clicksTabId =
-  rawClicksTab && /^\d+$/.test(rawClicksTab) ? parseInt(rawClicksTab, 10) : null;
-// Fenster-ID des aufgenommenen Tabs (guide-Modus): captureVisibleTab braucht sie, um den
-// richtigen Tab zu erwischen (aktiver Tab DIESES Fensters im Moment des Klicks).
-const rawClicksWin = params.get("clicksWin");
-const clicksWinId =
-  rawClicksWin && /^\d+$/.test(rawClicksWin) ? parseInt(rawClicksWin, 10) : null;
-// Modus: "guide" (Sofort-Anleitung) oder "video" (Bestand). Default video.
-const recorderMode = params.get("mode") === "guide" ? "guide" : "video";
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
 
-// Klicks aus dem Content-Script empfangen (aus JEDER Seite DES aufgenommenen Tabs).
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!msg || msg.type !== "steply-click") return;
-  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
-  // Nur Klicks aus dem gestarteten Tab zaehlen.
-  if (clicksTabId == null) return;
-  if (!sender || !sender.tab || sender.tab.id !== clicksTabId) return;
-  clicks.push(msg.click);
-  els.clickCount.textContent = String(clicks.length);
-});
+function updateInterruptedHint() {
+  els.interruptedHint.hidden = !interruptedDiscarded;
+}
 
-// Aufnahmezustand fuer die Content-Scripts setzen/loeschen.
+// ---- (a) Verbinden ----
+function showConnect() {
+  els.token.value = cfg.token || "";
+  els.appUrl.value = cfg.appUrl || "";
+  els.appUrl.placeholder = DEFAULT_APP_URL;
+  els.cfgStatus.textContent = "";
+  els.cfgStatus.className = "status";
+  show("connect");
+  updateInterruptedHint();
+}
+
+async function saveCfg() {
+  const token = (els.token.value || "").trim();
+  const appUrl = (els.appUrl.value || "").trim().replace(/\/+$/, "");
+  try {
+    await chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl });
+    cfg.token = token;
+    cfg.appUrl = appUrl;
+    hasToken = !!token;
+    els.cfgStatus.textContent = token
+      ? "Gespeichert. Sofort-Anleitung und Video-Upload sind verfuegbar."
+      : "Gespeichert. Ohne Token nur Video-Modus (zwei Dateien zum Hochladen).";
+    els.cfgStatus.className = "status status-ok";
+    // Nach dem Speichern zur Auswahl.
+    setTimeout(() => showStart(), 500);
+  } catch (err) {
+    els.cfgStatus.textContent = "Konnte nicht gespeichert werden.";
+    els.cfgStatus.className = "status status-error";
+  }
+}
+
+// ---- (b) Start / Auswahl ----
+function showStart() {
+  els.cardGuide.disabled = !hasToken;
+  els.cardGuide.title = hasToken
+    ? ""
+    : "Zuerst mit Steply verbinden (Direkt-Upload noetig).";
+  if (hasToken) {
+    els.connText.textContent = "Mit Steply verbunden.";
+    els.connBtn.textContent = "Verbindung aendern";
+  } else {
+    els.connText.textContent =
+      "Nicht verbunden - Sofort-Anleitung braucht eine Verbindung.";
+    els.connBtn.textContent = "Verbinden";
+  }
+  setStatus("");
+  show("start");
+  updateInterruptedHint();
+}
+
+// ============================================================================
+// ZUSTANDS-VERSOEHNUNG BEIM OEFFNEN
+// Das Panel-Dokument wird beim Schliessen der Seitenleiste zerstoert und beim
+// naechsten Oeffnen frisch geladen. Eine frisch geladene Instanz hat also NIE eine
+// laufende Session. Finden wir trotzdem ein rec-Flag im storage, ist es der Ueberrest
+// einer abgebrochenen/klemmenden Aufnahme -> verwerfen (storage clear) und sauber im
+// Start-Screen landen, mit dezentem Hinweis. NIE wieder im "recording"-Modus aufwachen.
+// ============================================================================
+async function reconcile() {
+  try {
+    const res = await chrome.storage.local.get("rec");
+    if (res && res.rec) {
+      await chrome.storage.local.remove("rec");
+      interruptedDiscarded = true;
+    }
+  } catch (err) {
+    /* storage nicht verfuegbar -> es gibt eh nichts zu verwerfen */
+  }
+}
+
+// Akzeptieren wir eine Nachricht aus diesem Sender? Nur aus einem Tab DES Panel-
+// Fensters (Tab-Wechsel innerhalb des Fensters ist erlaubt). Faellt die Fenster-ID
+// weg (unbekannt), akzeptieren wir defensiv aus jedem Tab.
+function fromPanelWindow(sender) {
+  if (!sender || !sender.tab) return false;
+  if (panelWindowId == null) return true;
+  return sender.tab.windowId === panelWindowId;
+}
+
+// Aufnahmezustand fuer die Content-Scripts setzen/loeschen (Video-Modus).
 async function setRecState(on) {
   try {
     if (on) {
@@ -147,6 +256,10 @@ async function setRecState(on) {
     console.warn("Steply: Aufnahmezustand konnte nicht gesetzt werden:", err);
   }
 }
+
+// ============================================================================
+// VIDEO-MODUS
+// ============================================================================
 
 function pickMimeType() {
   const candidates = [
@@ -180,10 +293,53 @@ function stampName(prefix, ext) {
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   chrome.downloads.download({ url, filename, saveAs: false }, () => {
-    // URL erst nach dem Start des Downloads freigeben.
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
   return filename;
+}
+
+// --- Mikro-Preflight: VOR dem Start pruefen, ob das Mikrofon nutzbar ist. ---
+function setMicStatus(kind, text) {
+  els.micStatus.className = "mic-status " + kind;
+  els.micStatus.textContent = text;
+}
+
+function updateBeginEnabled() {
+  // Start erst aktiv, wenn Mikro ok ODER Nutzer bewusst "ohne Ton" waehlt.
+  els.begin.disabled = !(micReady || els.noAudio.checked);
+}
+
+async function micPreflight() {
+  setMicStatus("pending", "Mikrofon wird geprueft ...");
+  els.micRetry.hidden = true;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Sofort wieder freigeben - beim eigentlichen Start neu anfordern (Recht bleibt).
+    s.getTracks().forEach((t) => t.stop());
+    micReady = true;
+    setMicStatus("ok", "🎙 Mikrofon bereit");
+  } catch (err) {
+    micReady = false;
+    setMicStatus(
+      "err",
+      "Mikrofon nicht verfuegbar. Bitte Zugriff erlauben - oder unten „ohne Ton aufnehmen“ waehlen."
+    );
+    els.micRetry.hidden = false;
+  }
+  updateBeginEnabled();
+}
+
+function goVideoSetup() {
+  started = false;
+  micReady = false;
+  els.noAudio.checked = false;
+  els.begin.disabled = true;
+  // Der Verworfen-Hinweis hat seinen Zweck erfuellt, sobald der Nutzer weitergeht.
+  interruptedDiscarded = false;
+  els.interruptedHint.hidden = true;
+  setStatus("");
+  show("videoSetup");
+  micPreflight();
 }
 
 async function begin() {
@@ -200,14 +356,15 @@ async function begin() {
   } catch (err) {
     // Nutzer hat abgebrochen oder Berechtigung verweigert.
     started = false;
-    els.begin.disabled = false;
+    updateBeginEnabled();
     setStatus("Aufnahme abgebrochen. Sie koennen es erneut versuchen.", "error");
     return;
   }
 
-  // Optional: Mikrofon dazumischen.
+  // Ton dazumischen, wenn Mikro ok und nicht bewusst abgewaehlt.
   let combinedStream = displayStream;
-  if (els.mic.checked) {
+  const wantAudio = micReady && !els.noAudio.checked;
+  if (wantAudio) {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       combinedStream = new MediaStream([
@@ -229,7 +386,7 @@ async function begin() {
   } catch (err) {
     cleanupStreams();
     started = false;
-    els.begin.disabled = false;
+    updateBeginEnabled();
     setStatus("Aufnahme konnte nicht gestartet werden: " + err.message, "error");
     return;
   }
@@ -247,17 +404,19 @@ async function begin() {
     });
   }
 
-  // UHR-SYNC: gemeinsame Startzeit im storage hinterlegen -> Content-Scripts erfassen ab jetzt.
+  // UHR-SYNC: gemeinsame Startzeit im storage -> Content-Scripts erfassen ab jetzt.
   startEpoch = Date.now();
   await setRecState(true);
 
   mediaRecorder.start(1000); // alle 1s ein Chunk (robust gegen Absturz)
-  show("live");
-  setStatus("");
+  stopping = false;
+  els.stop.disabled = false;
   els.clickCount.textContent = "0";
-  els.timer.textContent = "00:00";
-  tick();
-  timerInterval = setInterval(tick, 500);
+  els.micLive.textContent =
+    wantAudio && micStream ? "🎙 Mikrofon aktiv" : "Ohne Ton";
+  show("videoLive");
+  setStatus("");
+  startTimer(els.timer);
 }
 
 function stop() {
@@ -266,10 +425,7 @@ function stop() {
   els.stop.disabled = true;
   setStatus("Aufnahme wird abgeschlossen ...");
   setRecState(false); // Content-Scripts hoeren auf, Klicks zu erfassen
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
+  stopTimer();
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop(); // loest onstop aus
   } else {
@@ -297,9 +453,9 @@ function onRecorderStop() {
     type: "application/json",
   });
 
-  show("done");
+  show("videoDone");
 
-  // Mit Token: Direkt-Upload anbieten. Ohne Token: die zwei Dateien herunterladen.
+  // Mit Token: Direkt-Upload. Ohne Token: die zwei Dateien herunterladen.
   if (cfg.token) {
     uploadToSteply(videoBlob).catch((err) => {
       showUploadError(err && err.message ? err.message : String(err), videoBlob, clicksBlob);
@@ -309,7 +465,6 @@ function onRecorderStop() {
   }
 }
 
-// Fallback: beide Dateien herunterladen (v1-Verhalten).
 function downloadFallback(videoBlob, clicksBlob) {
   els.uploadBox.hidden = true;
   els.downloadBox.hidden = false;
@@ -327,13 +482,15 @@ function setUploadProgress(text) {
   if (els.uploadProgress) els.uploadProgress.textContent = text || "";
 }
 
-// Bei Upload-Fehler: klare Meldung + Fallback-Downloads, damit nichts verloren geht.
 function showUploadError(message, videoBlob, clicksBlob) {
-  setStatus("Upload fehlgeschlagen: " + message + " - Dateien wurden stattdessen heruntergeladen.", "error");
+  setStatus(
+    "Upload fehlgeschlagen: " + message + " - Dateien wurden stattdessen heruntergeladen.",
+    "error"
+  );
   downloadFallback(videoBlob, clicksBlob);
 }
 
-// Video an eine signierte URL per PUT hochladen (XHR fuer Fortschrittsanzeige).
+// Video an eine signierte URL per PUT (XHR fuer Fortschritt).
 function putVideo(uploadUrl, blob) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -373,7 +530,7 @@ async function uploadToSteply(videoBlob) {
     });
     hs = await res.json().catch(() => ({}));
     if (!res.ok || !hs.uploadUrl || !hs.path) {
-      throw new Error(hs.error || ("Handshake fehlgeschlagen (" + res.status + ")"));
+      throw new Error(hs.error || "Handshake fehlgeschlagen (" + res.status + ")");
     }
   } catch (err) {
     throw new Error(err && err.message ? err.message : "Handshake fehlgeschlagen");
@@ -398,7 +555,7 @@ async function uploadToSteply(videoBlob) {
     });
     done = await res.json().catch(() => ({}));
     if (!res.ok || !done.jobId) {
-      throw new Error(done.error || ("Einreihen fehlgeschlagen (" + res.status + ")"));
+      throw new Error(done.error || "Einreihen fehlgeschlagen (" + res.status + ")");
     }
   } catch (err) {
     throw new Error(err && err.message ? err.message : "Einreihen fehlgeschlagen");
@@ -418,47 +575,41 @@ async function uploadToSteply(videoBlob) {
 
 // ============================================================================
 // SOFORT-ANLEITUNG (guide-Modus): pro Klick ein Screenshot + Element-Box -> fertiger
-// Tutorial-Entwurf, ohne Video, ohne Server-KI-Pipeline (Tango-Stil).
+// Tutorial-Entwurf, ohne Video. Multi-Tab-faehig: captureVisibleTab(panelWindowId)
+// erfasst immer den aktiven (sichtbaren) Tab DES Panel-Fensters - egal in welchem Tab
+// geklickt wurde.
 //
-// ABLAUF:
-//  1) startGuide(): Aufnahmezustand { mode:"guide" } setzen -> das Content-Script sendet
-//     bei jedem pointerdown ein { rect,label,action,url,title,ts }.
-//  2) Pro Nachricht SOFORT chrome.tabs.captureVisibleTab(fensterId) -> PNG des
-//     aufgenommenen Tabs (der im Moment des Klicks aktiv/sichtbar ist).
-//  3) PNG -> WebP (OffscreenCanvas, spart ~70 % Upload), als Schritt speichern.
-//  4) "Fertigstellen": guide-handshake (N signierte URLs) -> alle WebPs per PUT ->
-//     guide-complete (Titel + Schritte) -> Entwurf. "In Steply oeffnen".
-//
-// RATENLIMIT: captureVisibleTab ist auf ~2/s begrenzt (MAX_CAPTURE_VISIBLE_TAB_CALLS_
-// PER_SECOND). Wir serialisieren die Captures (eine Warteschlange) und fassen schnelle
-// Doppelklicks zusammen: ein neuer Klick, der kommt bevor der vorige verarbeitet ist,
-// ersetzt den wartenden (letzter gewinnt), statt eine Fehlerflut auszuloesen.
+// RATENLIMIT: captureVisibleTab ist ~2/s begrenzt. Wir serialisieren die Captures
+// (Warteschlange) und fassen schnelle Doppelklicks zusammen (letzter gewinnt).
 // ============================================================================
 
 const MAX_GUIDE_STEPS = 40;
-// Mindestabstand zwischen zwei Captures (ms). ~2/s -> 550 ms mit Puffer.
-const CAPTURE_MIN_INTERVAL = 550;
+const CAPTURE_MIN_INTERVAL = 550; // ms Mindestabstand zwischen Captures
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, ts, blob }
-let guidePending = null; // wartender Schritt (letzter gewinnt), falls Capture noch laeuft
+let guideSteps = []; // { rect, label, action, url, title, ts, blob, width, height, thumbUrl }
+let guidePending = null; // { step, tabId } - wartender Schritt (letzter gewinnt)
 let guideCapturing = false;
 let guideLastCaptureAt = 0;
 let guideFinishing = false;
 
 function guideBusyHint() {
-  // Kleiner Hinweis, wenn das Ratenlimit greift.
   setStatus("Screenshot wird erfasst ...");
 }
 
 async function startGuide() {
+  resetGuide();
   guideActive = true;
-  guideSteps = [];
-  show("guideLive");
-  setStatus("");
+  guideFinishing = false;
+  interruptedDiscarded = false;
+  els.interruptedHint.hidden = true;
+  els.guideStop.disabled = false;
   els.guideCount.textContent = "0";
-  // Aufnahmezustand fuer die Content-Scripts (mit Modus guide).
+  els.guideList.textContent = "";
+  setStatus("");
+  show("guideLive");
   startEpoch = Date.now();
+  startTimer(els.guideTimer);
   try {
     await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
   } catch (err) {
@@ -479,7 +630,6 @@ async function pngDataUrlToWebp(dataUrl) {
     const webp = await canvas.convertToBlob({ type: "image/webp", quality: 0.85 });
     return { blob: webp, width: canvas.width, height: canvas.height };
   } catch (err) {
-    // OffscreenCanvas/WebP nicht verfuegbar -> PNG behalten (Server akzeptiert es).
     const dim = await imageSize(pngBlob).catch(() => ({ width: 0, height: 0 }));
     return { blob: pngBlob, width: dim.width, height: dim.height };
   }
@@ -493,8 +643,9 @@ function imageSize(blob) {
   });
 }
 
-// Einen Screenshot des aufgenommenen Tabs machen (Ratenlimit-bewusst, serialisiert).
+// Einen Screenshot des aktiven Tabs im Panel-Fenster machen (serialisiert, ratenlimit-bewusst).
 async function captureFor(pending) {
+  const src = pending.step;
   if (guideSteps.length >= MAX_GUIDE_STEPS) {
     setStatus("Maximale Schrittzahl (" + MAX_GUIDE_STEPS + ") erreicht.", "error");
     return;
@@ -506,11 +657,10 @@ async function captureFor(pending) {
   let dataUrl;
   try {
     dataUrl = await chrome.tabs.captureVisibleTab(
-      clicksWinId == null ? undefined : clicksWinId,
+      panelWindowId == null ? undefined : panelWindowId,
       { format: "png" }
     );
   } catch (err) {
-    // Haeufigste Ursache: Seite bereits weiternavigiert / Tab nicht sichtbar.
     console.warn("Steply: Screenshot fehlgeschlagen:", err && err.message);
     setStatus("Ein Screenshot konnte nicht erfasst werden (Seitenwechsel?).", "error");
     return;
@@ -518,12 +668,14 @@ async function captureFor(pending) {
   guideLastCaptureAt = Date.now();
   if (!dataUrl) return;
 
-  // Klick-Puls im aufgenommenen Tab ausloesen - ERST NACH dem Screenshot, damit der
-  // Puls nie mit im Bild landet. Tango-Gefuehl: Aufleuchten = "Schritt ist im Kasten".
-  try {
-    chrome.tabs.sendMessage(clicksTabId, { type: "steply-guide-captured" });
-  } catch (err) {
-    /* Puls ist optional */
+  // Klick-Puls im ausloesenden Tab - ERST NACH dem Screenshot, damit er nie mit im Bild
+  // landet. Multi-Tab: gezielt an sender.tab.id des Schritts (nicht an einen fixen Tab).
+  if (pending.tabId != null) {
+    try {
+      chrome.tabs.sendMessage(pending.tabId, { type: "steply-guide-captured" });
+    } catch (err) {
+      /* Puls ist optional */
+    }
   }
 
   let img;
@@ -535,19 +687,24 @@ async function captureFor(pending) {
   }
 
   const step = {
-    rect: pending.rect,
-    label: pending.label || "",
-    action: pending.action === "type" ? "type" : "click",
-    url: pending.url || "",
-    title: pending.title || "",
-    ts: pending.ts || Date.now(),
+    rect: src.rect,
+    label: src.label || "",
+    action: src.action === "type" ? "type" : "click",
+    url: src.url || "",
+    title: src.title || "",
+    ts: src.ts || Date.now(),
     blob: img.blob,
     width: img.width,
     height: img.height,
+    thumbUrl: null,
   };
+  try {
+    step.thumbUrl = URL.createObjectURL(step.blob);
+  } catch (err) {
+    step.thumbUrl = null;
+  }
   guideSteps.push(step);
   renderGuideSteps();
-  showGuidePreview(img.blob);
   setStatus("");
 }
 
@@ -566,19 +723,21 @@ async function drainGuideQueue() {
   }
 }
 
-function showGuidePreview(blob) {
-  try {
-    const url = URL.createObjectURL(blob);
-    const prev = els.guidePreview.dataset.url;
-    els.guidePreview.src = url;
-    els.guidePreview.dataset.url = url;
-    els.guidePreviewWrap.hidden = false;
-    if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000);
-  } catch (err) {
-    /* Vorschau ist optional */
+function removeGuideStep(step) {
+  const i = guideSteps.indexOf(step);
+  if (i < 0) return;
+  if (step.thumbUrl) {
+    try {
+      URL.revokeObjectURL(step.thumbUrl);
+    } catch (err) {
+      /* egal */
+    }
   }
+  guideSteps.splice(i, 1);
+  renderGuideSteps();
 }
 
+// Schrittliste mit Thumbnail JE Schritt (nicht nur letzter) + Entfernen-Knopf.
 function renderGuideSteps() {
   els.guideCount.textContent = String(guideSteps.length);
   els.guideList.textContent = "";
@@ -590,6 +749,11 @@ function renderGuideSteps() {
     idx.className = "idx";
     idx.textContent = String(i + 1);
 
+    const thumb = document.createElement("img");
+    thumb.className = "thumb";
+    thumb.alt = "";
+    if (s.thumbUrl) thumb.src = s.thumbUrl;
+
     const lbl = document.createElement("span");
     lbl.className = "lbl";
     lbl.textContent =
@@ -600,31 +764,17 @@ function renderGuideSteps() {
     rm.type = "button";
     rm.textContent = "✕";
     rm.title = "Schritt entfernen";
-    rm.addEventListener("click", () => {
-      guideSteps.splice(i, 1);
-      renderGuideSteps();
-    });
+    rm.addEventListener("click", () => removeGuideStep(s));
 
     row.appendChild(idx);
+    row.appendChild(thumb);
     row.appendChild(lbl);
     row.appendChild(rm);
     els.guideList.appendChild(row);
   });
+  // Neuen Schritt in Sicht scrollen.
+  els.guideList.scrollTop = els.guideList.scrollHeight;
 }
-
-// Klick-Schritte aus dem Content-Script empfangen (nur guide-Modus, nur aufgenommener Tab).
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!msg || msg.type !== "steply-guide-step") return;
-  if (!guideActive) return;
-  if (clicksTabId == null) return;
-  if (!sender || !sender.tab || sender.tab.id !== clicksTabId) return;
-  if (guideSteps.length >= MAX_GUIDE_STEPS) return;
-  // Letzter gewinnt: ein noch nicht verarbeiteter Klick wird vom naechsten ersetzt
-  // (schnelle Doppelklicks -> ein Screenshot).
-  guidePending = msg.step;
-  if (guideCapturing) guideBusyHint();
-  drainGuideQueue();
-});
 
 // "Anleitung fertigstellen" -> hochladen.
 async function finishGuide() {
@@ -632,6 +782,7 @@ async function finishGuide() {
   guideFinishing = true;
   els.guideStop.disabled = true;
   guideActive = false;
+  stopTimer();
   // Content-Scripts stoppen die Erfassung.
   try {
     await chrome.storage.local.remove("rec");
@@ -646,6 +797,7 @@ async function finishGuide() {
     els.guideStop.disabled = false;
     guideFinishing = false;
     guideActive = true;
+    startTimer(els.guideTimer);
     try {
       await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
     } catch (err) {
@@ -729,49 +881,126 @@ async function uploadGuide() {
   }
 }
 
-els.guideStop.addEventListener("click", finishGuide);
+// ============================================================================
+// NACHRICHTEN-EMPFANG (aus content.js, jeder Tab des Panel-Fensters)
+// ============================================================================
 
+// Video-Modus: Klick-Zeitstempel.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-click") return;
+  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+  if (!fromPanelWindow(sender)) return;
+  clicks.push(msg.click);
+  els.clickCount.textContent = String(clicks.length);
+});
+
+// Sofort-Modus: Klick-Schritt (Element-Box) -> Screenshot ausloesen.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-guide-step") return;
+  if (!guideActive) return;
+  if (!fromPanelWindow(sender)) return;
+  if (guideSteps.length >= MAX_GUIDE_STEPS) return;
+  // Letzter gewinnt: ein noch nicht verarbeiteter Klick wird vom naechsten ersetzt.
+  guidePending = { step: msg.step, tabId: sender.tab.id };
+  if (guideCapturing) guideBusyHint();
+  drainGuideQueue();
+});
+
+// ============================================================================
+// RESET / NEUE AUFNAHME
+// ============================================================================
+
+function resetGuide() {
+  guideSteps.forEach((s) => {
+    if (s.thumbUrl) {
+      try {
+        URL.revokeObjectURL(s.thumbUrl);
+      } catch (err) {
+        /* egal */
+      }
+    }
+  });
+  guideSteps = [];
+  guidePending = null;
+  guideCapturing = false;
+  guideFinishing = false;
+  guideActive = false;
+}
+
+function resetVideo() {
+  mediaRecorder = null;
+  recordedChunks = [];
+  clicks = [];
+  stopping = false;
+  started = false;
+  els.uploadBox.hidden = true;
+  els.downloadBox.hidden = true;
+  els.uploadDone.hidden = true;
+}
+
+function newRecording() {
+  cleanupStreams();
+  stopTimer();
+  resetGuide();
+  resetVideo();
+  // Ab jetzt ist die verworfene Aufnahme "abgehakt".
+  interruptedDiscarded = false;
+  els.guideStop.disabled = false;
+  showStart();
+}
+
+// ============================================================================
+// EVENTS
+// ============================================================================
+
+els.saveCfg.addEventListener("click", saveCfg);
+els.skipConnect.addEventListener("click", () => showStart());
+els.connBtn.addEventListener("click", () => showConnect());
+els.cardGuide.addEventListener("click", () => {
+  if (!hasToken) return;
+  startGuide();
+});
+els.cardVideo.addEventListener("click", () => goVideoSetup());
+els.videoBack.addEventListener("click", () => showStart());
+els.noAudio.addEventListener("change", updateBeginEnabled);
+els.micRetry.addEventListener("click", micPreflight);
 els.begin.addEventListener("click", begin);
 els.stop.addEventListener("click", stop);
+els.guideStop.addEventListener("click", finishGuide);
+els.again.addEventListener("click", newRecording);
+els.guideAgain.addEventListener("click", newRecording);
 
-// Query fuer die naechste Aufnahme: Tab-/Fenster-ID + Modus erhalten.
-function nextQuery() {
-  const q = new URLSearchParams();
-  if (clicksTabId != null) q.set("clicksTab", String(clicksTabId));
-  if (clicksWinId != null) q.set("clicksWin", String(clicksWinId));
-  q.set("mode", recorderMode);
-  const s = q.toString();
-  return s ? "?" + s : "";
-}
-
-function restart() {
-  location.href = chrome.runtime.getURL("recorder.html" + nextQuery());
-}
-els.again.addEventListener("click", restart);
-els.guideAgain.addEventListener("click", restart);
-
-// Warnen, wenn der Nutzer den Tab waehrend einer laufenden Aufnahme schliessen will.
-window.addEventListener("beforeunload", (e) => {
-  const videoRunning = mediaRecorder && mediaRecorder.state === "recording";
-  if (videoRunning || guideActive) {
-    e.preventDefault();
-    e.returnValue = "";
+// Panel wird geschlossen (Seitenleiste zu / Fenster zu): laufende Streams sauber
+// stoppen (sonst bleibt der Mikro-/Freigabe-Indikator haengen) und Zustand raeumen,
+// damit die NAECHSTE Oeffnung garantiert sauber startet. pagehide feuert beim Abbau
+// des Panel-Dokuments; wir blockieren das Schliessen bewusst NICHT (kein Nag-Dialog).
+window.addEventListener("pagehide", () => {
+  cleanupStreams();
+  guideActive = false;
+  try {
+    chrome.storage.local.remove("rec");
+  } catch (err) {
+    /* best effort - die Versoehnung beim naechsten Oeffnen faengt es sowieso ab */
   }
 });
 
-// Hinweis: Fehlt die Tab-ID, war die Ausgangsseite eine Systemseite -> dort keine Klicks.
-// Der Hinweis wird NUR dann gezeigt (praezise, nicht generisch).
-if (clicksTabId == null) {
-  els.clicksTabInfo.textContent =
-    "Hinweis: Auf Browser-Systemseiten koennen keine Klicks erfasst werden - auf normalen Websites schon. Das Video wird trotzdem aufgenommen.";
-}
-
-// Config laden (Token + App-URL) fuer den Direkt-Upload, dann Modus starten.
+// ============================================================================
+// INIT
+// ============================================================================
 (async () => {
+  // Fenster-ID des Panels bestimmen (fuer captureVisibleTab + Multi-Tab-Filter).
+  try {
+    const w = await chrome.windows.getCurrent();
+    panelWindowId = w && w.id != null ? w.id : null;
+  } catch (err) {
+    panelWindowId = null;
+  }
+  // Klemmende/abgebrochene Aufnahme verwerfen, BEVOR wir irgendetwas anzeigen.
+  await reconcile();
   await loadConfig();
-  if (recorderMode === "guide") {
-    startGuide();
+  if (hasToken) {
+    showStart();
   } else {
-    show("setup");
+    showConnect();
   }
 })();
