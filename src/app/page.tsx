@@ -227,22 +227,26 @@ export default function LandingPage() {
               <span className="size-2.5 rounded-full bg-line" />
               <span className="size-2.5 rounded-full bg-line" />
             </div>
-            <div
-              className="relative grid h-[260px] place-items-center sm:h-[300px]"
-              style={{
-                background:
-                  "repeating-linear-gradient(-45deg, #fff, #fff 11px, #faf5ea 11px, #faf5ea 22px)",
-              }}
-            >
-              <span aria-hidden className="font-mono text-xs text-faint">
-                ihre-software: rechnung anlegen
-              </span>
-              <span className="absolute right-[10%] top-[10%] rotate-2 whitespace-nowrap rounded-xl border-2 border-[#c2e8e1] bg-teal-soft px-3 py-1.5 text-[11px] font-extrabold text-teal-text">
+            {/* Echter App-Screenshot; Marker sitzt auf einem echten Tab
+                (Positions-Prozente aus dem Screenshot vermessen). */}
+            <div className="relative aspect-[16/10]">
+              <Image
+                src="/marketing-aufnahme.png"
+                alt="Aufnahme läuft: Steply markiert den nächsten Klick"
+                fill
+                sizes="(min-width: 1024px) 540px, 100vw"
+                className="object-cover object-top"
+              />
+              <span className="absolute right-[6%] top-[12%] rotate-2 whitespace-nowrap rounded-xl border-2 border-[#c2e8e1] bg-teal-soft px-3 py-1.5 text-[11px] font-extrabold text-teal-text shadow-sm">
                 Schritt 3 erkannt ✓
               </span>
-              <span className="absolute left-[34%] top-[52%]" aria-hidden>
-                <span className="block size-[52px] rounded-full border-[3.5px] border-primary bg-primary/10 shadow-[0_0_0_8px_rgba(239,106,78,0.08)]" />
-                <span className="absolute left-[60px] top-2 whitespace-nowrap rounded-[11px] bg-ink px-3 py-1.5 text-xs font-extrabold text-background">
+              <span
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: "36.5%", top: "25%" }}
+                aria-hidden
+              >
+                <span className="block size-[52px] rounded-full border-[3.5px] border-primary bg-primary/10 shadow-[0_0_0_8px_rgba(239,106,78,0.12)]" />
+                <span className="absolute left-[62px] top-3 whitespace-nowrap rounded-[11px] bg-ink px-3 py-1.5 text-xs font-extrabold text-background shadow-md">
                   Hier klicken
                 </span>
               </span>
