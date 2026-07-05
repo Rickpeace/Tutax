@@ -153,6 +153,14 @@ Hilfe-Seite/Abmelden; aktive Pill + Indigo-Bälkchen), schlanke Topbar,
 Mobile-Sheet, **⌘K-Befehlspalette** (Navigation + Aktionen + eigene Tutorials
 via searchMyTutorials); AppTabs entfernt; PPR-Disziplin (statisches Nav-Gerüst,
 Konto streamt); CommandDialog-Fix in ui/command.tsx.
+**Opus Welle 22 (reviewt+gemerged, 05.07.):** ⚡ **Sofort-Anleitung (Tango-Stil)** —
+zweiter Extension-Modus: Screenshot + DOM-Element-Box je Klick (pointerdown,
+normalisiert), WebP-Konvertierung clientseitig, Direkt-Upload per Token
+(guide-handshake/-complete, privater Bucket), fertiger Entwurf in Sekunden OHNE
+Video/Worker; Vorlagen-Titel + billiger KI-Feinschliff via after(); Free-Limit
++ Pfad-/Rect-/Count-Validierung; 32 Live-Checks. Manueller Chrome-Test offen.
+WORKFLOW-WECHSEL: nur noch main wird gepusht (Vercel-Dedup-Falle), Wellen
+zweigen von origin/main ab.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

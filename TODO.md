@@ -57,10 +57,12 @@
 - [ ] **TTS v2**: Audio auch für Übersetzungen (EN/PL/TR-Stimmen) + Stimme/Tempo pro
   Konto (Basis-Stimme ist seit 02.07. onyx auf gpt-4o-mini-tts; /stimmen.html wieder
   entfernen, wenn nicht mehr gebraucht).
-- [ ] **Echtzeit-Aufbau während der Aufnahme** (Richard, 02.07.): Extension zieht
-  bei jedem Klick sofort einen Frame aus dem Stream + legt Schritt-Skelett an
-  (Screenshot + Markierung live), KI-Texte füllen nach Aufnahme-Ende nach.
-  Bausteine (Klick-Erfassung, Direkt-Upload) existieren seit Welle 15.
+- [x] ~~Echtzeit-/Sofort-Aufbau~~ **GEBAUT (05.07., Welle 22, Tango-Stil):**
+  Extension-Modus „Sofort-Anleitung" — Screenshot + Element-Box je Klick,
+  fertiger Entwurf ohne Video. → Richard: Extension in Chrome neu laden
+  („Entpackt laden") und einmal real durchklicken (captureVisibleTab/Timing
+  ist headless nicht testbar). Denkbare Stufe 2: Schritte schon WÄHREND der
+  Aufnahme einzeln hochladen (Live-Aufbau im Builder).
 - [x] ~~Tier-Gates~~ **GEBAUT (02.07., Fable):** plan 'business' (Migration 0024),
   Gates: Sprachen/KI-CI/Intern/TTS = Business (serverseitig), Admin-Schalter 3-stufig,
   neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
