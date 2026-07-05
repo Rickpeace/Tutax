@@ -44,14 +44,69 @@
     return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
   }
 
+  // Interaktive Elemente (fuer Klick-Aufloesung UND Dead-Click-Filter). Deckt neben den
+  // nativen Widgets auch ARIA-Rollen ab (Checkbox/Switch/Slider/Tab/Option/Combobox).
+  const INTERACTIVE_SELECTOR =
+    'button, a, [role="button"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], ' +
+    '[role="menuitemradio"], [role="tab"], [role="option"], [role="checkbox"], [role="radio"], ' +
+    '[role="switch"], [role="slider"], [role="combobox"], input, textarea, select, summary, ' +
+    "label, [onclick]";
+
   // Das "sinnvolle" Element fuer einen Klick (fuer Label UND Bounding-Box): das naechste
   // interaktive Element in der Ahnenkette, sonst das Ziel selbst.
   function clickableFor(target) {
     if (!target || target.nodeType !== 1) return null;
-    const clickable = target.closest(
-      'button, a, [role="button"], [role="link"], [role="menuitem"], input, textarea, select, summary, label'
-    );
+    const clickable = target.closest(INTERACTIVE_SELECTOR);
     return clickable || target;
+  }
+
+  // Wie clickableFor, aber STRENG: null statt Fallback, wenn nichts Interaktives da ist
+  // (Dead-Click-Filter der Sofort-Anleitung — Richards Fall: Klick auf eine passive Karte
+  // markierte die ganze Karte und nahm ihren kompletten Text als Titel). Zusaetzlich:
+  // contenteditable/tabindex>=0 in der Ahnenkette und die cursor:pointer-Heuristik fuer
+  // klickbare DIVs ohne Rolle (onclick am Rahmenwerk statt im DOM-Attribut). Bei pointer
+  // nehmen wir das AEUSSERSTE Element mit pointer als Widget-Grenze (die ganze Karte,
+  // nicht der innere Span).
+  function interactiveFor(target) {
+    if (!target || target.nodeType !== 1) return null;
+    let hit = null;
+    try {
+      hit = target.closest(INTERACTIVE_SELECTOR);
+    } catch (err) {
+      hit = null;
+    }
+    if (hit) return hit;
+    let n = target;
+    for (let i = 0; n && n.nodeType === 1 && i < 8; i++) {
+      if (n.isContentEditable === true) return n;
+      const ti = n.getAttribute && n.getAttribute("tabindex");
+      if (ti != null && parseInt(ti, 10) >= 0) return n;
+      n = n.parentElement;
+    }
+    let cur = null;
+    try {
+      if (getComputedStyle(target).cursor === "pointer") cur = target;
+    } catch (err) {
+      cur = null;
+    }
+    if (cur) {
+      let p = cur.parentElement;
+      let guard = 0;
+      while (p && p !== document.body && p !== document.documentElement && guard < 8) {
+        let c = "";
+        try {
+          c = getComputedStyle(p).cursor;
+        } catch (err) {
+          c = "";
+        }
+        if (c !== "pointer") break;
+        cur = p;
+        p = p.parentElement;
+        guard++;
+      }
+      return cur;
+    }
+    return null;
   }
 
   // Whitespace kollabieren und an einer Wortgrenze auf max Zeichen kappen (60 fuer Labels).
@@ -314,15 +369,21 @@
     return "";
   }
 
-  // Label fuer ein nicht editierbares Klick-Ziel. Kette: aria > sichtbarer Text > alt/title
-  // > (nur Button-artige input) value > Tag. KEIN value fuer Textfelder (Datenschutz).
+  // Label fuer ein nicht editierbares Klick-Ziel. Kette: aria > sichtbarer Text >
+  // zugehoeriges <label> (Checkbox/Radio/Slider haben selbst keinen Text!) > alt/title >
+  // Feldueberschrift daneben > (nur Button-artige input) value > Tag.
+  // KEIN value fuer Textfelder (Datenschutz).
   function clickLabel(el) {
     const aria = ariaLabelText(el);
     if (aria && !looksLikeCode(aria)) return clampLabel(aria, 60);
     const text = visibleText(el);
     if (text) return clampLabel(text, 60);
+    const assoc = associatedLabelText(el);
+    if (assoc && !looksLikeCode(assoc)) return clampLabel(assoc, 60);
     const alt = el.getAttribute && (el.getAttribute("alt") || el.getAttribute("title"));
     if (alt && alt.trim() && !looksLikeCode(alt)) return clampLabel(alt, 60);
+    const cap = nearbyCaptionText(el);
+    if (cap) return clampLabel(cap, 60);
     const tag = (el.tagName || "").toLowerCase();
     const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
     if (tag === "input" && /^(button|submit|reset)$/.test(type) && el.value && String(el.value).trim()) {
@@ -571,19 +632,31 @@
     if (typeof event.button === "number" && event.button !== 0) return;
 
     const target = event.target;
-    const el = clickableFor(target) || target;
 
     // EVENT-REIHENFOLGE (kritisch): pointerdown(Button) feuert VOR blur(Feld). Klickt man
     // ausserhalb des fokussierten Feldes, erst die Eingabe melden, dann den Klick.
+    // Der Flush laeuft VOR dem Dead-Click-Filter: auch ein Klick ins Leere schliesst eine
+    // offene Eingabe ab.
     const fe = focusedEditable;
     const insideFocused = !!(
       fe && fe.el && (target === fe.el || (fe.el.contains && fe.el.contains(target)))
     );
     if (!insideFocused) flushPendingInput();
 
+    // DEAD-CLICK-FILTER: Klick auf nicht-interaktive Flaeche (passive Karte, Absatz,
+    // Leerraum) erzeugt KEINEN Schritt.
+    const el = interactiveFor(target);
+    if (!el) return;
+
     // Klick IN ein editierbares Feld erzeugt KEINEN Schritt (kein Feld-Klick-Rauschen).
     const info = editableInfo(controlForLabel(el));
     if (info.editable) return;
+
+    // Schieberegler (input type=range): der Schritt entsteht beim change (Endposition im
+    // Screenshot), nicht beim Anfassen.
+    const elTag = (el.tagName || "").toLowerCase();
+    const elType = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+    if (elTag === "input" && elType === "range") return;
 
     emitStep(el, "click", event.clientX || 0, event.clientY || 0);
   }
@@ -622,14 +695,31 @@
   }
   document.addEventListener("focusout", onFocusOut, true);
 
-  // change: native <select> -> ein „type"-Schritt (sichtbare UI-Auswahl, kein Getipptes).
+  // change: native <select> und Schieberegler (input type=range) -> ein „type"-Schritt
+  // (sichtbare UI-Auswahl/-Position, kein Getipptes). Range feuert change je Raststufe
+  // (Tastatur) bzw. beim Loslassen — pro Element gedrosselt, damit Feinjustieren nicht
+  // zehn Schritte erzeugt (der Screenshot zeigt dann die letzte erfasste Position).
+  let lastRangeStep = { el: null, t: 0 };
   function onChange(event) {
     if (!recording || mode !== "guide") return;
     const el = event.target;
-    if (!el || (el.tagName || "").toLowerCase() !== "select") return;
+    if (!el) return;
+    const tag = (el.tagName || "").toLowerCase();
+    const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+    const isSelect = tag === "select";
+    const isRange = tag === "input" && type === "range";
+    if (!isSelect && !isRange) return;
+    if (isRange) {
+      const now = Date.now();
+      if (lastRangeStep.el === el && now - lastRangeStep.t < 1200) {
+        lastRangeStep.t = now;
+        return;
+      }
+      lastRangeStep = { el, t: now };
+    }
     emitStep(el, "type");
     // Feld abrechnen, damit das folgende blur keinen Doppel-Schritt erzeugt.
-    if (focusedEditable && focusedEditable.el === el) {
+    if (isSelect && focusedEditable && focusedEditable.el === el) {
       focusedEditable.startValue = fieldSnapshot(el, "select");
       focusedEditable.settled = true;
     }
@@ -647,8 +737,8 @@
     st.position = "fixed";
     st.zIndex = "2147483647";
     st.pointerEvents = "none";
-    st.border = "3px solid #3d4ee6";
-    st.boxShadow = "0 0 0 4px rgba(61,78,230,0.25)";
+    st.border = "3px solid #ef6a4e";
+    st.boxShadow = "0 0 0 4px rgba(239,106,78,0.25)";
     st.borderRadius = hasRect ? "10px" : "50%";
     if (hasRect) {
       st.left = lastClickPx.left - pad + "px";

@@ -92,6 +92,19 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
     <input id="tel" type="text" placeholder="+49 ...">
   </div>
   <input id="ort" type="text" placeholder="Ort">
+
+  <section id="deadcard" style="border:1px solid #ccc;padding:12px">
+    <h3>Eskalation</h3>
+    <p id="deadtext">Nur erklaerender Text - diese Karte ist NICHT klickbar.</p>
+  </section>
+  <div id="card" style="cursor:pointer;border:1px solid #ccc;padding:12px">
+    <span id="cardInner">Karte oeffnen</span>
+  </div>
+  <input id="esc" type="checkbox"><label for="esc">Eskalation aktivieren</label>
+  <div>
+    <div>Lautstaerke</div>
+    <input id="vol" type="range" min="0" max="10" value="3">
+  </div>
 </body></html>`;
 
 let browser;
@@ -217,6 +230,43 @@ try {
     const s = await sent();
     ok(s.length === 1 && s[0].action === "type", `Ort-Feld: 1 Eingabe-Schritt (${s.length})`);
     ok(s[0]?.label === "Ort", `Platzhalter-Fallback intakt: „Ort" (war „${s[0]?.label}") - Nachbar-Button/Feld-Container NICHT als Ueberschrift missbraucht`);
+  }
+  // ---------- 11) Dead-Click: passive Karte/Absatz erzeugt KEINEN Schritt ----------
+  await reset();
+  await page.click("#deadtext");
+  await page.click("#deadcard");
+  {
+    const s = await sent();
+    ok(s.length === 0, `Klick auf nicht-interaktive Karte/Text -> 0 Schritte (${s.length})`);
+  }
+
+  // ---------- 12) cursor:pointer-Karte IST klickbar; Widget-Grenze = ganze Karte ----------
+  await reset();
+  await page.click("#cardInner");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "click", `pointer-Karte: 1 Klick-Schritt (${s.length})`);
+    ok(s[0]?.label === "Karte oeffnen", `pointer-Karte: Label „Karte oeffnen" (war „${s[0]?.label}")`);
+    ok(s[0]?.selector?.css === "#card", `pointer-Karte: aeusserstes pointer-Element als Grenze -> #card (war „${s[0]?.selector?.css}")`);
+  }
+
+  // ---------- 13) Checkbox: Label aus zugehoerigem <label>, nicht „input" ----------
+  await reset();
+  await page.click("#esc");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "click", `Checkbox: 1 Klick-Schritt (${s.length})`);
+    ok(s[0]?.label === "Eskalation aktivieren", `Checkbox-Label = „Eskalation aktivieren" (war „${s[0]?.label}")`);
+  }
+
+  // ---------- 14) Schieberegler: Schritt via change (gedrosselt), Label aus Ueberschrift ----------
+  await reset();
+  await page.click("#vol"); // pointerdown erzeugt keinen Schritt; der Klick setzt den Wert -> change
+  await page.keyboard.press("ArrowRight"); // weiteres change im Drossel-Fenster -> KEIN Extra-Schritt
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "type", `Schieberegler: genau 1 Schritt via change trotz Nachjustieren (${s.length})`);
+    ok(s[0]?.label === "Lautstaerke", `Schieberegler-Label = „Lautstaerke" (war „${s[0]?.label}")`);
   }
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
