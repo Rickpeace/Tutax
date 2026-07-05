@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Plus, Loader2, Pencil, Clapperboard, ChevronLeft } from "lucide-react";
+import Link from "next/link";
+import {
+  Plus,
+  Loader2,
+  Pencil,
+  Clapperboard,
+  ChevronLeft,
+  Zap,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +26,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createTutorial } from "@/app/app/actions";
 import { VideoUpload } from "@/components/app/video-upload";
+
+/**
+ * Erkennt clientseitig (nach Mount) die installierte Recorder-Extension am DOM-Marker
+ * `data-steply-recorder` (content.js setzt ihn frueh; isolated world -> nur das DOM ist
+ * geteilt). Gibt {installed, version} zurueck. Kurze Nachkontrollen fangen eine gerade
+ * erst installierte Extension ab.
+ */
+function useRecorderExtension() {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      if (cancelled) return true;
+      const v = document.documentElement.getAttribute("data-steply-recorder");
+      if (v != null) {
+        setInstalled(true);
+        setVersion(v);
+        return true;
+      }
+      return false;
+    };
+    // setState ASYNCHRON planen (kein synchrones setState im Effekt-Body): erste Pruefung
+    // + zwei Nachkontrollen, falls die Extension gerade erst installiert wurde.
+    const t0 = setTimeout(() => {
+      if (!read()) setInstalled(false);
+    }, 0);
+    const t1 = setTimeout(read, 500);
+    const t2 = setTimeout(read, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+  return { installed, version };
+}
 
 /**
  * „Neues Tutorial" (Welle 20): öffnet zuerst eine Weiche mit zwei Karten —
@@ -42,6 +90,7 @@ export function NewTutorialButton({
   // "choice" = Weiche, "manual" = Titel-Abfrage. Video läuft im eigenen Dialog.
   const [mode, setMode] = useState<"choice" | "manual">("choice");
   const [videoOpen, setVideoOpen] = useState(false);
+  const { installed: extInstalled, version: extVersion } = useRecorderExtension();
 
   const openWith = (o: boolean) => {
     setOpen(o);
@@ -102,6 +151,11 @@ export function NewTutorialButton({
                   </span>
                 </button>
               </div>
+
+              {/* Dritte Option: Sofort-Anleitung (Recorder-Extension, Tango-Stil). Kein
+                  Navigations-Ziel bei installierter Extension — die Aufnahme laeuft in der
+                  Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek. */}
+              <SofortAnleitungCard installed={extInstalled} version={extVersion} />
             </>
           ) : (
             <>
@@ -148,6 +202,64 @@ export function NewTutorialButton({
         hideTrigger
       />
     </>
+  );
+}
+
+/**
+ * Sofort-Anleitung-Karte im „Neue Anleitung"-Dialog. Installiert -> Kurzanleitung (kein
+ * Navigations-Ziel: die Aufnahme laeuft in der Seitenleiste); nicht installiert -> Link
+ * auf /extension. Warm-Redesign-Optik (Koralle-Akzent, 2px-Border, rounded-xl).
+ */
+function SofortAnleitungCard({
+  installed,
+  version,
+}: {
+  installed: boolean | null;
+  version: string;
+}) {
+  // Waehrend der Erkennung (installed === null) neutral-installiert-freundlich rendern:
+  // wir zeigen die Kurzanleitung erst bei bestaetigter Installation, sonst den Install-Link.
+  const isInstalled = installed === true;
+
+  if (isInstalled) {
+    return (
+      <div className="mt-3 rounded-xl border-2 border-primary/25 bg-accent/40 p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Zap className="size-5" />
+          </span>
+          <span className="font-bold text-ink">Sofort-Anleitung</span>
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-bold text-ink">
+            <CheckCircle2 className="size-3 text-primary" /> Installiert
+            {version ? " (v" + version + ")" : ""}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-ink-2">
+          Seitenleiste öffnen (Extension-Symbol anklicken), Zielseite aufrufen,
+          losklicken — der fertige Entwurf erscheint automatisch hier in der Bibliothek.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href="/extension"
+      target="_blank"
+      className="mt-3 flex items-center gap-3 rounded-xl border-2 border-dashed border-primary/30 bg-card p-4 text-left transition-colors hover:border-primary/60 hover:bg-accent/30"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+        <Zap className="size-5" />
+      </span>
+      <span className="flex-1">
+        <span className="block font-bold text-ink">Sofort-Anleitung</span>
+        <span className="block text-xs text-muted-foreground">
+          Klicken statt filmen: Extension installieren, dann entsteht bei jedem Klick ein
+          Schritt.
+        </span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-primary" />
+    </Link>
   );
 }
 

@@ -1,4 +1,14 @@
-# Steply Recorder (Browser-Extension, v2.1 — Side Panel)
+# Steply Recorder (Browser-Extension, v2.2 — Side Panel)
+
+> **v2.2 — Ein-Klick-Verbinden & Download-Seite.** Kein Token mehr von Hand kopieren:
+> Auf der öffentlichen **Download-Seite `/extension`** laden Sie die Extension als ZIP
+> herunter (mit bebilderter 3-Schritt-Anleitung). Danach verbinden Sie sie **mit einem
+> Klick** — in Steply unter **Einstellungen → Einbetten → „Extension verbinden"**. Die
+> Seite überträgt den Token per `postMessage` (origin-gebunden) an die Extension; diese
+> **validiert ihn gegen `/api/recorder/me`, bevor sie ihn speichert**, und meldet den
+> Kontonamen zurück. Panel und Seite zeigen „Verbunden mit X" — eine Fehlbindung fällt
+> sofort auf. Zusätzlich: **dezenter Update-Hinweis** im Panel (vergleicht die installierte
+> Version mit `/downloads/steply-recorder.json`). Details unten unter „Verbinden".
 
 > **v2.1 — Saubere Eingaben & Selektor-Vorbau (Sofort-Anleitung).** Eingaben werden
 > jetzt wie bei Tango als **eigener Schritt beim Verlassen des Feldes** (blur) erfasst —
@@ -49,7 +59,24 @@ Die Extension bietet **zwei Modi** (Wahl in der Seitenleiste):
 
 ---
 
-## Installation (Entwicklermodus)
+## Installation
+
+### Für Nutzer: Download-Seite `/extension` (empfohlen, ohne Repo)
+
+Solange der Chrome Web Store noch in Vorbereitung ist, ist die öffentliche Seite
+**`/extension`** der offizielle Weg (z. B. `https://tutax-ivory.vercel.app/extension`):
+
+1. **ZIP herunterladen** (Button „Extension herunterladen") und in einen festen Ordner
+   **entpacken** (nicht löschen — Chrome lädt die Extension von dort).
+2. `chrome://extensions` öffnen und oben rechts **Entwicklermodus** einschalten.
+3. **Entpackt laden** klicken und den entpackten Ordner wählen.
+
+Das ZIP wird per `node scripts/build-extension-zip.mjs` erzeugt (nach
+`public/downloads/steply-recorder.zip`, `manifest.json` im Wurzelverzeichnis) und ist
+zugleich das Upload-ZIP für den Chrome Web Store (siehe `store/LISTING.md`). Chrome ab
+Version 114 (Seitenleiste).
+
+### Für Entwickler (aus dem Repo)
 
 1. Chrome öffnen und `chrome://extensions` aufrufen.
 2. Oben rechts **Entwicklermodus** einschalten.
@@ -66,12 +93,15 @@ Platzhalter. Neu erzeugen: `node extension/make-icons.mjs` (ohne Abhängigkeiten
 
 1. Klicken Sie auf das **Steply-Symbol** → die **Seitenleiste** öffnet sich rechts
    im Browserfenster und bleibt dort offen.
-2. **Beim ersten Mal (für Direkt-Upload):** Ist noch kein Token hinterlegt, zeigt
-   die Seitenleiste zuerst den **Verbinden**-Schritt. Verbindungs-Token aus Steply
-   einfügen (Einstellungen → Einbetten → „Steply Recorder verbinden"), **Speichern**.
-   Die App-URL ist voreingestellt (`https://app.steply.de`); für lokale Tests hier
-   z. B. `http://localhost:3013` eintragen. Ohne Verbindung geht es per „Ohne
-   Verbindung fortfahren (nur Video)" weiter.
+2. **Beim ersten Mal (für Direkt-Upload) — am einfachsten per Ein-Klick-Verbinden:**
+   In Steply **Einstellungen → Einbetten → „Extension verbinden"** klicken. Die Seite
+   überträgt den Token automatisch an die installierte Extension; das Panel zeigt danach
+   „Verbunden mit X" (auch wenn es gerade offen ist — es aktualisiert sich sofort).
+   **Fallback:** Ist noch kein Token hinterlegt, zeigt die Seitenleiste den
+   **Verbinden**-Schritt, in dem man den Token von Hand einfügt (Einstellungen →
+   Einbetten → „Token manuell kopieren"), **Speichern**. Die App-URL ist voreingestellt
+   (`https://app.steply.de`); für lokale Tests hier z. B. `http://localhost:3013`
+   eintragen. Ohne Verbindung geht es per „Ohne Verbindung fortfahren (nur Video)" weiter.
 3. **Modus wählen:** Zwei große Karten — **Sofort-Anleitung** (Screenshot je Klick,
    ohne Video; braucht Verbindung) oder **Video mit Ton**.
 4. **Video mit Ton:** Zuerst der **Mikro-Preflight** — die Seitenleiste zeigt
@@ -218,6 +248,41 @@ Ruhezustand nichts.
 - **CORS `*` ist unkritisch**, weil kein Cookie/keine Session mitgeht: es gibt
   keine ambient authority. Nur wer den (widerrufbaren) Token hat, darf hochladen.
   Token in Steply erneuern = alter sofort ungültig.
+
+### Verbinden (Ein-Klick-Pairing, v2.2) — Ablauf & Sicherheit
+
+Neue, **einzige zusätzliche** Route: `GET /api/recorder/me` mit
+`Authorization: Bearer <recorder_token>` → `200 { account, slug }` | `401`. Sie sagt nur,
+zu welchem Konto ein Token gehört (dieselbe Token-Prüfung wie die Upload-Routen). Der
+Ein-Klick-Ablauf:
+
+1. **Seite** (Einstellungen → Einbetten → „Extension verbinden") erzeugt einen frischen
+   Token und sendet `window.postMessage({ __steply:true, type:"steply-pair", token,
+   appUrl:location.origin }, location.origin)` — **nur** an den eigenen Origin.
+2. **`content.js`** nimmt die Nachricht **nur** an, wenn `event.source === window` **und**
+   `event.origin === location.origin` **und** `data.__steply === true` **und**
+   `type === "steply-pair"` **und** der Token ein plausibler String ist. Dann reicht es
+   `{type:"steply-pair", token, appUrl: event.origin}` (die **verifizierte** Herkunft, nicht
+   der behauptete Wert) an `background.js`.
+3. **`background.js`** ruft **zuerst** `GET {appUrl}/api/recorder/me` mit dem Token auf
+   (Timeout ~8 s). **Nur bei 200** speichert es `steplyToken`/`steplyAppUrl` in
+   `chrome.storage.local` und meldet den **Kontonamen** an den Tab zurück. Bei jedem
+   Fehler: **nichts** speichern, Ablehnung zurück.
+4. **`content.js`** postet das Ergebnis (`steply-pair-result`, inkl. Kontoname) an die
+   Seite zurück → sie zeigt „Verbunden mit X".
+
+**Sicherheitsprinzipien:** Pairing startet nur auf **Nutzer-Klick** der Seite;
+**Origin-Bindung** in Seite und Content-Script; der Token wird **vor dem Speichern gegen
+die Ziel-App validiert**; Panel **und** Seite zeigen den **Kontonamen** (Fehlbindung fällt
+sofort auf); der Token steht **nie in einer URL** (nur im `Authorization`-Header).
+
+### Update-Hinweis (v2.2)
+
+Das Panel lädt beim Öffnen `{appUrl}/downloads/steply-recorder.json` (fail-silent,
+Timeout ~4 s). Ist die dort hinterlegte Version **neuer** als
+`chrome.runtime.getManifest().version` (numerischer Segment-Vergleich), erscheint eine
+**dezente, nie blockierende** Statuszeile „Neue Version verfügbar" mit Link auf
+`{appUrl}/extension`.
 
 ---
 

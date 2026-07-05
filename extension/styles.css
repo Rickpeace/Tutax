@@ -524,6 +524,28 @@ body {
   margin-bottom: 10px;
 }
 
+/* Dezenter Update-Hinweis (neue Version verfuegbar); nie blockierend. */
+.update-hint {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--beige);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin: 0 0 10px;
+}
+
+.update-hint a {
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.update-hint a:hover {
+  text-decoration: underline;
+}
+
 .link-back {
   border: none;
   background: transparent;

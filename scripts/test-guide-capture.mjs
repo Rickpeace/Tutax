@@ -52,10 +52,19 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
   #ce{border:1px solid #888;min-height:24px;padding:4px}
 </style><script>
   window.__sent = [];
+  window.__pairCalls = []; // Welle 25: zaehlt weitergereichte steply-pair-Nachrichten
   window.chrome = {
     runtime: {
       lastError: undefined,
-      sendMessage: function (m) { if (m && m.type === "steply-guide-step") window.__sent.push(m.step); },
+      getManifest: function () { return { version: "2.2.0" }; },
+      sendMessage: function (m) {
+        if (m && m.type === "steply-guide-step") { window.__sent.push(m.step); return; }
+        if (m && m.type === "steply-pair") {
+          window.__pairCalls.push(m);
+          return Promise.resolve({ ok: true, account: "Testkonto" });
+        }
+        return Promise.resolve(undefined);
+      },
       onMessage: { addListener: function () {} },
     },
     storage: {
@@ -268,6 +277,56 @@ try {
     ok(s.length === 1 && s[0].action === "type", `Schieberegler: genau 1 Schritt via change trotz Nachjustieren (${s.length})`);
     ok(s[0]?.label === "Lautstaerke", `Schieberegler-Label = „Lautstaerke" (war „${s[0]?.label}")`);
   }
+
+  // ---------- 15) Erkennungs-Marker (Welle 25): data-steply-recorder gesetzt ----------
+  {
+    const marker = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-steply-recorder")
+    );
+    ok(marker === "2.2.0", `data-steply-recorder = „2.2.0" (aus getManifest) (war „${marker}")`);
+  }
+
+  // ---------- 16) Pairing-Filter (Welle 25) ----------
+  const pairCount = () => page.evaluate(() => window.__pairCalls.length);
+  const resetPair = () => page.evaluate(() => { window.__pairCalls.length = 0; });
+
+  // (a) Gueltige Nachricht: echtes postMessage (source===window), __steply-Flag, gleicher
+  //     origin -> chrome.runtime.sendMessage("steply-pair") wird ausgeloest (Stub zaehlt).
+  await resetPair();
+  await page.evaluate(() =>
+    window.postMessage({ __steply: true, type: "steply-pair", token: "tok-123" }, "*")
+  );
+  await page.waitForTimeout(80);
+  {
+    const n = await pairCount();
+    ok(n === 1, `gueltiges postMessage -> sendMessage("steply-pair") ausgeloest (${n})`);
+    const last = await page.evaluate(() => window.__pairCalls[0] || null);
+    ok(
+      last && last.type === "steply-pair" && last.token === "tok-123",
+      `weitergereicht mit Token (war ${JSON.stringify(last)})`
+    );
+  }
+
+  // (b) Fehlendes __steply-Flag -> NICHT ausgeloest.
+  await resetPair();
+  await page.evaluate(() =>
+    window.postMessage({ type: "steply-pair", token: "x" }, "*")
+  );
+  await page.waitForTimeout(80);
+  ok((await pairCount()) === 0, "postMessage OHNE __steply-Flag -> NICHT ausgeloest");
+
+  // (c) event.source !== window (synthetisches Event mit source=null) -> NICHT ausgeloest.
+  await resetPair();
+  await page.evaluate(() => {
+    const ev = new MessageEvent("message", {
+      data: { __steply: true, type: "steply-pair", token: "x" },
+      origin: location.origin,
+      source: null,
+    });
+    window.dispatchEvent(ev);
+  });
+  await page.waitForTimeout(30);
+  ok((await pairCount()) === 0, "event.source!==window (source=null) -> NICHT ausgeloest");
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {

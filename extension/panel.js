@@ -32,9 +32,11 @@
 
 const els = {
   interruptedHint: document.getElementById("interruptedHint"),
+  updateHint: document.getElementById("updateHint"),
   status: document.getElementById("status"),
   // connect (a)
   connect: document.getElementById("connect"),
+  connectAccount: document.getElementById("connectAccount"),
   token: document.getElementById("token"),
   appUrl: document.getElementById("appUrl"),
   saveCfg: document.getElementById("saveCfg"),
@@ -102,6 +104,10 @@ let interruptedDiscarded = false; // beim Oeffnen eine klemmende Aufnahme verwor
 let cfg = { token: "", appUrl: "" };
 let hasToken = false;
 
+// Kontoname des verbundenen Tokens (via /api/recorder/me; fail-silent). Wird in Connect-
+// und Start-Screen als „Verbunden mit X" gezeigt - so faellt eine Fehlbindung sofort auf.
+let accountName = "";
+
 const DEFAULT_APP_URL = "https://app.steply.de";
 
 function appBase() {
@@ -119,6 +125,128 @@ async function loadConfig() {
     cfg.appUrl = "";
   }
   hasToken = !!cfg.token;
+}
+
+// Kontoname des aktuellen Tokens holen (GET /api/recorder/me). FAIL-SILENT: bei jedem
+// Fehler bleibt der neutrale Text ("Mit Steply verbunden.") stehen. Kurzer Timeout, damit
+// das Panel nie auf das Netz wartet. Aktualisiert die Anzeige, wenn sie gerade sichtbar ist.
+async function fetchAccountName() {
+  if (!cfg.token) {
+    accountName = "";
+    return;
+  }
+  const base = appBase();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(base + "/api/recorder/me", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + cfg.token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return; // neutraler Text bleibt (z. B. Token abgelaufen -> zeigt „verbunden")
+    const body = await res.json().catch(() => ({}));
+    if (body && body.account) {
+      accountName = String(body.account).slice(0, 80);
+      refreshConnectionUi();
+    }
+  } catch (err) {
+    /* fail-silent: neutraler Text wie bisher */
+  }
+}
+
+// Verbindungs-Anzeige (Connect + Start) auffrischen, ohne den Screen zu wechseln.
+function refreshConnectionUi() {
+  if (!els.start.hidden) updateConnInfo();
+  if (!els.connect.hidden) updateConnectAccount();
+}
+
+function updateConnectAccount() {
+  if (hasToken && accountName) {
+    els.connectAccount.textContent = "Verbunden mit " + accountName + ".";
+    els.connectAccount.hidden = false;
+  } else {
+    els.connectAccount.textContent = "";
+    els.connectAccount.hidden = true;
+  }
+}
+
+function updateConnInfo() {
+  if (hasToken) {
+    els.connText.textContent = accountName
+      ? "Verbunden mit " + accountName + "."
+      : "Mit Steply verbunden.";
+    els.connBtn.textContent = "Verbindung aendern";
+  } else {
+    els.connText.textContent =
+      "Nicht verbunden - Sofort-Anleitung braucht eine Verbindung.";
+    els.connBtn.textContent = "Verbinden";
+  }
+}
+
+// Numerischer Segment-Vergleich zweier Versionen ("2.2.0" vs "2.10.1"). true, wenn
+// `server` echt neuer als `current` ist. Kein npm-Paket - Manifest-Versionen sind
+// einfache Zahlen-Segmente.
+function isNewerVersion(server, current) {
+  const parse = (v) =>
+    String(v || "")
+      .split(".")
+      .map((n) => parseInt(n, 10) || 0);
+  const a = parse(server);
+  const b = parse(current);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+// Update-Hinweis: die auf dem Server hinterlegte Version lesen (public/downloads/
+// steply-recorder.json aus Paket 2). Ist sie neuer als diese Installation, eine dezente,
+// NIE blockierende Statuszeile mit Link auf /extension zeigen. Fail-silent + kurzer Timeout.
+async function checkForUpdate() {
+  const base = appBase();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(base + "/downloads/steply-recorder.json", {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const data = await res.json().catch(() => null);
+    const serverVer = data && typeof data.version === "string" ? data.version : "";
+    let current = "";
+    try {
+      current = chrome.runtime.getManifest().version;
+    } catch (err) {
+      current = "";
+    }
+    if (serverVer && current && isNewerVersion(serverVer, current)) {
+      showUpdateHint(base, serverVer);
+    }
+  } catch (err) {
+    /* fail-silent - der Update-Hinweis ist rein optional */
+  }
+}
+
+function showUpdateHint(base, serverVer) {
+  if (!els.updateHint) return;
+  els.updateHint.textContent = "Neue Version verfuegbar (" + serverVer + "). ";
+  const a = document.createElement("a");
+  a.textContent = "Jetzt aktualisieren";
+  a.href = "#";
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: base + "/extension", active: true });
+  });
+  els.updateHint.appendChild(a);
+  els.updateHint.hidden = false;
 }
 
 function setStatus(text, kind) {
@@ -172,8 +300,11 @@ function showConnect() {
   els.appUrl.placeholder = DEFAULT_APP_URL;
   els.cfgStatus.textContent = "";
   els.cfgStatus.className = "status";
+  updateConnectAccount();
   show("connect");
   updateInterruptedHint();
+  // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt.
+  if (hasToken && !accountName) fetchAccountName();
 }
 
 async function saveCfg() {
@@ -202,17 +333,12 @@ function showStart() {
   els.cardGuide.title = hasToken
     ? ""
     : "Zuerst mit Steply verbinden (Direkt-Upload noetig).";
-  if (hasToken) {
-    els.connText.textContent = "Mit Steply verbunden.";
-    els.connBtn.textContent = "Verbindung aendern";
-  } else {
-    els.connText.textContent =
-      "Nicht verbunden - Sofort-Anleitung braucht eine Verbindung.";
-    els.connBtn.textContent = "Verbinden";
-  }
+  updateConnInfo();
   setStatus("");
   show("start");
   updateInterruptedHint();
+  // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt.
+  if (hasToken && !accountName) fetchAccountName();
 }
 
 // ============================================================================
@@ -995,6 +1121,24 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   drainGuideQueue();
 });
 
+// Live-Pairing (Welle 25): Wird das Panel gepairt, WAEHREND es offen ist (Seite ->
+// content.js -> background.js -> chrome.storage.local.set), aktualisiert sich die Anzeige
+// SOFORT - ohne Neuoeffnen. Wir reagieren NUR auf steplyToken/steplyAppUrl (nicht auf den
+// rec-Zustand) und stoeren eine laufende Aufnahme NICHT (nur Connect/Start werden gewechselt).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (!changes.steplyToken && !changes.steplyAppUrl) return;
+  const recording =
+    (mediaRecorder && mediaRecorder.state !== "inactive") || guideActive;
+  loadConfig().then(() => {
+    accountName = ""; // neu ermitteln (Token koennte auf ein anderes Konto zeigen)
+    fetchAccountName();
+    if (recording) return; // laufende Aufnahme nie unterbrechen
+    // Nur wenn wir gerade auf Connect oder Start stehen, die Auswahl (neu) zeigen.
+    if (!els.connect.hidden || !els.start.hidden) showStart();
+  });
+});
+
 // ============================================================================
 // RESET / NEUE AUFNAHME
 // ============================================================================
@@ -1092,4 +1236,7 @@ window.addEventListener("pagehide", () => {
   } else {
     showConnect();
   }
+  // Nebenlaeufig, nicht blockierend: Kontoname anzeigen + auf neue Version pruefen.
+  fetchAccountName();
+  checkForUpdate();
 })();

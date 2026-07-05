@@ -182,7 +182,8 @@ try {
       // Highlight-Rechteck (Primaerfarbe, rounded).
       const h1 = Array.isArray(s1.highlights) ? s1.highlights[0] : null;
       ok(s1.highlights?.length === 1 && h1?.type === "rect", "S1: genau EIN Highlight-Rechteck");
-      ok(h1?.color === "#3d4ee6" && h1?.rounded === true, "S1: Highlight Primaerfarbe #3d4ee6 + rounded");
+      // Warm-Redesign (Commit 172717b): GUIDE_HIGHLIGHT_COLOR = Koralle #ef6a4e (vorher Indigo).
+      ok(h1?.color === "#ef6a4e" && h1?.rounded === true, "S1: Highlight Primaerfarbe #ef6a4e + rounded");
       ok(Math.abs(h1.x - 0.1) < 1e-6 && Math.abs(h1.y - 0.2) < 1e-6 && Math.abs(h1.w - 0.3) < 1e-6 && Math.abs(h1.h - 0.1) < 1e-6, "S1: Highlight-Werte aus rect uebernommen");
 
       // (d) rect außerhalb 0..1 -> geclampt: x=0,y=1,w<=1,h<=0 (y+h nie >1).

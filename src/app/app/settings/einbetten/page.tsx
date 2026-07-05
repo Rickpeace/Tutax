@@ -108,7 +108,7 @@ export default async function EinbettenPage() {
         </div>
       </section>
 
-      {/* Steply Recorder (Extension): Direkt-Upload statt Datei-Download-Umweg. */}
+      {/* Steply Recorder (Extension): Ein-Klick-Verbinden + Direkt-Upload. */}
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center gap-2 text-sm font-bold text-ink">
           <Clapperboard className="size-4 text-primary" /> Steply Recorder verbinden
@@ -116,16 +116,23 @@ export default async function EinbettenPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Mit der Steply-Recorder-Extension nehmen Sie einen Ablauf auf und laden ihn per
           Klick direkt hierher hoch – Steply erstellt daraus automatisch ein Tutorial.
-          Erzeugen Sie dafür einen Verbindungs-Token und fügen Sie ihn in der Extension ein.
+          Ist die Extension installiert, verbinden Sie sie hier mit einem einzigen Klick –
+          ganz ohne Token-Kopieren.
         </p>
         <div className="mt-3">
           <RecorderConnect initialHasToken={hasRecorderToken} appUrl={appUrl} />
         </div>
         <ol className="mt-4 list-decimal space-y-1 pl-5 text-xs text-muted-foreground marker:text-muted-foreground">
-          <li>Extension installieren (Ordner <code>extension/</code>, siehe Anleitung).</li>
-          <li>Hier auf „Recorder verbinden“ klicken und den Token kopieren.</li>
-          <li>In der Extension unter „Verbindungs-Token“ einfügen.</li>
-          <li>Aufnahme machen – am Ende „Zu Steply hochladen“.</li>
+          <li>
+            Extension installieren – über die{" "}
+            <Link href="/extension" target="_blank" className="font-semibold text-primary hover:underline">
+              Download-Seite
+            </Link>
+            .
+          </li>
+          <li>Hier auf „Extension verbinden“ klicken – fertig.</li>
+          <li>Seitenleiste öffnen (Extension-Symbol), Ablauf aufnehmen.</li>
+          <li>Der fertige Entwurf erscheint automatisch in Ihrer Bibliothek.</li>
         </ol>
       </section>
 

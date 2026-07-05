@@ -16,13 +16,18 @@
       Eine unterbrochene Aufnahme wurde verworfen.
     </p>
 
+    <!-- Dezenter Update-Hinweis (nie blockierend); Link wird per JS verdrahtet. -->
+    <p id="updateHint" class="update-hint" hidden></p>
+
     <!-- ============ (a) NICHT VERBUNDEN: Token / App-URL ============ -->
     <section id="connect" hidden>
       <p class="lead">Mit Steply verbinden</p>
+      <p id="connectAccount" class="status status-ok" hidden></p>
       <p class="note">
-        Fuegen Sie den Verbindungs-Token aus Steply ein (Einstellungen &rarr;
-        Einbetten &rarr; Steply Recorder verbinden). Dann landet die Aufnahme
-        automatisch in Steply - ohne Datei-Umweg.
+        Am einfachsten verbinden Sie <strong>per Klick in Steply</strong>:
+        Einstellungen &rarr; Einbetten &rarr; „Extension verbinden". Der Token wird
+        dann automatisch hierher uebertragen. Alternativ fuegen Sie ihn unten von
+        Hand ein.
       </p>
       <label class="field">
         <span>Verbindungs-Token</span>

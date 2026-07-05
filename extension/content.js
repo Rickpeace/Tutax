@@ -29,6 +29,82 @@
   if (window.__steplyRecorderInstalled) return;
   window.__steplyRecorderInstalled = true;
 
+  // ---- Erkennungs-Marker fuer App-Seiten (Welle 25) ------------------------
+  // FRUEH (document_start) ein DOM-Attribut setzen, damit App-Seiten erkennen, dass die
+  // Extension installiert ist. WICHTIG: Content-Script und Seite laufen in getrennten
+  // JS-Welten (isolated world) - window-Variablen dieses Scripts sind fuer Seiten-Skripte
+  // UNSICHTBAR. NUR das DOM ist geteilt, also ist ein Attribut der einzig verlaessliche
+  // Marker. Wert = die Versionsnummer aus dem Manifest (die App zeigt „Installiert (vX)").
+  try {
+    const setMarker = () => {
+      if (document.documentElement && chrome.runtime && chrome.runtime.getManifest) {
+        document.documentElement.setAttribute(
+          "data-steply-recorder",
+          chrome.runtime.getManifest().version
+        );
+      }
+    };
+    setMarker();
+    // Falls documentElement bei document_start noch nicht existiert: beim naechsten Tick.
+    if (!document.documentElement) {
+      document.addEventListener("readystatechange", setMarker, { once: true });
+    }
+  } catch (err) {
+    /* Marker ist optional - im Zweifel still weiter */
+  }
+
+  // ---- Ein-Klick-Pairing (Welle 25) ----------------------------------------
+  // Die App-Seite (Einstellungen -> Einbetten) stoesst das Verbinden per window.postMessage
+  // an. SICHERHEIT (Origin-Bindung): Wir nehmen die Nachricht NUR an, wenn
+  //   - event.source === window   (echtes Seiten-Fenster, kein iframe/fremder Kontext)
+  //   - event.origin === location.origin  (kein fremder Absender)
+  //   - event.data.__steply === true UND type === "steply-pair"
+  //   - token ein plausibler String (Laenge gekappt)
+  // Dann reichen wir NUR den Token an background.js weiter - mit appUrl = event.origin
+  // (der verifizierten Herkunft, NICHT einem im Payload behaupteten Wert). background.js
+  // validiert den Token GEGEN die Ziel-App, BEVOR etwas gespeichert wird. Das Ergebnis
+  // (inkl. Kontoname) posten wir an die Seite zurueck -> sie zeigt Erfolg/Fehler an.
+  function postPairResult(payload) {
+    try {
+      window.postMessage(
+        Object.assign({ __steply: true, type: "steply-pair-result" }, payload),
+        location.origin
+      );
+    } catch (err) {
+      /* egal */
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    if (event.origin !== location.origin) return;
+    const d = event.data;
+    if (!d || d.__steply !== true || d.type !== "steply-pair") return;
+    const token = typeof d.token === "string" ? d.token.slice(0, 200).trim() : "";
+    if (!token) {
+      postPairResult({ ok: false, error: "Kein Token uebergeben." });
+      return;
+    }
+    try {
+      chrome.runtime
+        .sendMessage({ type: "steply-pair", token, appUrl: event.origin })
+        .then(
+          (resp) =>
+            postPairResult({
+              ok: !!(resp && resp.ok),
+              account: (resp && resp.account) || "",
+              error: (resp && resp.error) || "",
+            }),
+          (err) =>
+            postPairResult({
+              ok: false,
+              error: (err && err.message) || "Verbindung fehlgeschlagen.",
+            })
+        );
+    } catch (err) {
+      postPairResult({ ok: false, error: "Extension nicht erreichbar." });
+    }
+  });
+
   let recording = false;
   let startEpoch = 0;
   // Modus der laufenden Aufnahme: "video" (Screencast + Klick-Zeitstempel, Bestand) oder
