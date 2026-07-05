@@ -184,6 +184,24 @@ generierte Klassen/IDs, serverseitig streng gesäubert, wirft nie, abwärts-
 kompatibel — Grundlage für Live-Führung + Anleitungs-TÜV, wird noch nicht
 gelesen) · neuer Headless-Beweis `scripts/test-guide-capture.mjs` (Playwright,
 25 Assertionen: Labels/Editierbarkeit/blur-Reihenfolge/Passwort-Schutz/Selektoren).
+**Fable-Hotfixes v2.1.1/v2.1.2 (05.07., aus Richards Live-Tests):** sichtbare
+Feldüberschrift schlägt Platzhalter („Telefon" statt „+49 …") · Dead-Click-Filter
+(Klick auf passive Fläche = KEIN Schritt; cursor:pointer-Heuristik mit äußerster
+pointer-Grenze für klickbare DIV-Karten) · Checkbox/Radio/Switch-Label aus
+zugehörigem `<label>` · Schieberegler via change (Endposition, gedrosselt);
+Testkatalog auf 40 Assertionen.
+**Opus Welle 25 + Fable (05.07.):** 🔌 **Extension-Onboarding (v2.2.0)**:
+Ein-Klick-Pairing (Einbetten-Karte „Extension verbinden" → postMessage mit
+Origin-Bindung → background validiert Token via NEUER Route `GET
+/api/recorder/me` VOR dem Speichern; Panel zeigt „Verbunden mit X" live via
+storage.onChanged; Token-Rotation nur mit Owner-Session, nie im DOM/URL) ·
+öffentliche Seite **/extension** (ZIP-Download aus `public/downloads/` via
+deterministischem `scripts/build-extension-zip.mjs`, 3-Schritt-Anleitung,
+Web-Store-Hinweis) · Update-Hinweis im Panel (Versionsvergleich gegen
+steply-recorder.json, nie blockierend) · „Neues Tutorial" mit DRITTER Karte
+⚡ Sofort-Anleitung (erkennt Installation am DOM-Marker `data-steply-recorder`)
+· Store-Paket `extension/store/LISTING.md` (Texte, Berechtigungs-Begründungen,
+Richard-Checkliste). Zwischenlösung bis Chrome-Web-Store-Konto existiert.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

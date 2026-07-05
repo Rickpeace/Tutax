@@ -11,16 +11,21 @@
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
-- [ ] **Extension v2.1.0 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
-  Steply Recorder NEU LADEN (v2.1.0 — Eingabe-Schritte + Label-Fix + Selektoren).
-  Checkliste: Klick auf der styled-components-Seite → Schritttext OHNE CSS-Müll ·
-  Textfeld tippen + direkt „Speichern" klicken → ZWEI Schritte (Eingabe vor Klick),
-  Eingabe-Screenshot zeigt das AUSGEFÜLLTE Feld, kein Extra-Schritt fürs Reinklicken ·
-  Passwortfeld → Schritttext zeigt NIE das Getippte · natives Dropdown ändern +
-  Tab-Wechsel → zählt weiter korrekt · schnelle Klickfolge → nichts geht verloren.
-  Basis-Checks (v2.0): Leiste bleibt bei Tab-Wechsel offen · Abbruch → nächstes
-  Öffnen sauber · Mikro-Status vor Video-Start · Upload → „In Steply öffnen".
+- [ ] **Extension v2.2.0 (Onboarding) in Chrome testen**: NEU LADEN → v2.2.0.
+  Onboarding-Checks: Einstellungen → Einbetten → „Extension verbinden" → Karte
+  UND Seitenleiste zeigen „Verbunden mit <Konto>" (Leiste offen lassen: aktualisiert
+  live) · „Neue Anleitung" → dritte Karte ⚡ Sofort-Anleitung zeigt „Installiert
+  (v2.2.0)" · /extension: ZIP laden, entpacken, „Entpackt laden" → funktioniert ·
+  Update-Hinweis: steply-recorder.json testweise auf 9.9.9 → dezente Zeile im Panel.
+  Aufnahme-Checks (v2.1.x): CSS-Müll-Label weg · Tippen+Klick = 2 Schritte in
+  richtiger Reihenfolge, Screenshot zeigt ausgefülltes Feld · Passwort nie im Text ·
+  Klick auf passive Karte = KEIN Schritt · Checkbox-Label stimmt · Schieberegler =
+  1 Schritt mit Endposition · Multi-Tab + schnelle Folge verlustfrei.
   Braucht Chrome ≥ 114.
+- [ ] **Chrome-Web-Store-Konto anlegen** (5 $ einmalig) → dann `extension/store/
+  LISTING.md` abarbeiten (Screenshots 1280×800, `public/downloads/steply-recorder.zip`
+  hochladen, einreichen). Danach Store-Link auf /extension ergänzen → automatische
+  Updates für alle Nutzer.
 - [ ] **Impressum + Datenschutz: echte Betreiber-Angaben** eintragen
   (`[ANGABE FOLGT — Betreiber]`-Platzhalter in impressum/datenschutz-Seiten).
 - [ ] **LemonSqueezy-Konto** anlegen (Merchant of Record) — dann baue ich die
