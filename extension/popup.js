@@ -16,8 +16,30 @@ const tokenInput = document.getElementById("token");
 const appUrlInput = document.getElementById("appUrl");
 const saveBtn = document.getElementById("saveCfg");
 const cfgStatus = document.getElementById("cfgStatus");
+const guideNeedsToken = document.getElementById("guideNeedsToken");
 
 const DEFAULT_APP_URL = "https://app.steply.de";
+
+// Aktuell gespeicherter Verbindungs-Token (steuert, ob der Sofort-Modus verfuegbar ist).
+let hasToken = false;
+
+function selectedMode() {
+  const checked = document.querySelector('input[name="mode"]:checked');
+  return checked ? checked.value : "video";
+}
+
+// Sofort-Anleitung braucht einen Verbindungs-Token (Direkt-Upload). Ohne Token: Radio
+// deaktivieren, auf Video zurueckfallen und den Hinweis zeigen.
+function applyModeAvailability() {
+  const guideRadio = document.querySelector('input[name="mode"][value="guide"]');
+  const videoRadio = document.querySelector('input[name="mode"][value="video"]');
+  if (!guideRadio || !videoRadio) return;
+  guideRadio.disabled = !hasToken;
+  if (!hasToken && guideRadio.checked) {
+    videoRadio.checked = true;
+  }
+  if (guideNeedsToken) guideNeedsToken.hidden = hasToken;
+}
 
 function setStatus(text, kind) {
   statusEl.textContent = text || "";
@@ -49,12 +71,15 @@ function isNormalWebPage(url) {
 async function loadCfg() {
   try {
     const res = await chrome.storage.local.get(["steplyToken", "steplyAppUrl"]);
-    if (tokenInput) tokenInput.value = (res && res.steplyToken) || "";
+    const token = (res && res.steplyToken) || "";
+    if (tokenInput) tokenInput.value = token;
     if (appUrlInput) appUrlInput.value = (res && res.steplyAppUrl) || "";
     if (appUrlInput) appUrlInput.placeholder = DEFAULT_APP_URL;
+    hasToken = !!token;
   } catch (err) {
-    /* ignore */
+    hasToken = false;
   }
+  applyModeAvailability();
 }
 
 async function saveCfg() {
@@ -62,10 +87,12 @@ async function saveCfg() {
   const appUrl = (appUrlInput?.value || "").trim().replace(/\/+$/, "");
   try {
     await chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl });
+    hasToken = !!token;
+    applyModeAvailability();
     if (cfgStatus) {
       cfgStatus.textContent = token
-        ? "Gespeichert. Aufnahmen werden direkt zu Steply hochgeladen."
-        : "Gespeichert. Ohne Token werden zwei Dateien heruntergeladen.";
+        ? "Gespeichert. Sofort-Anleitung und Video-Upload sind verfuegbar."
+        : "Gespeichert. Ohne Token nur Video-Modus (zwei Dateien zum Hochladen).";
       cfgStatus.className = "status status-ok";
     }
   } catch (err) {
@@ -86,12 +113,24 @@ startBtn.addEventListener("click", async () => {
     const tab = await getActiveTab();
     const normal = tab && tab.id != null && isNormalWebPage(tab.url);
 
+    // Sofort-Modus nur mit Token und nur auf normalen Seiten (Screenshots + Klicks noetig).
+    let mode = selectedMode();
+    if (mode === "guide" && (!hasToken || !normal)) {
+      mode = "video";
+    }
+
     // Aufnahme-Tab oeffnen. Bei normalen Seiten die Tab-ID mitgeben (clicksTab), damit
-    // der Recorder Klicks NUR aus diesem Tab zaehlt - auch ueber Seitenwechsel hinweg.
-    // Bei Systemseiten ohne ID -> der Recorder zeigt den passenden Hinweis.
-    const url = chrome.runtime.getURL(
-      "recorder.html" + (normal ? "?clicksTab=" + String(tab.id) : "")
-    );
+    // der Recorder Klicks/Screenshots NUR aus diesem Tab erfasst - auch ueber
+    // Seitenwechsel hinweg. Fuer den Sofort-Modus zusaetzlich die Fenster-ID (clicksWin):
+    // captureVisibleTab braucht die Fenster-ID des aufgenommenen Tabs. Bei Systemseiten
+    // ohne ID -> der Recorder zeigt den passenden Hinweis.
+    const q = new URLSearchParams();
+    if (normal) {
+      q.set("clicksTab", String(tab.id));
+      if (tab.windowId != null) q.set("clicksWin", String(tab.windowId));
+    }
+    q.set("mode", mode);
+    const url = chrome.runtime.getURL("recorder.html?" + q.toString());
     await chrome.tabs.create({ url, active: true });
 
     setStatus(

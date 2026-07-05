@@ -31,6 +31,9 @@
 
   let recording = false;
   let startEpoch = 0;
+  // Modus der laufenden Aufnahme: "video" (Screencast + Klick-Zeitstempel, Bestand) oder
+  // "guide" (Sofort-Anleitung: pro Klick ein Screenshot + Element-Box, KEIN Video).
+  let mode = "video";
 
   function truncate(text, max) {
     if (!text) return "";
@@ -38,15 +41,22 @@
     return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
   }
 
+  // Das "sinnvolle" Element fuer einen Klick (fuer Label UND Bounding-Box): das naechste
+  // interaktive Element in der Ahnenkette, sonst das Ziel selbst.
+  function clickableFor(target) {
+    if (!target || target.nodeType !== 1) return null;
+    const clickable = target.closest(
+      'button, a, [role="button"], [role="link"], [role="menuitem"], input, textarea, select, summary, label'
+    );
+    return clickable || target;
+  }
+
   // Kuerzester sinnvoller Text fuer das geklickte Element.
   // Prioritaet: aria-label > Text des naechsten button/a/[role=button] > title/alt > tagName.
   function labelFor(target) {
     if (!target || target.nodeType !== 1) return "";
 
-    const clickable = target.closest(
-      'button, a, [role="button"], [role="link"], [role="menuitem"], input[type="submit"], input[type="button"], summary, label'
-    );
-    const el = clickable || target;
+    const el = clickableFor(target) || target;
 
     const aria = el.getAttribute && el.getAttribute("aria-label");
     if (aria && aria.trim()) return truncate(aria, 60);
@@ -74,7 +84,9 @@
   }
 
   function onClick(event) {
-    if (!recording) return;
+    // Nur im Video-Modus Klick-Zeitstempel senden (im guide-Modus laeuft die Erfassung
+    // ueber pointerdown, s. u.).
+    if (!recording || mode !== "video") return;
 
     const w = window.innerWidth || document.documentElement.clientWidth || 1;
     const h = window.innerHeight || document.documentElement.clientHeight || 1;
@@ -103,10 +115,73 @@
   // Capture-Phase: Klick wird erfasst, auch wenn die Seite stopPropagation nutzt.
   document.addEventListener("click", onClick, true);
 
+  // SOFORT-ANLEITUNG (guide-Modus): auf pointerdown (Capture-Phase, VOR der Klick-Wirkung
+  // und damit VOR einer moeglichen Navigation) das geklickte Element erfassen. Der TANGO-
+  // Trick: nicht nur der Klickpunkt, sondern die BoundingClientRect des Elements,
+  // normalisiert 0..1 zum Viewport -> pixelgenaue Markierung im Bild. Der Aufnahme-Tab
+  // macht auf diese Nachricht hin SOFORT einen Screenshot (captureVisibleTab).
+  function onPointerDown(event) {
+    if (!recording || mode !== "guide") return;
+    // Nur Haupt-Taste (linksklick / primaerer Zeiger).
+    if (typeof event.button === "number" && event.button !== 0) return;
+
+    const w = window.innerWidth || document.documentElement.clientWidth || 1;
+    const h = window.innerHeight || document.documentElement.clientHeight || 1;
+
+    const el = clickableFor(event.target) || event.target;
+    let rect = { x: 0, y: 0, w: 0, h: 0 };
+    try {
+      const r = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      if (r && r.width >= 0 && r.height >= 0) {
+        const clamp = (n) => Math.min(1, Math.max(0, n));
+        const round = (n) => Math.round(n * 10000) / 10000;
+        rect = {
+          x: round(clamp(r.left / w)),
+          y: round(clamp(r.top / h)),
+          w: round(clamp(r.width / w)),
+          h: round(clamp(r.height / h)),
+        };
+        // Nicht ueber den Rand hinauslaufen lassen.
+        if (rect.x + rect.w > 1) rect.w = round(1 - rect.x);
+        if (rect.y + rect.h > 1) rect.h = round(1 - rect.y);
+      }
+    } catch (err) {
+      // Bounding-Box nicht ermittelbar -> leeres Rechteck (Markierung entfaellt still).
+    }
+
+    // Aktionstyp: Texteingabe bei editierbaren Feldern, sonst Klick.
+    const tag = (el.tagName || "").toLowerCase();
+    const editable =
+      tag === "textarea" ||
+      (tag === "input" && !/^(button|submit|checkbox|radio|reset|file|image)$/i.test(el.type || "text")) ||
+      el.isContentEditable === true;
+    const action = editable ? "type" : "click";
+
+    const step = {
+      rect,
+      label: labelFor(event.target),
+      action,
+      url: (location && location.href ? location.href : "").slice(0, 500),
+      title: truncate(document.title || "", 200),
+      ts: Date.now(),
+    };
+
+    try {
+      chrome.runtime.sendMessage({ type: "steply-guide-step", step });
+    } catch (err) {
+      recording = false;
+    }
+  }
+
+  // pointerdown feuert VOR click und VOR der Navigation -> der Screenshot zeigt die Seite
+  // im Ausgangszustand (mit dem Element, das gleich geklickt wird).
+  document.addEventListener("pointerdown", onPointerDown, true);
+
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
     if (rec && typeof rec.startedAt === "number") {
       startEpoch = rec.startedAt;
+      mode = rec.mode === "guide" ? "guide" : "video";
       recording = true;
     } else {
       recording = false;

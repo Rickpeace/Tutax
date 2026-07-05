@@ -13,8 +13,31 @@
     </header>
 
     <p class="lead">
-      Nehmen Sie einen kurzen Bildschirm-Screencast auf. Ihre Klicks werden
-      mitgezaehlt und als exakte Schrittgrenzen an Steply uebergeben.
+      Machen Sie einen Ablauf einmal vor - Steply baut die Anleitung.
+    </p>
+
+    <fieldset class="modes">
+      <legend>Modus</legend>
+      <label class="mode">
+        <input type="radio" name="mode" value="guide" checked />
+        <span>
+          <strong>Sofort-Anleitung</strong> (Screenshots je Klick)
+          <em>Fertige Anleitung in Sekunden - ohne Video.</em>
+        </span>
+      </label>
+      <label class="mode">
+        <input type="radio" name="mode" value="video" />
+        <span>
+          <strong>Video</strong> (mit KI-Texten &amp; Ton)
+          <em>Bildschirm-Screencast, KI erzeugt Texte.</em>
+        </span>
+      </label>
+    </fieldset>
+
+    <p id="guideNeedsToken" class="note" hidden>
+      Fuer die Sofort-Anleitung verbinden Sie die Erweiterung zuerst mit Steply
+      (Einstellungen &rarr; Einbetten). Ohne Verbindung steht nur der Video-Modus zur
+      Verfuegung.
     </p>
 
     <button id="start" class="btn btn-primary" type="button">
