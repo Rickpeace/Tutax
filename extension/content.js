@@ -105,6 +105,23 @@
     }
   });
 
+  // ---- Seitenleiste per Klick auf der App-Seite oeffnen (v2.2.1) -------------
+  // Die Sofort-Anleitung-Karte im „Neue Anleitung"-Dialog postet {type:"steply-open-panel"}.
+  // Gleiche Origin-Bindung wie beim Pairing. background.js ruft chrome.sidePanel.open()
+  // SYNCHRON im onMessage-Handler auf - die Klick-Geste der Seite reicht dafuer durch
+  // (Chrome >= 116), solange dazwischen nichts awaited wird.
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    if (event.origin !== location.origin) return;
+    const d = event.data;
+    if (!d || d.__steply !== true || d.type !== "steply-open-panel") return;
+    try {
+      chrome.runtime.sendMessage({ type: "steply-open-panel" });
+    } catch (err) {
+      /* Extension nicht erreichbar - Karte zeigt den manuellen Weg als Fallback */
+    }
+  });
+
   let recording = false;
   let startEpoch = 0;
   // Modus der laufenden Aufnahme: "video" (Screencast + Klick-Zeitstempel, Bestand) oder

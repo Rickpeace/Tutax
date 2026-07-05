@@ -220,11 +220,26 @@ function SofortAnleitungCard({
   // Waehrend der Erkennung (installed === null) neutral-installiert-freundlich rendern:
   // wir zeigen die Kurzanleitung erst bei bestaetigter Installation, sonst den Install-Link.
   const isInstalled = installed === true;
+  // Nach dem Klick kurz den Fallback-Hinweis zeigen: sidePanel.open() braucht Chrome >= 116
+  // und eine frische Klick-Geste — falls sich nichts oeffnet, hilft der Symbol-Klick.
+  const [openRequested, setOpenRequested] = useState(false);
 
   if (isInstalled) {
     return (
-      <div className="mt-3 rounded-xl border-2 border-primary/25 bg-accent/40 p-4">
-        <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          // Klick-Geste der Seite -> content.js -> background.js -> sidePanel.open().
+          // Muss im selben Klick passieren (Origin-gebunden wie das Pairing).
+          window.postMessage(
+            { __steply: true, type: "steply-open-panel" },
+            window.location.origin
+          );
+          setOpenRequested(true);
+        }}
+        className="mt-3 block w-full rounded-xl border-2 border-primary/25 bg-accent/40 p-4 text-left transition-colors hover:border-primary/60 hover:bg-accent/60"
+      >
+        <span className="flex items-center gap-2">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
             <Zap className="size-5" />
           </span>
@@ -233,12 +248,17 @@ function SofortAnleitungCard({
             <CheckCircle2 className="size-3 text-primary" /> Installiert
             {version ? " (v" + version + ")" : ""}
           </span>
-        </div>
-        <p className="mt-2 text-xs text-ink-2">
-          Seitenleiste öffnen (Extension-Symbol anklicken), Zielseite aufrufen,
-          losklicken — der fertige Entwurf erscheint automatisch hier in der Bibliothek.
-        </p>
-      </div>
+        </span>
+        <span className="mt-2 block text-xs text-ink-2">
+          {openRequested
+            ? "Seitenleiste geöffnet — Zielseite aufrufen und losklicken; der fertige " +
+              "Entwurf erscheint automatisch hier in der Bibliothek. (Nichts passiert? " +
+              "Extension-Symbol oben rechts anklicken oder Extension aktualisieren.)"
+            : "Klicken, um die Aufnahme-Seitenleiste zu öffnen — dann Zielseite aufrufen " +
+              "und losklicken; der fertige Entwurf erscheint automatisch hier in der " +
+              "Bibliothek."}
+        </span>
+      </button>
     );
   }
 

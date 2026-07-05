@@ -119,3 +119,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     .finally(() => clearTimeout(timer));
   return true; // Antwort kommt asynchron
 });
+
+// Seitenleiste auf Klick der App-Seite oeffnen (v2.2.1): sidePanel.open() verlangt eine
+// Nutzer-Geste. Die Klick-Aktivierung der Seite reicht ueber content.js + sendMessage bis
+// hierher (Chrome >= 116) - aber NUR, wenn wir SYNCHRON im Handler oeffnen (kein await
+// davor). Chrome < 116 hat kein open(): dann passiert schlicht nichts, die Karte nennt
+// den manuellen Weg (Extension-Symbol) als Fallback.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-open-panel") return false;
+  if (!sender || !sender.tab || sender.tab.id == null) return false;
+  try {
+    if (chrome.sidePanel && typeof chrome.sidePanel.open === "function") {
+      chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {
+        /* z. B. Geste abgelaufen - Fallback bleibt der Symbol-Klick */
+      });
+    }
+  } catch (err) {
+    /* sidePanel.open nicht verfuegbar */
+  }
+  return false;
+});

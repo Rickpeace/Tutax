@@ -53,12 +53,14 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
 </style><script>
   window.__sent = [];
   window.__pairCalls = []; // Welle 25: zaehlt weitergereichte steply-pair-Nachrichten
+  window.__openPanelCalls = 0; // v2.2.1: zaehlt steply-open-panel-Weiterleitungen
   window.chrome = {
     runtime: {
       lastError: undefined,
       getManifest: function () { return { version: "2.2.0" }; },
       sendMessage: function (m) {
         if (m && m.type === "steply-guide-step") { window.__sent.push(m.step); return; }
+        if (m && m.type === "steply-open-panel") { window.__openPanelCalls++; return; }
         if (m && m.type === "steply-pair") {
           window.__pairCalls.push(m);
           return Promise.resolve({ ok: true, account: "Testkonto" });
@@ -327,6 +329,23 @@ try {
   });
   await page.waitForTimeout(30);
   ok((await pairCount()) === 0, "event.source!==window (source=null) -> NICHT ausgeloest");
+
+  // ---------- 17) Seitenleiste-oeffnen-Weiterleitung (v2.2.1) ----------
+  // Gueltiges postMessage -> sendMessage("steply-open-panel"); ohne __steply-Flag -> nicht.
+  await page.evaluate(() =>
+    window.postMessage({ __steply: true, type: "steply-open-panel" }, "*")
+  );
+  await page.waitForTimeout(80);
+  ok(
+    (await page.evaluate(() => window.__openPanelCalls)) === 1,
+    "steply-open-panel: gueltig -> an background weitergereicht"
+  );
+  await page.evaluate(() => window.postMessage({ type: "steply-open-panel" }, "*"));
+  await page.waitForTimeout(80);
+  ok(
+    (await page.evaluate(() => window.__openPanelCalls)) === 1,
+    "steply-open-panel OHNE __steply-Flag -> NICHT weitergereicht"
+  );
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {
