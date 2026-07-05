@@ -1,5 +1,5 @@
-// Erzeugt einfarbige PNG-Platzhalter-Icons (#3d4ee6) fuer die Extension.
-// Bewusst OHNE Abhaengigkeiten (kein sharp): schreibt gueltige PNG-Bytes direkt.
+// Erzeugt einfarbige PNG-Platzhalter-Icons (#ef6a4e, Warm-Redesign 07/2026)
+// fuer die Extension. Bewusst OHNE Abhaengigkeiten (kein sharp).
 // Aufruf:  node extension/make-icons.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -10,10 +10,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "icons");
 mkdirSync(outDir, { recursive: true });
 
-// Steply-Blau
-const R = 0x3d;
-const G = 0x4e;
-const B = 0xe6;
+// Steply-Koralle
+const R = 0xef;
+const G = 0x6a;
+const B = 0x4e;
 
 function crc32(buf) {
   let c = ~0;

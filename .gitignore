@@ -53,3 +53,6 @@ next-env.d.ts
 
 # Design-Explorationen (lokal, kein App-Code)
 desing claude/
+
+# Design-Referenzen (Claude-Design-Handoff, lokal)
+desing claude/

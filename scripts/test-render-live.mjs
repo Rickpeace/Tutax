@@ -147,7 +147,7 @@ try {
     try {
       const brand = resolveBrand({ mode: "manual", tokens: { colors: { primary: "#c81e5a", background: "#fffafc", text: "#1a1a1a" } } });
       ok(brand.primary === "#c81e5a", "(c) resolveBrand liest Primärfarbe aus tokens");
-      ok(resolveBrand(null).primary === "#3d4ee6", "(c) resolveBrand-Fallback = Indigo");
+      ok(resolveBrand(null).primary === "#ef6a4e", "(c) resolveBrand-Fallback = Koralle (Warm-Redesign)");
 
       const size = { w: 1920, h: 1080 };
       const introPng = path.join(dir, "intro.png");

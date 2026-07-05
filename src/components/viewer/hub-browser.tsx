@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Layers, ChevronRight, Loader2 } from "lucide-react";
 import { labelsFor, t as translate, type HubLabels, type HubLang } from "@/lib/i18n-hub";
+import { categoryColor, type CategoryColor } from "@/lib/category-colors";
 
 export type HubTutorial = {
   title: string;
@@ -19,6 +20,7 @@ export function HubBrowser({
   lang = "de",
   langQuery = "",
   labels,
+  colorful = false,
 }: {
   accountSlug: string;
   items: HubTutorial[];
@@ -29,6 +31,11 @@ export function HubBrowser({
   langQuery?: string;
   /** UI-Strings; Default = deutsche Strings. */
   labels?: HubLabels;
+  /**
+   * Kategorie-Farbfamilien (Design 3b) nur im Steply-Standard-Theme; bei
+   * Kunden-CI (ai/extreme) bleibt alles monochrom in der Akzentfarbe.
+   */
+  colorful?: boolean;
 }) {
   const L = labels ?? labelsFor(lang);
   // Query-Suffix für Karten-Links (?lang=… bzw. leer).
@@ -100,15 +107,23 @@ export function HubBrowser({
 
   return (
     <div data-tx="browser">
-      <div data-tx="search" className="mb-5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 py-3">
-        <Search className="size-4 text-muted-foreground" />
+      {/* Große Such-Pille (Design 3b) — Schattenfarbe CI-neutral aus der Ink. */}
+      <div
+        data-tx="search"
+        className="mx-auto mb-8 flex max-w-[520px] items-center gap-2.5 rounded-full border-2 bg-white px-5 py-3 sm:py-3.5"
+        style={{
+          borderColor: "color-mix(in srgb, var(--brand-ink) 10%, transparent)",
+          boxShadow: "0 4px 0 color-mix(in srgb, var(--brand-ink) 8%, transparent)",
+        }}
+      >
+        <Search className="size-4 shrink-0 text-muted-foreground" />
         <input
           type="search"
           aria-label={L.searchAria}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={L.searchPlaceholder}
-          className="w-full bg-transparent text-sm outline-none"
+          className="w-full bg-transparent text-[15px] font-semibold outline-none placeholder:text-muted-foreground"
         />
       </div>
 
@@ -188,80 +203,122 @@ export function HubBrowser({
           </div>
         )
       ) : (
-        groups.map((g) => (
-          <section key={g.name} data-tx="cats" className="mb-6">
-            <h2
-              data-tx="cat"
-              className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground"
-              style={{ fontFamily: "var(--brand-font-heading)" }}
-            >
-              {g.name}
-            </h2>
-            <div className="space-y-2">
-              {g.items.map((t) => (
-                <Link
-                  key={t.slug}
-                  href={`/h/${accountSlug}/${t.slug}${suffix}`}
-                  data-tx="card"
-                  className="group flex items-center gap-3 p-4 transition-transform hover:-translate-y-px"
-                  style={{
-                    // Akzent-Dosierung (REVIEW G): Kartenrahmen neutral, erst bei Hover
-                    // Akzent — statt jeden Rahmen dauerhaft in der CI-Farbe. Fläche/Radius/
-                    // Schatten bleiben Token-gesteuert (Kunden-CI).
-                    background: "var(--brand-card-bg, #fff)",
-                    borderWidth: "var(--brand-card-bw, 1px)",
-                    borderStyle: "solid",
-                    borderColor: "rgba(16,21,36,0.08)",
-                    borderRadius: "var(--brand-radius, 12px)",
-                    boxShadow: "var(--brand-card-shadow, none)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "var(--brand-accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(16,21,36,0.08)";
-                  }}
-                >
-                  <div
-                    className="flex size-10 shrink-0 items-center justify-center"
+        /* Kategorien-Grid (Design 3b): 2 Spalten ab md, Blöcke mit Icon-Kachel. */
+        <div className="grid gap-x-7 gap-y-7 md:grid-cols-2">
+          {groups.map((g) => {
+            const fam: CategoryColor | null = colorful ? categoryColor(g.name) : null;
+            return (
+              <section key={g.name} data-tx="cats">
+                <div className="mb-3 flex items-center gap-2.5">
+                  <span
+                    aria-hidden
+                    className="grid size-[30px] shrink-0 place-items-center rounded-[10px]"
                     style={{
-                      // Akzent-Dosierung: dezenter Akzent-Tint als Fläche + Akzent-Icon,
-                      // statt eines harten Akzent-Rahmens ums Icon-Quadrat.
-                      background: "color-mix(in srgb, var(--brand-accent) 10%, white)",
-                      color: "var(--brand-accent)",
-                      borderRadius: "var(--brand-radius, 10px)",
+                      background: fam
+                        ? fam.soft
+                        : "color-mix(in srgb, var(--brand-accent) 10%, white)",
                     }}
                   >
-                    <Layers className="size-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      data-tx="card-title"
-                      className="text-base font-bold"
+                    <CategoryGlyph fam={fam} />
+                  </span>
+                  <h2
+                    data-tx="cat"
+                    className="text-[17px] font-black"
+                    style={{
+                      fontFamily: "var(--brand-font-heading)",
+                      color: "var(--brand-title, var(--brand-ink))",
+                    }}
+                  >
+                    {g.name}
+                  </h2>
+                  <span className="text-xs font-extrabold text-muted-foreground">
+                    {g.items.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {g.items.map((t) => (
+                    <Link
+                      key={t.slug}
+                      href={`/h/${accountSlug}/${t.slug}${suffix}`}
+                      data-tx="card"
+                      className="group flex items-center gap-3 px-4 py-3 transition-transform hover:-translate-y-px"
                       style={{
-                        // Akzent-Dosierung: Titel in Ink (nicht in der Akzentfarbe), damit
-                        // die CI auf Logo/Topbar/Buttons/Chat konzentriert bleibt.
-                        color: "var(--brand-ink)",
-                        fontFamily: "var(--brand-font-heading)",
-                        fontWeight: "var(--brand-heading-weight, 700)",
+                        background: "var(--brand-card-bg, #fff)",
+                        borderWidth: "var(--brand-card-bw, 2px)",
+                        borderStyle: "solid",
+                        borderColor:
+                          "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
+                        borderRadius: "var(--brand-radius, 14px)",
+                        boxShadow: "var(--brand-card-shadow, none)",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = fam
+                          ? fam.solid
+                          : "var(--brand-accent)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor =
+                          "color-mix(in srgb, var(--brand-ink) 9%, transparent)";
                       }}
                     >
-                      {t.title}
-                    </div>
-                    {t.description && (
-                      <div data-tx="card-desc" className="truncate text-sm text-muted-foreground">
-                        {t.description}
+                      <div className="min-w-0 flex-1">
+                        <div
+                          data-tx="card-title"
+                          className="text-sm font-extrabold"
+                          style={{
+                            color: "var(--brand-ink)",
+                            fontFamily: "var(--brand-font-heading)",
+                            fontWeight: "var(--brand-heading-weight, 800)",
+                          }}
+                        >
+                          {t.title}
+                        </div>
+                        {t.description && (
+                          <div
+                            data-tx="card-desc"
+                            className="truncate text-[11.5px] font-bold text-muted-foreground"
+                          >
+                            {t.description}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {/* Akzent-Dosierung: Chevron neutral statt in der Akzentfarbe. */}
-                  <ChevronRight className="size-5 shrink-0" style={{ color: "var(--brand-ink)", opacity: 0.3 }} />
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))
+                      <span
+                        aria-hidden
+                        className="shrink-0 font-black"
+                        style={{ color: fam ? fam.solid : "var(--brand-accent)" }}
+                      >
+                        →
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
+}
+
+/** Form-Glyphe der Kategoriefamilie (Koralle=Quadrat, Teal=Kreis, Violett=Raute, Amber=Ring). */
+function CategoryGlyph({ fam }: { fam: CategoryColor | null }) {
+  if (!fam) return <Layers className="size-4" style={{ color: "var(--brand-accent)" }} />;
+  const base = { width: 11, height: 11 } as const;
+  switch (fam.shape) {
+    case "circle":
+      return <span style={{ ...base, borderRadius: "50%", background: fam.solid }} />;
+    case "diamond":
+      return (
+        <span
+          style={{ ...base, borderRadius: 4, background: fam.solid, transform: "rotate(45deg)" }}
+        />
+      );
+    case "ring":
+      return (
+        <span style={{ ...base, borderRadius: "50%", border: `3px solid ${fam.solid}` }} />
+      );
+    default:
+      return <span style={{ ...base, borderRadius: 4, background: fam.solid }} />;
+  }
 }

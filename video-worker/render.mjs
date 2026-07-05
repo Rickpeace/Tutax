@@ -20,16 +20,16 @@ import path from "node:path";
 
 // ---- Konstanten (bewusst hier dupliziert, damit der Worker keine src/-Imports braucht) ----
 export const FALLBACK_BRAND = {
-  // Steply-Indigo (siehe src/app/globals.css :root / OVERVIEW.md §3).
-  primary: "#3d4ee6",
-  surface: "#f6f7fe",
+  // Steply-Koralle (Warm-Redesign 07/2026; siehe src/app/globals.css :root / OVERVIEW.md §3).
+  primary: "#ef6a4e",
+  surface: "#fdf3ec",
   background: "#ffffff",
-  text: "#101524",
+  text: "#33291f",
   accentFg: "#ffffff",
 };
-const YES_COLOR = "#0f9d72"; // --yes (Ja-Ast)
-const NO_COLOR = "#d6455d"; // --no (Nein-Ast)
-export const HIGHLIGHT_COLOR = "#3d4ee6";
+const YES_COLOR = "#18a999"; // --yes (Ja-Ast)
+const NO_COLOR = "#d3543a"; // --no (Nein-Ast)
+export const HIGHLIGHT_COLOR = "#ef6a4e";
 
 // Video-Format (9:16 + Musikbett kommen als Folgewelle — Format als Parameter vorbereitet).
 export const FORMATS = {
@@ -562,7 +562,7 @@ export function lowerThirdFilters({ title, caption, fontFile, fontBold, brand, s
 
 /** #rrggbb -> 0xRRGGBB für ffmpeg color=. */
 function hexToFfmpeg(hex) {
-  const h = validHex(hex) ?? "#3d4ee6";
+  const h = validHex(hex) ?? "#ef6a4e";
   let x = h.replace(/^#/, "");
   if (x.length === 3) x = x.split("").map((c) => c + c).join("");
   return `0x${x.toUpperCase()}`;

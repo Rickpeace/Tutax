@@ -4,18 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicImageUrl } from "@/lib/public-image";
 import type { Tutorial } from "@/lib/types";
-import { NewTutorialButton } from "@/components/app/new-tutorial-button";
-import { VideoUpload } from "@/components/app/video-upload";
-import { TutorialCard } from "@/components/app/tutorial-card";
+import { LibraryBrowser, type LibraryCategory } from "@/components/app/library-browser";
+import type { LibraryTutorial } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
-import { CollapsibleSection } from "@/components/app/collapsible-section";
-import { CategoryJump, type JumpSection } from "@/components/app/category-jump";
-import { CategoryDeleteButton } from "@/components/app/category-delete-button";
 import { InsightsCard } from "@/components/app/insights-card";
-import { BulkCleanupProvider, CleanupControls } from "@/components/app/bulk-cleanup";
-import { AudienceFilterProvider, AudienceFilterChips } from "@/components/app/audience-filter";
-import { Layers, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
+/**
+ * Bibliothek (Design-Handoff 07/2026, Option 2a/2b): Kategorien-Sidebar +
+ * Kartenraster mit Bereichs-/Status-Filter. Laufende Video-Jobs über dem
+ * Raster; Nutzung/Insights und Standard-Vorlagen darunter.
+ */
 export default async function DashboardPage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -66,13 +65,13 @@ export default async function DashboardPage() {
   const atByTpl = new Map(ats.map((a) => [a.template_id, a]));
   const forkIds = new Set(ats.map((a) => a.forked_tutorial_id).filter(Boolean) as string[]);
 
-  // Eigene Tutorials ohne Forks (Forks erscheinen als Template-Eintrag)
+  // Eigene Tutorials ohne Forks (Forks erscheinen als Vorlagen-Eintrag)
   const own = allOwn.filter((t) => !forkIds.has(t.id));
 
-  // Thumbnails: erstes Schritt-Bild (kleinste position mit image_path) pro Tutorial.
-  // EINE Query für ALLE eigenen Tutorials (kein N+1), nach position sortiert →
-  // erster Treffer pro Tutorial gewinnt.
+  // Schritt-Zahl + Thumbnail (erstes Schritt-Bild) pro Anleitung:
+  // EINE Query für ALLE eigenen Anleitungen (kein N+1), nach position sortiert.
   const thumbById = new Map<string, string>();
+  const stepCountById = new Map<string, number>();
   const ownIds = own.map((t) => t.id);
   if (ownIds.length) {
     const admin = createAdminClient();
@@ -80,11 +79,10 @@ export default async function DashboardPage() {
       .from("steps")
       .select("tutorial_id, image_path, position")
       .in("tutorial_id", ownIds)
-      .not("image_path", "is", null)
       .order("position", { ascending: true });
-    // Erster (kleinste position) Treffer pro Tutorial.
     const firstPath = new Map<string, string>();
     for (const r of stepRows ?? []) {
+      stepCountById.set(r.tutorial_id, (stepCountById.get(r.tutorial_id) ?? 0) + 1);
       if (r.image_path && !firstPath.has(r.tutorial_id)) {
         firstPath.set(r.tutorial_id, r.image_path);
       }
@@ -105,7 +103,7 @@ export default async function DashboardPage() {
     for (const [id, url] of resolved) if (url) thumbById.set(id, url);
   }
 
-  // Standard-Anleitungen (Templates)
+  // Standard-Anleitungen (Vorlagen)
   const templateItems: TemplateItem[] = templates.map((t) => {
     const row = atByTpl.get(t.id);
     const categoryName = (t.category_id && globalCatName.get(t.category_id)) || "Sonstiges";
@@ -132,159 +130,67 @@ export default async function DashboardPage() {
     };
   });
 
-  // Eigene nach Kategorie gruppieren
-  const byCat = new Map<string, Tutorial[]>();
-  for (const t of own) {
-    const k = t.category_id ?? "__none";
-    const l = byCat.get(k) ?? [];
-    l.push(t);
-    byCat.set(k, l);
-  }
-  const ownSections = [
-    ...cats.map((c) => ({ id: c.id, name: c.name, items: byCat.get(c.id) ?? [] })),
-    ...(byCat.has("__none") ? [{ id: null, name: "Sonstiges", items: byCat.get("__none")! }] : []),
-  ].filter((s) => s.items.length > 0 || s.id !== null);
+  const items: LibraryTutorial[] = own.map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description ?? null,
+    status: t.status,
+    visibility: t.visibility,
+    inLernen: !!t.in_lernen,
+    updatedAt: t.updated_at,
+    categoryId: t.category_id ?? null,
+    slug: t.slug ?? null,
+    freshness: t.freshness ?? null,
+    stepCount: stepCountById.get(t.id) ?? 0,
+    thumbnailUrl: thumbById.get(t.id) ?? null,
+  }));
 
+  const browserCats: LibraryCategory[] = cats.map((c) => ({ id: c.id, name: c.name }));
   const jobs = activeJobs ?? [];
-  const nothing = own.length === 0 && templateItems.length === 0;
-
-  // Stabile DOM-ids pro Sektion (für die mobile Kategorie-Sprungleiste, REVIEW G).
-  const secDomId = (id: string | null) => `dash-sec-${id ?? "none"}`;
-  const jumpSections: JumpSection[] = [
-    ...ownSections.map((s) => ({ domId: secDomId(s.id), name: s.name, count: s.items.length })),
-    ...(templateItems.length
-      ? [{ domId: "dash-sec-templates", name: "Standard-Anleitungen", count: templateItems.length }]
-      : []),
-  ];
-
-  // Gibt es eine Zielgruppen-Vermischung (Kunden UND Team)? Nur dann lohnen die Chips.
-  const hasKunden = own.some((t) => t.visibility === "public");
-  const hasTeam = own.some(
-    (t) => t.visibility === "internal" || (t.visibility === "public" && t.in_lernen),
-  );
-  const showAudienceChips = hasKunden && hasTeam;
 
   return (
-    <BulkCleanupProvider>
-    <AudienceFilterProvider>
-    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-ink">Tutorials</h1>
-          <p className="text-sm text-muted-foreground">
-            {own.length === 0 ? "Eigene Anleitungen" : `${own.length} eigene Anleitung${own.length === 1 ? "" : "en"}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {own.length > 0 && <CleanupControls />}
-          <VideoUpload accountId={account.id} />
-          <NewTutorialButton accountId={account.id} />
-        </div>
-      </div>
-
-      {jobs.length > 0 && (
-        <div className="mt-6 space-y-2">
-          {jobs.map((j) => (
-            <div
-              key={j.id}
-              className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-accent/50 px-4 py-3"
-            >
-              <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">
-                  {j.title?.trim() || "Anleitung"} wird erstellt …
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {j.status === "queued"
-                    ? "In der Warteschlange …"
-                    : j.progress
-                    ? `${j.progress} …`
-                    : "KI verarbeitet das Video …"}
-                </p>
+    <LibraryBrowser
+      tutorials={items}
+      categories={browserCats}
+      accountId={account.id}
+      accountSlug={account.slug}
+      topSlot={
+        jobs.length > 0 ? (
+          <div className="mb-4 space-y-2">
+            {jobs.map((j) => (
+              <div
+                key={j.id}
+                className="flex items-center gap-3 rounded-card border-2 border-primary/25 bg-accent/60 px-4 py-3"
+              >
+                <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-extrabold text-ink">
+                    {j.title?.trim() || "Anleitung"} wird erstellt …
+                  </p>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {j.status === "queued"
+                      ? "In der Warteschlange …"
+                      : j.progress
+                      ? `${j.progress} …`
+                      : "KI verarbeitet das Video …"}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Insights über den Tutorial-Sektionen; streamt nach (blockiert das Dashboard
-          nicht) und rendert sich selbst weg, wenn es keine Events gibt. */}
+            ))}
+          </div>
+        ) : undefined
+      }
+    >
+      {/* Nutzung/Insights (streamt nach; rendert sich weg ohne Events) */}
       <Suspense fallback={null}>
         <InsightsCard accountId={account.id} />
       </Suspense>
 
-      {nothing ? (
-        <div className="mt-8 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-accent text-primary">
-            <Layers className="size-6" />
-          </div>
-          <h2 className="mt-4 font-bold text-ink">Erstellen Sie Ihr erstes Tutorial</h2>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Eigene Anleitung bauen – oder unten eine Standard-Anleitung aktivieren.
-          </p>
-          <div className="mt-5">
-            <NewTutorialButton accountId={account.id} />
-          </div>
+      {templateItems.length > 0 && (
+        <div className="mt-8">
+          <TemplateSection items={templateItems} />
         </div>
-      ) : (
-        <>
-          {/* Zielgruppen-Filter (Welle 20): nur wenn Kunden- UND Team-Anleitungen da sind. */}
-          {showAudienceChips && (
-            <div className="mt-6 flex justify-end">
-              <AudienceFilterChips />
-            </div>
-          )}
-
-          {/* Mobile Kategorie-Sprungleiste (REVIEW G): rendert sich selbst weg bei < 3 Sektionen. */}
-          <CategoryJump sections={jumpSections} />
-
-          <div className="mt-6 space-y-8">
-            {ownSections.map((s) => (
-              <div key={s.id ?? "none"} id={secDomId(s.id)} className="scroll-mt-[6.5rem] md:scroll-mt-4">
-                <CollapsibleSection
-                  title={s.name}
-                  count={s.items.length}
-                  storageKey={`dash:own:${s.id ?? "none"}`}
-                  action={
-                    s.id !== null ? (
-                      <div className="flex items-center gap-0.5">
-                        {/* Leere eigene Kategorie: dezenter Papierkorb (Welle 20). */}
-                        {s.items.length === 0 && (
-                          <CategoryDeleteButton categoryId={s.id} categoryName={s.name} />
-                        )}
-                        <NewTutorialButton accountId={account.id} compact categoryId={s.id} />
-                      </div>
-                    ) : undefined
-                  }
-                >
-                  {s.items.length === 0 ? (
-                    <p className="py-2 text-sm text-muted-foreground">Noch keine Tutorials in dieser Kategorie.</p>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {s.items.map((t) => (
-                        <TutorialCard
-                          key={t.id}
-                          tutorial={t}
-                          accountSlug={account.slug}
-                          thumbnailUrl={thumbById.get(t.id) ?? null}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CollapsibleSection>
-              </div>
-            ))}
-
-            {templateItems.length > 0 && (
-              <div id="dash-sec-templates" className="scroll-mt-[6.5rem] md:scroll-mt-4">
-                <TemplateSection items={templateItems} />
-              </div>
-            )}
-          </div>
-        </>
       )}
-    </main>
-    </AudienceFilterProvider>
-    </BulkCleanupProvider>
+    </LibraryBrowser>
   );
 }

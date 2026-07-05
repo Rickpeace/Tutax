@@ -254,6 +254,29 @@ export function Wizard({
     return count > 0 ? count : null;
   }, [steps, branchesByStep, stepById, rootId]);
 
+  // Linearer Pfad (geordnete Schritt-IDs) für die Schrittlisten-Sidebar
+  // (Design 3a, nur Desktop + nur wenn es keinen Verzweigungs-Baum gibt).
+  const linearPath = useMemo(() => {
+    if (linearTotal == null) return null;
+    const ids: string[] = [];
+    let id: string | null = rootId;
+    const seen = new Set<string>();
+    while (id != null && stepById.has(id) && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+      id = branchesByStep.get(id)?.[0]?.target_step_id ?? null;
+    }
+    return ids;
+  }, [linearTotal, rootId, stepById, branchesByStep]);
+
+  // Zu einem Schritt der linearen Liste springen (Historie = Pfad davor).
+  const jumpTo = (idx: number) => {
+    if (!linearPath) return;
+    gestureRef.current = true;
+    setCur(linearPath[idx] ?? null);
+    setHistory(linearPath.slice(0, idx));
+  };
+
   const go = (target: string | null) => {
     gestureRef.current = true; // Navigation = Geste vorhanden (erlaubt Auto-Play)
     setHistory((h) => (cur != null ? [...h, cur] : h));
@@ -369,13 +392,93 @@ export function Wizard({
   return (
     <div
       data-tx="step"
-      className="w-full border bg-white p-4 shadow-[0_10px_40px_rgba(16,21,36,0.08)] sm:p-5"
+      className={`w-full overflow-hidden border-2 bg-white ${linearPath ? "lg:flex" : ""}`}
       style={{
         borderRadius: "var(--brand-radius, 16px)",
-        borderColor: "var(--brand-card-border, rgba(16,21,36,0.06))",
-        borderWidth: "var(--brand-card-bw, 1px)",
+        borderColor:
+          "var(--brand-card-border, color-mix(in srgb, var(--brand-ink) 9%, transparent))",
+        boxShadow:
+          "var(--brand-card-shadow, 0 5px 0 color-mix(in srgb, var(--brand-ink) 7%, transparent))",
       }}
     >
+      {/* Schrittliste (Design 3a): nur Desktop + nur lineare Tutorials —
+          bei Verzweigungen gibt es keine ehrliche Gesamtliste. */}
+      {linearPath && (
+        <aside
+          className="hidden w-[250px] shrink-0 flex-col self-stretch border-r-2 lg:flex"
+          style={{
+            borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)",
+          }}
+        >
+          <div className="px-4 pb-1 pt-4 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+            Schritte
+          </div>
+          <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-3 pt-1">
+            {linearPath.map((id, i) => {
+              const s = stepById.get(id);
+              const curIdx = step == null ? linearPath.length : history.length;
+              const state = i < curIdx ? "done" : i === curIdx ? "active" : "open";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => jumpTo(i)}
+                  aria-current={state === "active" ? "step" : undefined}
+                  className="flex items-center gap-3 rounded-[13px] px-2.5 py-2 text-left transition-colors"
+                  style={
+                    state === "active" ? { background: "var(--brand-soft)" } : undefined
+                  }
+                >
+                  <span
+                    className="grid size-[25px] shrink-0 place-items-center rounded-full text-[11.5px] font-black"
+                    style={
+                      state === "done"
+                        ? {
+                            background:
+                              "color-mix(in srgb, var(--brand-ink) 7%, transparent)",
+                            color: "var(--brand-ink)",
+                            opacity: 0.7,
+                          }
+                        : state === "active"
+                          ? {
+                              background: "var(--brand-accent)",
+                              color: "var(--brand-accent-fg, #fff)",
+                            }
+                          : {
+                              background: "#fff",
+                              border:
+                                "2px solid color-mix(in srgb, var(--brand-ink) 12%, transparent)",
+                              color: "var(--brand-ink)",
+                              opacity: 0.55,
+                            }
+                    }
+                  >
+                    {state === "done" ? <Check className="size-3.5" /> : i + 1}
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[13px] ${
+                      state === "active" ? "font-extrabold" : "font-bold"
+                    }`}
+                    style={{
+                      color: "var(--brand-ink)",
+                      opacity: state === "open" ? 0.6 : 1,
+                      textDecoration: state === "done" ? "line-through" : undefined,
+                      textDecorationColor:
+                        state === "done"
+                          ? "color-mix(in srgb, var(--brand-ink) 30%, transparent)"
+                          : undefined,
+                    }}
+                  >
+                    {s?.title?.trim() || `Schritt ${i + 1}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+      )}
+
+      <div className="min-w-0 flex-1 p-4 sm:p-5">
       {/* Audio-UX Welle 16: Ton- und Auto-Schalter oben rechts, nur wenn das
           Tutorial überhaupt Vorlese-Audio hat (also nur im öffentlichen Wizard). */}
       {hasAudio && (
@@ -414,13 +517,27 @@ export function Wizard({
       {step ? (
         <>
           {linearTotal != null && (
-            <div
-              data-tx="progress"
-              className="mb-3 text-xs font-semibold text-muted-foreground"
-            >
-              {L.stepXofY
-                .replace("{n}", String(history.length + 1))
-                .replace("{total}", String(linearTotal))}
+            <div data-tx="progress" className="mb-3.5 flex items-center gap-3">
+              <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">
+                {L.stepXofY
+                  .replace("{n}", String(history.length + 1))
+                  .replace("{total}", String(linearTotal))}
+              </span>
+              <span
+                className="h-1.5 flex-1 overflow-hidden rounded-full"
+                style={{
+                  background: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
+                }}
+                aria-hidden
+              >
+                <span
+                  className="block h-full rounded-full transition-[width] duration-300 ease-out"
+                  style={{
+                    width: `${Math.round(((history.length + 1) / linearTotal) * 100)}%`,
+                    background: "var(--brand-accent)",
+                  }}
+                />
+              </span>
             </div>
           )}
           {imageUrls[step.id] ? (
@@ -435,7 +552,12 @@ export function Wizard({
                 })
               }
               aria-label="Bild vergrößern"
-              className="mb-4 block w-full cursor-zoom-in"
+              className="mb-4 block w-full cursor-zoom-in overflow-hidden rounded-2xl border-2"
+              style={{
+                borderColor: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
+                boxShadow:
+                  "0 5px 0 color-mix(in srgb, var(--brand-ink) 7%, transparent)",
+              }}
             >
               <ViewerImage
                 url={imageUrls[step.id]}
@@ -512,11 +634,11 @@ export function Wizard({
                     key={b.id}
                     data-tx="btn"
                     onClick={() => go(b.target_step_id)}
-                    className="w-full border-2 bg-white px-4 py-3 text-base font-bold transition-transform active:translate-y-px"
+                    className="w-full border-2 bg-white px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
                     style={{
                       borderColor: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
                       color: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
-                      borderRadius: "var(--brand-btn-radius, 12px)",
+                      borderRadius: "var(--brand-btn-radius, 999px)",
                     }}
                   >
                     {b.label || L.next}
@@ -535,7 +657,10 @@ export function Wizard({
             {history.length > 0 && (
               <button
                 onClick={back}
-                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-semibold text-muted-foreground"
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border-2 bg-white py-2.5 text-sm font-extrabold text-muted-foreground transition-transform active:translate-y-px"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
+                }}
               >
                 <ChevronLeft className="size-4" /> {L.back}
               </button>
@@ -642,11 +767,12 @@ export function Wizard({
 
           <button
             onClick={restart}
-            className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-semibold"
+            className="mt-5 flex items-center gap-1.5 px-5 py-3 text-base font-extrabold transition-all active:translate-y-[2px]"
             style={{
               background: "var(--brand-accent)",
               color: "var(--brand-accent-fg, #fff)",
-              borderRadius: "var(--brand-btn-radius, 12px)",
+              borderRadius: "var(--brand-btn-radius, 999px)",
+              boxShadow: "0 4px 0 color-mix(in srgb, var(--brand-accent) 72%, #000)",
             }}
           >
             <RotateCcw className="size-4" /> {L.restart}
@@ -699,6 +825,7 @@ export function Wizard({
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -739,11 +866,12 @@ function NextButton({
     <button
       data-tx="btn"
       onClick={() => onNext(target)}
-      className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-semibold transition-transform active:translate-y-px"
+      className="flex w-full items-center justify-center gap-2 px-4 py-3 text-base font-extrabold transition-all active:translate-y-[2px]"
       style={{
         background: "var(--brand-accent)",
         color: "var(--brand-accent-fg, #fff)",
-        borderRadius: "var(--brand-btn-radius, 12px)",
+        borderRadius: "var(--brand-btn-radius, 999px)",
+        boxShadow: "0 4px 0 color-mix(in srgb, var(--brand-accent) 72%, #000)",
       }}
     >
       {hasNext ? (

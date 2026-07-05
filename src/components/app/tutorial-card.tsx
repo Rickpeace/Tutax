@@ -9,16 +9,13 @@ import {
   FileText,
   Eye,
   ExternalLink,
-  ImageIcon,
   QrCode,
   Check,
   Lock,
-  GraduationCap,
   Film,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
-import { useAudienceFilter, matchesAudience } from "@/components/app/audience-filter";
 import { VideoExport } from "@/components/app/video-export";
 import {
   DropdownMenu,
@@ -37,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { relativeDe } from "@/lib/format";
+import { categoryColor, categoryStripes, CATEGORY_NEUTRAL } from "@/lib/category-colors";
 import {
   deleteTutorial,
   duplicateTutorial,
@@ -44,16 +42,38 @@ import {
   publishTutorial,
   unpublishTutorial,
 } from "@/app/app/actions";
-import type { Tutorial } from "@/lib/types";
 
+/** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte). */
+export type LibraryTutorial = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  visibility: string;
+  inLernen: boolean;
+  updatedAt: string;
+  categoryId: string | null;
+  slug: string | null;
+  freshness: string | null;
+  stepCount: number;
+  thumbnailUrl: string | null;
+};
+
+/**
+ * Bibliotheks-Karte (Design 2a): Streifen-Thumbnail im Kategorie-Pastell
+ * (oder echtes Schritt-Bild) mit Kategorie-/Bereichs-Chips, darunter Titel,
+ * Meta und Fußzeile mit Status-Chip. Funktionalität wie gehabt: optimistischer
+ * Publish-Toggle, Kontextmenü (Umbenennen/Duplizieren/QR/Export/Löschen),
+ * Aufräum-Modus als Auswahl-Fläche.
+ */
 export function TutorialCard({
   tutorial,
   accountSlug,
-  thumbnailUrl = null,
+  categoryName,
 }: {
-  tutorial: Tutorial;
+  tutorial: LibraryTutorial;
   accountSlug: string;
-  thumbnailUrl?: string | null;
+  categoryName: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -67,13 +87,10 @@ export function TutorialCard({
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
   const internal = tutorial.visibility === "internal";
-  // Öffentliche Anleitung, die zusätzlich im Team-Lernbereich liegt (Welle 20).
-  const teamToo = tutorial.visibility === "public" && tutorial.in_lernen;
 
-  // Zielgruppen-Filter (Welle 20): Chips „Alle | Kunden | Team" über der Liste.
-  const audienceFilter = useAudienceFilter();
+  const color = categoryName ? categoryColor(categoryName) : CATEGORY_NEUTRAL;
 
-  // Bulk-Aufräumen (REVIEW G): im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
+  // Bulk-Aufräumen: im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
   const cleanup = useCleanup();
   const cleanupActive = cleanup?.active ?? false;
   const checked = cleanup?.isSelected(tutorial.id) ?? false;
@@ -132,17 +149,14 @@ export function TutorialCard({
     }
   };
 
-  // Zielgruppen-Filter: passt die Karte nicht, gar nicht rendern (nach allen Hooks).
-  if (!matchesAudience(audienceFilter, tutorial)) return null;
-
   return (
     <div
-      className={`group relative flex gap-3 rounded-xl border bg-card p-3 shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all sm:p-4 ${
+      className={`group relative flex flex-col overflow-hidden rounded-card border-2 bg-card transition-colors ${
         cleanupActive
           ? checked
-            ? "border-primary ring-2 ring-primary/30"
-            : "border-border"
-          : "border-border hover:-translate-y-0.5 hover:border-primary/40"
+            ? "border-primary ring-2 ring-primary/25"
+            : "border-line"
+          : "border-line hover:border-[#e3d7c2]"
       }`}
       data-pending={pending}
     >
@@ -153,66 +167,86 @@ export function TutorialCard({
           onClick={() => cleanup?.toggle(tutorial.id)}
           aria-pressed={checked}
           aria-label={`${tutorial.title} ${checked ? "abwählen" : "auswählen"}`}
-          className="absolute inset-0 z-10 cursor-pointer rounded-xl"
+          className="absolute inset-0 z-10 cursor-pointer rounded-card"
         >
           <span
             className={`absolute left-2 top-2 flex size-6 items-center justify-center rounded-md border-2 ${
-              checked ? "border-primary bg-primary text-white" : "border-line-2 bg-white"
+              checked ? "border-primary bg-primary text-white" : "border-line bg-card"
             }`}
           >
             {checked && <Check className="size-4" />}
           </span>
         </button>
       )}
-      {/* Thumbnail links: erstes Schritt-Bild oder Platzhalter */}
+
+      {/* Thumbnail: erstes Schritt-Bild oder Kategorie-Streifen */}
       <Link
         href={`/app/tutorials/${tutorial.id}`}
         aria-label={`${tutorial.title} bearbeiten`}
-        className="size-16 shrink-0 overflow-hidden rounded-lg border border-line-2 bg-muted sm:size-20"
+        className="relative block h-[110px] w-full overflow-hidden"
+        style={
+          tutorial.thumbnailUrl ? undefined : { background: categoryStripes(color) }
+        }
       >
-        {thumbnailUrl ? (
+        {tutorial.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={thumbnailUrl}
+            src={tutorial.thumbnailUrl}
             alt=""
             className="size-full object-cover"
             loading="lazy"
           />
         ) : (
-          <div className="flex size-full items-center justify-center text-muted-foreground/50">
-            <ImageIcon className="size-6" />
-          </div>
+          <span
+            className="absolute inset-0 grid place-items-center font-mono text-[9.5px]"
+            style={{ color: color.deep }}
+            aria-hidden
+          >
+            noch kein screenshot
+          </span>
         )}
+        {categoryName && (
+          <span
+            className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-card px-2 py-[3px] text-[10px] font-extrabold"
+            style={{ color: color.text }}
+          >
+            <span
+              aria-hidden
+              className="size-1.5 rounded-full"
+              style={{ background: color.solid }}
+            />
+            {categoryName}
+          </span>
+        )}
+        <span
+          className={`absolute right-2 top-2 flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-extrabold ${
+            internal
+              ? "border-[1.5px] border-line bg-card text-ink-2"
+              : "bg-ink text-background"
+          }`}
+          title={
+            internal
+              ? "Interne Anleitung – nur für das Team sichtbar"
+              : "Für Kunden auf der Hilfe-Seite"
+          }
+        >
+          {internal ? (
+            <>
+              <Lock className="size-2.5" /> Intern
+            </>
+          ) : (
+            "Kunde"
+          )}
+        </span>
       </Link>
 
-      {/* Inhalt rechts */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Body */}
+      <div className="flex min-w-0 flex-1 flex-col px-3.5 pb-3 pt-3">
         <div className="flex items-start gap-2">
           <Link href={`/app/tutorials/${tutorial.id}`} className="min-w-0 flex-1">
-            {/* Titel als ERSTES Text-Element */}
-            <div className="flex min-w-0 items-center gap-1.5">
-              <h3 className="truncate font-bold text-ink group-hover:text-primary">
-                {tutorial.title}
-              </h3>
-              {internal && (
-                <span
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-medium text-ink-2"
-                  title="Interne Anleitung – nur für das Team sichtbar"
-                >
-                  <Lock className="size-3" /> Intern
-                </span>
-              )}
-              {/* KEIN Schloss: das Tutorial ist öffentlich — der Chip sagt nur
-                  „läuft ZUSÄTZLICH als Team-Schulung" (Richard-Feedback 03.07.). */}
-              {teamToo && (
-                <span
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-medium text-ink-2"
-                  title="Öffentlich auf der Hilfe-Seite UND zusätzlich im Team-Lernbereich (mit Schulungsnachweis)"
-                >
-                  <GraduationCap className="size-3" /> + Team
-                </span>
-              )}
-            </div>
+            <h3 className="line-clamp-2 text-sm font-extrabold leading-[1.3] text-ink group-hover:text-primary">
+              {tutorial.title}
+            </h3>
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -220,7 +254,7 @@ export function TutorialCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="-mr-1 -mt-0.5 shrink-0"
+                  className="-mr-1 -mt-0.5 shrink-0 text-faint hover:text-ink"
                   aria-label="Aktionen"
                 >
                   <MoreVertical className="size-4" />
@@ -231,26 +265,30 @@ export function TutorialCard({
               <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
                 <FileText className="size-4" /> Bearbeiten
               </DropdownMenuItem>
-              {live && internal && (
-                <DropdownMenuItem render={<Link href={`/app/lernen/${tutorial.id}`} />}>
-                  <Lock className="size-4" /> Im Lernbereich öffnen
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem
+                render={
+                  <Link
+                    href={
+                      internal
+                        ? `/app/lernen/${tutorial.id}`
+                        : `/app/preview/${tutorial.id}`
+                    }
+                    target={internal ? undefined : "_blank"}
+                  />
+                }
+              >
+                <Eye className="size-4" /> Ansehen
+              </DropdownMenuItem>
               {live && !internal && tutorial.slug && (
                 <DropdownMenuItem
                   render={
-                    <Link
-                      href={`/h/${accountSlug}/${tutorial.slug}`}
-                      target="_blank"
-                    />
+                    <Link href={`/h/${accountSlug}/${tutorial.slug}`} target="_blank" />
                   }
                 >
                   <ExternalLink className="size-4" /> Live-Seite öffnen
                 </DropdownMenuItem>
               )}
               {live && !internal && tutorial.slug && (
-                // QR-Code öffnen (H6): führt zur öffentlichen Anleitung; nur die eigene
-                // Hilfe-URL wird an /api/qr übergeben (serverseitig zusätzlich geprüft).
                 <DropdownMenuItem
                   onClick={() => {
                     const url = `${window.location.origin}/h/${accountSlug}/${tutorial.slug}`;
@@ -265,7 +303,6 @@ export function TutorialCard({
                 </DropdownMenuItem>
               )}
               {live && !internal && tutorial.slug && (
-                // Video-Export (Welle 18): nur für öffentlich veröffentlichte Tutorials.
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.preventDefault();
@@ -280,9 +317,7 @@ export function TutorialCard({
                 Umbenennen
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() =>
-                  run(() => duplicateTutorial(tutorial.id), "Dupliziert")
-                }
+                onClick={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
               >
                 Duplizieren
               </DropdownMenuItem>
@@ -294,58 +329,56 @@ export function TutorialCard({
           </DropdownMenu>
         </div>
 
-        {tutorial.description && (
-          <Link href={`/app/tutorials/${tutorial.id}`} className="mt-0.5">
-            <p className="line-clamp-1 text-sm text-muted-foreground sm:line-clamp-2">
-              {tutorial.description}
-            </p>
-          </Link>
-        )}
+        <p className="mt-1 text-xs font-semibold text-faint">
+          {tutorial.stepCount} Schritt{tutorial.stepCount === 1 ? "" : "e"} ·{" "}
+          {relativeDe(tutorial.updatedAt)}
+          {tutorial.description ? (
+            <span className="block truncate">{tutorial.description}</span>
+          ) : null}
+        </p>
 
-        {/* Publish-Toggle UNTER dem Titel (nicht mehr darüber) */}
-        <div className="mt-auto flex items-center gap-2 pt-2">
-          <HelpToggle on={live} onToggle={toggleLive} label={internal ? "Fürs Team" : "Auf Hilfe-Seite"} />
+        {/* Fußzeile: Status-Chip + Prüfen-Hinweis + Publish-Toggle */}
+        <div className="mt-auto flex items-center gap-1.5 pt-2.5 text-[11px] font-extrabold">
+          <span
+            className={`rounded-full px-2.5 py-[3px] ${
+              live ? "bg-teal-soft text-teal-text" : "bg-amber-soft text-amber-text"
+            }`}
+          >
+            {live ? (internal ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
+          </span>
           {stale && (
-            <span className="flex items-center gap-1 rounded-md bg-no-soft px-1.5 py-0.5 text-xs font-bold text-no">
+            <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-[3px] text-accent-foreground">
               <AlertTriangle className="size-3" /> Prüfen
             </span>
           )}
-          <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
-            {relativeDe(tutorial.updated_at)}
+          <span className="ml-auto">
+            <HelpToggle
+              on={live}
+              onToggle={toggleLive}
+              label={internal ? "Fürs Team" : "Auf Hilfe-Seite"}
+            />
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            className="shrink-0"
-            render={
-              <Link
-                href={internal ? `/app/lernen/${tutorial.id}` : `/app/preview/${tutorial.id}`}
-                target={internal ? undefined : "_blank"}
-              />
-            }
-          >
-            <Eye className="size-4" /> Ansehen
-          </Button>
         </div>
-
-        {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte). */}
-        {live && !internal && tutorial.slug && (
-          <VideoExport tutorialId={tutorial.id} open={exportOpen} onOpenChange={setExportOpen} />
-        )}
       </div>
+
+      {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte). */}
+      {live && !internal && tutorial.slug && (
+        <div className="px-3.5 pb-3">
+          <VideoExport
+            tutorialId={tutorial.id}
+            open={exportOpen}
+            onOpenChange={setExportOpen}
+          />
+        </div>
+      )}
 
       {/* Umbenennen */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Tutorial umbenennen</DialogTitle>
+            <DialogTitle>Anleitung umbenennen</DialogTitle>
           </DialogHeader>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-          />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
               Abbrechen
@@ -367,7 +400,7 @@ export function TutorialCard({
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Tutorial löschen?</DialogTitle>
+            <DialogTitle>Anleitung löschen?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             „{tutorial.title}“ wird mit allen Schritten dauerhaft gelöscht. Das

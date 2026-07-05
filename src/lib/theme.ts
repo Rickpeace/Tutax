@@ -135,10 +135,11 @@ export function brandStyle(tokens: unknown): CSSProperties {
   s["--brand-btn-radius"] = sh.buttonStyle === "pill" ? "999px" : radiusPx;
 
   // Card-/Titel-Stil aus dem Design ableiten (outline | elevated | filled).
-  const accent = (c.primary as string) || "#3d4ee6";
+  // Fallbacks = warmes Steply-Standard-Theme (Handoff 07/2026).
+  const accent = (c.primary as string) || "#ef6a4e";
   const bg = (c.background as string) || "#ffffff";
-  const surface = (c.surface as string) || "#eef0fe";
-  const ink = (c.text as string) || "#101524";
+  const surface = (c.surface as string) || "#ffe8e2";
+  const ink = (c.text as string) || "#33291f";
   const border = (c.border as string) || "";
   const cardStyle = String(sh.cardStyle ?? "filled");
 

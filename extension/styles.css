@@ -1,12 +1,16 @@
 :root {
-  --brand: #3d4ee6;
-  --brand-dark: #2f3cc0;
+  /* Warm-Redesign 07/2026 (Design-Handoff): Koralle/Creme statt Indigo.
+     --stop bleibt ein echtes Rot (Aufnahme-Signal, bewusst != Koralle). */
+  --brand: #ef6a4e;
+  --brand-dark: #d3543a;
   --stop: #dc2626;
-  --ink: #1f2430;
-  --muted: #6b7280;
+  --ink: #33291f;
+  --muted: #8a7a63;
   --bg: #ffffff;
-  --line: #e5e7eb;
-  --ok: #15803d;
+  --line: #f0e7d9;
+  --ok: #118576;
+  --beige: #f7f1e6;
+  --cream: #fdf9f3;
 }
 
 * {
@@ -40,9 +44,9 @@ body {
 }
 
 .dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   background: var(--brand);
   display: inline-block;
 }
@@ -64,16 +68,16 @@ body {
   width: 100%;
   padding: 11px 14px;
   font-size: 14px;
-  font-weight: 600;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f3f4f6;
+  font-weight: 700;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--beige);
   color: var(--ink);
   cursor: pointer;
 }
 
 .btn:hover {
-  background: #e9eaef;
+  background: var(--line);
 }
 
 .btn:disabled {
@@ -81,14 +85,23 @@ body {
   cursor: default;
 }
 
+/* Markenzeichen „harter Schatten": drückt sich beim Klick ein. */
 .btn-primary {
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
+  box-shadow: 0 3px 0 var(--brand-dark);
+  transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .btn-primary:hover {
-  background: var(--brand-dark);
+  background: var(--brand);
+  filter: brightness(1.04);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--brand-dark);
 }
 
 .btn-stop {
@@ -190,7 +203,7 @@ body {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #dcfce7;
+  background: #dcf3ef;
   color: var(--ok);
   font-size: 26px;
   display: flex;
@@ -215,7 +228,7 @@ body {
 .filelist li {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 13px;
-  background: #f3f4f6;
+  background: var(--beige);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 10px;
@@ -324,7 +337,7 @@ body {
   border-radius: 10px;
   overflow: hidden;
   margin: 0 0 12px;
-  background: #f5f6fb;
+  background: var(--cream);
 }
 
 .preview-img {
@@ -387,7 +400,7 @@ body {
 }
 
 .guide-item .rm:hover {
-  background: #f3f4f6;
+  background: var(--beige);
   color: var(--stop);
 }
 
@@ -399,7 +412,7 @@ body {
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid var(--line);
-  background: #f5f6fb;
+  background: var(--cream);
 }
 
 /* ===== Start-Auswahl: zwei grosse Karten (Tango-Look) ===== */
@@ -420,7 +433,7 @@ body {
 
 .card-choice:hover:not(:disabled) {
   border-color: var(--brand);
-  background: #f7f8ff;
+  background: #fdf3ec;
 }
 
 .card-choice:disabled {
@@ -484,17 +497,17 @@ body {
 }
 
 .mic-status.pending {
-  background: #f3f4f6;
+  background: var(--beige);
   color: var(--muted);
 }
 
 .mic-status.ok {
-  background: #dcfce7;
+  background: #dcf3ef;
   color: var(--ok);
 }
 
 .mic-status.err {
-  background: #fee2e2;
+  background: #ffe8e2;
   color: var(--stop);
 }
 
@@ -506,7 +519,7 @@ body {
 
 /* Dezenter Hinweis "unterbrochene Aufnahme verworfen" + Zurueck-Link. */
 .note-warn {
-  color: #b45309;
+  color: #c07d16;
   margin-top: 0;
   margin-bottom: 10px;
 }

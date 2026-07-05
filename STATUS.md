@@ -2,9 +2,62 @@
 
 > Selbstgepflegte Status-/Kontextdatei (für Claude). **Bei jeder größeren Änderung aktualisieren.**
 > **Neu reinkommen? Zuerst [`OVERVIEW.md`](OVERVIEW.md) lesen** (Funktions-Inventar, Farben, lokale Skripte – „was gibt es schon").
-> Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md` · Design-Referenz: `../prototyp-v4.jsx`
+> Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md`
+> **Design-Referenz NEU: `desing claude/` (README + SPEC-*.md, gitignored) — ersetzt prototyp-v4.jsx/§13-Farben.**
 
-Letztes Update: 2026-07-02 (Wellen 1–15 + Tarif-System — Details: REVIEW.md „Erledigt"-Block, offene Punkte: TODO.md)
+Letztes Update: 2026-07-05 (WARM-REDESIGN nach Claude-Design-Handoff, s. §7g — UNCOMMITTED; davor Wellen 1–15 + Tarif-System — Details: REVIEW.md, offene Punkte: TODO.md)
+
+## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — GEBAUT, UNCOMMITTED
+> Komplettes visuelles Redesign nach dem High-Fidelity-Handoff (Nunito, Creme #FDF9F3,
+> Ink-Braun #33291F, Koralle #EF6A4E + „harter Schatten" 0 4px 0 #D3543A, 2px-Borders,
+> Teal/Violett/Amber/Blau-Pastelle). Funktionalität 1:1. Build+Lint grün, Playwright-
+> Screenshots aller Flächen geprüft. Die alte §13-Farbwelt (Indigo/Space Grotesk) ist Geschichte.
+- **Fundament**: globals.css-Tokens komplett warm; Nunito 600–900 (einzige Schrift);
+  Utilities `.shadow-hard(-line)`, `.pressable`, `.bg-stripes`; Buttons app-weit Pills
+  (Primär mit hartem Schatten, `ink`-Variante NEU); Card = border-2/rounded-card(18px);
+  NEU `lib/category-colors.ts` (deterministische Akzentfamilie je Kategorie + Streifen).
+- **Bibliothek /app (Option 2a/2b)**: NEU `components/app/app-header.tsx` (64px-Topnav:
+  Pills Bibliothek/Lernen/Assistent, Such-Pill→⌘K, Glocke, „＋ Neue Anleitung", Avatar-
+  Menü mit Org-Wechsel/Settings/Admin/Abmelden; mobil TabBar mit „Aufnehmen"-Aktion);
+  NEU `components/app/library-browser.tsx` (Kategorien-Sidebar 230px m. Bereich-/
+  Kategorie-Filtern + Zählern, Status-Filter, Kartenraster, Anlegen-Karte gestrichelt);
+  `tutorial-card.tsx` = Design-Karte (110px-Streifen-Thumb im Kategorie-Pastell,
+  Kategorie-/Kunde-/Intern-Chips, Teal-/Amber-Status-Chips, Toggle+Menü erhalten);
+  page.tsx liefert Schritt-Zähler (eine steps-Query für Thumb+Count). Wordmark NEU
+  (S-Kreis, alte Ja/Nein-Punkte weg). ALT ENTFÄLLT: CollapsibleSection auf dem Dashboard,
+  CategoryJump, AudienceFilter-Chips (Bereich wohnt jetzt in der Sidebar).
+- **Hilfe-Center /h (3b/4a)**: Branding-Header-Leiste, Hero „Wie können wir helfen?"
+  (NEUER i18n-Key `heroTitle` DE/EN/PL/TR), große Such-Pille, 2-spaltiges Kategorien-
+  Grid mit Familien-Icon-Kacheln + →-Pfeilen. **Kunden-CI bleibt**: Farbfamilien nur
+  bei mode=manual (`colorful`-Prop), sonst monochrom brand-accent; alle neuen Flächen
+  nutzen brand-Vars + color-mix(ink) für Neutraltöne. Warme brand-Defaults in
+  globals.css + theme.ts-Fallbacks.
+- **Viewer (3a/4a)**: IN PLACE restylt (Logik unangetastet): Fortschrittszeile
+  „SCHRITT X VON Y" + Balken, Bühnen-Schatten, Pill-Buttons (Weiter mit hartem
+  Akzent-Schatten), **Schrittlisten-Sidebar nur Desktop + nur lineare Tutorials**
+  (linearPath; bei Verzweigungen keine ehrliche Liste), klickbare Schritte (jumpTo).
+  Tutorial-Seiten-Wrapper lg:max-w-4xl.
+- **Landing (4b/5a)**: komplett neu mit finaler Handoff-Copy; Browser-Mockup zeigt
+  ECHTEN Bibliotheks-Screenshot (`public/marketing-bibliothek.png`); Preis-Sektion im
+  Handoff-Stil ergänzt (PLANS). SiteHeader/SiteFooter/CompareSlider auf der Landing
+  nicht mehr verwendet (Dateien existieren noch für Unterseiten).
+- **Nachgezogen**: Builder-Branch-Farben YES/NO → Teal/#d3543a (neue Branches; alte
+  behalten DB-Farbe), GUIDE_HIGHLIGHT_COLOR → Koralle, Drift-Mail-Button → Koralle.
+  eslint ignoriert `desing claude/**`; Ordner ist gitignored.
+- **CI-Designer verifiziert**: KI-Design = Tokens→brand-Vars (Struktur unberührt);
+  Extreme = Paint-only via sanitizeSkinCss, alle data-tx-Hooks existieren weiter
+  (+ NEU data-tx="hero", Prompt-Hookliste aktualisiert). test-branding-live +
+  test-render-live GRÜN. Video-Worker-Fallbacks → Koralle/Teal (wirken live erst
+  nach deploy.sh!); Test-Assertion angepasst.
+- **Recorder-Extension**: API unverändert (test-recorder-live GRÜN); Popup-CSS auf
+  Warm-Palette (Token-Block + Pill-Buttons mit hartem Schatten), Klick-Marker im
+  content.js + generierte Icons → Koralle. Nutzer müssen die Extension neu laden
+  (chrome://extensions → Aktualisieren), Store-Paket ggf. neu bauen.
+- **Offen (bewusst)**: Settings/Lernen/Assistent/Builder erben die warmen Tokens,
+  sind aber noch nicht komponentenweise nachpoliert; „KUNDEN"-Sidebar-Gruppe des
+  Designs entfällt (kein Kunden-Entity im Datenmodell); Landing-Burger (5a) entfällt
+  (kein Menü definiert); ARCHITEKTUR.md §13 muss auf die Warm-Palette umgeschrieben
+  werden.
 
 ---
 

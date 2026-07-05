@@ -14,8 +14,8 @@ export const MAX_GUIDE_STEPS = 40;
 const LABEL_MAX = 60;
 const TITLE_MAX = 60;
 
-// Primärfarbe (#3d4ee6, ARCHITEKTUR §13) für das eine Highlight-Rechteck je Schritt.
-export const GUIDE_HIGHLIGHT_COLOR = "#3d4ee6";
+// Primärfarbe (Koralle, Design-Handoff 07/2026) für das eine Highlight-Rechteck je Schritt.
+export const GUIDE_HIGHLIGHT_COLOR = "#ef6a4e";
 
 export type GuideAction = "click" | "type";
 

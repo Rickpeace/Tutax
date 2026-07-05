@@ -50,13 +50,33 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
-  /* App-Chrome Spezial-Tokens (§13) */
+  /* App-Chrome Spezial-Tokens */
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-line: var(--line);
   --color-line-2: var(--line-2);
+  --color-faint: var(--faint);
+  --color-primary-pressed: var(--primary-pressed);
 
-  /* Signature: Verzweigungsfarben (NUR Ja/Nein-Äste, §13) */
+  /* Akzentfamilien (Handoff 07/2026): Kategorien/Status/Landing */
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
+  --color-teal-text: var(--teal-text);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --color-violet-text: var(--violet-text);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-amber-text: var(--amber-text);
+  --color-blue: var(--blue);
+  --color-blue-soft: var(--blue-soft);
+  --color-blue-text: var(--blue-text);
+  --color-coral-text: var(--coral-text);
+  --color-dark-section: var(--dark-section);
+  --color-dark-card: var(--dark-card);
+  --color-dark-muted: var(--dark-muted);
+
+  /* Signature: Verzweigungsfarben (Ja/Nein-Äste) */
   --color-yes: var(--yes);
   --color-yes-soft: var(--yes-soft);
   --color-no: var(--no);
@@ -75,70 +95,100 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Standard-Kartenradius aus dem Handoff (rounded-card) */
+  --radius-card: 18px;
 }
 
 :root {
-  /* Fonts via next/font: --font-sans (Inter) & --font-display (Space Grotesk) */
+  /* Fonts via next/font: --font-sans = Nunito (Design-Handoff 07/2026);
+     --font-display zeigt auf dieselbe Schrift (Kompatibilität). */
+  --font-display: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --radius: 0.75rem; /* 12px – Buttons 10–12, Karten via radius-xl ~16 */
+  --radius: 0.75rem; /* Pills/Buttons sind 999px (rounded-full), Karten 14–22px */
 
-  /* App-Chrome-Palette (§13) */
-  --ink: #101524;
-  --ink-2: #3b4254;
-  --line: #e7e8ee;
-  --line-2: #f1f2f6;
+  /* ============================================================
+     WARME PALETTE — Design-Handoff „desing claude/README.md" (07/2026).
+     Ersetzt die Indigo-Palette aus §13. Quelle: Design Tokens im README.
+     ============================================================ */
+  --ink: #33291f; /* Text/dunkle Flächen */
+  --ink-2: #6b5e4b; /* Sekundärtext kräftig */
+  --line: #f0e7d9; /* Border/Divider — Konvention: IMMER 2px */
+  --line-2: #f7f1e6; /* Hintergrund-Beige (Flächen, Skeletons) */
 
-  --background: #f7f8fb; /* bg */
-  --foreground: #101524; /* ink */
+  --background: #fdf9f3; /* warmes Off-White */
+  --foreground: #33291f;
   --card: #ffffff;
-  --card-foreground: #101524;
+  --card-foreground: #33291f;
   --popover: #ffffff;
-  --popover-foreground: #101524;
+  --popover-foreground: #33291f;
 
-  --primary: #3d4ee6; /* Indigo – primäre Aktion */
+  --primary: #ef6a4e; /* Koralle – primäre Aktion */
   --primary-foreground: #ffffff;
-  --secondary: #f1f2f6; /* line2 */
-  --secondary-foreground: #101524;
-  --muted: #f1f2f6;
-  --muted-foreground: #6b7280;
-  --accent: #eef0fe; /* accentSoft – dezente Hover-Fläche/Badge */
-  --accent-foreground: #3d4ee6;
-  --destructive: #d6455d; /* deckungsgleich mit "no"-Rosé */
+  --primary-pressed: #d3543a; /* gedrückt + „harter Schatten" */
+  --secondary: #f7f1e6; /* Beige-Fläche */
+  --secondary-foreground: #33291f;
+  --muted: #f7f1e6;
+  --muted-foreground: #8a7a63; /* Sekundärtext gedämpft */
+  --faint: #b3a48c; /* Muted-Stufe 3 (Meta, Gruppenlabels) */
+  --accent: #ffe8e2; /* Koralle-Pastell – Hover-/Badge-Fläche */
+  --accent-foreground: #a8452e; /* Text auf Koralle-Pastell */
+  --destructive: #d3543a; /* dunkle Koralle (Handoff hat kein eigenes Rot) */
 
-  --border: #e7e8ee; /* line */
-  --input: #e7e8ee;
-  --ring: #3d4ee6; /* Indigo Fokus-Ring */
+  --border: #f0e7d9;
+  --input: #f0e7d9;
+  --ring: #ef6a4e; /* Koralle Fokus-Ring */
 
-  /* Signature-Verzweigungsfarben */
-  --yes: #0f9d72;
-  --yes-soft: #e9f7f1;
-  --no: #d6455d;
-  --no-soft: #fdedf0;
+  /* Verzweigungsfarben Ja/Nein — auf die warme Palette gemappt:
+     Ja = Teal (Erfolgs-Farbe des Handoffs), Nein = dunkle Koralle. */
+  --yes: #18a999;
+  --yes-soft: #dcf3ef;
+  --no: #d3543a;
+  --no-soft: #ffe8e2;
 
-  /* CI-Brand-Defaults (Indigo) – im Viewer/Hub pro Account überschrieben */
-  --brand-accent: #3d4ee6;
-  --brand-soft: #eef0fe;
-  --brand-bg: #f6f7fe;
-  --brand-ink: #101524;
+  /* Akzentfamilien des Handoffs (Kategorien, Status, Landing) */
+  --teal: #18a999;
+  --teal-soft: #dcf3ef;
+  --teal-text: #118576;
+  --violet: #8b7cf6;
+  --violet-soft: #ece7fd;
+  --violet-text: #6d59d8;
+  --amber: #f2a93b;
+  --amber-soft: #fdeecd;
+  --amber-text: #c07d16;
+  --blue: #5aa9e6;
+  --blue-soft: #e3f0fb;
+  --blue-text: #2f6ea8;
+  --coral-text: #a8452e;
+
+  /* Dunkle Marketing-Sektion */
+  --dark-section: #33291f;
+  --dark-card: #3f3428;
+  --dark-muted: #cbbfa8;
+
+  /* CI-Brand-Defaults (warm) – im Viewer/Hub pro Account überschrieben */
+  --brand-accent: #ef6a4e;
+  --brand-soft: #ffe8e2;
+  --brand-bg: #fdf3ec;
+  --brand-ink: #33291f;
   /* Kontrast-Ableitung (brandStyle): Text AUF Akzent bzw. Akzent ALS Text. */
   --brand-accent-fg: #ffffff;
   --brand-accent-strong: var(--brand-accent);
 
-  --chart-1: #3d4ee6;
-  --chart-2: #0f9d72;
-  --chart-3: #d6455d;
-  --chart-4: #6b7280;
-  --chart-5: #3b4254;
+  --chart-1: #ef6a4e;
+  --chart-2: #18a999;
+  --chart-3: #8b7cf6;
+  --chart-4: #f2a93b;
+  --chart-5: #8a7a63;
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #101524;
-  --sidebar-primary: #3d4ee6;
+  --sidebar-foreground: #33291f;
+  --sidebar-primary: #ef6a4e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef0fe;
-  --sidebar-accent-foreground: #3d4ee6;
-  --sidebar-border: #e7e8ee;
-  --sidebar-ring: #3d4ee6;
+  --sidebar-accent: #ffe8e2;
+  --sidebar-accent-foreground: #a8452e;
+  --sidebar-border: #f0e7d9;
+  --sidebar-ring: #ef6a4e;
 }
 
 .dark {
@@ -178,30 +228,53 @@
   html {
     @apply font-sans antialiased;
   }
-  /* Signature: Headings in der Display-Schrift, eng gesetzt */
+  /* Headings: Nunito fett, leicht eng (Handoff: Headlines 900) */
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
-    letter-spacing: -0.025em;
+    font-weight: 800;
+    letter-spacing: -0.01em;
   }
 }
 
 /* ============================================================
-   Marken-Helfer / Texturen
+   Marken-Helfer (Handoff 07/2026)
    ============================================================ */
 .font-display {
   font-family: var(--font-display);
 }
-.bg-dotgrid {
-  background-image: radial-gradient(var(--line) 1px, transparent 1px);
-  background-size: 22px 22px;
+
+/* Markenzeichen „harter Schatten": 0 4–6px 0 in einer dunkleren Stufe.
+   .pressable drückt sich beim Klick ein (translateY + Schatten kürzen). */
+.shadow-hard {
+  box-shadow: 0 4px 0 var(--primary-pressed);
 }
-.bg-dotgrid-dark {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-  background-size: 22px 22px;
+.shadow-hard-line {
+  box-shadow: 0 4px 0 var(--line);
 }
-/* Verzweigungs-Motiv: farbiger linker Rand */
+.shadow-hard-line-lg {
+  box-shadow: 0 6px 0 var(--line);
+}
+.pressable {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.pressable:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--pressable-shadow, var(--line));
+}
+
+/* Gestreifte Platzhalter-Flächen (Screenshots/Logos im Handoff):
+   Farben pro Einsatzort über --stripe-a/--stripe-b übersteuerbar. */
+.bg-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--stripe-a, var(--line-2)) 0 10px,
+    var(--stripe-b, #ffffff) 10px 20px
+  );
+}
+
+/* Verzweigungs-Motiv: farbiger linker Rand (Builder-Flow) */
 .branch-yes {
   border-left: 3px solid var(--yes);
   background: linear-gradient(90deg, var(--yes-soft), transparent 60%);
@@ -209,4 +282,15 @@
 .branch-no {
   border-left: 3px solid var(--no);
   background: linear-gradient(90deg, var(--no-soft), transparent 60%);
+}
+
+/* Übergangs-Helfer: alte Dot-Grid-Aufrufe (Landing) bis zum Umbau in Phase 5 —
+   rendert jetzt warm über --line. */
+.bg-dotgrid {
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.bg-dotgrid-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
 }

@@ -233,7 +233,8 @@ export default async function ViewerPage({
         <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
-      <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl">
+      {/* lg-Breite für die Schrittlisten-Sidebar linearer Tutorials (Design 3a). */}
+      <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl lg:max-w-4xl">
         <div data-tx="header" className="mb-4 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element

@@ -31,7 +31,7 @@ async function sendDigest(to: string[], accountName: string, titles: string[]): 
     <h2 style="margin:0 0 8px">${count} Anleitung${count === 1 ? "" : "en"} wirk${count === 1 ? "t" : "en"} veraltet</h2>
     <p style="color:#3b4254;line-height:1.55">Unser Aktualitäts-Check hat bei <b>${escapeHtml(accountName)}</b> mögliche Änderungen gefunden:</p>
     <ul style="color:#101524;padding-left:20px;margin:12px 0">${items}</ul>
-    <p style="margin:24px 0"><a href="${link}" style="background:#3d4ee6;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Hinweise ansehen</a></p>
+    <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:700;display:inline-block">Hinweise ansehen</a></p>
     <p style="color:#6b7280;font-size:12px">Sie erhalten diese Mail, weil Sie Inhaber dieses Kontos auf Steply sind.</p>
   </div>`;
   try {

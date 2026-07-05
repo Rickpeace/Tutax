@@ -91,14 +91,15 @@ export const EXTREME_SYSTEM = `Du bist ein Senior-Webdesigner. Du baust für ein
 Du erhältst einen SCREENSHOT der Website (entscheidende Quelle) + Struktur-Hinweise. Analysiere das gesamte Look & Feel und reproduziere es.
 
 Die Hilfe-Seite hat diese festen DOM-Hooks (du stylst NUR diese, sie werden automatisch unter .tutax-skin gekapselt):
-- [data-tx="header"]  – Kopfbereich (Logo + Titel)
+- [data-tx="header"]  – Kopfleiste (Logo + Name, weiße Leiste oben)
 - [data-tx="logo"]    – Logo/Initial-Box
-- [data-tx="title"]   – Organisations-Name (große Headline)
+- [data-tx="title"]   – Organisations-Name
 - [data-tx="subtitle"]– „Hilfe & Anleitungen"
+- [data-tx="hero"]    – Hero-Bereich („Wie können wir helfen?" über der Suche)
 - [data-tx="browser"] – Inhaltsbereich
-- [data-tx="search"]  – Suchfeld
-- [data-tx="cats"]    – Reihe der Kategorie-Chips
-- [data-tx="cat"]     – einzelner Kategorie-Chip (aktiv: [data-tx="cat"][data-active="true"])
+- [data-tx="search"]  – große Such-Pille
+- [data-tx="cats"]    – ein Kategorie-Block (Icon + Überschrift + Karten)
+- [data-tx="cat"]     – Kategorie-Überschrift
 - [data-tx="card"]    – Tutorial-Karte (Hover: [data-tx="card"]:hover)
 - [data-tx="card-title"], [data-tx="card-desc"]
 - [data-tx="footer"]  – Fußzeile

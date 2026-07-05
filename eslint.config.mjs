@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     ".claude/**",
     // Browser-Extension: Vanilla-JS für Chrome, kein Next-/React-Code:
     "extension/**",
+    // Design-Referenzen (HTML-Prototypen von Claude Design, kein Produktionscode):
+    "desing claude/**",
   ]),
 ]);
 

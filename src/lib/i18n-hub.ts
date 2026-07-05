@@ -57,6 +57,7 @@ type Key =
   | "searchPlaceholder"
   | "searchAria"
   | "helpTitle"
+  | "heroTitle"
   | "stuck"
   | "stuckThanks"
   | "helpful"
@@ -92,6 +93,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     searchPlaceholder: "Anleitung suchen …",
     searchAria: "Anleitung suchen",
     helpTitle: "Hilfe & Anleitungen",
+    heroTitle: "Wie können wir helfen?",
     stuck: "Ich komme hier nicht weiter",
     stuckThanks:
       "Danke – wir schauen uns diesen Schritt an. Nutzen Sie gern den Hilfe-Assistenten unten rechts.",
@@ -127,6 +129,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     searchPlaceholder: "Search guides …",
     searchAria: "Search guides",
     helpTitle: "Help & Guides",
+    heroTitle: "How can we help?",
     stuck: "I'm stuck here",
     stuckThanks:
       "Thanks – we'll take a look at this step. Feel free to use the help assistant in the bottom right.",
@@ -162,6 +165,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     searchPlaceholder: "Szukaj instrukcji …",
     searchAria: "Szukaj instrukcji",
     helpTitle: "Pomoc i instrukcje",
+    heroTitle: "Jak możemy pomóc?",
     stuck: "Utknąłem w tym miejscu",
     stuckThanks:
       "Dziękujemy – przyjrzymy się temu krokowi. Skorzystaj z asystenta pomocy w prawym dolnym rogu.",
@@ -197,6 +201,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     searchPlaceholder: "Kılavuz ara …",
     searchAria: "Kılavuz ara",
     helpTitle: "Yardım ve Kılavuzlar",
+    heroTitle: "Size nasıl yardımcı olabiliriz?",
     stuck: "Burada takıldım",
     stuckThanks:
       "Teşekkürler – bu adımı inceleyeceğiz. Sağ alttaki yardım asistanını kullanabilirsiniz.",

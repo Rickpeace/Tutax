@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 import { appBaseUrl } from "@/lib/url";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({
+// Design-Handoff 07/2026 („desing claude/README.md"): EINE Marken-Schrift —
+// Nunito 600–900 (Fließtext 600/700, Buttons/Labels 800, Headlines 900).
+// --font-display bleibt als Variable erhalten (zeigt ebenfalls auf Nunito),
+// damit bestehende .font-display-Verwendungen nicht brechen.
+const nunito = Nunito({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap",
-});
-
-const display = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700"],
+  weight: ["600", "700", "800", "900"],
   display: "swap",
 });
 
@@ -34,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className={`${inter.variable} ${display.variable} h-full`}>
+    <html lang="de" className={`${nunito.variable} h-full`}>
       <body className="min-h-full flex flex-col">
         <TooltipProvider delay={200}>{children}</TooltipProvider>
         <Toaster position="top-center" richColors />

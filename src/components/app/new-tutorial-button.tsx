@@ -27,13 +27,16 @@ export function NewTutorialButton({
   variant = "default",
   categoryId = null,
   compact = false,
-  label = "Neues Tutorial",
+  label = "Neue Anleitung",
+  trigger,
 }: {
   accountId: string;
   variant?: "default" | "outline";
   categoryId?: string | null;
   compact?: boolean;
   label?: string;
+  /** Eigenes Trigger-Element (Base UI render) statt des Standard-Buttons. */
+  trigger?: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   // "choice" = Weiche, "manual" = Titel-Abfrage. Video läuft im eigenen Dialog.
@@ -50,22 +53,23 @@ export function NewTutorialButton({
       <Dialog open={open} onOpenChange={openWith}>
         <DialogTrigger
           render={
-            compact ? (
+            trigger ??
+            (compact ? (
               <Button variant="ghost" size="sm" className="text-primary">
-                <Plus className="size-4" /> Tutorial
+                <Plus className="size-4" /> Anleitung
               </Button>
             ) : (
               <Button variant={variant}>
                 <Plus className="size-4" /> {label}
               </Button>
-            )
+            ))
           }
         />
         <DialogContent className="sm:max-w-md">
           {mode === "choice" ? (
             <>
               <DialogHeader>
-                <DialogTitle>Neues Tutorial</DialogTitle>
+                <DialogTitle>Neue Anleitung</DialogTitle>
               </DialogHeader>
               <div className="grid gap-3 sm:grid-cols-2">
                 <button

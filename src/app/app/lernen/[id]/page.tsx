@@ -74,7 +74,8 @@ export default async function LernenDetailPage({
   const trainingRecord = isOwner ? await loadTrainingRecord(account.id, id, admin) : [];
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8">
+    // Gleiche Breite wie die Live-/Vorschau-Ansicht (Schrittlisten-Sidebar ab lg).
+    <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 lg:max-w-4xl">
       <Link
         href="/app/lernen"
         className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-ink"

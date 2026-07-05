@@ -45,36 +45,43 @@ Die eigene Doku ist selbst ein Steply-Hub: **/h/steply** (?-Icon in der App-Leis
 
 ## 3. Design-System / Farben — **erst hier schauen, keine neuen Farben erfinden**
 
-Definiert in [`src/app/globals.css`](src/app/globals.css) (`:root`) und als Tailwind-Klassen nutzbar
-(`bg-…`, `text-…`, `border-…`). Details/Regeln: ARCHITEKTUR.md §13.
+**WARM-REDESIGN 07/2026** (Design-Handoff `desing claude/` — README + SPEC-*.md sind die
+Quelle der Wahrheit; ersetzt die alte Indigo-Welt aus ARCHITEKTUR §13). Definiert in
+[`src/app/globals.css`](src/app/globals.css) (`:root`), als Tailwind-Klassen nutzbar.
 
-**App-Chrome / Editor:**
+**Kern-Palette:**
 | Token | Klasse | Wert | Verwendung |
 |---|---|---|---|
-| `--ink` | `text-ink` | `#101524` | Haupt-Text/Überschriften |
-| `--ink-2` | `text-ink-2` | `#3b4254` | sekundärer Text |
-| `--muted-foreground` | `text-muted-foreground` | `#6b7280` | gedämpfter Text |
-| `--line` | `border-line` / `bg-line` | `#e7e8ee` | Linien/Ränder, Toggle-Off |
-| `--line-2` | `border-line-2` | `#f1f2f6` | feine Trenner |
-| `--primary` | `bg-primary` / `text-primary` | `#3d4ee6` (Indigo) | primäre Aktion, Fokus-Ring (`ring`) |
-| `--accent` | `bg-accent` | `#eef0fe` | dezente Hover-/Badge-Fläche |
-| `--card` | `bg-card` | `#ffffff` | Karten/Panels |
-| `--background` | `bg-background` | `#f7f8fb` | Seiten-Hintergrund |
-| `--destructive` | `variant="destructive"` | `#d6455d` | Löschen |
+| `--ink` | `text-ink` | `#33291f` | Haupt-Text, dunkle Pills/Sektionen |
+| `--ink-2` | `text-ink-2` | `#6b5e4b` | sekundärer Text |
+| `--muted-foreground` | `text-muted-foreground` | `#8a7a63` | gedämpfter Text |
+| `--faint` | `text-faint` | `#b3a48c` | Meta/Labels (Stufe 3) |
+| `--line` | `border-line` | `#f0e7d9` | Borders — Konvention: **immer 2px** |
+| `--line-2` | `bg-line-2` | `#f7f1e6` | Beige-Flächen, Skeletons |
+| `--primary` | `bg-primary` | `#ef6a4e` (Koralle) | primäre Aktion, Marker, Logo |
+| `--primary-pressed` | — | `#d3543a` | „harter Schatten" + gedrückt |
+| `--accent` | `bg-accent` | `#ffe8e2` | Koralle-Pastell (Hover/Chips) |
+| `--background` | `bg-background` | `#fdf9f3` | Seiten-Hintergrund (Creme) |
+| `--destructive` | `variant="destructive"` | `#d3543a` | Löschen |
 
-**Signature – Ja/Nein-Verzweigungen (NUR dafür!):**
-| Token | Klasse | Wert |
-|---|---|---|
-| `--yes` / `--yes-soft` | `bg-yes` / `bg-yes-soft` `text-yes` | `#0f9d72` grün / `#e9f7f1` |
-| `--no` / `--no-soft` | `bg-no` / `bg-no-soft` `text-no` | `#d6455d` rosé / `#fdedf0` |
+**Akzentfamilien** (Kategorien/Status/Landing; via `lib/category-colors.ts` deterministisch je Kategorie):
+Teal `#18a999`/`#dcf3ef`/`#118576` · Violett `#8b7cf6`/`#ece7fd`/`#6d59d8` ·
+Amber `#f2a93b`/`#fdeecd`/`#c07d16` · Blau `#5aa9e6`/`#e3f0fb` · dunkle Sektion `#33291f`/`#3f3428`.
+Status-Chips: Veröffentlicht = Teal-Pastell, Entwurf = Amber-Pastell.
 
-Konstanten `YES`/`NO` (Hex) für Branch-Farben: [`src/lib/builder/constants.ts`](src/lib/builder/constants.ts).
+**Ja/Nein-Verzweigungen:** `--yes #18a999` (Teal) / `--no #d3543a` — Konstanten in
+[`src/lib/builder/constants.ts`](src/lib/builder/constants.ts); bestehende Branches behalten ihre DB-Farbe.
+
+**Marken-Utilities:** `.shadow-hard` (0 4px 0 pressed), `.shadow-hard-line(-lg)`, `.pressable`,
+`.bg-stripes` (Streifen-Platzhalter, via `--stripe-a/-b` einfärbbar). Buttons sind Pills
+(`rounded-full`), Karten `rounded-card` (18px) mit `border-2 border-line`.
 
 **CI-Brand (öffentlicher Viewer/Hub, pro Kanzlei überschrieben):** `--brand-accent/-soft/-bg/-ink`
-(`bg-brand`, …). Wird aus dem Theme des Accounts gesetzt, **nicht** hart verdrahten.
+— Defaults jetzt warm (Koralle); Kategorien-Farbfamilien im Hub NUR bei mode=manual
+(`colorful`-Prop), Kunden-CI bleibt monochrom. **Nicht** hart verdrahten.
 
-**Radius:** `--radius: 0.75rem`; abgeleitet `rounded-md/lg/xl/2xl` (Karten meist `rounded-2xl`).
-**Fonts:** `--font-sans` (Inter), `--font-display` (Space Grotesk) via `next/font`.
+**Fonts:** NUR Nunito (600/700/800/900) via `next/font` — Headlines 900/black, Buttons/Labels
+800/extrabold, Fließtext 600–700. `--font-display` zeigt ebenfalls auf Nunito (Kompatibilität).
 
 ---
 

@@ -176,7 +176,7 @@ export default async function HubPage({
 
   return (
     <main
-      className={`min-h-screen ${skinClass}`}
+      className={`flex min-h-screen flex-col ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
       {fontsHref && (
@@ -192,45 +192,78 @@ export default async function HubPage({
         <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
-      <div className="mx-auto max-w-2xl px-4 py-6">
-        <div data-tx="header" className="mb-5 flex items-center gap-3">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt=""
-              data-tx="logo"
-              className="size-11 border border-black/5 bg-white object-contain p-1"
-              style={{ borderRadius: "var(--brand-radius, 12px)" }}
-            />
-          ) : (
-            <div
-              data-tx="logo"
-              className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
-              style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
-            >
-              {initial}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div
-              data-tx="title"
-              className="text-xl font-extrabold"
-              style={{
-                fontFamily: fonts.heading,
-                fontWeight: "var(--brand-heading-weight, 800)",
-                color: "var(--brand-title, var(--brand-ink))",
-              }}
-            >
-              {account.name}
-            </div>
-            <div data-tx="subtitle" className="text-sm text-muted-foreground">{labels.subtitle}</div>
-          </div>
-          {languages.length > 0 && (
-            <LangSwitcher current={lang} languages={languages} basePath={`/h/${account.slug}`} />
-          )}
-        </div>
 
+      {/* Branding-Header (Design 3b): weiße Leiste mit Kundenlogo + Name. */}
+      <header
+        data-tx="header"
+        className="flex items-center gap-3 border-b-2 bg-white px-4 py-3.5 sm:px-10"
+        style={{ borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)" }}
+      >
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt=""
+            data-tx="logo"
+            className="size-9 border border-black/5 bg-white object-contain p-1"
+            style={{ borderRadius: "var(--brand-radius, 10px)" }}
+          />
+        ) : (
+          <div
+            data-tx="logo"
+            className="flex size-9 items-center justify-center text-base font-extrabold text-white"
+            style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 10px)" }}
+          >
+            {initial}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div
+            data-tx="title"
+            className="truncate text-base font-black leading-tight"
+            style={{
+              fontFamily: fonts.heading,
+              fontWeight: "var(--brand-heading-weight, 900)",
+              color: "var(--brand-title, var(--brand-ink))",
+            }}
+          >
+            {account.name}
+          </div>
+          <div data-tx="subtitle" className="text-[11.5px] font-bold text-muted-foreground">
+            {labels.subtitle}
+          </div>
+        </div>
+        {languages.length > 0 && (
+          <LangSwitcher current={lang} languages={languages} basePath={`/h/${account.slug}`} />
+        )}
+      </header>
+
+      {/* Hero (Design 3b): zentrierte Frage + große Suche (Suche wohnt im Browser). */}
+      <div
+        data-tx="hero"
+        className="px-4 pb-2 pt-9 text-center sm:pt-11"
+        style={{
+          background:
+            "linear-gradient(180deg, color-mix(in srgb, var(--brand-accent) 7%, var(--brand-bg)) 0%, var(--brand-bg) 100%)",
+        }}
+      >
+        <h1
+          className="text-[26px] font-black leading-tight sm:text-[34px]"
+          style={{
+            fontFamily: fonts.heading,
+            fontWeight: "var(--brand-heading-weight, 900)",
+            color: "var(--brand-title, var(--brand-ink))",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {labels.heroTitle}
+        </h1>
+        <p className="mt-2 text-sm font-bold text-muted-foreground sm:text-[15px]">
+          {labels.helpTitle} · {account.name}
+        </p>
+      </div>
+
+      <div className="mx-auto w-full max-w-5xl flex-1 px-4 pb-10 sm:px-10">
         <HubBrowser
           accountSlug={account.slug}
           items={items}
@@ -238,20 +271,31 @@ export default async function HubPage({
           lang={lang}
           langQuery={langQ}
           labels={labels}
+          colorful={mode === "manual"}
         />
-
-        <p data-tx="footer" className="mt-8 text-center text-xs text-muted-foreground">
-          powered by Steply
-          <span className="mx-1.5 opacity-50">·</span>
-          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            Impressum
-          </a>
-          <span className="mx-1.5 opacity-50">·</span>
-          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            Datenschutz
-          </a>
-        </p>
       </div>
+
+      <footer
+        data-tx="footer"
+        className="flex items-center justify-center gap-2 border-t-2 px-4 py-4 text-xs font-bold text-muted-foreground"
+        style={{ borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)" }}
+      >
+        <span
+          aria-hidden
+          className="grid size-[18px] place-items-center rounded-full bg-primary text-[10px] font-black text-white"
+        >
+          S
+        </span>
+        Erstellt mit Steply
+        <span className="opacity-50">·</span>
+        <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          Impressum
+        </a>
+        <span className="opacity-50">·</span>
+        <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          Datenschutz
+        </a>
+      </footer>
       <ChatWidget accountSlug={account.slug} accountName={account.name} />
     </main>
   );

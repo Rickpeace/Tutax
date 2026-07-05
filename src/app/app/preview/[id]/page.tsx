@@ -85,7 +85,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
         </Link>
       </div>
 
-      <div className="mx-auto flex max-w-md flex-col px-4 py-6">
+      {/* Gleiche Breiten wie die Live-Seite (/h/…/[slug]) — die Vorschau soll
+          exakt so aussehen wie live, inkl. Schrittlisten-Sidebar ab lg. */}
+      <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl lg:max-w-4xl">
         <div className="mb-4 flex items-center gap-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element

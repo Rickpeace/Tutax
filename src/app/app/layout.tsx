@@ -1,145 +1,100 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { Wordmark } from "@/components/wordmark";
-import { SidebarNav } from "@/components/app/sidebar-nav";
 import {
-  SidebarAccount,
-  SidebarBottom,
-  TopbarBell,
-} from "@/components/app/sidebar-account";
-import { AppChrome } from "@/components/app/app-chrome";
+  AppHeader,
+  TopBell,
+  UserMenu,
+  TabBar,
+  CreateTabTrigger,
+} from "@/components/app/app-header";
+import { NewTutorialButton } from "@/components/app/new-tutorial-button";
 import { requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * App-Shell (Welle 21): linksbündige Sidebar (Desktop ≥1024px) + schlanke Topbar +
- * ⌘K-Palette. Mobil wird die Sidebar zum Sheet (Hamburger in der Topbar).
+ * App-Shell (Design-Handoff 07/2026): 64px-Topnav (Option 2a) für alle
+ * /app-Seiten; mobil übernimmt die TabBar (Option 2b) die Navigation.
  *
- * Cache-Components-Disziplin: Das GERÜST (Grid, Wordmark, Nav-Items, Topbar-Suchfeld)
- * ist STATISCH und zeichnet sofort — die Nav flackert nicht. Alle konto-abhängigen
- * Teile (AccountSwitcher, Admin-Flag, Hilfe-Seiten-Slug, E-Mail, Glocke) streamen in
- * Suspense-Boundaries nach; sie teilen sich EINEN requireAccount()-Abruf (pro Request
- * via cache() dedupt), auch wenn sie an mehreren Stellen (Desktop-Sidebar + mobiles
- * Sheet + Topbar) erscheinen. Ohne diese Trennung würde jedes uncached Read die ganze
- * Route blockieren (Build-Error unter cacheComponents). Der Onboarding-Redirect bleibt
- * im gestreamten Konto-Teil.
+ * Cache-Components-Disziplin: Das GERÜST (Header, Nav-Pills, Suchfeld)
+ * ist statisch; konto-abhängige Teile (Glocke, „Neue Anleitung", Avatar)
+ * streamen in eigenen Suspense-Boundaries und teilen sich EINEN
+ * requireAccount()-Abruf (per cache() dedupt). AppHeader/TabBar lesen
+ * usePathname → eigene Boundaries. Onboarding-Redirect wohnt im Avatar-Slot.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full lg:grid lg:grid-cols-[240px_1fr]">
-      {/* Desktop-Sidebar (fix links, volle Höhe). */}
-      <aside className="sticky top-0 hidden h-svh flex-col border-r border-border bg-card lg:flex">
-        <div className="flex flex-col gap-3 border-b border-border px-4 py-4">
-          <Link href="/app" aria-label="Zur Übersicht">
-            <Wordmark />
-          </Link>
-          <Suspense
-            fallback={<div className="h-8 w-full animate-pulse rounded-md bg-line-2/70" />}
-          >
-            <SidebarAccountSlot />
-          </Suspense>
-        </div>
+    <div className="flex min-h-full flex-col">
+      <Suspense fallback={<div className="h-16 border-b-2 border-line bg-card" />}>
+        <AppHeader
+          bell={
+            <Suspense fallback={<div className="size-9" />}>
+              <BellSlot />
+            </Suspense>
+          }
+          newAction={
+            <Suspense
+              fallback={<div className="h-9 w-40 animate-pulse rounded-full bg-line-2" />}
+            >
+              <NewActionSlot />
+            </Suspense>
+          }
+          userMenu={
+            <Suspense
+              fallback={<div className="size-[34px] animate-pulse rounded-full bg-line-2" />}
+            >
+              <UserMenuSlot />
+            </Suspense>
+          }
+        />
+      </Suspense>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          {/* usePathname macht die Nav request-abhängig → eigene Boundary. Das
-              Skelett hat exakt die Nav-Maße, damit nichts springt. */}
-          <Suspense fallback={<NavSkeleton />}>
-            <SidebarNav />
-          </Suspense>
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
 
-        <div className="border-t border-border px-3 py-3">
-          <Suspense
-            fallback={<div className="h-28 w-full animate-pulse rounded-md bg-line-2/60" />}
-          >
-            <SidebarBottomSlot />
-          </Suspense>
-        </div>
-      </aside>
-
-      {/* Content-Spalte: Topbar (interaktiv) + Seite. */}
-      <div className="flex min-w-0 flex-col">
-        {/* AppChrome liest usePathname → eigene Boundary. Fallback = leere Topbar. */}
-        <Suspense fallback={<div className="h-12 border-b border-border bg-card/80" />}>
-          <AppChrome
-            bell={
-              <Suspense fallback={<div className="size-7" />}>
-                <BellSlot />
-              </Suspense>
-            }
-            mobileAccountZone={
-              <Suspense
-                fallback={<div className="h-8 w-full animate-pulse rounded-md bg-line-2/70" />}
-              >
-                <MobileAccountSlot />
-              </Suspense>
-            }
-            mobileBottomZone={
-              <Suspense
-                fallback={<div className="h-28 w-full animate-pulse rounded-md bg-line-2/60" />}
-              >
-                <MobileBottomSlot />
-              </Suspense>
-            }
-          />
-        </Suspense>
-        {children}
-      </div>
+      {/* Platzhalter, damit die mobile TabBar keinen Inhalt verdeckt. */}
+      <div className="h-16 lg:hidden" aria-hidden />
+      <Suspense fallback={null}>
+        <TabBar
+          createAction={
+            <Suspense fallback={<div className="min-w-16" />}>
+              <CreateTabSlot />
+            </Suspense>
+          }
+        />
+      </Suspense>
     </div>
   );
 }
 
-/** Nav-Skelett (gleiche Maße wie SidebarNav), damit der Wechsel nicht springt. */
-function NavSkeleton() {
-  return (
-    <div className="flex flex-col gap-5">
-      {[2, 3].map((n, i) => (
-        <div key={i} className="flex flex-col gap-1">
-          <div className="mx-3 h-3 w-16 animate-pulse rounded bg-line-2/70" />
-          <div className="flex flex-col gap-0.5">
-            {Array.from({ length: n }).map((_, j) => (
-              <div key={j} className="h-8 w-full animate-pulse rounded-lg bg-line-2/50" />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/*
- * Hinweis: Die Seiten unter /app rufen selbst requireAccount() auf (per React cache()
- * dedupliziert) — die Zugriffskontrolle liegt also bei jeder Seite + RLS, nicht nur im
- * Layout. Der Onboarding-Redirect wandert in den Konto-Stream (unkritisch: eigene Daten).
- */
-
-/** Konto-Umschalter (Sidebar oben). Enthält den Onboarding-Redirect. */
-async function SidebarAccountSlot() {
-  const { account, memberships } = await requireAccount();
+/** Avatar-Menü (rechts). Enthält den Onboarding-Redirect. */
+async function UserMenuSlot() {
+  const { account, memberships, email } = await requireAccount();
   if (!account.onboarded) redirect("/onboarding");
+  const isAdmin = await checkAdmin();
   return (
-    <SidebarAccount
-      accountId={account.id}
+    <UserMenu
       accountName={account.name}
       memberships={memberships}
+      isAdmin={isAdmin}
+      accountSlug={account.slug}
+      email={email}
     />
   );
 }
-const MobileAccountSlot = SidebarAccountSlot;
 
-/** Unterer Sidebar-Bereich (Einstellungen/Admin/Hilfe/E-Mail/Abmelden). */
-async function SidebarBottomSlot() {
-  const { account, email } = await requireAccount();
-  const isAdmin = await checkAdmin();
-  return (
-    <SidebarBottom isAdmin={isAdmin} accountSlug={account.slug} email={email} />
-  );
+/** „＋ Neue Anleitung" (Desktop-Header). */
+async function NewActionSlot() {
+  const { account } = await requireAccount();
+  return <NewTutorialButton accountId={account.id} />;
 }
-const MobileBottomSlot = SidebarBottomSlot;
 
-/** Glocke mit offener-Hinweise-Badge (Topbar rechts). */
+/** „Aufnehmen"-Tab (mobil) öffnet dieselbe Erstell-Weiche. */
+async function CreateTabSlot() {
+  const { account } = await requireAccount();
+  return <NewTutorialButton accountId={account.id} trigger={<CreateTabTrigger />} />;
+}
+
+/** Glocke mit offener-Hinweise-Badge. */
 async function BellSlot() {
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -148,5 +103,5 @@ async function BellSlot() {
     .select("id, tutorials!inner(account_id)", { count: "exact", head: true })
     .eq("tutorials.account_id", account.id)
     .eq("status", "open");
-  return <TopbarBell alertCount={count} />;
+  return <TopBell alertCount={count} />;
 }
