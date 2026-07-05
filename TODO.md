@@ -11,8 +11,9 @@
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
-- [ ] **Extension v2.0 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
-  Steply Recorder NEU LADEN → Icon-Klick öffnet die Seitenleiste. Checkliste:
+- [ ] **Extension v2.0.1 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
+  Steply Recorder NEU LADEN (v2.0.1 — Screenshot-Fix: Capture via Service Worker,
+  Chromium-Bug crbug.com/40916430 im Panel-Kontext). Checkliste:
   bleibt bei Tab-Wechsel offen · Sofort-Anleitung über MEHRERE Tabs (jeder Klick
   = Schritt mit Thumbnail + blauer Puls) · Abbruch → nächstes Öffnen sauber
   („unterbrochene Aufnahme verworfen") · Video-Modus zeigt Mikro-Status VOR dem

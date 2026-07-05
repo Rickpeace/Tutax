@@ -575,9 +575,9 @@ async function uploadToSteply(videoBlob) {
 
 // ============================================================================
 // SOFORT-ANLEITUNG (guide-Modus): pro Klick ein Screenshot + Element-Box -> fertiger
-// Tutorial-Entwurf, ohne Video. Multi-Tab-faehig: captureVisibleTab(panelWindowId)
-// erfasst immer den aktiven (sichtbaren) Tab DES Panel-Fensters - egal in welchem Tab
-// geklickt wurde.
+// Tutorial-Entwurf, ohne Video. Multi-Tab-faehig: captureVisibleTab erfasst immer den
+// aktiven (sichtbaren) Tab des Fensters, in dem geklickt wurde - egal in welchem Tab.
+// Der Aufruf laeuft ueber background.js (Chromium-Bug im Panel-Kontext, s. captureFor).
 //
 // RATENLIMIT: captureVisibleTab ist ~2/s begrenzt. Wir serialisieren die Captures
 // (Warteschlange) und fassen schnelle Doppelklicks zusammen (letzter gewinnt).
@@ -643,6 +643,20 @@ function imageSize(blob) {
   });
 }
 
+// Screenshot ueber den Hintergrund-Worker anfordern (siehe Kommentar in captureFor).
+function captureViaBackground(windowId) {
+  return chrome.runtime
+    .sendMessage({ type: "steply-capture", windowId })
+    .then((resp) => {
+      if (!resp || !resp.ok || !resp.dataUrl) {
+        throw new Error(
+          (resp && resp.error) || "keine Antwort vom Hintergrund-Worker"
+        );
+      }
+      return resp.dataUrl;
+    });
+}
+
 // Einen Screenshot des aktiven Tabs im Panel-Fenster machen (serialisiert, ratenlimit-bewusst).
 async function captureFor(pending) {
   const src = pending.step;
@@ -654,19 +668,51 @@ async function captureFor(pending) {
   const wait = CAPTURE_MIN_INTERVAL - (Date.now() - guideLastCaptureAt);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 
-  let dataUrl;
-  try {
-    dataUrl = await chrome.tabs.captureVisibleTab(
-      panelWindowId == null ? undefined : panelWindowId,
-      { format: "png" }
+  // Fenster des Klicks bevorzugen; Fallback: Panel-Fenster.
+  const targetWindowId =
+    pending.windowId != null
+      ? pending.windowId
+      : panelWindowId == null
+        ? null
+        : panelWindowId;
+
+  // WICHTIG: Der Screenshot laeuft ueber den Hintergrund-Worker, NICHT direkt hier -
+  // captureVisibleTab scheitert im Seitenleisten-Kontext an einem Chromium-Bug
+  // (crbug.com/40916430). Zwei Versuche (kurze Pause dazwischen faengt Seitenwechsel/
+  // Fokuswechsel ab), danach ein letzter Direktversuch aus dem Panel.
+  let dataUrl = null;
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2 && !dataUrl; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 350));
+    try {
+      dataUrl = await captureViaBackground(targetWindowId);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!dataUrl) {
+    try {
+      dataUrl = await chrome.tabs.captureVisibleTab(
+        targetWindowId == null ? undefined : targetWindowId,
+        { format: "png" }
+      );
+    } catch (err) {
+      lastErr = lastErr || err;
+    }
+  }
+  if (!dataUrl) {
+    const why = lastErr && lastErr.message ? lastErr.message : "unbekannter Fehler";
+    console.warn("Steply: Screenshot fehlgeschlagen:", why);
+    setStatus(
+      "Screenshot fehlgeschlagen (" +
+        why +
+        "). Passiert das bei jedem Klick: chrome://extensions -> Steply Recorder -> " +
+        'Details -> Websitezugriff auf "Bei allen Websites" stellen und neu laden.',
+      "error"
     );
-  } catch (err) {
-    console.warn("Steply: Screenshot fehlgeschlagen:", err && err.message);
-    setStatus("Ein Screenshot konnte nicht erfasst werden (Seitenwechsel?).", "error");
     return;
   }
   guideLastCaptureAt = Date.now();
-  if (!dataUrl) return;
 
   // Klick-Puls im ausloesenden Tab - ERST NACH dem Screenshot, damit er nie mit im Bild
   // landet. Multi-Tab: gezielt an sender.tab.id des Schritts (nicht an einen fixen Tab).
@@ -901,7 +947,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!fromPanelWindow(sender)) return;
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
   // Letzter gewinnt: ein noch nicht verarbeiteter Klick wird vom naechsten ersetzt.
-  guidePending = { step: msg.step, tabId: sender.tab.id };
+  // windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster (robuster
+  // als das beim Panel-Start ermittelte Fenster, z. B. bei mehreren Chrome-Fenstern).
+  guidePending = { step: msg.step, tabId: sender.tab.id, windowId: sender.tab.windowId };
   if (guideCapturing) guideBusyHint();
   drainGuideQueue();
 });

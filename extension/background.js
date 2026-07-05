@@ -36,3 +36,25 @@ enableSidePanelOnActionClick();
 
 // Verwaiste Klick-/Schritt-Nachrichten absorbieren (siehe oben). Nichts zu tun.
 chrome.runtime.onMessage.addListener(() => false);
+
+// Screenshot-Dienst fuer die Seitenleiste: chrome.tabs.captureVisibleTab scheitert
+// direkt im Panel-Kontext an einem Chromium-Bug (crbug.com/40916430 - activeTab
+// greift dort nicht), im Service Worker funktioniert derselbe Aufruf. Das Panel
+// schickt {type:"steply-capture", windowId} und bekommt {ok, dataUrl | error}.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "steply-capture") return false;
+  const opts = { format: "png" };
+  const p =
+    typeof msg.windowId === "number"
+      ? chrome.tabs.captureVisibleTab(msg.windowId, opts)
+      : chrome.tabs.captureVisibleTab(opts);
+  p.then(
+    (dataUrl) => sendResponse({ ok: true, dataUrl }),
+    (err) =>
+      sendResponse({
+        ok: false,
+        error: err && err.message ? err.message : String(err),
+      })
+  );
+  return true; // Antwort kommt asynchron
+});
