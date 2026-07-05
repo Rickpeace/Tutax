@@ -34,6 +34,44 @@ if (chrome.runtime.onStartup) {
 // Auch beim gewoehnlichen Aufwachen des Workers setzen (billig, idempotent).
 enableSidePanelOnActionClick();
 
+// content.js in BEREITS OFFENE Tabs nachimpfen (v2.2.2). Chrome injiziert deklarative
+// Content-Scripts nur in Seiten, die NACH dem (Neu-)Laden der Extension geladen wurden -
+// in altoffenen Tabs fehlt das Script komplett, Klicks werden dort nicht erkannt, bis
+// die Seite neu geladen wird (Richards "er erkennt nichts, erst wenn ich neu lade").
+// Doppel-Injektion ist harmlos: content.js hat einen Installations-Guard und kehrt
+// sofort zurueck. Nicht-injizierbare Tabs (chrome://, Web Store, PDF, discarded)
+// schlagen einzeln fehl und werden still uebersprungen.
+function injectIntoOpenTabs() {
+  if (!chrome.scripting || !chrome.tabs || !chrome.tabs.query) return;
+  chrome.tabs
+    .query({ url: ["http://*/*", "https://*/*"] })
+    .then((tabs) => {
+      for (const tab of tabs || []) {
+        if (tab.id == null || tab.discarded) continue;
+        chrome.scripting
+          .executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
+          .catch(() => {
+            /* Tab nicht injizierbar - beim naechsten echten Laden greift das Manifest */
+          });
+      }
+    })
+    .catch(() => {
+      /* tabs.query fehlgeschlagen - dann eben nur deklarativ */
+    });
+}
+chrome.runtime.onInstalled.addListener(injectIntoOpenTabs);
+if (chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(injectIntoOpenTabs);
+}
+
+// Sicherheitsnetz: Auch beim Aufnahme-Start bittet das Panel um eine Nachimpfung
+// (falls der Worker zwischendurch beendet war oder ein Tab durchgerutscht ist).
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg || msg.type !== "steply-ensure-content") return false;
+  injectIntoOpenTabs();
+  return false;
+});
+
 // Verwaiste Klick-/Schritt-Nachrichten absorbieren (siehe oben). Nichts zu tun.
 chrome.runtime.onMessage.addListener(() => false);
 

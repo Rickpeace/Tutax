@@ -729,6 +729,29 @@ function guideBusyHint() {
   setStatus("Screenshot wird erfasst ...");
 }
 
+// Warnen, wenn der gerade aktive Tab prinzipiell nicht aufnehmbar ist (chrome://,
+// Web Store, PDF-Viewer, neuer-Tab-Seite): dort laeuft kein Content-Script, Klicks
+// waeren stumm - der Nutzer soll wissen, dass er zum Ziel-Tab wechseln muss.
+async function warnIfActiveTabNotCapturable() {
+  try {
+    const q =
+      panelWindowId == null
+        ? { active: true, currentWindow: true }
+        : { active: true, windowId: panelWindowId };
+    const tabs = await chrome.tabs.query(q);
+    const tab = tabs && tabs[0];
+    if (tab && tab.url && !/^https?:\/\//i.test(tab.url)) {
+      setStatus(
+        "Hinweis: Der aktive Tab ist eine Browser-Seite und kann nicht aufgenommen " +
+          "werden. Wechsle zum Tab der Ziel-Website - dort zaehlen die Klicks.",
+        "error"
+      );
+    }
+  } catch (err) {
+    /* egal - reine Komfort-Warnung */
+  }
+}
+
 async function startGuide() {
   resetGuide();
   guideActive = true;
@@ -740,6 +763,14 @@ async function startGuide() {
   els.guideList.textContent = "";
   setStatus("");
   show("guideLive");
+  // Altoffene Tabs nachimpfen (v2.2.2): ohne das fehlte content.js in Tabs, die vor dem
+  // (Neu-)Laden der Extension geoeffnet wurden - Klicks dort blieben stumm.
+  try {
+    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+  } catch (err) {
+    /* egal - deklarative Injektion deckt neue Seiten ab */
+  }
+  warnIfActiveTabNotCapturable();
   startEpoch = Date.now();
   startTimer(els.guideTimer);
   try {
