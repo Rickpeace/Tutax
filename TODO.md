@@ -11,8 +11,12 @@
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
-- [ ] **Steply-Recorder-Extension testen**: `chrome://extensions` → Entwicklermodus →
-  „Entpackt laden" → Ordner `extension/`. Ergebnis: aufnahme.webm + clicks.json.
+- [ ] **Extension v2.0 (Seitenleiste) in Chrome testen**: `chrome://extensions` →
+  Steply Recorder NEU LADEN → Icon-Klick öffnet die Seitenleiste. Checkliste:
+  bleibt bei Tab-Wechsel offen · Sofort-Anleitung über MEHRERE Tabs (jeder Klick
+  = Schritt mit Thumbnail + blauer Puls) · Abbruch → nächstes Öffnen sauber
+  („unterbrochene Aufnahme verworfen") · Video-Modus zeigt Mikro-Status VOR dem
+  Start · Upload → „In Steply öffnen". Braucht Chrome ≥ 114.
 - [ ] **Impressum + Datenschutz: echte Betreiber-Angaben** eintragen
   (`[ANGABE FOLGT — Betreiber]`-Platzhalter in impressum/datenschutz-Seiten).
 - [ ] **LemonSqueezy-Konto** anlegen (Merchant of Record) — dann baue ich die

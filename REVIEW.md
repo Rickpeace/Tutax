@@ -161,6 +161,13 @@ Video/Worker; Vorlagen-Titel + billiger KI-Feinschliff via after(); Free-Limit
 + Pfad-/Rect-/Count-Validierung; 32 Live-Checks. Manueller Chrome-Test offen.
 WORKFLOW-WECHSEL: nur noch main wird gepusht (Vercel-Dedup-Falle), Wellen
 zweigen von origin/main ab.
+**Opus Welle 23 + Fable (05.07.):** 🧲 **Extension v2.0 — Seitenleiste** (Chrome
+sidePanel, Tango-Architektur): Panel statt Popup+Fenster, Zustands-Screens
+(Verbinden/Start/Aufnahme/Fertig), Schrittliste mit Thumbnails je Schritt;
+Robustheit: Multi-Tab-Klicks (Fenster- statt Tab-Bindung), Zustands-Versöhnung
+(nie mehr klemmender Aufnahme-Modus), Mikro-Preflight (kein stummes Video mehr),
+Klick-Puls pro Tab; Server-Verträge unverändert (Tests grün). Vorher: v1.2.1
+Klick-Puls nach Screenshot-Bestätigung (Fable direkt).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
