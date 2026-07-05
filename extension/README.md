@@ -1,9 +1,19 @@
-# Steply Recorder (Browser-Extension, v2)
+# Steply Recorder (Browser-Extension, v2.0 — Side Panel)
 
 Nordstern-Einstieg **„Klicks statt Zauberwort"**: Statt einen Ablauf in Worte zu
 fassen, klicken Sie ihn einfach vor.
 
-Die Extension bietet **zwei Modi** (Wahl im Popup):
+> **v2.0 — Seitenleiste statt Fenster (Tango-Architektur).** Alles passiert in
+> **einer Browser-Seitenleiste** (rechts im Fenster) — kein separates
+> Aufnahme-Fenster mehr, das aufgeht, minimiert und vergessen wird. Die
+> Seitenleiste bleibt beim Navigieren **und beim Tab-Wechsel offen** (das erledigt
+> Chrome). Klick aufs Symbol öffnet sie. Robuster geworden:
+> **Multi-Tab-Klicks** (Klicks aus **jedem** Tab des Fensters zählen — Tab-Wechsel
+> mitten in der Anleitung ist normal), **Mikro-Preflight** (kein stilles Ohne-Ton-
+> Video mehr) und **Zustands-Versöhnung** (eine abgebrochene Aufnahme klemmt nie
+> wieder — sie wird beim Öffnen sauber verworfen).
+
+Die Extension bietet **zwei Modi** (Wahl in der Seitenleiste):
 
 - **Sofort-Anleitung (Screenshots je Klick)** — Tango-Stil: Bei jedem Klick
   entsteht sofort ein Screenshot + das geklickte Element wird ausgelesen
@@ -45,22 +55,35 @@ Platzhalter. Neu erzeugen: `node extension/make-icons.mjs` (ohne Abhängigkeiten
 
 ## Nutzung
 
-1. **Einmalig (für Direkt-Upload):** Popup öffnen → „Direkt-Upload zu Steply" →
-   Verbindungs-Token aus Steply einfügen, **Speichern**. Die App-URL ist
-   voreingestellt (`https://app.steply.de`); für lokale Tests hier z. B.
-   `http://localhost:3013` eintragen.
-2. Öffnen Sie den **Tab**, den Sie erklären möchten.
-3. Klicken Sie auf das Steply-Symbol → **Aufnahme starten**.
-   Es öffnet sich ein eigener **Aufnahme-Tab** (dieser überlebt das Schließen
-   des Popups — im Popup selbst würde die Aufnahme sterben).
-4. Optional: **Mikrofon mit aufnehmen** anhaken (Ihre Erklärung als Ton).
-5. **Bildschirm wählen & aufnehmen** → im Chrome-Dialog den Tab bzw. das Fenster
-   auswählen.
-6. Führen Sie Ihre Schritte vor. Der Zähler zeigt Laufzeit und erfasste Klicks.
-7. **Aufnahme beenden** →
-   - **Mit Token:** „Zu Steply hochladen" mit Fortschritt, dann „In Steply öffnen".
-   - **Ohne Token:** beide Dateien werden heruntergeladen → manuell in Steply
-     hochladen (**Aus Video**).
+1. Klicken Sie auf das **Steply-Symbol** → die **Seitenleiste** öffnet sich rechts
+   im Browserfenster und bleibt dort offen.
+2. **Beim ersten Mal (für Direkt-Upload):** Ist noch kein Token hinterlegt, zeigt
+   die Seitenleiste zuerst den **Verbinden**-Schritt. Verbindungs-Token aus Steply
+   einfügen (Einstellungen → Einbetten → „Steply Recorder verbinden"), **Speichern**.
+   Die App-URL ist voreingestellt (`https://app.steply.de`); für lokale Tests hier
+   z. B. `http://localhost:3013` eintragen. Ohne Verbindung geht es per „Ohne
+   Verbindung fortfahren (nur Video)" weiter.
+3. **Modus wählen:** Zwei große Karten — **Sofort-Anleitung** (Screenshot je Klick,
+   ohne Video; braucht Verbindung) oder **Video mit Ton**.
+4. **Video mit Ton:** Zuerst der **Mikro-Preflight** — die Seitenleiste zeigt
+   „🎙 Mikrofon bereit" (grün) oder einen roten Hinweis mit „erneut prüfen". Der
+   Start-Knopf ist erst aktiv, wenn das Mikro bereit ist **oder** Sie bewusst
+   „Ohne Ton aufnehmen" ankreuzen. Dann **Bildschirm wählen & aufnehmen** → im
+   Chrome-Dialog den Tab bzw. das Fenster auswählen.
+5. Führen Sie Ihre Schritte vor. Sie dürfen dabei **zwischen Tabs wechseln** — die
+   Seitenleiste bleibt offen und zählt Klicks aus jedem Tab des Fensters. Der Zähler
+   zeigt Laufzeit und erfasste Klicks (bzw. bei der Sofort-Anleitung die Schrittliste
+   mit **Thumbnail je Schritt** und **✕** zum Entfernen).
+6. **Beenden** (Video: „Aufnahme beenden"; Sofort-Anleitung: „Anleitung
+   fertigstellen") →
+   - **Mit Token:** Upload mit Fortschritt, dann „In Steply öffnen".
+   - **Ohne Token (nur Video):** beide Dateien werden heruntergeladen → manuell in
+     Steply hochladen (**Aus Video**).
+
+> Schließen Sie die Seitenleiste während einer laufenden Aufnahme, werden die
+> Streams sauber gestoppt und der Zustand geräumt. Die **nächste** Öffnung startet
+> garantiert sauber im Start-Screen (mit dezentem Hinweis „Eine unterbrochene
+> Aufnahme wurde verworfen.").
 
 ---
 
@@ -88,9 +111,9 @@ können (der Worker rechnet gegen `image_width`/`image_height`).
 
 ### Uhr-Synchronisation (wie `t` entsteht)
 
-Aufnahme-Tab und aufgenommener Tab laufen auf **derselben Maschine** und teilen
-sich damit dieselbe Wanduhr (`Date.now()`). Beim Aufnahmestart schreibt der
-Aufnahme-Tab `{ rec: { startedAt: Date.now() } }` nach `chrome.storage.local`.
+Seitenleiste und aufgenommener Tab laufen auf **derselben Maschine** und teilen
+sich damit dieselbe Wanduhr (`Date.now()`). Beim Aufnahmestart schreibt die
+Seitenleiste `{ rec: { startedAt: Date.now() } }` nach `chrome.storage.local`.
 Das Content-Script liest/beobachtet diesen Wert; für jeden Klick gilt:
 `t = (Date.now() - startedAt) / 1000`. So ist kein fehleranfälliger Abgleich von
 `performance.now()`-Zeitursprüngen über Kontextgrenzen nötig — und eine **frisch
@@ -100,18 +123,20 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 
 ## Grenzen (Ehrlichkeit)
 
-- **Klick-Erfassung im aufgenommenen Browser-Tab — inkl. Seitenwechsel.** Das
+- **Klick-Erfassung inkl. Seitenwechsel UND Tab-Wechsel (v2.0).** Das
   Content-Script ist deklarativ auf jeder `http(s)`-Seite registriert und wird
   auf jeder Folge-Seite neu geladen; es liest den Aufnahmezustand aus
-  `chrome.storage.local`. Damit überleben Klicks **Navigationen innerhalb des
-  Tabs**.
-- **NICHT abgedeckt: Tab-Wechsel während der Aufnahme.** Wechseln Sie in einen
-  **anderen Tab** oder in ein **anderes Programm**, werden dort **keine Klicks**
-  erfasst (der Recorder zählt bewusst nur den einen Ablauf). Das **Video** wird
-  trotzdem vollständig aufgenommen (Sie können beliebige Fenster/Tabs teilen).
+  `chrome.storage.local`. Die Seitenleiste akzeptiert Klick-/Schritt-Nachrichten
+  aus **jedem `http(s)`-Tab desselben Fensters** (`sender.tab.windowId ===`
+  Panel-Fenster). Damit überleben Klicks **Navigationen** und **Tab-Wechsel**
+  innerhalb des Fensters — ein häufiger Stolperstein in v1.
+- **`captureVisibleTab` erfasst immer den aktiven Tab des Panel-Fensters.** In der
+  Sofort-Anleitung wird pro Klick der gerade sichtbare Tab aufgenommen — passt zum
+  Multi-Tab-Ablauf. Klicks in **anderen Fenstern** oder **anderen Programmen**
+  zählen nicht.
 - **Nur normale `http(s)`-Seiten** können Klicks liefern. Auf Browser-Systemseiten
   (`chrome://`, Chrome Web Store, PDF-Viewer, `about:` …) läuft die Aufnahme ohne
-  Klick-Erfassung (die Extension weist darauf hin).
+  Klick-Erfassung. Beim Video wird der Bildschirm trotzdem vollständig aufgenommen.
 - Ausgabeformat ist WebM (VP9/VP8, je nach Browser-Unterstützung).
 
 ---
@@ -120,7 +145,8 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 
 - **DOM-Selektoren** pro Klick (stabile CSS-/ARIA-Pfade) für robusteres
   Schritt-Matching statt nur Text-Labels.
-- Klick-Erfassung über **Tab-Wechsel** hinweg (aktuell bewusst nur ein Tab).
+- Klick-Erfassung über **Fenster-Grenzen** hinweg (aktuell ein Fenster).
+- Echtzeit-Aufbau des Tutorials **während** der Aufnahme.
 - Scroll-/Tastatur-Ereignisse und Formular-Eingaben (datenschutzbewusst).
 
 ---
@@ -129,25 +155,45 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 
 | Datei             | Zweck                                                         |
 | ----------------- | ------------------------------------------------------------ |
-| `manifest.json`   | MV3-Manifest (Berechtigungen, deklaratives Content-Script)   |
-| `popup.html/.js`  | Einstieg: Token/App-URL verwalten + Aufnahme-Tab öffnen      |
-| `recorder.html/.js` | Aufnahme-Tab: getDisplayMedia + MediaRecorder + Upload/DL  |
+| `manifest.json`   | MV3-Manifest (Berechtigungen inkl. `sidePanel`, `side_panel`, `background`, deklaratives Content-Script) |
+| `background.js`   | Service-Worker: öffnet die Seitenleiste beim Symbol-Klick (`setPanelBehavior`) + schluckt verwaiste Nachrichten |
+| `panel.html/.js`  | **Die Seitenleiste**: Verbinden, Modus-Wahl, Aufnahme (Video/Sofort), Upload/Download — alle Zustände in einem Dokument |
 | `content.js`      | Läuft passiv auf jeder Seite; erfasst Klicks nur bei Aufnahme |
-| `styles.css`      | Gemeinsames Styling (Popup + Aufnahme-Tab)                   |
+| `styles.css`      | Styling der Seitenleiste                                      |
 | `make-icons.mjs`  | Erzeugt die Platzhalter-Icons (ohne Abhängigkeiten)          |
 | `icons/`          | `icon16/48/128.png`                                          |
 
-### Warum `host_permissions` für http/https jetzt nötig ist
+### Architektur v2.0 (Side Panel / Tango)
 
-v1 injizierte das Content-Script per `chrome.scripting.executeScript` nur in den
-**aktiven Tab** (`activeTab`). Das scheiterte auf vielen Seiten und überlebte
-**keine Navigation** — Klicks auf Folge-Seiten fehlten. v2 registriert das
-Content-Script **deklarativ** (`content_scripts` mit `matches: http/https`,
-`run_at: document_start`); dafür braucht die Extension
-`host_permissions: ["http://*/*", "https://*/*"]`. Das Script ist standardmäßig
-**passiv** (es liest den Aufnahmezustand aus `chrome.storage.local` und erfasst
-Klicks nur während einer laufenden Aufnahme), sammelt also im Ruhezustand
-nichts.
+- **Kein Popup, kein separater Aufnahme-Tab** mehr. `manifest.json` hat
+  `"side_panel": { "default_path": "panel.html" }` und die `sidePanel`-Berechtigung;
+  `background.js` ruft einmal
+  `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`, damit der
+  **Klick aufs Symbol** die Seitenleiste öffnet.
+- **Panel-Zustände** (genau einer sichtbar): `connect` (a, Token) · `start`
+  (b, zwei Karten) · `videoSetup` (Mikro-Preflight) · `videoLive` (d) · `videoDone`
+  (e) · `guideLive` (c, Schrittliste mit Thumbnails) · `guideDone` (e).
+- **Message-Fluss:** `content.js` sendet per `chrome.runtime.sendMessage`
+  (`steply-click` im Video-Modus, `steply-guide-step` im Sofort-Modus); das offene
+  Panel empfängt via `chrome.runtime.onMessage` und akzeptiert nur Nachrichten aus
+  einem Tab **desselben Fensters** (`sender.tab.windowId === panelWindowId`, via
+  `chrome.windows.getCurrent()`). Der Klick-Puls (`steply-guide-captured`) geht
+  gezielt zurück an `sender.tab.id` des jeweiligen Schritts — auch bei Multi-Tab.
+- **Zustands-Versöhnung:** Das Panel-Dokument wird beim Schließen der Seitenleiste
+  zerstört; eine frisch geladene Instanz hat also nie eine laufende Session. Findet
+  sie beim Öffnen trotzdem ein `rec`-Flag im `storage`, wird es verworfen (kein
+  Aufwachen im „recording"-Modus). `pagehide` stoppt beim Schließen zusätzlich die
+  Streams und räumt `rec`.
+
+### Warum `host_permissions` für http/https nötig ist
+
+Das Content-Script ist **deklarativ** registriert (`content_scripts` mit
+`matches: http/https`, `run_at: document_start`); dafür braucht die Extension
+`host_permissions: ["http://*/*", "https://*/*"]`. Dasselbe Recht deckt
+`captureVisibleTab` mit ab (kein zusätzliches `"tabs"`-Recht nötig). Das Script ist
+standardmäßig **passiv** (es liest den Aufnahmezustand aus `chrome.storage.local`
+und erfasst Klicks nur während einer laufenden Aufnahme), sammelt also im
+Ruhezustand nichts.
 
 ### Direkt-Upload — Server-Routen & Sicherheit
 
@@ -173,19 +219,20 @@ Vision-Pipeline.
 
 **Ablauf (nur mit Verbindungs-Token):**
 
-1. Popup → Modus **„Sofort-Anleitung"** → Aufnahme starten (öffnet den Aufnahme-Tab).
-2. Der Aufnahme-Tab setzt `chrome.storage.local` `{ rec: { startedAt, mode: "guide" } }`.
+1. Seitenleiste → Karte **„Sofort-Anleitung"** (ohne Verbindung ist die Karte
+   deaktiviert, mit Hinweis „Zuerst mit Steply verbinden").
+2. Das Panel setzt `chrome.storage.local` `{ rec: { startedAt, mode: "guide" } }`.
    Das Content-Script erfasst dann bei jedem `pointerdown` (Capture-Phase, **vor** der
    Klick-Wirkung/Navigation) die **BoundingClientRect des Elements** (normalisiert 0..1
    zum Viewport — der Tango-Trick für pixelgenaue Markierungen), das **Label**
    (aria-label/Text/alt/value, ≤ 60), den **Aktionstyp** (`click` | `type` bei
    Eingabefeldern), `location.href` und `document.title`.
-3. Pro Klick-Nachricht macht der Aufnahme-Tab **sofort**
-   `chrome.tabs.captureVisibleTab(fensterId, {format:"png"})` — der aufgenommene Tab ist
-   im Moment des Klicks der aktive/sichtbare Tab seines Fensters. PNG → **WebP**
-   (OffscreenCanvas, Qualität 0,85, spart ~70 % Upload). Schritte sammeln sich im
-   Speicher; **Live-Zähler** + **Mini-Vorschau** (letzter Screenshot) + Liste mit **✕**
-   zum Entfernen einzelner Schritte vor dem Upload.
+3. Pro Klick-Nachricht (aus **jedem** Tab des Fensters) macht das Panel **sofort**
+   `chrome.tabs.captureVisibleTab(panelWindowId, {format:"png"})` — der im Moment des
+   Klicks aktive/sichtbare Tab des Panel-Fensters. PNG → **WebP** (OffscreenCanvas,
+   Qualität 0,85, spart ~70 % Upload). Schritte sammeln sich im Speicher; **Live-Zähler**
+   + **scrollende Schrittliste mit Thumbnail je Schritt** und **✕** zum Entfernen
+   einzelner Schritte vor dem Upload.
 4. **„Anleitung fertigstellen"** → Upload (s. u.) → Abschluss-Screen mit
    „In Steply öffnen" (`{appUrl}/app/tutorials/{id}`).
 
@@ -199,8 +246,9 @@ Vision-Pipeline.
   Schritt still übersprungen und ein Hinweis gezeigt.
 - **Berechtigungen:** `captureVisibleTab` ist durch die vorhandenen
   `host_permissions` (`http/https`) gedeckt — **kein** zusätzliches `"tabs"`-Recht nötig.
-- **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token ist der Sofort-Modus im
-  Popup ausgeblendet (Hinweis: „In Steply verbinden — Einstellungen → Einbetten").
+- **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token ist die
+  Sofort-Anleitung-Karte deaktiviert (Hinweis: „In Steply verbinden — Einstellungen
+  → Einbetten").
 
 **Direkt-Upload — Server-Routen (privat!):**
 
