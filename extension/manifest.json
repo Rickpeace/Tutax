@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Steply Recorder",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Zwei Wege zur Anleitung: Sofort-Anleitung (Screenshot je Klick, ohne Video) oder Video mit KI-Texten. Direkt-Upload zu Steply.",
   "permissions": [
     "activeTab",
@@ -14,8 +14,13 @@
   ],
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ],
