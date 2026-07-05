@@ -243,9 +243,49 @@
     return { editable: false, control: el, kind: "" };
   }
 
+  // Sichtbare Feldueberschrift in der Naehe finden - das haeufigste Muster OHNE echte
+  // <label>-Verknuepfung: <div>Telefon</div><input placeholder="+49 ...">. Wir gehen bis
+  // zu 3 Ebenen nach oben und pruefen je Ebene die bis zu 2 unmittelbar vorangehenden
+  // Geschwister. Bewusst konservativ: kurzer (<=40), code-freier Text; Geschwister, die
+  // selbst Eingabefelder/Buttons enthalten (Formular-Grids), werden uebersprungen.
+  function nearbyCaptionText(control) {
+    let node = control;
+    for (let depth = 0; depth < 3 && node && node !== document.body; depth++) {
+      let sib = node.previousElementSibling;
+      let hops = 0;
+      while (sib && hops < 2) {
+        let skip = false;
+        try {
+          // Interaktive Geschwister (Button/Link/Feld) sind NIE die Ueberschrift dieses
+          // Feldes; Container MIT Feldern (Formular-Grids) ebenfalls ueberspringen.
+          skip = !!(
+            sib.matches &&
+            sib.matches("input, textarea, select, button, a, [role='button'], [role='link']")
+          );
+          if (!skip) {
+            skip = !!(
+              sib.querySelector && sib.querySelector("input, textarea, select, button")
+            );
+          }
+        } catch (err) {
+          skip = true; // im Zweifel ueberspringen
+        }
+        if (!skip) {
+          const t = visibleText(sib);
+          if (t && t.length <= 40 && !looksLikeCode(t)) return t;
+        }
+        sib = sib.previousElementSibling;
+        hops++;
+      }
+      node = node.parentElement;
+    }
+    return "";
+  }
+
   // Label fuer ein editierbares Feld. DATENSCHUTZ: NIE der getippte Wert (el.value) - bei
   // type=password gilt das erst recht (nichts Feldinhaltliches). Kette: <label> > aria >
-  // (select: gewaehlte Option) > placeholder > name > title.
+  // (select: gewaehlte Option) > sichtbare Feldueberschrift daneben > placeholder > name
+  // > title. (Placeholder erst NACH der Ueberschrift: "Telefon" schlaegt "+49 ...".)
   function labelForEditable(control, kind) {
     const lbl = associatedLabelText(control);
     if (lbl && !looksLikeCode(lbl)) return clampLabel(lbl, 60);
@@ -263,6 +303,8 @@
         /* egal */
       }
     }
+    const cap = nearbyCaptionText(control);
+    if (cap) return clampLabel(cap, 60);
     const ph = control.getAttribute && control.getAttribute("placeholder");
     if (ph && ph.trim() && !looksLikeCode(ph)) return clampLabel(ph, 60);
     const nm = control.getAttribute && control.getAttribute("name");

@@ -86,6 +86,12 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
   <button id="save" name="save">Speichern</button>
 
   <button id=":r7:">Generierte ID</button>
+
+  <div>
+    <div>Telefon</div>
+    <input id="tel" type="text" placeholder="+49 ...">
+  </div>
+  <input id="ort" type="text" placeholder="Ort">
 </body></html>`;
 
 let browser;
@@ -190,6 +196,27 @@ try {
     ok(s.length === 1, `generierte-id-Button: 1 Klick-Schritt (${s.length})`);
     ok(!css.includes(":r7:") && !css.startsWith("#"), `generierte id NICHT als #id verwendet -> nth-Pfad (war „${css}")`);
     ok(s[0]?.selector?.role === "button", "selector.role = button");
+  }
+  // ---------- 9) Sichtbare Feldueberschrift schlaegt Platzhalter (Richards Telefon-Fall) ----------
+  await reset();
+  await page.fill("#tel", "01762");
+  await page.keyboard.press("Tab");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "type", `Telefon-Feld: 1 Eingabe-Schritt (${s.length})`);
+    ok(s[0]?.label === "Telefon", `Ueberschrift daneben schlaegt Platzhalter: „Telefon" statt „+49 ..." (war „${s[0]?.label}")`);
+    const raw = await sentRaw();
+    ok(!raw.includes("01762"), "DATENSCHUTZ: getippte Nummer NICHT im Payload");
+  }
+
+  // ---------- 10) Ohne Ueberschrift in der Naehe bleibt der Platzhalter das Label ----------
+  await reset();
+  await page.fill("#ort", "Berlin");
+  await page.keyboard.press("Tab");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "type", `Ort-Feld: 1 Eingabe-Schritt (${s.length})`);
+    ok(s[0]?.label === "Ort", `Platzhalter-Fallback intakt: „Ort" (war „${s[0]?.label}") - Nachbar-Button/Feld-Container NICHT als Ueberschrift missbraucht`);
   }
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
