@@ -361,9 +361,12 @@ export function TutorialCard({
         </div>
       </div>
 
-      {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte). */}
+      {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich
+          veröffentlichte). empty:hidden: ohne sichtbaren Inhalt darf der Wrapper
+          kein Phantom-Padding erzeugen — sonst sitzt die Fußzeile dieser Karten
+          höher als bei den anderen. */}
       {live && !internal && tutorial.slug && (
-        <div className="px-3.5 pb-3">
+        <div className="px-3.5 pb-3 empty:hidden">
           <VideoExport
             tutorialId={tutorial.id}
             open={exportOpen}

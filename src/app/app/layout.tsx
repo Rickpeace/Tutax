@@ -24,7 +24,9 @@ import { createClient } from "@/lib/supabase/server";
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col">
+    // flex-1 (Body ist flex-col): füllt den Viewport, damit die Höhenkette bis
+    // zur Bibliotheks-Sidebar durchreicht — sonst endet deren border-r beim Inhalt.
+    <div className="flex flex-1 flex-col">
       <Suspense fallback={<div className="h-16 border-b-2 border-line bg-card" />}>
         <AppHeader
           bell={
