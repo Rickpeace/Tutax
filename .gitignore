@@ -50,3 +50,6 @@ next-env.d.ts
 /fetch-live-boxes.mjs
 /seg-stability.mjs
 /delete-test-drafts.mjs
+
+# Design-Explorationen (lokal, kein App-Code)
+desing claude/
