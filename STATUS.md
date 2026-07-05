@@ -5,9 +5,9 @@
 > Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md`
 > **Design-Referenz NEU: `desing claude/` (README + SPEC-*.md, gitignored) — ersetzt prototyp-v4.jsx/§13-Farben.**
 
-Letztes Update: 2026-07-05 (WARM-REDESIGN nach Claude-Design-Handoff, s. §7g — UNCOMMITTED; davor Wellen 1–15 + Tarif-System — Details: REVIEW.md, offene Punkte: TODO.md)
+Letztes Update: 2026-07-05 (WARM-REDESIGN nach Claude-Design-Handoff, s. §7g — COMMITTET + LIVE deployt, Commit 172717b; davor Wellen 1–15 + Tarif-System — Details: REVIEW.md, offene Punkte: TODO.md)
 
-## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — GEBAUT, UNCOMMITTED
+## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — LIVE (Commit 172717b)
 > Komplettes visuelles Redesign nach dem High-Fidelity-Handoff (Nunito, Creme #FDF9F3,
 > Ink-Braun #33291F, Koralle #EF6A4E + „harter Schatten" 0 4px 0 #D3543A, 2px-Borders,
 > Teal/Violett/Amber/Blau-Pastelle). Funktionalität 1:1. Build+Lint grün, Playwright-
