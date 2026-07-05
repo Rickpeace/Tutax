@@ -1,7 +1,20 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { Check } from "lucide-react";
+import {
+  Check,
+  MousePointerClick,
+  Clapperboard,
+  PencilLine,
+  Languages,
+  Volume2,
+  Film,
+  GitBranch,
+  QrCode,
+  RefreshCw,
+  Palette,
+  GraduationCap,
+} from "lucide-react";
 import { PLANS } from "@/lib/pricing";
 import { Wordmark } from "@/components/wordmark";
 
@@ -158,6 +171,132 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Sofort-Anleitung per Extension (der Tango-Moment) */}
+      <section className="px-4 py-10 sm:px-10 sm:py-[52px]">
+        <div className="mx-auto grid max-w-[1000px] items-center gap-8 lg:grid-cols-[1fr_1.1fr] lg:gap-12">
+          <div>
+            <h2 className="text-[21px] font-black leading-tight sm:text-[32px]">
+              Oder einfach durchklicken.
+            </h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-muted-foreground sm:text-[15px]">
+              Die Steply-Extension nimmt jeden Klick auf — aus einem einzigen
+              Durchlauf wird eine fertige Anleitung mit Screenshots und Markern.
+              Ohne Video, ohne Schnitt, direkt in Ihrer Bibliothek.
+            </p>
+            <div className="mt-5 space-y-2.5">
+              {[
+                {
+                  icon: MousePointerClick,
+                  title: "Durchklicken",
+                  body: "Extension starten, Aufgabe einmal vorführen — fertig.",
+                },
+                {
+                  icon: Clapperboard,
+                  title: "Screencast hochladen",
+                  body: "Die KI erkennt Schritte, setzt Marker, schreibt die Texte vor.",
+                },
+                {
+                  icon: PencilLine,
+                  title: "Selbst bauen",
+                  body: "Screenshot, Markierung, Text — volle Kontrolle im Builder.",
+                },
+              ].map((w) => (
+                <div
+                  key={w.title}
+                  className="flex items-start gap-3 rounded-[14px] border-2 border-line bg-card px-4 py-3"
+                >
+                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[10px] bg-accent text-accent-foreground">
+                    <w.icon className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black">{w.title}</span>
+                    <span className="block text-[12.5px] font-semibold text-muted-foreground">
+                      {w.body}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Browser-Mockup mit Klick-Marker (Viewer-Motiv) */}
+          <div className="overflow-hidden rounded-[22px] border-2 border-line bg-card shadow-hard-line-lg">
+            <div className="flex gap-1.5 border-b-2 border-line-2 px-4 py-3">
+              <span className="size-2.5 rounded-full bg-line" />
+              <span className="size-2.5 rounded-full bg-line" />
+              <span className="size-2.5 rounded-full bg-line" />
+            </div>
+            <div
+              className="relative grid h-[260px] place-items-center sm:h-[300px]"
+              style={{
+                background:
+                  "repeating-linear-gradient(-45deg, #fff, #fff 11px, #faf5ea 11px, #faf5ea 22px)",
+              }}
+            >
+              <span aria-hidden className="font-mono text-xs text-faint">
+                ihre-software: rechnung anlegen
+              </span>
+              <span className="absolute right-[10%] top-[10%] rotate-2 whitespace-nowrap rounded-xl border-2 border-[#c2e8e1] bg-teal-soft px-3 py-1.5 text-[11px] font-extrabold text-teal-text">
+                Schritt 3 erkannt ✓
+              </span>
+              <span className="absolute left-[34%] top-[52%]" aria-hidden>
+                <span className="block size-[52px] rounded-full border-[3.5px] border-primary bg-primary/10 shadow-[0_0_0_8px_rgba(239,106,78,0.08)]" />
+                <span className="absolute left-[60px] top-2 whitespace-nowrap rounded-[11px] bg-ink px-3 py-1.5 text-xs font-extrabold text-background">
+                  Hier klicken
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* KI-Hilfe-Chat + Wissensdatenbank */}
+      <section className="px-4 pb-10 sm:px-10 sm:pb-[52px]">
+        <div className="mx-auto grid max-w-[1000px] items-center gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-12">
+          {/* Chat-Mockup */}
+          <div className="order-2 rounded-[22px] border-2 border-line bg-card p-4 shadow-hard-line-lg sm:p-5 lg:order-1">
+            <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm font-semibold text-background">
+              Wie lade ich Belege ins Portal hoch?
+            </div>
+            <div className="mt-2.5 w-fit max-w-[90%] rounded-2xl rounded-bl-md bg-secondary px-4 py-2.5 text-sm font-semibold text-ink-2">
+              Öffnen Sie im Portal den Bereich „Belege“ und tippen Sie auf
+              „Hochladen“. Die Anleitung zeigt es Schritt für Schritt:
+            </div>
+            <div className="mt-2 flex w-fit items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-extrabold text-accent-foreground">
+              Belege hochladen — Anleitung öffnen →
+            </div>
+            <div className="mt-4 border-t-2 border-line-2 pt-3 text-[11.5px] font-bold text-faint">
+              Antwortet ausschließlich aus Ihren Inhalten — sonst sagt er es ehrlich
+              und leitet an Sie weiter.
+            </div>
+          </div>
+
+          <div className="order-1 lg:order-2">
+            <h2 className="text-[21px] font-black leading-tight sm:text-[32px]">
+              Ein Chat, der nur Ihre Inhalte kennt.
+            </h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-muted-foreground sm:text-[15px]">
+              Der Hilfe-Assistent auf Ihrer Hilfe-Seite antwortet aus Ihren
+              Anleitungen und Ihrer Wissensdatenbank — nicht aus dem Internet.
+            </p>
+            <ul className="mt-5 space-y-2.5">
+              {[
+                "Wissensdatenbank füllt sich per Import aus Ihrer Website oder aus PDFs.",
+                "Keine erfundenen Antworten: Was Steply nicht weiß, wird an Sie eskaliert.",
+                "Unbeantwortete Fragen werden sichtbar — ein Klick macht daraus den Entwurf der fehlenden Anleitung.",
+              ].map((t) => (
+                <li
+                  key={t}
+                  className="flex items-start gap-2 text-sm font-semibold text-ink-2"
+                >
+                  <Check className="mt-0.5 size-4 shrink-0 text-teal" /> {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       {/* Eine Bibliothek — zwei Welten */}
       <section className="px-4 py-10 sm:px-10 sm:py-[52px]">
         <h2 className="mx-auto max-w-[640px] text-center text-[20px] font-black leading-tight sm:text-[32px]">
@@ -195,6 +334,45 @@ export default function LandingPage() {
               Onboarding, HR, CRM — jede Abteilung findet ihre Abläufe, immer aktuell.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* Feature-Grid: der lange Schwanz, kompakt */}
+      <section className="px-4 pb-10 sm:px-10 sm:pb-[52px]">
+        <h2 className="text-center text-[20px] font-black leading-tight sm:text-[32px]">
+          Und alles drumherum.
+        </h2>
+        <div className="mx-auto mt-4 grid max-w-[1000px] grid-cols-1 gap-3 sm:mt-[34px] sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: Languages, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Mehrsprachig", body: "EN, PL, TR — Übersetzungen bleiben automatisch synchron." },
+            { icon: Volume2, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "Vorlesen", body: "Jeder Schritt als natürliche KI-Stimme." },
+            { icon: Film, soft: "var(--accent)", text: "var(--coral-text)", title: "Video-Export", body: "Aus jeder Anleitung ein fertiges MP4 — die Umkehrung." },
+            { icon: GitBranch, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Verzweigungen", body: "„Haben Sie schon ein Konto?“ — ein Guide, beide Wege." },
+            { icon: QrCode, soft: "var(--accent)", text: "var(--coral-text)", title: "QR, Druck & Bubble", body: "Teilen, ausdrucken oder als Chat-Bubble einbetten." },
+            { icon: RefreshCw, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Aktualitäts-Check", body: "Die KI meldet, wenn eine Anleitung veraltet wirkt." },
+            { icon: Palette, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "KI-Design", body: "Ihr CI, automatisch aus Ihrer Website abgeleitet." },
+            { icon: GraduationCap, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Schulungsnachweis", body: "Wer im Team hat welche Schulung absolviert?" },
+          ].map((f) => (
+            <div
+              key={f.title}
+              className="rounded-2xl p-4"
+              style={{ background: f.soft }}
+            >
+              <span
+                className="grid size-8 place-items-center rounded-[10px] bg-white/70"
+                style={{ color: f.text }}
+              >
+                <f.icon className="size-4" />
+              </span>
+              <h3 className="mt-2.5 text-sm font-black">{f.title}</h3>
+              <p
+                className="mt-1 text-[11.5px] font-bold leading-relaxed"
+                style={{ color: f.text }}
+              >
+                {f.body}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -245,6 +423,55 @@ export default function LandingPage() {
                 Kostenlos starten
               </Link>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FAQ — kompakt, native <details> (kein JS) */}
+      <section className="px-4 pb-10 sm:px-10 sm:pb-[52px]">
+        <h2 className="text-center text-[20px] font-black leading-tight sm:text-[32px]">
+          Häufige Fragen
+        </h2>
+        <div className="mx-auto mt-4 max-w-[760px] space-y-2.5 sm:mt-[34px]">
+          {[
+            {
+              q: "Wie lange dauert die erste Anleitung wirklich?",
+              a: "Wenige Minuten: Extension starten und die Aufgabe einmal durchklicken — oder einen Screencast hochladen. Steply erzeugt Schritte, Screenshots und Marker; Sie prüfen nur noch den Text.",
+            },
+            {
+              q: "Brauchen meine Kunden ein Login?",
+              a: "Nein. Ihr Hilfe-Center ist eine öffentliche Seite in Ihrem Branding — Link teilen oder QR-Code aufhängen genügt. Interne Anleitungen bleiben davon getrennt und sind nur fürs Team sichtbar.",
+            },
+            {
+              q: "Kann der KI-Chat Dinge erfinden?",
+              a: "Der Assistent antwortet ausschließlich aus Ihren Anleitungen und Ihrer Wissensdatenbank. Kennt er die Antwort nicht, sagt er das ehrlich und leitet die Frage an Sie weiter — Sie sehen alle offenen Fragen im Überblick.",
+            },
+            {
+              q: "Passt das zu unserem Erscheinungsbild?",
+              a: "Ja — Logo und Farben stellen Sie selbst ein, oder die KI leitet Ihr Design automatisch von Ihrer Website ab. Das Hilfe-Center wirkt wie Ihre eigene Seite, nicht wie ein Fremd-Tool.",
+            },
+            {
+              q: "Was kostet Steply?",
+              a: "Der Einstieg ist kostenlos (bis zu 5 Anleitungen, ohne Kreditkarte). Pro und Business gibt es ab 29 € im Monat — die Details stehen oben bei den Preisen.",
+            },
+          ].map((f) => (
+            <details
+              key={f.q}
+              className="group rounded-[14px] border-2 border-line bg-card px-5 py-4 open:pb-5"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-3 text-sm font-black sm:text-[15px] [&::-webkit-details-marker]:hidden">
+                <span className="flex-1">{f.q}</span>
+                <span
+                  aria-hidden
+                  className="grid size-6 shrink-0 place-items-center rounded-full bg-secondary text-sm font-black text-muted-foreground transition-transform group-open:rotate-45"
+                >
+                  ＋
+                </span>
+              </summary>
+              <p className="mt-2.5 text-[13.5px] font-semibold leading-relaxed text-muted-foreground">
+                {f.a}
+              </p>
+            </details>
           ))}
         </div>
       </section>
