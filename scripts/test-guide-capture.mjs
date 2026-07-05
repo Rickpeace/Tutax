@@ -1,0 +1,201 @@
+// Headless-Beweis der content.js-Erfassungslogik (Welle 24), OHNE Netz/Server. Laedt die
+// ECHTE extension/content.js in eine Mini-HTML-Seite (styled-components-artiges <style>-
+// Kind, label->input, contenteditable, password, select, generierte id) in echtem Chromium
+// und prueft:
+//   1) Label-Hygiene: <style>-CSS laeuft NICHT ins Label (Richards Bug „…{background…").
+//   2) Editierbarkeit: Klick auf <label> loest die Kontrolle auf -> KEIN Klick-Schritt;
+//      contenteditable + password + select gelten als editierbar.
+//   3) Blur-Reihenfolge: Tippen + direkt Klick -> Eingabe-Schritt VOR Klick-Schritt.
+//   4) Datenschutz: getippte Werte (auch Passwoerter) landen NIE im Schritt/Label.
+//   5) Selektor-Vorbau: { css, text, role }; generierte id (":r7:") wird NICHT als #id
+//      genutzt; stabile id schon.
+//
+// Nutzung:  node scripts/test-guide-capture.mjs   (kein .env noetig)
+// Playwright wird lokal ODER aus dem npx-Cache aufgeloest (Browser: ms-playwright-Cache).
+import { createRequire } from "node:module";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function resolvePlaywright() {
+  try {
+    return require("playwright");
+  } catch {
+    /* nicht lokal installiert -> npx-Cache absuchen */
+  }
+  const base = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local");
+  const npxDir = path.join(base, "npm-cache", "_npx");
+  if (existsSync(npxDir)) {
+    for (const d of readdirSync(npxDir)) {
+      const p = path.join(npxDir, d, "node_modules", "playwright");
+      if (existsSync(p)) return require(p);
+    }
+  }
+  throw new Error("playwright nicht gefunden (weder lokal noch im npx-Cache).");
+}
+
+let failed = false;
+const ok = (c, m) => {
+  console.log(`${c ? "✓" : "✗"} ${m}`);
+  if (!c) failed = true;
+};
+
+const CONTENT_JS = readFileSync(path.join(__dirname, "..", "extension", "content.js"), "utf8");
+
+// Mini-Seite: Der Inline-<script>-Stub definiert chrome + __sent VOR dem Content-Script,
+// damit content.js sich fuer den guide-Modus „scharf" schaltet und Schritte in __sent legt.
+const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
+  body{font-family:sans-serif;padding:20px} button,input,select,#ce{display:block;margin:12px 0}
+  #ce{border:1px solid #888;min-height:24px;padding:4px}
+</style><script>
+  window.__sent = [];
+  window.chrome = {
+    runtime: {
+      lastError: undefined,
+      sendMessage: function (m) { if (m && m.type === "steply-guide-step") window.__sent.push(m.step); },
+      onMessage: { addListener: function () {} },
+    },
+    storage: {
+      local: { get: function (key, cb) { cb({ rec: { startedAt: Date.now(), mode: "guide" } }); } },
+      onChanged: { addListener: function () {} },
+    },
+    tabs: { sendMessage: function () {} },
+  };
+</script></head><body>
+  <button id="scbtn" class="MagqMc ZFiwCf"><style>.MagqMc{background-color:#2c2e35;border:1px solid #000;color:#fff}.ZFiwCf{padding:6px 10px}</style>Weiter</button>
+
+  <label for="email">E-Mail-Adresse</label>
+  <input id="email" name="email" type="text">
+
+  <div id="ce" contenteditable="true" aria-label="Notiz">start</div>
+
+  <label>Passwort <input id="pw" type="password" name="passwort" placeholder="Passwort"></label>
+
+  <select id="land" name="land">
+    <option value="">Bitte waehlen</option>
+    <option value="de">Deutschland</option>
+    <option value="at">Oesterreich</option>
+  </select>
+
+  <label for="note">Notizfeld</label>
+  <input id="note" name="note" type="text">
+
+  <button id="save" name="save">Speichern</button>
+
+  <button id=":r7:">Generierte ID</button>
+</body></html>`;
+
+let browser;
+try {
+  const { chromium } = resolvePlaywright();
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+  await page.setContent(HTML, { waitUntil: "load" });
+  // Echtes Content-Script injizieren (IIFE liest den rec-Zustand sofort -> guide-Modus).
+  await page.addScriptTag({ content: CONTENT_JS });
+  ok(await page.evaluate(() => window.__steplyRecorderInstalled === true), "content.js installiert + guide-Modus scharf");
+
+  const sent = () => page.evaluate(() => window.__sent.map((s) => ({ action: s.action, label: s.label, selector: s.selector, hasRect: !!s.rect })));
+  const sentRaw = () => page.evaluate(() => JSON.stringify(window.__sent));
+  const reset = () => page.evaluate(() => { const a = document.activeElement; if (a && a.blur) a.blur(); window.__sent.length = 0; });
+
+  // ---------- 1) Label-Hygiene: <style>-CSS NICHT im Label ----------
+  await reset();
+  await page.click("#scbtn");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "click", `styled-Button: genau 1 Klick-Schritt (${s.length})`);
+    const lbl = s[0]?.label || "";
+    ok(lbl === "Weiter", `Label = „Weiter" (kein CSS-Text) (war „${lbl}")`);
+    ok(!/[{}]|background-color|MagqMc/.test(lbl), "Label enthaelt KEINEN CSS-/Klassen-Text");
+    ok(s[0]?.selector?.css === "#scbtn", `selector.css = „#scbtn" (war „${s[0]?.selector?.css}")`);
+    ok(s[0]?.selector?.role === "button", "selector.role = button");
+  }
+
+  // ---------- 2) Klick auf <label> -> Kontrolle aufgeloest, KEIN Klick-Schritt ----------
+  await reset();
+  await page.click('label[for="email"]');
+  {
+    const s = await sent();
+    ok(s.length === 0, `Klick auf <label> erzeugt KEINEN Schritt (Feld-Klick-Rauschen weg) (${s.length})`);
+  }
+
+  // ---------- 3) Tippen + direkt Klick -> Eingabe-Schritt VOR Klick-Schritt ----------
+  // (email ist durch den Label-Klick bereits fokussiert.)
+  await page.fill("#email", "hallo@example.test");
+  await page.click("#save");
+  {
+    const s = await sent();
+    ok(s.length === 2, `Eingabe + Klick -> 2 Schritte (${s.length})`);
+    ok(s[0]?.action === "type" && s[1]?.action === "click", `Reihenfolge: type VOR click (${s.map((x) => x.action).join(",")})`);
+    ok(s[0]?.label === "E-Mail-Adresse", `Eingabe-Label aus <label> = „E-Mail-Adresse" (war „${s[0]?.label}")`);
+    ok(s[1]?.label === "Speichern", `Klick-Label = „Speichern" (war „${s[1]?.label}")`);
+    ok(s[0]?.selector?.css === "#email" && s[0]?.selector?.role === "textbox", `email selector { #email, textbox } (war ${JSON.stringify(s[0]?.selector)})`);
+    const raw = await sentRaw();
+    ok(!raw.includes("hallo@example.test"), "DATENSCHUTZ: getippter Wert NICHT im Schritt-Payload");
+  }
+
+  // ---------- 4) contenteditable: editierbar, Label aus aria-label ----------
+  await reset();
+  await page.click("#ce");
+  await page.keyboard.type("XYZ");
+  await page.click("#save");
+  {
+    const s = await sent();
+    ok(s.length === 2 && s[0].action === "type" && s[1].action === "click", `contenteditable: type dann click (${s.map((x) => x.action).join(",")})`);
+    ok(s[0]?.label === "Notiz", `contenteditable-Label aus aria-label = „Notiz" (war „${s[0]?.label}")`);
+  }
+
+  // ---------- 5) Passwort: Label NIE aus Feldinhalt; Wert nie im Payload ----------
+  await reset();
+  await page.fill("#pw", "GeheimesPasswort123");
+  await page.click("#save");
+  {
+    const s = await sent();
+    ok(s.length === 2 && s[0].action === "type", "password: Eingabe-Schritt erzeugt");
+    ok(s[0]?.label === "Passwort", `password-Label = „Passwort" (Label des <label>, kein Wert) (war „${s[0]?.label}")`);
+    const raw = await sentRaw();
+    ok(!raw.includes("GeheimesPasswort123"), "DATENSCHUTZ: Passwort NICHT im Payload");
+  }
+
+  // ---------- 6) blur-only (Tab, ohne folgenden Klick) -> Eingabe-Schritt ----------
+  await reset();
+  await page.focus("#note");
+  await page.keyboard.type("hi");
+  await page.keyboard.press("Tab");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "type", `blur via Tab -> genau 1 Eingabe-Schritt (${s.length})`);
+    ok(s[0]?.label === "Notizfeld", `blur-Label aus <label> = „Notizfeld" (war „${s[0]?.label}")`);
+  }
+
+  // ---------- 7) native <select>: change -> Eingabe-Schritt (gewaehlte Option als Label) ----------
+  await reset();
+  await page.selectOption("#land", "de");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "type", `select change -> 1 Eingabe-Schritt (${s.length})`);
+    ok(s[0]?.label === "Deutschland", `select-Label = gewaehlte Option „Deutschland" (war „${s[0]?.label}")`);
+  }
+
+  // ---------- 8) Selektor: generierte id (":r7:") wird NICHT als #id genutzt ----------
+  await reset();
+  await page.locator('[id=":r7:"]').click();
+  {
+    const s = await sent();
+    const css = s[0]?.selector?.css || "";
+    ok(s.length === 1, `generierte-id-Button: 1 Klick-Schritt (${s.length})`);
+    ok(!css.includes(":r7:") && !css.startsWith("#"), `generierte id NICHT als #id verwendet -> nth-Pfad (war „${css}")`);
+    ok(s[0]?.selector?.role === "button", "selector.role = button");
+  }
+} catch (e) {
+  ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
+} finally {
+  if (browser) await browser.close().catch(() => {});
+}
+
+console.log(failed ? "\n✗ Fehlgeschlagen." : "\n✓ content.js-Erfassung (Label/Editierbarkeit/blur/Selektor) verifiziert.");
+process.exit(failed ? 1 : 0);

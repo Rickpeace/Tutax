@@ -579,16 +579,22 @@ async function uploadToSteply(videoBlob) {
 // aktiven (sichtbaren) Tab des Fensters, in dem geklickt wurde - egal in welchem Tab.
 // Der Aufruf laeuft ueber background.js (Chromium-Bug im Panel-Kontext, s. captureFor).
 //
-// RATENLIMIT: captureVisibleTab ist ~2/s begrenzt. Wir serialisieren die Captures
-// (Warteschlange) und fassen schnelle Doppelklicks zusammen (letzter gewinnt).
+// RATENLIMIT: captureVisibleTab ist ~2/s begrenzt. Wir serialisieren die Captures ueber
+// eine kleine FIFO-Warteschlange (Kappe GUIDE_QUEUE_CAP; bei Ueberlauf faellt der aelteste
+// wartende Schritt heraus). So gehen Eingabe- + Klick-Schritt, die kurz nacheinander
+// eintreffen (pointerdown-Flush), NICHT verloren. OPTIMIERUNG: kommen zwei Schritte im
+// COALESCE_WINDOW an, teilen sie sich EINEN Screenshot - so zeigt der Klick-Schritt nicht
+// versehentlich schon die Folgeseite (die Rects unterscheiden sich ja).
 // ============================================================================
 
 const MAX_GUIDE_STEPS = 40;
-const CAPTURE_MIN_INTERVAL = 550; // ms Mindestabstand zwischen Captures
+const CAPTURE_MIN_INTERVAL = 550; // ms Mindestabstand zwischen Captures (captureVisibleTab ~2/s)
+const GUIDE_QUEUE_CAP = 4; // max. wartende Schritte; bei Ueberlauf aeltesten verwerfen
+const COALESCE_WINDOW = 300; // ms: Eingabe + direkt folgender Klick teilen sich EINEN Screenshot
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, ts, blob, width, height, thumbUrl }
-let guidePending = null; // { step, tabId } - wartender Schritt (letzter gewinnt)
+let guideSteps = []; // { rect, label, action, url, title, selector, ts, blob, width, height, thumbUrl }
+let guideQueue = []; // FIFO: [{ step, tabId, windowId }] - wartende Schritte (Kappe GUIDE_QUEUE_CAP)
 let guideCapturing = false;
 let guideLastCaptureAt = 0;
 let guideFinishing = false;
@@ -657,12 +663,22 @@ function captureViaBackground(windowId) {
     });
 }
 
-// Einen Screenshot des aktiven Tabs im Panel-Fenster machen (serialisiert, ratenlimit-bewusst).
-async function captureFor(pending) {
-  const src = pending.step;
+// Klick-Puls im ausloesenden Tab anstossen (optional, Multi-Tab: gezielt an dessen tabId).
+function pulseTab(tabId) {
+  if (tabId == null) return;
+  try {
+    chrome.tabs.sendMessage(tabId, { type: "steply-guide-captured" });
+  } catch (err) {
+    /* Puls ist optional */
+  }
+}
+
+// EINEN Screenshot des aktiven Tabs im Panel-Fenster machen (serialisiert, ratenlimit-
+// bewusst). Gibt { blob, width, height } zurueck oder null (Fehler -> Status gesetzt).
+async function captureImage(pending) {
   if (guideSteps.length >= MAX_GUIDE_STEPS) {
     setStatus("Maximale Schrittzahl (" + MAX_GUIDE_STEPS + ") erreicht.", "error");
-    return;
+    return null;
   }
   // Ratenlimit einhalten.
   const wait = CAPTURE_MIN_INTERVAL - (Date.now() - guideLastCaptureAt);
@@ -710,34 +726,35 @@ async function captureFor(pending) {
         'Details -> Websitezugriff auf "Bei allen Websites" stellen und neu laden.',
       "error"
     );
-    return;
+    return null;
   }
   guideLastCaptureAt = Date.now();
 
   // Klick-Puls im ausloesenden Tab - ERST NACH dem Screenshot, damit er nie mit im Bild
   // landet. Multi-Tab: gezielt an sender.tab.id des Schritts (nicht an einen fixen Tab).
-  if (pending.tabId != null) {
-    try {
-      chrome.tabs.sendMessage(pending.tabId, { type: "steply-guide-captured" });
-    } catch (err) {
-      /* Puls ist optional */
-    }
-  }
+  pulseTab(pending.tabId);
 
-  let img;
   try {
-    img = await pngDataUrlToWebp(dataUrl);
+    return await pngDataUrlToWebp(dataUrl);
   } catch (err) {
     console.warn("Steply: WebP-Konvertierung fehlgeschlagen:", err && err.message);
-    return;
+    return null;
   }
+}
 
+// Einen erfassten Schritt (Rohdaten + fertiges Bild) in die Liste aufnehmen. Bei geteiltem
+// Screenshot (Coalesce) bekommt jeder Schritt einen EIGENEN Objekt-URL (sauberes Revoke).
+function addGuideStep(src, img) {
+  if (guideSteps.length >= MAX_GUIDE_STEPS) return;
   const step = {
     rect: src.rect,
     label: src.label || "",
     action: src.action === "type" ? "type" : "click",
     url: src.url || "",
     title: src.title || "",
+    // selector (Welle 24): optionaler Vorbau, wird beim Upload mitgeschickt und serverseitig
+    // streng validiert. Nur ein Objekt durchreichen (nie fremde Typen).
+    selector: src.selector && typeof src.selector === "object" ? src.selector : null,
     ts: src.ts || Date.now(),
     blob: img.blob,
     width: img.width,
@@ -754,15 +771,28 @@ async function captureFor(pending) {
   setStatus("");
 }
 
-// Nach jedem Capture den naechsten wartenden Schritt abarbeiten (Serialisierung).
+// FIFO-Queue abarbeiten (Serialisierung + Ratenlimit). OPTIMIERUNG: Schritte, die im
+// ~COALESCE_WINDOW nach dem ersten ankamen (pointerdown-Flush: Eingabe + Klick), teilen
+// sich DENSELBEN Screenshot - so zeigt der Klick-Schritt nicht schon die Folgeseite.
 async function drainGuideQueue() {
   if (guideCapturing) return;
   guideCapturing = true;
   try {
-    while (guidePending && guideActive) {
-      const pending = guidePending;
-      guidePending = null;
-      await captureFor(pending);
+    while (guideQueue.length && guideActive) {
+      const first = guideQueue.shift();
+      const img = await captureImage(first);
+      if (!img) continue;
+      addGuideStep(first.step, img);
+      while (
+        guideQueue.length &&
+        guideActive &&
+        guideSteps.length < MAX_GUIDE_STEPS &&
+        Math.abs((guideQueue[0].step.ts || 0) - (first.step.ts || 0)) <= COALESCE_WINDOW
+      ) {
+        const shared = guideQueue.shift();
+        pulseTab(shared.tabId);
+        addGuideStep(shared.step, img);
+      }
     }
   } finally {
     guideCapturing = false;
@@ -897,15 +927,20 @@ async function uploadGuide() {
 
   // 3) Complete: Entwurf anlegen.
   els.guideProgress.textContent = "Anleitung wird erstellt ...";
-  const steps = guideSteps.map((s, i) => ({
-    path: hs.uploads[i].path,
-    label: s.label,
-    action: s.action,
-    rect: s.rect,
-    url: s.url,
-    w: s.width,
-    h: s.height,
-  }));
+  const steps = guideSteps.map((s, i) => {
+    const step = {
+      path: hs.uploads[i].path,
+      label: s.label,
+      action: s.action,
+      rect: s.rect,
+      url: s.url,
+      w: s.width,
+      h: s.height,
+    };
+    // selector nur mitschicken, wenn vorhanden (Abwaertskompatibilitaet: optionales Feld).
+    if (s.selector) step.selector = s.selector;
+    return step;
+  });
   const compRes = await fetch(base + "/api/recorder/guide-complete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -946,11 +981,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!guideActive) return;
   if (!fromPanelWindow(sender)) return;
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
-  // Letzter gewinnt: ein noch nicht verarbeiteter Klick wird vom naechsten ersetzt.
-  // windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster (robuster
-  // als das beim Panel-Start ermittelte Fenster, z. B. bei mehreren Chrome-Fenstern).
-  guidePending = { step: msg.step, tabId: sender.tab.id, windowId: sender.tab.windowId };
-  if (guideCapturing) guideBusyHint();
+  // Kleine FIFO-Queue statt Einzel-Slot: schnelle Folgen (Eingabe + Klick) gehen NICHT
+  // verloren. windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster
+  // (robuster als das beim Panel-Start ermittelte Fenster, z. B. bei mehreren Fenstern).
+  guideQueue.push({ step: msg.step, tabId: sender.tab.id, windowId: sender.tab.windowId });
+  // Ueberlauf: aeltesten wartenden Schritt verwerfen (+ dezenter Hinweis).
+  if (guideQueue.length > GUIDE_QUEUE_CAP) {
+    guideQueue.shift();
+    setStatus("Zu viele Klicks in Folge - ein Schritt wurde uebersprungen.", "error");
+  } else if (guideCapturing) {
+    guideBusyHint();
+  }
   drainGuideQueue();
 });
 
@@ -969,7 +1010,7 @@ function resetGuide() {
     }
   });
   guideSteps = [];
-  guidePending = null;
+  guideQueue = [];
   guideCapturing = false;
   guideFinishing = false;
   guideActive = false;

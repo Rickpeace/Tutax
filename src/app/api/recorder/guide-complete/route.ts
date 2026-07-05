@@ -118,6 +118,8 @@ export async function POST(req: NextRequest) {
     image_width: s.w,
     image_height: s.h,
     highlights: [highlightFromRect(s.rect)],
+    // selector (Welle 24): Vorbau für Live-Führung. Fehlt bei alten Extensions -> null.
+    selector: s.selector ?? null,
     position: i + 1,
     is_decision: false,
   }));

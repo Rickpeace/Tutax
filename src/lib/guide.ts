@@ -19,6 +19,14 @@ export const GUIDE_HIGHLIGHT_COLOR = "#3d4ee6";
 
 export type GuideAction = "click" | "type";
 
+// Robuster Element-Selektor je Schritt (Welle 24, Vorbau für Live-Führung/Anleitungs-TÜV).
+// Wird NUR erfasst + gespeichert (steps.selector, jsonb) — noch nirgends gelesen.
+export type GuideSelector = {
+  css?: string; // kürzester eindeutiger CSS-Pfad (<=400), OHNE generierte Klassennamen
+  text?: string; // sichtbarer Kurztext (<=80)
+  role?: string; // implizite/explizite ARIA-Rolle (<=40)
+};
+
 // Ein normalisierter Roh-Schritt aus der Extension (nach Validierung).
 export type GuideStepInput = {
   path: string;
@@ -29,7 +37,41 @@ export type GuideStepInput = {
   title: string; // document.title der Seite beim Klick
   w: number; // Bildbreite (px)
   h: number; // Bildhöhe (px)
+  selector?: GuideSelector; // optional; fehlt bei alten Extensions (abwärtskompatibel)
 };
+
+// Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
+const SEL_CSS_MAX = 400;
+const SEL_TEXT_MAX = 80;
+const SEL_ROLE_MAX = 40;
+
+// Einen Selektor-String säubern: nur Strings, Steuerzeichen (\p{Cc}) raus, Whitespace
+// kollabieren, auf max kappen. Ungültig/leer -> undefined (Feld wird verworfen).
+function cleanSelectorString(v: unknown, max: number): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim();
+  if (!s) return undefined;
+  return s.slice(0, max);
+}
+
+/**
+ * STRENGE, aber tolerante Selektor-Validierung: unbekannte Keys werden verworfen, falsche
+ * Typen ignoriert, überlange Strings gekappt. Wirft NIE — ein kaputter Selektor darf den
+ * ganzen Request nicht scheitern lassen (Abwärtskompatibilität). Ergebnis oder undefined,
+ * wenn nichts Brauchbares übrig bleibt.
+ */
+export function validateSelector(raw: unknown): GuideSelector | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: GuideSelector = {};
+  const css = cleanSelectorString(r.css, SEL_CSS_MAX);
+  const text = cleanSelectorString(r.text, SEL_TEXT_MAX);
+  const role = cleanSelectorString(r.role, SEL_ROLE_MAX);
+  if (css) out.css = css;
+  if (text) out.text = text;
+  if (role) out.role = role;
+  return out.css || out.text || out.role ? out : undefined;
+}
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -86,6 +128,9 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       typeof s.title === "string" ? s.title.replace(/\s+/g, " ").trim().slice(0, 200) : "";
     const url = typeof s.url === "string" ? s.url.trim().slice(0, 500) : "";
 
+    // selector (Welle 24): optional, tolerant gesäubert (nie werfend). Fehlt/kaputt -> weg.
+    const selector = validateSelector(s.selector);
+
     out.push({
       path,
       label,
@@ -95,6 +140,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       title,
       w: Math.round(s.w),
       h: Math.round(s.h),
+      ...(selector ? { selector } : {}),
     });
   }
   return out;
