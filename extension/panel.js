@@ -2886,7 +2886,10 @@ const exec = {
   finished: false, // Doppel-finish-Schutz
 };
 
-const EXEC_STEP_TIMEOUT = 9000; // ms: 5s Selektor-Suche + Animation + Puffer
+// ms: 5s Selektor-Suche + Animation + bis zu 8s Hydration-Warten vor Submits
+// (Kaltstart-Sonde, 06.07. abends) + Puffer. Vorher 9000 — die Sonde haette sonst
+// als falscher Miss geendet, waehrend das Content-Script noch korrekt wartete.
+const EXEC_STEP_TIMEOUT = 20000;
 const EXEC_AUTO_GAP = 700; // ms Pause zwischen Schritten in der Vollautomatik
 const EXEC_NAV_TIMEOUT = 15000; // ms auf „complete" nach einer Navigation warten
 // Beruhigungspause NACH „complete" (Hotfix 06.07., Richards Login-Lauf): „complete" heißt

@@ -2122,6 +2122,42 @@
   }
 
   // Ziel gefunden → in Sicht scrollen, Maus hinführen, Puls, Aktion, Ergebnis melden.
+  // Vor einem Formular-Submit auf React-Seiten warten, bis die Hydration durch ist
+  // (Hotfix 06.07. abends, Vercel-KALTSTART schlug jede feste Pause): Formular per
+  // data-Attribut markieren (Attribute sehen beide Welten), dann via background eine
+  // MAIN-World-Sonde pollen. „Kein React" -> sofort weiter (native Submission ist dort
+  // korrekt). Obergrenze 8s -> danach Status quo (nicht ewig blockieren).
+  async function execWaitHydration(formEl) {
+    const MAX = 8000;
+    const TICK = 250;
+    try {
+      formEl.setAttribute("data-steply-hydration-probe", "1");
+    } catch (err) {
+      return;
+    }
+    const t0 = Date.now();
+    try {
+      while (Date.now() - t0 < MAX) {
+        let res = null;
+        try {
+          res = await chrome.runtime.sendMessage({ type: "steply-probe-hydration" });
+        } catch (err) {
+          return; // Sonde nicht verfuegbar -> nicht blockieren
+        }
+        if (!res || res.ok === false) return;
+        if (res.hydrated) return;
+        if (!res.isReact) return;
+        await execWait(TICK);
+      }
+    } finally {
+      try {
+        formEl.removeAttribute("data-steply-hydration-probe");
+      } catch (err) {
+        /* egal */
+      }
+    }
+  }
+
   async function execPerform(el, step, token) {
     execEnsureCursor();
     try {
@@ -2138,6 +2174,11 @@
     execShowFrame(rect);
     await execAnimateCursorTo(rect.cx, rect.cy);
     await execWait(EXEC_CURSOR_DWELL_MS); // kurz auf dem Ziel verweilen (Welle 37, Fix 3), dann handeln
+    // Submit-Klicks erst NACH der React-Hydration ausloesen (sonst nativer Voll-Reload).
+    if (step && step.action === "click") {
+      const form = execFormForSubmit(el);
+      if (form) await execWaitHydration(form);
+    }
     execClickPulse(rect.cx, rect.cy); // „Klick-Puls" beim Ausführen
     let result;
     try {

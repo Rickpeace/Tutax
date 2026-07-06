@@ -120,6 +120,45 @@ if (chrome.runtime.onConnect) {
   });
 }
 
+// Hydration-Sonde (Hotfix 06.07. abends, Vercel-Kaltstart): Das Content-Script (isolierte
+// Welt) kann NICHT sehen, ob React die Seite schon hydratisiert hat — die __react*-Marker
+// auf DOM-Knoten leben in der Hauptwelt. Es markiert deshalb das Ziel-Formular mit einem
+// data-Attribut (Attribute teilen sich beide Welten) und bittet uns um eine MAIN-World-
+// Sonde. Feuert ein Submit vor der Hydration, uebernimmt die NATIVE Formular-Submission
+// (Voll-Reload) statt der React-Form-Action — der Login-Haenger. isReact unterscheidet
+// „React-Seite, noch nicht bereit" (warten) von „gar kein React" (native Submission ist
+// dort das korrekte Verhalten -> sofort weiter).
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "steply-probe-hydration") return false;
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId == null || !chrome.scripting || !chrome.scripting.executeScript) {
+    sendResponse({ ok: false });
+    return true;
+  }
+  chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        const el = document.querySelector("[data-steply-hydration-probe]");
+        const hydrated =
+          !!el && Object.keys(el).some((k) => k.indexOf("__react") === 0);
+        const isReact =
+          hydrated ||
+          !!(window.__next_f || window.next || document.querySelector("[data-reactroot]"));
+        return { hydrated, isReact };
+      },
+    })
+    .then(
+      (results) => {
+        const r = results && results[0] ? results[0].result : null;
+        sendResponse({ ok: true, hydrated: !!(r && r.hydrated), isReact: !!(r && r.isReact) });
+      },
+      () => sendResponse({ ok: false })
+    );
+  return true; // Antwort kommt asynchron
+});
+
 // Screenshot-Dienst fuer die Seitenleiste: chrome.tabs.captureVisibleTab scheitert
 // direkt im Panel-Kontext an einem Chromium-Bug (crbug.com/40916430 - activeTab
 // greift dort nicht), im Service Worker funktioniert derselbe Aufruf. Das Panel
