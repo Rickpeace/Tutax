@@ -143,9 +143,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const el = document.querySelector("[data-steply-hydration-probe]");
         const hydrated =
           !!el && Object.keys(el).some((k) => k.indexOf("__react") === 0);
+        // isReact = „diese Seite wird von React/Next gefahren, warte auf die Hydration".
+        // WICHTIG (Welle 38, Kaltstart-Restlücke): NIE eine Next-Seite als „kein React"
+        // fehlklassifizieren, sonst feuert die Sonde einen nativen Submit VOR der Hydration
+        // (Voll-Reload). `script[src*="/_next/"]` steht schon ~50 ms nach Dokumentstart im
+        // (geteilten) DOM — weit vor `window.__next_f` (~1 s) und `window.next` (~2,5 s);
+        // `[data-reactroot]` gibt es in React 19 gar nicht mehr. Das früheste, robusteste
+        // Next-Signal deckt damit das gesamte Vor-Hydration-Fenster ab.
         const isReact =
           hydrated ||
-          !!(window.__next_f || window.next || document.querySelector("[data-reactroot]"));
+          !!(
+            window.__next_f ||
+            window.next ||
+            document.querySelector('script[src*="/_next/"]') ||
+            document.querySelector("[data-reactroot]")
+          );
         return { hydrated, isReact };
       },
     })

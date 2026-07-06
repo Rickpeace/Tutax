@@ -2900,6 +2900,11 @@ const EXEC_NAV_TIMEOUT = 15000; // ms auf „complete" nach einer Navigation war
 // Richards erster Lauf schlug weiterhin fehl, die folgenden nicht — Vercel-KALTSTART
 // macht die Hydration beim allerersten Aufruf spürbar langsamer.
 const EXEC_NAV_SETTLE_MS = 2000;
+// Submit-Ergebnis-Kontrolle (Welle 38, Ehrlichkeits-Netz). EIGENES Budget: läuft im Panel
+// NACH dem content-Ergebnis, ist also NICHT Teil des content-seitigen EXEC_STEP_TIMEOUT
+// (der deckt Sonde+Aktion ab). 10s reichen für Reload-Zyklus / React-Client-Navigation.
+const EXEC_VERIFY_TIMEOUT = 10000;
+const EXEC_VERIFY_POLL = 500;
 
 // ── Werte-Handling (lokal) ────────────────────────────────────────────────────
 // chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
@@ -3337,6 +3342,70 @@ function execWaitTabComplete(tabId) {
   });
 }
 
+// ── Lauf: Submit-Ergebnis-Kontrolle (Welle 38, Ehrlichkeits-Netz) ──────────────
+// Nach einem Formular-Submit (content meldet submitted:true) prüfen, ob die Übermittlung
+// wirklich durchkam — statt blind „ok" weiterzuschalten, während die Anmeldung real nicht
+// durchkam (Richards Kaltstart-Login: die Seite lädt voll neu, landet wieder auf /login).
+// EIGENES Budget (EXEC_VERIFY_TIMEOUT), läuft NACH dem content-Ergebnis.
+//   • Tab verlässt den Formular-Pfad (Pfadwechsel, z. B. → /app) → "ok".
+//   • Voll-Reload (loading→complete) zurück auf DENSELBEN Pfad → "bounced" (fehlgeschlagen).
+// KEIN Auto-Retry (Sicherheit: kein Doppel-Submit von Logins) — der Nutzer entscheidet.
+// Reine Klassifikation via SteplyExecPlan.submitOutcome (getestet in test-exec-plan).
+function execVerifySubmit(prevUrl) {
+  return new Promise((resolve) => {
+    if (typeof SteplyExecPlan === "undefined" || exec.tabId == null) {
+      resolve("ok");
+      return;
+    }
+    const tabId = exec.tabId;
+    const events = [];
+    let done = false;
+    const finish = (outcome) => {
+      if (done) return;
+      done = true;
+      try {
+        chrome.tabs.onUpdated.removeListener(onUpd);
+      } catch (err) {
+        /* egal */
+      }
+      clearInterval(poll);
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+    const classify = () => {
+      const o = SteplyExecPlan.submitOutcome(prevUrl, events);
+      if (o === "left") finish("ok");
+      else if (o === "bounced") finish("bounced");
+      // "pending" → weiter beobachten
+    };
+    const onUpd = (id, changeInfo) => {
+      if (id !== tabId || !changeInfo) return;
+      if (changeInfo.status) events.push({ status: changeInfo.status });
+      if (changeInfo.url) events.push({ url: changeInfo.url });
+      classify();
+    };
+    let poll;
+    try {
+      chrome.tabs.onUpdated.addListener(onUpd);
+    } catch (err) {
+      resolve("ok");
+      return;
+    }
+    poll = setInterval(async () => {
+      const u = await tabUrlById(tabId);
+      if (u) {
+        events.push({ url: u });
+        classify();
+      }
+    }, EXEC_VERIFY_POLL);
+    const timer = setTimeout(() => {
+      // Fenster aus: nur bei bewiesenem Voll-Reload-auf-selben-Pfad blockieren, sonst
+      // NICHT (advance) — das Netz fängt gezielt den Reload-Bounce, keine Fehlalarme.
+      finish(SteplyExecPlan.submitOutcome(prevUrl, events) === "bounced" ? "bounced" : "ok");
+    }, EXEC_VERIFY_TIMEOUT);
+  });
+}
+
 async function execNavigateIfNeeded(planStep) {
   const curUrl = await tabUrlById(exec.tabId);
   if (typeof SteplyExecPlan === "undefined") return;
@@ -3548,10 +3617,22 @@ async function execExecuteCurrent() {
   await execNavigateIfNeeded(planStep);
   if (!exec.running) return; // mitten in der Navigation abgebrochen
 
+  // Tab-URL VOR dem Submit merken — Grundlage der Ergebnis-Kontrolle (Welle 38).
+  const preSubmitUrl = await tabUrlById(exec.tabId);
   const res = await execSendStep(planStep);
   if (!exec.running) return; // während des Wartens abgebrochen
 
   if (res && res.ok) {
+    // War die Aktion ein Formular-Submit? Dann VOR dem Weiterschalten verifizieren, dass die
+    // Übermittlung wirklich durchkam (nicht nur ein Voll-Reload auf denselben Pfad).
+    if (res.submitted) {
+      const outcome = await execVerifySubmit(preSubmitUrl);
+      if (!exec.running) return; // während der Verifikation abgebrochen
+      if (outcome === "bounced") {
+        execEnterMiss("submit-bounced");
+        return;
+      }
+    }
     execAdvance();
   } else {
     execEnterMiss(res ? res.reason : "unbekannt");
@@ -3718,10 +3799,17 @@ function execRenderRun() {
 
   // Miss-Box nur im Miss-Zustand.
   if (exec.phase === "miss") {
-    const reason = exec.lastMissReason ? " (" + exec.lastMissReason + ")" : "";
-    els.autoMissText.textContent =
-      "Schritt " + num + ": Stelle nicht gefunden" + reason +
-      " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
+    if (exec.lastMissReason === "submit-bounced") {
+      // Ehrlichkeits-Netz (Welle 38): die Übermittlung kam nicht durch, die Seite lud neu.
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Die Anmeldung/Übermittlung kam nicht durch — die Seite hat neu" +
+        " geladen. Bitte selbst prüfen und „Weiter“ drücken oder abbrechen.";
+    } else {
+      const reason = exec.lastMissReason ? " (" + exec.lastMissReason + ")" : "";
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Stelle nicht gefunden" + reason +
+        " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
+    }
     execRenderMissImage(planStep);
     els.autoMissBox.hidden = false;
   } else {
@@ -3792,7 +3880,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (exec.tabId != null && sender && sender.tab && sender.tab.id !== exec.tabId) return;
   if (!execPending) return;
   if (msg.token != null && execPending.token !== msg.token) return;
-  execPending.resolve({ ok: !!msg.ok, reason: typeof msg.reason === "string" ? msg.reason : "" });
+  execPending.resolve({
+    ok: !!msg.ok,
+    reason: typeof msg.reason === "string" ? msg.reason : "",
+    submitted: !!msg.submitted,
+  });
 });
 
 // ============================================================================
