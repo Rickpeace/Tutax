@@ -15,7 +15,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
-import { setTutorialTitle, countUnreviewedBlurSteps } from "@/app/app/tutorials/[id]/actions";
+import {
+  setTutorialTitle,
+  setTutorialDescription,
+  countUnreviewedBlurSteps,
+} from "@/app/app/tutorials/[id]/actions";
 import { translateTutorial } from "@/app/app/actions-translate";
 import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/app/actions";
 import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
@@ -24,6 +28,7 @@ import type { TutorialVisibility } from "@/lib/types";
 export function TutorialHeader({
   tutorialId,
   initialTitle,
+  initialDescription,
   published: initialPublished,
   visibility: initialVisibility,
   inLernen: initialInLernen,
@@ -35,6 +40,7 @@ export function TutorialHeader({
 }: {
   tutorialId: string;
   initialTitle: string;
+  initialDescription: string;
   published: boolean;
   visibility: TutorialVisibility;
   inLernen: boolean;
@@ -47,6 +53,11 @@ export function TutorialHeader({
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
   const [editing, setEditing] = useState(false);
+  // Kurzbeschreibung (Untertitel auf der Hilfe-Seiten-Karte) — war bis 06.07. nirgends
+  // editierbar, obwohl /h sie anzeigt.
+  const [desc, setDesc] = useState(initialDescription);
+  const [savedDesc, setSavedDesc] = useState(initialDescription);
+  const [descEditing, setDescEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
   // Zwei Häkchen (Welle 20): „Auf der Hilfe-Seite" ⇔ public; „Im Lern-Bereich".
@@ -72,6 +83,20 @@ export function TutorialHeader({
       toast.error(e instanceof Error ? e.message : "Übersetzen fehlgeschlagen");
     } finally {
       setTrBusy(false);
+    }
+  }
+
+  async function saveDescription() {
+    const d = desc.replace(/\s+/g, " ").trim();
+    if (d === savedDesc) return;
+    try {
+      await setTutorialDescription(tutorialId, d);
+      setSavedDesc(d);
+      setDesc(d);
+      toast.success(d ? "Beschreibung gespeichert" : "Beschreibung entfernt");
+    } catch {
+      setDesc(savedDesc);
+      toast.error("Beschreibung konnte nicht gespeichert werden");
     }
   }
 
@@ -224,6 +249,49 @@ export function TutorialHeader({
                 <Pencil className="size-3.5" />
               </Button>
             </div>
+          )}
+          {/* Kurzbeschreibung: erscheint als Untertitel auf der Hilfe-Seiten-Karte. */}
+          {descEditing ? (
+            <input
+              autoFocus
+              value={desc}
+              maxLength={160}
+              onChange={(e) => setDesc(e.target.value)}
+              onBlur={() => {
+                saveDescription();
+                setDescEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") {
+                  setDesc(savedDesc);
+                  setDescEditing(false);
+                }
+              }}
+              placeholder="Kurzbeschreibung — erscheint unter dem Titel auf der Hilfe-Seite"
+              aria-label="Kurzbeschreibung"
+              className="mt-1 w-full rounded-md border border-ring bg-card px-2 py-0.5 text-sm text-ink-2 outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setDesc(savedDesc);
+                setDescEditing(true);
+              }}
+              className="group mt-0.5 flex max-w-full items-start gap-1.5 text-left"
+              title="Kurzbeschreibung bearbeiten"
+            >
+              <span
+                className={
+                  "min-w-0 break-words text-sm " +
+                  (savedDesc ? "text-ink-2" : "text-muted-foreground italic")
+                }
+              >
+                {savedDesc || "Kurzbeschreibung ergänzen (erscheint auf der Hilfe-Seite)"}
+              </span>
+              <Pencil className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button

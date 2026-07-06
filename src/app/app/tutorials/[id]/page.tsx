@@ -72,6 +72,7 @@ export default async function EditorPage({
       <TutorialHeader
         tutorialId={id}
         initialTitle={tutorial.title}
+        initialDescription={tutorial.description ?? ""}
         published={tutorial.status === "published"}
         visibility={tutorial.visibility}
         inLernen={tutorial.in_lernen}
