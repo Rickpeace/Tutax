@@ -22,6 +22,11 @@ Letztes Update: 2026-07-06 (LIVE-FÜHRUNG + Seiten-Erkennung, s. §7h; davor War
 > blur-Aufnahme, weiter bei Enter/blur-mit-Wert), Overlay mit Hingucker-Zoom+Glow,
 > Führen-Liste „Diese Seite + Live" mit Kategorien-Gruppen, Banner nur im Anker-
 > Modus, Icon-Badge (nur published), „Bring mich hin". Details REVIEW.md.
+> **Danach am 06.07.**: Wellen 33 (Führungs-Bugfixes, v2.7.x-Hotfix-Serie nach
+> Richards Live-Tests), 34 (Steply-Selbst-Doku NEU + führbar, /h/steply, 9×;
+> inkl. Template-Incident + Wiederherstellung + deleteTutorial-Schutzriegel,
+> s. REVIEW.md) und 35 (**„Steply lernen"**: öffentliche Doku-API `/api/guide/
+> steply*` + Extension-Sektion für ALLE Kunden, auch ohne Pairing — v2.8.0).
 
 ## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — LIVE (Commit 172717b)
 > Komplettes visuelles Redesign nach dem High-Fidelity-Handoff (Nunito, Creme #FDF9F3,

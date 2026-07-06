@@ -295,6 +295,21 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 35 + Fable (06.07., v2.8.0):** 🎓 **„Steply lernen" für ALLE Kunden** —
+öffentliche Doku-API (`/api/guide/steply` Liste + `/[slug]` Detail: hart aufs
+Steply-Doku-Konto verdrahtet, NUR published+public, publicImageUrl statt Signatur,
+kein Auth, 'use cache' hours + Tags; Tiptap→HTML in geteiltes `lib/guide-payload.ts`,
+Recorder-Detail-Route nutzt es mit). Extension: Start-Karte + Führen-Gruppe
+„🎓 Steply lernen" (auch OHNE Pairing — Onboarding direkt nach Installation),
+Doku-Touren im „Für diese Seite"-Matching + Icon-Badge (id-Dedupe bei
+Steply-Pairing), guide-events nur mit Token, kein „Bring mich hin" bei Doku-Touren.
+Fable-Fix beim Merge: DEFAULT_APP_URL/BADGE_DEFAULT_APP_URL zeigten auf
+app.steply.de (403, Domain nicht verdrahtet) → tutax-ivory.vercel.app, Kommentar
+für den Domain-Umzug. **Doku-Markierungen nachgeschärft:** 8 Hand-Markierungen
+(patch-steply-highlights.mjs, idempotent), 13 bewusst `highlight:null`
+(Extension-Panel/Overlay nicht im Screenshot) — 30→38 von 51 markiert. Tests grün:
+test-guide-steply-live (24, neu; Entwurf taucht NIE auf), recorder/resolve/
+site-match-Regression, Build.
 **Opus Welle 34 + Fable (06.07.):** 📚 **Steply-Selbst-Doku KOMPLETT NEU + FÜHRBAR**
 (/h/steply): 9 Anleitungen/51 Schritte, frische Warm-Design-Screenshots (Playwright-
 Pipeline v3), erstmals mit `selector`/`page_url`/`site_domains` je Schritt → die Doku

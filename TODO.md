@@ -8,10 +8,12 @@
   Die 6 DATEV-Vorlagen sind wiederhergestellt, aber die Aktivierungs-Häkchen
   (account_templates) waren mit weg — in RichardTax/Muster GmbH einmal
   Dashboard → „Standard-Anleitungen von Tutax" → gewünschte anhaken.
-- [ ] **Steply-Doku geführt testen**: Extension mit dem STEPLY-Doku-Konto pairen
-  (dessen Einstellungen → Einbetten) → auf tutax-ivory.vercel.app/app Panel
-  öffnen → „Für diese Seite" listet die 9 neuen Doku-Anleitungen → eine Tour
-  live führen lassen.
+- [ ] **Steply-Doku geführt testen** (seit v2.8.0 OHNE Steply-Pairing!): Extension
+  neu laden → v2.8.0 → Start-Screen zeigt Karte „🎓 Steply lernen" (auch
+  unverbunden) → Tour starten; auf tutax-ivory.vercel.app zeigen zusätzlich
+  „Für diese Seite" + Icon-Badge die 9 Doku-Touren. Kern-Dogfooding: eine Tour
+  komplett live führen lassen (8 neue Hand-Markierungen sitzen? 13 Schritte
+  sind bewusst ohne Markierung — reine Hinweis-/Panel-Schritte).
 
 - [ ] **`deploy.sh` ausführen + Test-Video** — schaltet auf Hetzner frei: Live-Aufbau,
   Klick-Modus, Szenen-Erkennung, Fortschritt, Frame-Picker-Timestamps, alle Fixes.
