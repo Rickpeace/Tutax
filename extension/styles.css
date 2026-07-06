@@ -611,3 +611,99 @@ body {
 .target-clear:hover {
   text-decoration: underline;
 }
+
+/* ===== „Fuer diese Seite" (Welle 31c): passende Tutorials zur offenen Seite ===== */
+.site-match {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 10px 8px;
+  margin: 0 0 14px;
+  background: var(--cream);
+}
+
+.site-match-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.site-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Treffer-Zeile: Titel + Schritt-Zahl + Status-Chip; klickbar. */
+.site-match-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.site-match-item:hover {
+  border-color: var(--brand);
+  background: #fdf3ec;
+}
+
+.site-match-item .sm-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-match-item .sm-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.site-match-item .sm-chip {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+/* Status-Chips wie in der App: Veroeffentlicht = Teal-Pastell, Entwurf = Amber-Pastell. */
+.site-match-item .sm-chip-pub {
+  background: #dcf3ef;
+  color: var(--ok);
+}
+
+.site-match-item .sm-chip-draft {
+  background: #fdeecd;
+  color: #c07d16;
+}
+
+/* Dezenter Leer-Zustand: „... jetzt aufnehmen?" -> springt zur Aufnehmen-Karte. */
+.site-match-empty {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.site-match-empty:hover {
+  border-color: var(--brand);
+  color: var(--ink);
+}

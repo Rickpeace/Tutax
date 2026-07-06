@@ -428,6 +428,8 @@ function showStart() {
   updateInterruptedHint();
   // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt.
   if (hasToken && !accountName) fetchAccountName();
+  // „Fuer diese Seite" (Welle 31c) auffrischen (nutzt gecachte Liste; matcht lokal).
+  refreshSiteMatch();
 }
 
 // ============================================================================
@@ -1263,6 +1265,185 @@ async function uploadGuide() {
 }
 
 // ============================================================================
+// „FUER DIESE SEITE" (Welle 31c) — passende Tutorials zur gerade offenen Seite.
+//
+// DATENSCHUTZ (PFLICHT): Die besuchte URL verlaesst NIEMALS den Browser. Wir holen die
+// Tutorial-Liste (inkl. site_domains) EINMAL vom Server und cachen sie ~5 min im Speicher;
+// das Abgleichen der aktuellen Tab-URL passiert danach REIN LOKAL (site-match.js). Es geht
+// KEIN Request pro Seitenwechsel raus — die Tab-Listener unten matchen nur gegen die
+// gecachte Liste. So sieht Steply nie, welche Seiten der Nutzer besucht.
+//
+// Die Tutorial-Route (GET /api/recorder/tutorials) baut PARALLEL Welle 31a. Fehlt sie noch
+// (404) oder scheitert der Fetch, bleibt die Sektion einfach still ausgeblendet.
+// ============================================================================
+
+let siteTutorials = null; // gecachte Tutorial-Liste (oder null = nicht verfuegbar)
+let siteMatchFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
+let siteMatchOk = false; // war der letzte Fetch erfolgreich?
+const SITE_MATCH_TTL = 5 * 60 * 1000; // Liste ~5 min im Speicher cachen
+
+// Tutorial-Liste holen (Bearer-Token), ~5 min gecacht. Bei 404/Fehler: null (Sektion aus).
+async function loadSiteTutorials() {
+  if (!cfg.token) return null;
+  if (Date.now() - siteMatchFetchedAt < SITE_MATCH_TTL) {
+    return siteMatchOk ? siteTutorials : null; // Cache (auch „unverfuegbar" wird gecacht)
+  }
+  siteMatchFetchedAt = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(appBase() + "/api/recorder/tutorials", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + cfg.token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      siteMatchOk = false;
+      siteTutorials = null;
+      return null;
+    }
+    const body = await res.json().catch(() => ({}));
+    siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
+    siteMatchOk = true;
+    return siteTutorials;
+  } catch (err) {
+    siteMatchOk = false;
+    siteTutorials = null;
+    return null;
+  }
+}
+
+// URL des aktiven Tabs im Panel-Fenster (nur LOKAL genutzt, nie gesendet).
+async function currentActiveUrl() {
+  try {
+    const q =
+      panelWindowId == null
+        ? { active: true, currentWindow: true }
+        : { active: true, windowId: panelWindowId };
+    const tabs = await chrome.tabs.query(q);
+    const tab = tabs && tabs[0];
+    return tab && typeof tab.url === "string" ? tab.url : "";
+  } catch (err) {
+    return "";
+  }
+}
+
+// Ein Tutorial oeffnen: bevorzugt die Live-Fuehrung (Welle 31a, window.SteplyGuide.start),
+// sonst die Vorschau (funktioniert fuer Entwurf UND veroeffentlicht, eingeloggter Autor).
+function openMatchedTutorial(id) {
+  if (!id) return;
+  if (window.SteplyGuide && typeof window.SteplyGuide.start === "function") {
+    try {
+      window.SteplyGuide.start(id);
+      return;
+    } catch (err) {
+      /* Fallback: Link oeffnen */
+    }
+  }
+  chrome.tabs.create({ url: appBase() + "/app/preview/" + id, active: true });
+}
+
+// Treffer (oder Leer-Zustand) rendern.
+function renderSiteMatch(matches) {
+  const listEl = document.getElementById("siteMatchList");
+  if (!listEl) return;
+  listEl.textContent = "";
+
+  if (!matches.length) {
+    // Dezenter Leer-Zustand: Sprung zur Aufnehmen-Karte (KEIN Autostart der Aufnahme).
+    const empty = document.createElement("button");
+    empty.type = "button";
+    empty.className = "site-match-empty";
+    empty.textContent =
+      "Für diese Seite gibt es noch keine Anleitung — jetzt aufnehmen?";
+    empty.addEventListener("click", () => {
+      try {
+        els.cardGuide.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch (err) {
+        /* egal */
+      }
+      try {
+        els.cardGuide.focus({ preventScroll: true });
+      } catch (err) {
+        /* egal */
+      }
+    });
+    listEl.appendChild(empty);
+    return;
+  }
+
+  for (const t of matches) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "site-match-item";
+
+    const title = document.createElement("span");
+    title.className = "sm-title";
+    title.textContent = t.title || "Ohne Titel";
+
+    const meta = document.createElement("span");
+    meta.className = "sm-meta";
+    const n = Number(t.stepCount) || 0;
+    meta.textContent = n === 1 ? "1 Schritt" : n + " Schritte";
+
+    const chip = document.createElement("span");
+    const published = t.status === "published";
+    chip.className = "sm-chip " + (published ? "sm-chip-pub" : "sm-chip-draft");
+    chip.textContent = published ? "Veröffentlicht" : "Entwurf";
+
+    row.appendChild(title);
+    row.appendChild(meta);
+    row.appendChild(chip);
+    row.addEventListener("click", () => openMatchedTutorial(t.id));
+    listEl.appendChild(row);
+  }
+}
+
+// Sektion neu bewerten: nur auf dem Start-Screen + verbunden + auf einer normalen Website
+// mit verfuegbarer Route. Sonst still ausblenden. Matching REIN LOKAL (site-match.js).
+async function refreshSiteMatch() {
+  const box = document.getElementById("siteMatch");
+  if (!box) return;
+  if (typeof SteplySiteMatch === "undefined") {
+    box.hidden = true;
+    return;
+  }
+  if (!hasToken || els.start.hidden) {
+    box.hidden = true;
+    return;
+  }
+  const list = await loadSiteTutorials();
+  if (!list) {
+    box.hidden = true; // Route fehlt/Fehler -> kein Kaputt-Zustand
+    return;
+  }
+  const url = await currentActiveUrl();
+  // DATENSCHUTZ: `url` bleibt hier lokal — nur der Abgleich gegen die gecachten
+  // site_domains passiert im Browser, es geht nichts nach draussen.
+  const host = SteplySiteMatch.hostnameOf(url);
+  if (!host) {
+    box.hidden = true; // keine normale Website (chrome://, about:, PDF-Viewer …)
+    return;
+  }
+  renderSiteMatch(SteplySiteMatch.matchTutorials(url, list));
+  box.hidden = false;
+}
+
+// Aktiven Tab beobachten (Tab-Wechsel + URL-Aenderung). KEIN Netz-Request pro Wechsel —
+// refreshSiteMatch matcht nur gegen die gecachte Liste (Datenschutz, s. o.).
+try {
+  chrome.tabs.onActivated.addListener(() => {
+    refreshSiteMatch();
+  });
+  chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+    if (changeInfo && changeInfo.url) refreshSiteMatch();
+  });
+} catch (err) {
+  /* tabs-API nicht verfuegbar -> Sektion bleibt still */
+}
+
+// ============================================================================
 // NACHRICHTEN-EMPFANG (aus content.js, jeder Tab des Panel-Fensters)
 // ============================================================================
 
@@ -1307,6 +1488,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   loadConfig().then(() => {
     accountName = ""; // neu ermitteln (Token koennte auf ein anderes Konto zeigen)
     fetchAccountName();
+    siteMatchFetchedAt = 0; // „Fuer diese Seite"-Cache verwerfen (Token wechselte evtl. Konto)
     if (recording) return; // laufende Aufnahme nie unterbrechen
     // Nur wenn wir gerade auf Connect oder Start stehen, die Auswahl (neu) zeigen.
     if (!els.connect.hidden || !els.start.hidden) showStart();
