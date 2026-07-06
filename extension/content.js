@@ -1920,13 +1920,17 @@
     execFrameEl = f;
   }
 
-  function execSendResult(token, ok, reason) {
+  // submitted (Welle 38, additiv): true, wenn die Aktion eine Formular-Submission war
+  // (requestSubmit auf einem <form>). Das Panel verifiziert danach, ob die Übermittlung
+  // wirklich durchkam (URL-Wechsel) oder die Seite nur neu lud (submit-bounced).
+  function execSendResult(token, ok, reason, submitted) {
     try {
       chrome.runtime.sendMessage({
         type: "steply-exec-result",
         token: token,
         ok: !!ok,
         reason: ok ? "" : reason || "unbekannt",
+        submitted: !!submitted,
       });
     } catch (err) {
       /* Panel evtl. geschlossen — egal */
@@ -2128,25 +2132,51 @@
   // MAIN-World-Sonde pollen. „Kein React" -> sofort weiter (native Submission ist dort
   // korrekt). Obergrenze 8s -> danach Status quo (nicht ewig blockieren).
   async function execWaitHydration(formEl) {
-    const MAX = 8000;
+    // Deckel 12s statt 8s (Welle 38): ein echter Kaltstart hydratisiert messbar langsamer
+    // (gemessen 9,6 s bei 16x- und 14,1 s bei 20x-CPU-Drossel) — 8 s fiel VOR der Hydration
+    // offen in einen nativen Submit (Voll-Reload) durch. 12 s + der Vorlauf (Scroll/Cursor
+    // ~1,2 s) bleibt unter dem Panel-EXEC_STEP_TIMEOUT (20 s).
+    const MAX = 12000;
     const TICK = 250;
     try {
       formEl.setAttribute("data-steply-hydration-probe", "1");
     } catch (err) {
       return;
     }
+    // Geteiltes DOM-Signal: ist das ÜBERHAUPT eine React/Next-Seite? Die isolierte Welt sieht
+    // Skript-Tags/Attribute — `script[src*="/_next/"]` steht ~50 ms nach Dokumentstart, lange
+    // vor der Hydration; `[data-reactroot]` deckt Nicht-Next-React ab. Damit fällt die Sonde
+    // NICHT offen in einen nativen Submit durch, wenn (a) die MAIN-World-Sonde kurz nicht
+    // verfügbar ist (MV3-Service-Worker kalt nach Browser-Neustart → ok:false) oder (b) isReact
+    // in einem frühen Fenster false meldet. Auf einer Nicht-Framework-Seite bleibt das alte
+    // „nicht blockieren"-Verhalten (dort ist die native Submission korrekt).
+    let looksFramework = false;
+    try {
+      looksFramework = !!document.querySelector('script[src*="/_next/"], [data-reactroot]');
+    } catch (err) {
+      looksFramework = false;
+    }
     const t0 = Date.now();
     try {
       while (Date.now() - t0 < MAX) {
         let res = null;
+        let probeFailed = false;
         try {
           res = await chrome.runtime.sendMessage({ type: "steply-probe-hydration" });
         } catch (err) {
-          return; // Sonde nicht verfuegbar -> nicht blockieren
+          probeFailed = true;
         }
-        if (!res || res.ok === false) return;
+        if (probeFailed || !res || res.ok === false) {
+          // Sonde nicht verfügbar. Auf einer erkennbaren Framework-Seite NICHT offen
+          // durchfallen (sonst nativer Voll-Reload) — weiter pollen, bis sie sich meldet
+          // oder der Deckel greift. Sonst (kein Framework) wie bisher sofort weiter.
+          if (!looksFramework) return;
+          await execWait(TICK);
+          continue;
+        }
         if (res.hydrated) return;
-        if (!res.isReact) return;
+        // „kein React" nur glauben, wenn AUCH das geteilte DOM kein Framework zeigt.
+        if (!res.isReact && !looksFramework) return;
         await execWait(TICK);
       }
     } finally {
@@ -2175,9 +2205,13 @@
     await execAnimateCursorTo(rect.cx, rect.cy);
     await execWait(EXEC_CURSOR_DWELL_MS); // kurz auf dem Ziel verweilen (Welle 37, Fix 3), dann handeln
     // Submit-Klicks erst NACH der React-Hydration ausloesen (sonst nativer Voll-Reload).
+    let wasSubmit = false;
     if (step && step.action === "click") {
       const form = execFormForSubmit(el);
-      if (form) await execWaitHydration(form);
+      if (form) {
+        wasSubmit = true;
+        await execWaitHydration(form);
+      }
     }
     execClickPulse(rect.cx, rect.cy); // „Klick-Puls" beim Ausführen
     let result;
@@ -2188,8 +2222,9 @@
     }
     // WICHTIG bei navigierenden Klicks: das Ergebnis SYNCHRON nach der Aktion senden — die
     // Nachricht ist dann beim Browser, bevor eine Navigation die Seite abbaut (Muster wie
-    // steply-guide-advance).
-    execSendResult(token, result && result.ok, result && result.reason);
+    // steply-guide-advance). submitted meldet dem Panel, dass es das Übermittlungs-Ergebnis
+    // prüfen soll (Ehrlichkeits-Netz, Welle 38).
+    execSendResult(token, result && result.ok, result && result.reason, wasSubmit);
     execScheduleTidy();
   }
 

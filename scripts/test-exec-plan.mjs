@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -105,5 +105,60 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(redactDetail("Automatisierung abgeschlossen") === "Automatisierung abgeschlossen", "redactDetail: normale Wörter bleiben");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail verifiziert.");
+// ══════════ submitOutcome / submitBounced (Welle 38, Ehrlichkeits-Netz) ══════════
+{
+  const LOGIN = "https://app.steply.de/login";
+  const ev = (...e) => e;
+
+  // Richards Kaltstart-Bounce: Voll-Reload (loading→complete) zurück auf /login (mit ?next).
+  const bounced = ev(
+    { status: "loading" },
+    { url: "https://app.steply.de/login?next=%2Fapp" },
+    { status: "complete" },
+  );
+  ok(submitOutcome(LOGIN, bounced) === "bounced", "submitOutcome: Voll-Reload auf selben Pfad → bounced");
+  ok(submitBounced(LOGIN, bounced) === true, "submitBounced: Bounce → true");
+
+  // Erfolg per React-Client-Navigation: Pfad wechselt zu /app, KEIN Reload-Zyklus.
+  const left = ev({ url: "https://app.steply.de/app" });
+  ok(submitOutcome(LOGIN, left) === "left", "submitOutcome: Pfadwechsel (Client-Nav) → left");
+  ok(submitBounced(LOGIN, left) === false, "submitBounced: Pfadwechsel → false");
+
+  // Erfolg per Voll-Reload, der aber auf einen NEUEN Pfad landet (nativer POST → /app): left.
+  const reloadAway = ev({ status: "loading" }, { url: "https://app.steply.de/app" }, { status: "complete" });
+  ok(submitOutcome(LOGIN, reloadAway) === "left", "submitOutcome: Reload auf ANDEREN Pfad → left (Erfolg schlägt Bounce)");
+
+  // Query/Hash-Wechsel allein ist KEIN Pfadwechsel (gleiche Seite) → kein „left".
+  const sameQuery = ev({ status: "loading" }, { url: "https://app.steply.de/login?x=1" }, { status: "complete" });
+  ok(submitOutcome(LOGIN, sameQuery) === "bounced", "submitOutcome: nur Query anders + Reload → bounced (selber Pfad)");
+
+  // Flüchtige Zwischen-URL zählt nicht — maßgeblich ist die ZULETZT bekannte URL.
+  const transient = ev(
+    { status: "loading" },
+    { url: "https://app.steply.de/app" },            // Zwischenschritt der Redirect-Kette
+    { url: "https://app.steply.de/login?next=%2Fapp" }, // finaler Bounce zurück
+    { status: "complete" },
+  );
+  ok(submitOutcome(LOGIN, transient) === "bounced", "submitOutcome: finale URL entscheidet (flüchtiges /app ignoriert) → bounced");
+
+  // Kein Reload, kein Pfadwechsel (z. B. inline-Fehler auf gleicher Seite) → pending (nicht blockieren).
+  ok(submitOutcome(LOGIN, ev()) === "pending", "submitOutcome: nichts passiert → pending");
+  ok(submitOutcome(LOGIN, ev({ status: "loading" })) === "pending", "submitOutcome: nur loading, kein complete → pending");
+  ok(submitBounced(LOGIN, ev()) === false, "submitBounced: pending → false (advance, kein Fehlalarm)");
+
+  // Lone „complete" ohne vorangehendes „loading" ist KEIN Reload-Zyklus.
+  ok(submitOutcome(LOGIN, ev({ status: "complete" })) === "pending", "submitOutcome: complete ohne loading → pending");
+
+  // Unbekannter Ausgangs-Pfad (leere prevUrl) → nie bounced (nichts beweisbar).
+  ok(submitOutcome("", bounced) === "pending", "submitOutcome: prevUrl unbekannt → pending (nie fälschlich bounced)");
+
+  // Anderer Host + Reload = Pfadwechsel → left.
+  const otherHost = ev({ status: "loading" }, { url: "https://elster.de/login" }, { status: "complete" });
+  ok(submitOutcome(LOGIN, otherHost) === "left", "submitOutcome: anderer Host → left");
+
+  // Robust gegen kaputte events.
+  ok(submitOutcome(LOGIN, null) === "pending", "submitOutcome: events null → pending");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome verifiziert.");
 process.exitCode = failed ? 1 : 0;

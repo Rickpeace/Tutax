@@ -125,10 +125,66 @@
     return s;
   }
 
+  // ── submitOutcome / submitBounced (Welle 38) ─────────────────────────────────
+  // Ehrlichkeits-Netz: Nach einem Formular-Submit (content meldet submitted:true) prüft das
+  // Panel, ob die Übermittlung wirklich durchkam — statt blind „ok" zu melden und weiter zu
+  // stapfen, während die Anmeldung real nicht durchkam (Richards Kaltstart-Login: die Seite
+  // lädt voll neu, landet wieder auf demselben Pfad). Diese REINE Logik klassifiziert die im
+  // Panel gesammelten Beobachtungen; kein DOM, kein Chrome, testbar.
+  //
+  //   prevUrl : Tab-URL im Moment des Submits.
+  //   events  : geordnete Beobachtungen im Prüf-Fenster, je Eintrag EINES von:
+  //             { url: "<aktuelle Tab-URL>" }            (aus tabs.onUpdated.url / Polling)
+  //             { status: "loading" | "complete" }       (aus tabs.onUpdated.status)
+  //   → "left"    : Tab hat den Formular-Pfad verlassen (Pfad gewechselt) = ERFOLG.
+  //   → "bounced" : Voll-Reload (loading→complete) und wieder auf DEMSELBEN Pfad = FEHLGESCHLAGEN.
+  //   → "pending" : (noch) keine Aussage — kein Pfadwechsel, kein Reload-Zyklus.
+  //
+  // Pfadvergleich = Host + Pfad (Query/Hash egal, wie needsNavigation): `/login` nach dem
+  // Bounce (URL `/login?next=%2Fapp`) zählt als DERSELBE Pfad wie das Ausgangs-`/login`.
+  // „left" schlägt „bounced": ein Pfadwechsel (auch via Voll-Reload, z. B. nativer POST →
+  // /app) ist Erfolg. Maßgeblich ist die ZULETZT bekannte URL (keine Fehlklassifikation
+  // durch eine flüchtige Zwischen-URL einer Redirect-Kette).
+  function pathKey(u) {
+    try {
+      var x = new URL(u);
+      return x.host.toLowerCase() + normPath(x.pathname);
+    } catch (e) {
+      return "";
+    }
+  }
+  function submitOutcome(prevUrl, events) {
+    var prevKey = pathKey(prevUrl);
+    var evs = Array.isArray(events) ? events : [];
+    // Zuletzt bekannte URL im Fenster (maßgeblich für den Pfadvergleich).
+    var lastUrl = prevUrl;
+    for (var i = 0; i < evs.length; i++) {
+      if (evs[i] && typeof evs[i].url === "string" && evs[i].url) lastUrl = evs[i].url;
+    }
+    var lastKey = pathKey(lastUrl);
+    // Ohne bekannten Ausgangs-Pfad können wir nichts beweisen → nie „bounced".
+    if (prevKey && lastKey && lastKey !== prevKey) return "left";
+    // Gleicher Pfad — kam ein VOLL-Reload (loading → danach complete)?
+    var sawLoading = false;
+    var sawComplete = false;
+    for (var j = 0; j < evs.length; j++) {
+      var s = evs[j] && evs[j].status;
+      if (s === "loading") sawLoading = true;
+      else if (s === "complete" && sawLoading) sawComplete = true;
+    }
+    if (prevKey && sawLoading && sawComplete) return "bounced";
+    return "pending";
+  }
+  function submitBounced(prevUrl, events) {
+    return submitOutcome(prevUrl, events) === "bounced";
+  }
+
   var api = {
     buildRunPlan: buildRunPlan,
     needsNavigation: needsNavigation,
     redactDetail: redactDetail,
+    submitOutcome: submitOutcome,
+    submitBounced: submitBounced,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).
