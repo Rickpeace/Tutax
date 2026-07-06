@@ -794,7 +794,7 @@ const GUIDE_QUEUE_CAP = 4; // max. wartende Schritte; bei Ueberlauf aeltesten ve
 const COALESCE_WINDOW = 300; // ms: Eingabe + direkt folgender Klick teilen sich EINEN Screenshot
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, selector, ts, blob, width, height, thumbUrl }
+let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, ts, blob, width, height, thumbUrl }
 let guideQueue = []; // FIFO: [{ step, tabId, windowId }] - wartende Schritte (Kappe GUIDE_QUEUE_CAP)
 let guideCapturing = false;
 let guideLastCaptureAt = 0;
@@ -1014,6 +1014,9 @@ function addGuideStep(src, img) {
     // selector (Welle 24): optionaler Vorbau, wird beim Upload mitgeschickt und serverseitig
     // streng validiert. Nur ein Objekt durchreichen (nie fremde Typen).
     selector: src.selector && typeof src.selector === "object" ? src.selector : null,
+    // sensitive (Welle 28): Rechtecke sensibler Felder (reine Geometrie) fuer die Auto-
+    // Schwaerzung. Nur ein Array durchreichen; der Server validiert streng und klemmt.
+    sensitive: Array.isArray(src.sensitive) ? src.sensitive : null,
     ts: src.ts || Date.now(),
     blob: img.blob,
     width: img.width,
@@ -1201,6 +1204,8 @@ async function uploadGuide() {
     };
     // selector nur mitschicken, wenn vorhanden (Abwaertskompatibilitaet: optionales Feld).
     if (s.selector) step.selector = s.selector;
+    // sensitive nur mitschicken, wenn vorhanden (additiv; alte Server ignorieren es).
+    if (Array.isArray(s.sensitive) && s.sensitive.length) step.sensitive = s.sensitive;
     return step;
   });
   // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.

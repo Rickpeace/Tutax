@@ -1,4 +1,16 @@
-# Steply Recorder (Browser-Extension, v2.3 — Side Panel)
+# Steply Recorder (Browser-Extension, v2.4 — Side Panel)
+
+> **v2.4 — Auto-Schwärzung sensibler Felder.** Bei der Sofort-Anleitung sammelt das
+> Content-Script pro Schritt zusätzlich die **Rechtecke sichtbarer sensibler Felder** ein
+> (`input[type=password]` immer; Text-Felder, deren Label/`aria-label`/`placeholder`/`name`/
+> `id` auf API-Key, secret, token, Passwort, IBAN, Kontonummer, Kreditkarte, CVV oder BIC
+> passt; sowie jedes Element mit dem Opt-in-Attribut **`data-steply-sensitive`**). Erfasst
+> wird **nur Geometrie** (normalisiert `0..1`, wie das Klick-Rechteck) — **niemals**
+> Feldinhalte. Der Server macht daraus je Feld einen **vorgeschlagenen „blur“-Highlight**
+> (`suggested:true`); der Autor sieht im Builder den Hinweis „Automatisch geschwärzt — bitte
+> prüfen" und wird vor dem Veröffentlichen gewarnt, falls noch ungeprüfte Schwärzungen offen
+> sind. Beim Veröffentlichen werden die Blurs (wie bisher) **in die Pixel gebrannt**. Details
+> unten unter „Auto-Schwärzung sensibler Felder (v2.4)".
 
 > **v2.3 — Aufnahme-Anker: in bestehende Anleitungen aufnehmen.** Bisher legte jede
 > Sofort-Anleitung immer ein **neues** Tutorial an. Jetzt kann die Aufnahme **gezielt in
@@ -383,6 +395,32 @@ bleiben gültig) und wird serverseitig **streng** validiert (Typen, Längen `css
   Klassennamen (`sc-…`, `css-…`, Hashes).
 - `text`: sichtbarer Kurztext (≤ 80). `role`: implizite/explizite ARIA-Rolle (≤ 40).
 
+### Auto-Schwärzung sensibler Felder (v2.4)
+
+Damit Screenshots keine **API-Keys/Passwörter/IBANs** leaken, sammelt das Content-Script pro
+Schritt zusätzlich zu Klick-Rechteck und Selektor die **Rechtecke sichtbarer sensibler
+Felder** ein und schickt sie als optionales Feld `sensitive: [{x,y,w,h}, …]` (normalisiert
+`0..1`, wie `rect`) mit. **Nur Geometrie — niemals Feldinhalte.** Erfasst werden:
+
+- **`input[type=password]`** — immer.
+- **`input`/`textarea`**, deren zugehöriges `<label>`/`aria-label`/`placeholder`/`name`/`id`
+  auf `(api[-_ ]?key|secret|token|geheim|passw|iban|kontonummer|kreditkarte|
+  credit[-_ ]?card|cvv|bic)` matcht (case-insensitive).
+- Beliebige Elemente mit dem **Opt-in-Attribut `data-steply-sensitive`**.
+
+**Sichtbar** = im Viewport, Fläche > 0, nicht `display:none`/`visibility:hidden`. Es werden
+höchstens **10** Rechtecke gesendet (die **größten zuerst**), Werte `0..1` geklemmt.
+
+Serverseitig wird `sensitive` **streng** validiert (Muster wie `selector`: Array ≤ 10,
+`{x,y,w,h}` endlich + `0..1` geklemmt, Mini-Flächen `< 0.0004` verworfen, unbekannte Keys
+entfernt; kaputt ⇒ ignoriert, **kein** Fehler). Aus jedem gültigen Eintrag entsteht ein
+zusätzlicher **`blur`-Highlight** mit `suggested:true`. Im Builder erscheinen sie als normale
+Blur-Formen samt Hinweis „Automatisch geschwärzt — bitte prüfen"; sobald der Autor die
+Markierungen eines Schritts speichert, fällt `suggested` weg (= geprüft). Vor dem
+Veröffentlichen warnt ein Dialog, falls noch ungeprüfte Schwärzungen offen sind (reines
+UI-Gate). Beim Veröffentlichen werden **alle** Blurs — inkl. `suggested` — wie bisher **in
+die Pixel gebrannt** (`lib/redact.ts`). Ohne `sensitive` ist das Verhalten exakt wie zuvor.
+
 **Direkt-Upload — Server-Routen (privat!):**
 
 - `POST /api/recorder/guide-handshake` `{token, count}` → Token via `accountForRecorderToken`,
@@ -390,9 +428,10 @@ bleiben gültig) und wird serverseitig **streng** validiert (Typen, Längen `css
   `tutorial-images` unter `{accountId}/guide-{uuid}/{i}.webp` (Entwurfs-Bilder sind
   privat — public entsteht erst beim Veröffentlichen). Extension lädt alle WebPs per `PUT`.
 - `POST /api/recorder/guide-complete` `{token, title?, steps:[{path, label, action,
-  rect:{x,y,w,h}, url, w, h, selector?}]}` → validiert (Pfad-Präfix aufs Konto, rect je
-  0..1 geklemmt, Label ≤ 60, ≤ 40 Schritte, Maße plausibel; `selector` optional + streng
-  gesäubert → `steps.selector`), respektiert `FREE_TUTORIAL_LIMIT`
+  rect:{x,y,w,h}, url, w, h, selector?, sensitive?}]}` → validiert (Pfad-Präfix aufs Konto,
+  rect je 0..1 geklemmt, Label ≤ 60, ≤ 40 Schritte, Maße plausibel; `selector` optional +
+  streng gesäubert → `steps.selector`; `sensitive` optional + streng validiert → je Feld ein
+  „blur“-Highlight mit `suggested:true`, s. u.), respektiert `FREE_TUTORIAL_LIMIT`
   und legt einen **Tutorial-Entwurf** an: Titel = übergeben oder „Anleitung vom {Datum}";
   je Schritt Vorlagen-Titel/-Text, ein **Highlight-Rechteck** (`#3d4ee6`, rounded) aus
   `rect`, `image_path/width/height`; **lineare** null-Label-Branch-Kette + `root_step_id`

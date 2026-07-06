@@ -744,6 +744,91 @@
     return { rect, px };
   }
 
+  // ---- Auto-Schwaerzung (Welle 28): Rechtecke sichtbarer SENSIBLER Felder sammeln. ----
+  // Datenschutz-Vorbau fuers Server-Blur (Gruender-Auftrag): Screenshots duerfen keine
+  // API-Keys/Passwoerter/IBANs leaken. Wir sammeln NUR GEOMETRIE (normalisiert 0..1 zum
+  // Viewport, wie rect) - NIEMALS Feldinhalte. Erfasst werden:
+  //   • input[type=password] IMMER,
+  //   • input/textarea, deren Label/aria-label/placeholder/name/id auf sensible Begriffe
+  //     matcht (API-Key, secret, token, Passwort, IBAN, Kontonummer, Kreditkarte, CVV, BIC),
+  //   • beliebige Elemente mit [data-steply-sensitive] (Opt-in).
+  // Sichtbar = im Viewport, Flaeche > 0, nicht display:none/visibility:hidden. Kappe bei 10
+  // (die groessten zuerst), Werte 0..1 geklemmt (rectOf klemmt bereits).
+  const SENSITIVE_RE =
+    /(api[-_ ]?key|secret|token|geheim|passw|iban|kontonummer|kreditkarte|credit[-_ ]?card|cvv|bic)/i;
+  const MAX_SENSITIVE = 10;
+
+  // Trifft die BESCHRIFTUNG (Label/aria-label/placeholder/name/id) eines Feldes einen
+  // sensiblen Begriff? NUR Metadaten des Feldes - NIE der eingegebene Wert.
+  function isSensitiveByMeta(el) {
+    try {
+      const parts = [
+        associatedLabelText(el),
+        ariaLabelText(el),
+        el.getAttribute && el.getAttribute("placeholder"),
+        el.getAttribute && el.getAttribute("name"),
+        el.id,
+      ];
+      const hay = parts.filter(Boolean).join(" ");
+      return !!hay && SENSITIVE_RE.test(hay);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Sichtbar fuer die Schwaerzung: im Viewport, Flaeche > 0, nicht display:none/hidden.
+  function isVisibleForRedaction(el) {
+    if (!el || el.nodeType !== 1) return false;
+    try {
+      const cs = getComputedStyle(el);
+      if (cs && (cs.display === "none" || cs.visibility === "hidden")) return false;
+    } catch (err) {
+      /* getComputedStyle kann werfen -> das Rect entscheidet */
+    }
+    let r;
+    try {
+      r = el.getBoundingClientRect();
+    } catch (err) {
+      return false;
+    }
+    if (!r || r.width <= 0 || r.height <= 0) return false;
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    // Im Viewport, sobald es ihn ueberhaupt schneidet.
+    if (r.bottom <= 0 || r.right <= 0 || r.top >= vh || r.left >= vw) return false;
+    return true;
+  }
+
+  // Alle sichtbaren sensiblen Elemente -> normalisierte Rechtecke (0..1), groesste zuerst,
+  // Kappe 10. Reine Geometrie; wirft nie (im Zweifel leere Liste).
+  function collectSensitiveRects() {
+    const seen = new Set();
+    const rects = [];
+    const add = (el) => {
+      if (!el || el.nodeType !== 1 || seen.has(el)) return;
+      seen.add(el);
+      if (!isVisibleForRedaction(el)) return;
+      const { rect } = rectOf(el);
+      const area = rect.w * rect.h;
+      if (!(area > 0)) return;
+      rects.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, area });
+    };
+    try {
+      // 1) Passwortfelder IMMER.
+      document.querySelectorAll('input[type="password"]').forEach(add);
+      // 2) Opt-in per Attribut (beliebige Elemente).
+      document.querySelectorAll("[data-steply-sensitive]").forEach(add);
+      // 3) Text-Eingaben mit sensibler Beschriftung.
+      document.querySelectorAll("input, textarea").forEach((el) => {
+        if (isSensitiveByMeta(el)) add(el);
+      });
+    } catch (err) {
+      /* im Zweifel lieber nichts erfassen als einen Fehler werfen */
+    }
+    rects.sort((a, b) => b.area - a.area);
+    return rects.slice(0, MAX_SENSITIVE).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }));
+  }
+
   // Einen Schritt (Klick oder Eingabe) an das Panel senden. Die Seitenleiste macht darauf
   // SOFORT einen Screenshot. Der Klick-Puls (lastClickPx) wird erst NACH der Bestaetigung
   // gezeichnet, damit er nie mit im Bild landet. cx/cy optional (Fallback-Kreis).
@@ -762,6 +847,9 @@
       selector: selectorFor(el),
       ts: Date.now(),
     };
+    // Auto-Schwaerzung (Welle 28): nur GEOMETRIE sichtbarer sensibler Felder, additiv.
+    const sensitive = collectSensitiveRects();
+    if (sensitive.length) step.sensitive = sensitive;
     try {
       chrome.runtime.sendMessage({ type: "steply-guide-step", step });
     } catch (err) {

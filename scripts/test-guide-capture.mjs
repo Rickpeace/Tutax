@@ -439,6 +439,73 @@ try {
     { t: UUID_A });
   await page.waitForTimeout(80);
   ok((await recordCount()) === 0, "record-into ohne anchor -> NICHT weitergereicht");
+
+  // ---------- 19) Auto-Schwaerzung (Welle 28): sensitive-Rechtecke sichtbarer Felder ----------
+  // Frische, isolierte Seite (deterministisch): ein Passwortfeld, ein „API-Key"-beschriftetes
+  // Feld und ein [data-steply-sensitive]-Element (alle sichtbar) plus ein UNSICHTBARES
+  // Passwortfeld. Beim Klick-Schritt muss der Payload `sensitive` GENAU die drei sichtbaren
+  // tragen (normiert 0..1, geklemmt) - Feld-WERTE tauchen NIRGENDS auf.
+  {
+    const page2 = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+    const HTML2 = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
+      body{font-family:sans-serif;margin:0;padding:16px} input,button,div{display:block;margin:8px 0}
+      .hid{display:none}
+    </style><script>
+      window.__sent = [];
+      window.chrome = {
+        runtime: {
+          lastError: undefined,
+          getManifest: function(){ return { version: "2.4.0" }; },
+          sendMessage: function(m){ if (m && m.type === "steply-guide-step") { window.__sent.push(m.step); } return Promise.resolve(undefined); },
+          onMessage: { addListener: function(){} },
+        },
+        storage: {
+          local: { get: function(key, cb){ cb({ rec: { startedAt: Date.now(), mode: "guide" } }); } },
+          onChanged: { addListener: function(){} },
+        },
+        tabs: { sendMessage: function(){} },
+      };
+    </script></head><body>
+      <button id="go">Weiter</button>
+      <label for="pw2">Passwort</label>
+      <input id="pw2" type="password" name="pw2" value="TOPSECRET123">
+      <label for="apikey">API-Key</label>
+      <input id="apikey" type="text" name="apikey" value="sk-LEAKME-000">
+      <div data-steply-sensitive id="secretbox">Kundennummer 4711</div>
+      <input id="hiddenpw" type="password" class="hid" value="INVISIBLE-SECRET">
+    </body></html>`;
+    await page2.setContent(HTML2, { waitUntil: "load" });
+    await page2.addScriptTag({ content: CONTENT_JS });
+    await page2.click("#go");
+    const step = await page2.evaluate(() => window.__sent[0] || null);
+    const raw2 = await page2.evaluate(() => JSON.stringify(window.__sent));
+    ok(!!step && step.action === "click", "Auto-Schwaerzung: Klick-Schritt erzeugt");
+    const sens = (step && step.sensitive) || [];
+    ok(
+      Array.isArray(sens) && sens.length === 3,
+      `sensitive enthaelt GENAU die 3 sichtbaren (Passwort, API-Key, data-attr) (war ${sens.length})`,
+    );
+    ok(
+      sens.every(
+        (r) =>
+          typeof r.x === "number" && typeof r.y === "number" &&
+          typeof r.w === "number" && typeof r.h === "number" &&
+          r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0 &&
+          r.x + r.w <= 1.0001 && r.y + r.h <= 1.0001,
+      ),
+      "sensitive: alle Rechtecke normiert 0..1 + geklemmt",
+    );
+    ok(
+      sens.every((r) => Object.keys(r).sort().join(",") === "h,w,x,y"),
+      "sensitive: NUR Geometrie (x,y,w,h) - keine weiteren Felder",
+    );
+    ok(
+      !raw2.includes("TOPSECRET123") && !raw2.includes("sk-LEAKME-000") && !raw2.includes("INVISIBLE-SECRET"),
+      "DATENSCHUTZ: KEIN Feldwert im Payload (auch nicht des unsichtbaren Feldes)",
+    );
+    ok(sens.length === 3, "unsichtbares Passwortfeld ausgeschlossen (3, nicht 4)");
+    await page2.close();
+  }
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {
