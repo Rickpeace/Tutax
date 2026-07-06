@@ -22,5 +22,11 @@ Hinweise:
   einkleben, dann ist sie fertig, falls wir Bestätigung später einschalten.
 - Die Team-Einladung läuft NICHT über Supabase, sondern über Resend direkt aus
   der App (`settings/team/actions.ts`) — dort ist das Design schon drin.
-- `{{ .ConfirmationURL }}` ist die Supabase-Variable für den Aktions-Link;
-  nichts daran ändern.
+- **Link-Methode (wichtig):** Die Vorlagen bauen den Link SELBST über
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=…&next=…` —
+  NICHT über `{{ .ConfirmationURL }}`. Grund: Der Direkt-Link geht ohne Umweg
+  über supabase.co auf unsere `/auth/confirm` (verifyOtp), funktioniert dadurch
+  auch geräteübergreifend (Mail am Handy öffnen, obwohl am PC angefordert) und
+  hängt nicht an der Redirect-Allowlist. Voraussetzung: **Site URL** in
+  Supabase (Auth → URL Configuration) muss auf die echte App-Domain zeigen.
+  `type` je Vorlage: magiclink · recovery · email_change · signup.

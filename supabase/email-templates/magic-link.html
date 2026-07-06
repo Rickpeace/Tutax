@@ -2,7 +2,7 @@
   <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
   <h2 style="margin:0 0 8px">Dein Anmelde-Link</h2>
   <p style="color:#5c5049;line-height:1.55">Mit einem Klick bist du angemeldet — ganz ohne Passwort:</p>
-  <p style="margin:24px 0"><a href="{{ .ConfirmationURL }}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Jetzt anmelden</a></p>
+  <p style="margin:24px 0"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/app" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Jetzt anmelden</a></p>
   <p style="color:#8a7d75;font-size:12px;line-height:1.5">Der Link ist nur kurze Zeit gültig und funktioniert einmal. Du hast das nicht angefordert? Dann kannst du diese Mail einfach ignorieren.</p>
-  <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>{{ .ConfirmationURL }}</p>
+  <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/app</p>
 </div>
