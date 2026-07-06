@@ -2889,6 +2889,12 @@ const exec = {
 const EXEC_STEP_TIMEOUT = 9000; // ms: 5s Selektor-Suche + Animation + Puffer
 const EXEC_AUTO_GAP = 700; // ms Pause zwischen Schritten in der Vollautomatik
 const EXEC_NAV_TIMEOUT = 15000; // ms auf „complete" nach einer Navigation warten
+// Beruhigungspause NACH „complete" (Hotfix 06.07., Richards Login-Lauf): „complete" heißt
+// nur „Dokument geladen" — React braucht danach noch einen Moment zum Hydratisieren.
+// Feuert ein Submit VORHER, greift die NATIVE Formular-Submission (Voll-Reload) statt der
+// React-Form-Action — genau der „Login-Seite reloaded einfach"-Hänger. Ein Mensch ist nie
+// so schnell nach dem Seitenladen; unsere Maus war es.
+const EXEC_NAV_SETTLE_MS = 1500;
 
 // ── Werte-Handling (lokal) ────────────────────────────────────────────────────
 // chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
@@ -3303,7 +3309,8 @@ function execWaitTabComplete(tabId) {
         /* egal */
       }
       clearTimeout(timer);
-      resolve();
+      // NICHT sofort weitermachen: erst die Hydration-Beruhigungspause (s. Konstante).
+      setTimeout(resolve, EXEC_NAV_SETTLE_MS);
     };
     const onUpd = (id, changeInfo) => {
       if (id === tabId && changeInfo && changeInfo.status === "complete") finish();
