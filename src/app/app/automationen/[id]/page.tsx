@@ -33,7 +33,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key")
+      .select("id, position, title, action, param_key, image_path")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -54,6 +54,7 @@ export default async function AutomationDetailPage({
     title: (s.title as string | null) ?? "",
     action: s.action as AutomationStepView["action"],
     paramKey: (s.param_key as string | null) ?? null,
+    imagePath: (s.image_path as string | null) ?? null,
   }));
 
   const runs: AutomationRunView[] = (runsData ?? []).map((r) => ({

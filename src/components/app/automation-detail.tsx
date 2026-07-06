@@ -16,7 +16,9 @@ import {
   ListChecks,
   ToggleRight,
   Globe,
+  ChevronDown,
 } from "lucide-react";
+import { signedImageUrl } from "@/lib/upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +43,7 @@ export type AutomationStepView = {
   title: string;
   action: "click" | "fill" | "select" | "toggle";
   paramKey: string | null;
+  imagePath: string | null;
 };
 
 export type AutomationRunView = {
@@ -106,6 +109,23 @@ export function AutomationDetail({
   const paramsDirty = JSON.stringify(paramState) !== JSON.stringify(savedParams);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Schritt-Vorschau: Klick klappt den Referenz-Screenshot auf (Richard, 06.07.:
+  // Titel allein sind oft nicht selbsterklärend). Signierte URL lazy beim ersten
+  // Aufklappen (privater Bucket), danach im State gecacht. null = Laden schlug fehl.
+  const [openStepId, setOpenStepId] = useState<string | null>(null);
+  const [stepImageUrls, setStepImageUrls] = useState<Record<string, string | null>>({});
+
+  function toggleStep(s: AutomationStepView) {
+    if (!s.imagePath) return;
+    const next = openStepId === s.id ? null : s.id;
+    setOpenStepId(next);
+    if (next && stepImageUrls[s.id] === undefined) {
+      signedImageUrl(s.imagePath)
+        .then((u) => setStepImageUrls((m) => ({ ...m, [s.id]: u ?? null })))
+        .catch(() => setStepImageUrls((m) => ({ ...m, [s.id]: null })));
+    }
+  }
 
   function saveTitle() {
     const clean = titleValue.trim();
@@ -322,28 +342,70 @@ export function AutomationDetail({
         <h2 className="text-sm font-black uppercase tracking-[0.06em] text-faint">
           Schritte ({steps.length})
         </h2>
+        <p className="mt-1 text-xs font-semibold text-muted-foreground">
+          Schritt anklicken zeigt den Screenshot aus der Aufnahme.
+        </p>
         <ol className="mt-3 space-y-2">
           {steps.map((s) => {
             const meta = ACTION_META[s.action];
+            const open = openStepId === s.id;
+            const imageUrl = stepImageUrls[s.id];
             return (
               <li
                 key={s.id}
-                className="flex items-center gap-3 rounded-card border-2 border-line bg-card px-3.5 py-2.5"
+                className="rounded-card border-2 border-line bg-card"
               >
-                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-xs font-black text-ink-2">
-                  {s.position}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">
-                  {s.title || "Schritt"}
-                </span>
-                {s.paramKey && (
-                  <code className="hidden shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground sm:inline">
-                    {s.paramKey}
-                  </code>
+                <button
+                  type="button"
+                  onClick={() => toggleStep(s)}
+                  disabled={!s.imagePath}
+                  aria-expanded={open}
+                  className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
+                    s.imagePath ? "cursor-pointer hover:bg-accent/30" : "cursor-default"
+                  } ${open ? "rounded-t-card" : "rounded-card"}`}
+                >
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-xs font-black text-ink-2">
+                    {s.position}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">
+                    {s.title || "Schritt"}
+                  </span>
+                  {s.paramKey && (
+                    <code className="hidden shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground sm:inline">
+                      {s.paramKey}
+                    </code>
+                  )}
+                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2">
+                    <meta.Icon className="size-3" /> {meta.label}
+                  </span>
+                  {s.imagePath && (
+                    <ChevronDown
+                      className={`size-4 shrink-0 text-faint transition-transform ${
+                        open ? "rotate-180" : ""
+                      }`}
+                    />
+                  )}
+                </button>
+                {open && (
+                  <div className="border-t-2 border-line bg-line-2/40 p-3">
+                    {imageUrl === undefined ? (
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        Screenshot wird geladen …
+                      </p>
+                    ) : imageUrl === null ? (
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        Der Screenshot konnte nicht geladen werden.
+                      </p>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={imageUrl}
+                        alt={`Screenshot zu Schritt ${s.position}: ${s.title || "Schritt"}`}
+                        className="max-h-80 w-full rounded-lg border border-line object-contain"
+                      />
+                    )}
+                  </div>
                 )}
-                <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2">
-                  <meta.Icon className="size-3" /> {meta.label}
-                </span>
               </li>
             );
           })}
