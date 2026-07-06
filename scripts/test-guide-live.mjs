@@ -1,5 +1,5 @@
 // Live-Test der Sofort-Anleitung (Welle 22): /api/recorder/guide-handshake + guide-complete.
-// Startet einen lokalen Next-Server auf PORT=3016 und prueft:
+// Startet einen lokalen Next-Server auf PORT=3019 und prueft:
 //   (a) guide-handshake ohne/mit falschem Token -> 401; count 50 (>40) -> 400
 //   (b) guide-handshake gueltig -> N Upload-URLs; PUT eines Mini-WebP -> 2xx, Datei im
 //       PRIVATEN Bucket tutorial-images
@@ -19,6 +19,12 @@
 //   (d) fremdes Konto / veroeffentlichtes Tutorial / kaputte Anker -> fallback:true, 200,
 //       neues Tutorial, Ziel unveraendert.
 //   (e) >40 Schritte gesamt -> fallback:true, neues Tutorial, Ziel unveraendert.
+// AUTO-SCHWAERZUNG (Welle 28):
+//   (w28-a) Schritt mit gueltigem `sensitive` -> steps.highlights enthaelt zusaetzlich zum
+//           Klick-Rechteck je ein blur-Highlight mit suggested:true (normiert/geklemmt).
+//   (w28-b) kaputte sensitive-Werte (NaN / >10 Eintraege / fremde Keys / Mini-Flaeche /
+//           Nicht-Objekte) -> gesaeubert bzw. ignoriert, KEIN 400.
+//   (w28-c) ohne `sensitive` -> unveraendert (nur das Klick-Rechteck, keine blur).
 // Danach: vollstaendiges Cleanup (Tutorials/Steps/Branches via Cascade, Storage, Konten).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-guide-live.mjs
@@ -29,7 +35,8 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
 const admin = createClient(url, secret, { auth: { persistSession: false } });
 const BUCKET = "tutorial-images";
-const PORT = 3016;
+// Welle 28: 3013/3016/3017 sind anderweitig belegt -> ab 3019.
+const PORT = 3019;
 const BASE = `http://localhost:${PORT}`;
 
 let failed = false;
@@ -466,6 +473,95 @@ try {
     const { count: bigCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", seedBig.tutId);
     ok((bigCount ?? 0) === 39, "(e) Ziel-Draft unveraendert bei Ueberschreitung (39 Schritte)");
     if (jBig.tutorialId) tutorialIds.push(jBig.tutorialId);
+  }
+
+  // ═══════════ AUTO-SCHWAERZUNG (Welle 28) ═══════════
+  {
+    // (w28-a) gueltige sensitive -> zusaetzliche blur-Highlights mit suggested:true.
+    const base = mkSteps(accId, 1, "S")[0];
+    const withSens = {
+      ...base,
+      sensitive: [
+        { x: 0.10, y: 0.10, w: 0.20, h: 0.06 },
+        { x: 0.50, y: 0.50, w: 0.15, h: 0.10 },
+      ],
+    };
+    const res = await post("/api/recorder/guide-complete", { token, steps: [withSens] });
+    const j = await res.json().catch(() => ({}));
+    ok(res.status === 200 && !!j.tutorialId, `(w28-a) sensitive: complete ok (${res.status})`);
+    if (j.tutorialId) {
+      tutorialIds.push(j.tutorialId);
+      const { data: rows } = await admin
+        .from("steps")
+        .select("highlights")
+        .eq("tutorial_id", j.tutorialId)
+        .order("position", { ascending: true });
+      const hs2 = Array.isArray(rows?.[0]?.highlights) ? rows[0].highlights : [];
+      const rect = hs2.filter((h) => h.type === "rect");
+      const blur = hs2.filter((h) => h.type === "blur");
+      ok(rect.length === 1, `(w28-a) Klick-Highlight (rect) weiterhin genau 1 (${rect.length})`);
+      ok(blur.length === 2, `(w28-a) 2 blur-Highlights aus sensitive (${blur.length})`);
+      ok(blur.every((h) => h.suggested === true), "(w28-a) blur-Highlights tragen suggested:true");
+      ok(
+        blur.every(
+          (h) =>
+            h.x >= 0 && h.y >= 0 && h.w > 0 && h.h > 0 &&
+            h.x + h.w <= 1.0001 && h.y + h.h <= 1.0001,
+        ),
+        "(w28-a) blur-Rects normiert/geklemmt (0..1, im Bild)",
+      );
+    }
+
+    // (w28-b) kaputte sensitive: NaN, Mini-Flaeche, >10 valide Eintraege, fremde Keys,
+    // Nicht-Objekte -> gesaeubert/ignoriert, KEIN 400. Erwartung: genau 10 blur (gekappt),
+    // keine fremden Keys, nur endliche Zahlen.
+    const many = Array.from({ length: 15 }, (_, i) => ({ x: 0.01 * i, y: 0.20, w: 0.10, h: 0.10, evil: "x" }));
+    const withBad = {
+      ...mkSteps(accId, 1, "S")[0],
+      sensitive: [
+        { x: "nope", y: 0.1, w: 0.2, h: 0.1 }, // NaN -> weg
+        { x: 0.1, y: 0.1, w: 0.001, h: 0.001 }, // Mini-Flaeche -> weg
+        ...many, // 15 valide -> auf 10 gekappt
+        "garbage",
+        null,
+        42, // Nicht-Objekte -> weg
+      ],
+    };
+    const res2 = await post("/api/recorder/guide-complete", { token, steps: [withBad] });
+    const j2 = await res2.json().catch(() => ({}));
+    ok(res2.status === 200 && !!j2.tutorialId, `(w28-b) kaputte sensitive: kein 400 (${res2.status})`);
+    if (j2.tutorialId) {
+      tutorialIds.push(j2.tutorialId);
+      const { data: rows } = await admin
+        .from("steps")
+        .select("highlights")
+        .eq("tutorial_id", j2.tutorialId)
+        .order("position", { ascending: true });
+      const blur = (Array.isArray(rows?.[0]?.highlights) ? rows[0].highlights : []).filter((h) => h.type === "blur");
+      ok(blur.length === 10, `(w28-b) auf 10 gekappt (war ${blur.length})`);
+      ok(blur.every((h) => !("evil" in h)), "(w28-b) fremde Keys entfernt");
+      ok(
+        blur.every(
+          (h) => Number.isFinite(h.x) && Number.isFinite(h.y) && Number.isFinite(h.w) && Number.isFinite(h.h),
+        ),
+        "(w28-b) nur endliche Zahlen",
+      );
+    }
+
+    // (w28-c) ohne sensitive -> nur das Klick-Rechteck, KEINE blur (unveraendertes Verhalten).
+    const res3 = await post("/api/recorder/guide-complete", { token, steps: [mkSteps(accId, 1, "S")[0]] });
+    const j3 = await res3.json().catch(() => ({}));
+    ok(res3.status === 200 && !!j3.tutorialId, `(w28-c) ohne sensitive: ok (${res3.status})`);
+    if (j3.tutorialId) {
+      tutorialIds.push(j3.tutorialId);
+      const { data: rows } = await admin
+        .from("steps")
+        .select("highlights")
+        .eq("tutorial_id", j3.tutorialId)
+        .order("position", { ascending: true });
+      const hs3 = Array.isArray(rows?.[0]?.highlights) ? rows[0].highlights : [];
+      ok(hs3.length === 1 && hs3[0].type === "rect", `(w28-c) nur das Klick-Rechteck, keine blur (${hs3.length})`);
+    }
   }
 
   // ---------- (e-alt) Free-Limit ----------
