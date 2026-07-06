@@ -30,7 +30,11 @@ export async function getCatalog(
     client
       .from("tutorials")
       .select("id, title, description, slug, status, freshness, category_id, visibility, updated_at")
-      .eq("account_id", accountId),
+      .eq("account_id", accountId)
+      // Deterministische Reihenfolge (sonst gibt Postgres eine undefinierte Zeilenfolge
+      // zurück): Anlage-Reihenfolge innerhalb jeder Kategorie — so bleibt die Hub-/Library-
+      // Sortierung stabil und steuerbar (z. B. Steply-Doku: Sofort-Anleitung an Position 2).
+      .order("created_at", { ascending: true }),
     client
       .from("account_templates")
       .select("template_id, enabled, forked_tutorial_id, category_id")
