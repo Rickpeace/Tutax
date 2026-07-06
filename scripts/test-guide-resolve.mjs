@@ -254,5 +254,42 @@ function makeRoot(elements) {
   ok(r2.el === null && r2.reason === "volatile-id", "Flüchtige-ID-css tot + kein Text-Treffer -> reason volatile-id");
 }
 
+// ── Hotfix 06.07.: Mini-Text-Falle + Typ-Grenze (Richards „Menü-Icon statt E-Mail-Feld") ──
+{
+  // Avatar-Knopf „M" darf die Suche nach „E-Mail" NICHT fangen („e-mail" enthält „m"),
+  // solange das echte Feld (css) noch nicht existiert (Hydration/PPR).
+  const avatar = elem({ tag: "button", text: "M", css: "#avatar" });
+  const r = resolveSelector(makeRoot([avatar]), {
+    css: "#invite-email",
+    text: "E-Mail",
+    role: "textbox",
+  });
+  ok(r.el === null, "Mini-Text: Avatar-M faengt die E-Mail-Suche nicht (kein Fuzzy-Treffer)");
+
+  // Exakt gleicher Kurz-Text bleibt gültig (Stufe 2): der M-Knopf wird über role+Text gefunden.
+  const r2 = resolveSelector(makeRoot([avatar]), { css: "#tot", text: "M", role: "button" });
+  ok(r2.el === avatar && r2.confidence === "text", "Mini-Text: exakt gleicher Kurz-Text (M) matcht weiter");
+
+  // Typ-Grenze: Ein textbox-Schritt ankert nie an einem Button — auch wenn dessen Text
+  // die Beschriftung ENTHÄLT (z. B. Knopf [E-Mail senden] vs. Feld-Label [E-Mail]).
+  const mailBtn = elem({ tag: "button", text: "E-Mail senden", css: "#send" });
+  const r3 = resolveSelector(makeRoot([mailBtn]), {
+    css: "#invite-email",
+    text: "E-Mail",
+    role: "textbox",
+  });
+  ok(r3.el === null, "Typ-Grenze: textbox-Schritt ankert nicht am Senden-Button");
+
+  // Gegenprobe: existiert das ECHTE Feld (label via for-Bindung), gewinnt es wie gehabt.
+  const label = elem({ tag: "label", attrs: { for: "invite-email" }, text: "E-Mail" });
+  const field = elem({ tag: "input", attrs: { id: "invite-email", type: "email" }, css: "#invite-email" });
+  const r4 = resolveSelector(makeRoot([label, field]), {
+    css: "#invite-email",
+    text: "E-Mail",
+    role: "textbox",
+  });
+  ok(r4.el === field && r4.confidence === "exact", "Gegenprobe: echtes Feld gewinnt via css+Label wie gehabt");
+}
+
 console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen verifiziert.");
 process.exitCode = failed ? 1 : 0;

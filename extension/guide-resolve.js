@@ -123,9 +123,15 @@
   }
 
   // "contains in beide Richtungen": a enthält b ODER b enthält a (beide nicht leer).
+  // MINDESTLÄNGE 3 für den ENTHALTENEN Teil (Hotfix 06.07.): Ein Avatar-Knopf „M" darf
+  // die Suche nach „E-Mail" nicht fangen, nur weil „e-mail" ein „m" enthält. Exakt
+  // gleiche Texte passen immer (auch kurze — „M" == „M" bleibt gültig).
   function containsEither(a, b) {
     if (!a || !b) return false;
-    return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
+    if (a === b) return true;
+    if (a.indexOf(b) >= 0) return b.length >= 3;
+    if (b.indexOf(a) >= 0) return a.length >= 3;
+    return false;
   }
 
   function getAttr(el, name) {
@@ -268,10 +274,17 @@
     if (exactMatches.length === 1) return { el: exactMatches[0], confidence: "text", reason: null };
 
     // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
+    // Typ-Grenze (Hotfix 06.07.): Ein Eingabefeld-Schritt (textbox/searchbox/combobox) darf
+    // NIE an einem Nicht-Eingabefeld ankern — und umgekehrt. Sonst „gewinnt" während des
+    // Seitenaufbaus (Hydration/PPR) kurzzeitig ein völlig falsches Element als „eindeutig".
+    var wantEditable =
+      wantRole === "textbox" || wantRole === "searchbox" || wantRole === "combobox";
     var fuzzyMatches = [];
     for (var j = 0; j < cands.length; j++) {
-      var t = textOf(cands[j], scope);
-      if (t && containsEither(t, wantText)) fuzzyMatches.push(cands[j]);
+      var cel = cands[j];
+      if (wantRole && wantEditable !== isEditableEl(cel)) continue;
+      var t = textOf(cel, scope);
+      if (t && containsEither(t, wantText)) fuzzyMatches.push(cel);
     }
     if (fuzzyMatches.length === 1) return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
 
