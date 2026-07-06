@@ -295,6 +295,24 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Wellen 36a+36b + Fable (06.07., v2.9.0):** ⚙️ **AUTOMATIONEN (Stufe 1)** —
+dritte Produkt-Ebene (Helpdesk · internes Wissen · Automationen): aufgezeichnete
+Abläufe, die die Extension AUSFÜHRT. Migration 0030 (automations/steps/runs + RLS;
+Parameter-DEFINITIONEN serverseitig, WERTE nie). Konvertierung aus Sofort-Aufnahme
+(lib/automations.ts: linearer Pfad, Verzweigung → Fehler, Hinweis-Schritte
+übersprungen, fill/select→Parameter mit secret-Erkennung); App-Bereich
+/app/automationen (Liste, Detail mit Parameter-Tabelle + Lauf-Historie,
+Karten-Menü „Als Automation nutzen"); Token-APIs automations(+/[id]) +
+automation-runs. Extension: Karte „⚙️ Automationen" (nur gepairt) →
+Parameter-Formular (Secrets als password, „Im Browser merken" opt-in, Werte NUR
+in chrome.storage.local, redactDetail-Schwärzung) → Lauf mit ANIMIERTER MAUS
+(Koralle-Cursor + Klick-Puls), React-sicherem fill (nativer value-Setter +
+input/change), Halbautomatik-DEFAULT, Vollautomatik opt-in, Miss = PAUSE (nie
+raten), Port „steply-exec" räumt bei Panel-Schließen ab, Download-Hinweis.
+Geplant: Stufe 2 Zeitplan (chrome.alarms), Stufe 3 dynamische Quellen (params
+haben dafür schon `source`). Tests grün: exec-plan (pure, neu), Kern-Logik-Mock
+(20 Assertions), Build/Lint, recorder/resolve/site-match-Regression;
+test-automations-live wartet auf Migration 0030 (Preflight-Skip).
 **Opus Welle 35 + Fable (06.07., v2.8.0):** 🎓 **„Steply lernen" für ALLE Kunden** —
 öffentliche Doku-API (`/api/guide/steply` Liste + `/[slug]` Detail: hart aufs
 Steply-Doku-Konto verdrahtet, NUR published+public, publicImageUrl statt Signatur,
