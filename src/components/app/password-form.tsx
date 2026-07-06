@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { changePassword } from "@/app/app/settings/konto/actions";
 
@@ -33,9 +33,8 @@ export function PasswordForm() {
     <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="pw">Neues Passwort</Label>
-        <Input
+        <PasswordInput
           id="pw"
-          type="password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
           autoComplete="new-password"
@@ -43,9 +42,8 @@ export function PasswordForm() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="pw2">Wiederholen</Label>
-        <Input
+        <PasswordInput
           id="pw2"
-          type="password"
           value={pw2}
           onChange={(e) => setPw2(e.target.value)}
           autoComplete="new-password"
