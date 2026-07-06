@@ -1625,9 +1625,10 @@
   // {type:"steply-exec-step", step:{selector, action, value?, index, total}, token}.
   // Wir lösen das Element via SteplyGuideResolve auf (5s, MutationObserver — Muster
   // showGuideStep), zeigen eine ANIMIERTE Maus (Koralle-Zeiger mit Schatten, gleitet vom
-  // letzten Punkt/Bildschirmmitte zum Ziel ~450ms, „Klick-Puls" beim Ausführen) + einen
-  // Rahmen ums Ziel, und FÜHREN dann die Aktion aus:
-  //   click  → pointer/mouse-Gesten + el.click()
+  // letzten Punkt/Bildschirmmitte zum Ziel in EXEC_CURSOR_TRAVEL_MS, verweilt kurz, dann
+  // „Klick-Puls" beim Ausführen) + einen Rahmen ums Ziel, und FÜHREN dann die Aktion aus:
+  //   click  → pointer/mouse-Gesten; Submit-Button im <form> via form.requestSubmit(el)
+  //            (React-19-Form-Action-sicher), sonst el.click()
   //   fill   → React-sicherer value-Setter + input/change + blur (Wert NIE geloggt)
   //   select → Option per value ODER sichtbarem Text; nicht gefunden ⇒ Miss (kein Raten)
   //   toggle → Klick-Sequenz (Checkbox/Radio/Switch)
@@ -1640,6 +1641,11 @@
   const EXEC_CURSOR_ID = "__steply-exec-cursor";
   const EXEC_GLOW = "0 0 0 3px rgba(239,106,78,0.5), 0 0 14px 3px rgba(239,106,78,0.32)";
   const EXEC_SIGNAL_MAX_IDLE = 60000;
+  // Maus-Timing (Welle 37, Fix 3): Richard empfand die Cursor-Reise als zu hektisch. Die
+  // Reise ist jetzt gemächlicher (weiterhin ease-out) und der Cursor VERWEILT kurz auf dem
+  // Ziel, bevor die Aktion ausgelöst wird. Benannte Konstanten → künftiges Tuning ist trivial.
+  const EXEC_CURSOR_TRAVEL_MS = 750; // Reisedauer des Cursors zum Ziel (vorher ~450 ms)
+  const EXEC_CURSOR_DWELL_MS = 250; // Verweilpause auf dem Ziel VOR der Aktion (Klick-Puls danach)
 
   let execCursorEl = null; // persistente animierte Maus (überlebt Schritte)
   let execFrameEl = null; // Rahmen ums aktuelle Ziel
@@ -1806,7 +1812,7 @@
     };
   }
 
-  // Maus in ~450ms ease-out zum Ziel gleiten lassen. Promise löst nach dem Ankommen.
+  // Maus in EXEC_CURSOR_TRAVEL_MS ease-out zum Ziel gleiten lassen. Promise löst nach dem Ankommen.
   function execAnimateCursorTo(x, y) {
     execEnsureCursor();
     const from = execLastPoint || { x: (window.innerWidth || 0) / 2, y: (window.innerHeight || 0) / 2 };
@@ -1824,12 +1830,12 @@
             { left: from.x + "px", top: from.y + "px" },
             { left: x + "px", top: y + "px" },
           ],
-          { duration: 450, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" }
+          { duration: EXEC_CURSOR_TRAVEL_MS, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" }
         );
         anim.onfinish = finish;
         anim.oncancel = finish;
-        // Sicherheitsnetz, falls onfinish nie feuert (Tab im Hintergrund u. ä.).
-        setTimeout(finish, 620);
+        // Sicherheitsnetz, falls onfinish nie feuert (Tab im Hintergrund u. ä.): Reisedauer + Puffer.
+        setTimeout(finish, EXEC_CURSOR_TRAVEL_MS + 170);
       } catch (err) {
         finish();
       }
@@ -1935,9 +1941,49 @@
     fire("mouseup", false);
   }
 
+  // Ist `el` ein SUBMIT-Button innerhalb eines <form>? Dann liefern wir das Formular zurück,
+  // damit der Klick über die standardkonforme Submission (form.requestSubmit(el)) statt über
+  // eine rohe click()-Sequenz läuft.
+  //
+  // WARUM (Welle 37, Fix 1 — echter Bug, per Playwright reproduziert): Auf React-19-Form-
+  // Actions (`<form action={fn}>` + useActionState) füllte unsere Sequenz E-Mail + Passwort
+  // und rief dann el.click() auf dem „Anmelden"-Button. Die Server-Action LIEF zwar (Cookie
+  // gesetzt), aber die Seite blieb/„reloadete" auf /login statt zur App zu navigieren: der
+  // synthetische Klick löst die native Formular-Submission aus, die React nicht als seine
+  // eigene Action-Submission übernimmt → das clientseitige redirect() der Action greift nicht.
+  // form.requestSubmit(el) fährt die Formular-Submission-Algorithmus GENAU EINMAL mit dem
+  // Button als submitter — React behandelt das exakt wie einen echten Klick (inkl. Navigation).
+  function execFormForSubmit(el) {
+    try {
+      // Nur <button>/<input>/<select>/<textarea> haben eine .form-Property; sonst undefined.
+      var form = el && el.form ? el.form : null;
+      if (!form || typeof form.requestSubmit !== "function") return null;
+      var tag = (el.tagName || "").toLowerCase();
+      var type = (el.getAttribute && el.getAttribute("type") ? el.getAttribute("type") : "").toLowerCase();
+      // Submit-Button: <button> ohne type ODER type=submit; <input type=submit|image>.
+      var isSubmit =
+        (tag === "button" && (type === "" || type === "submit")) ||
+        (tag === "input" && (type === "submit" || type === "image"));
+      return isSubmit ? form : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
   function execClick(el) {
     try {
       execPointerGesture(el);
+      var form = execFormForSubmit(el);
+      if (form) {
+        // Standardkonforme Submission mit dem Button als submitter (React-19-Form-Action-sicher).
+        try {
+          form.requestSubmit(el);
+        } catch (err) {
+          // requestSubmit(submitter) sehr selten nicht unterstützt → Fallback auf rohen Klick.
+          el.click();
+        }
+        return { ok: true };
+      }
       el.click();
       return { ok: true };
     } catch (err) {
@@ -2064,6 +2110,7 @@
     const rect = execRectOf(el);
     execShowFrame(rect);
     await execAnimateCursorTo(rect.cx, rect.cy);
+    await execWait(EXEC_CURSOR_DWELL_MS); // kurz auf dem Ziel verweilen (Welle 37, Fix 3), dann handeln
     execClickPulse(rect.cx, rect.cy); // „Klick-Puls" beim Ausführen
     let result;
     try {

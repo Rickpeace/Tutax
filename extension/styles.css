@@ -1011,6 +1011,17 @@ body {
   pointer-events: none;
 }
 
+/* Blur-Markierung im Referenzbild (Welle 37, Fix 4): dunkle Box, die den sensiblen Bereich
+   sichtbar abdeckt. Automations-Referenzbilder liegen im privaten Bucket (unredigiert) —
+   die Box verdeckt hier, was im veröffentlichten Bild eingebrannt wäre. Kein Koralle-Rahmen. */
+.run-hl-blur {
+  position: absolute;
+  box-sizing: border-box;
+  background: rgba(17, 24, 39, 0.72);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
 .run-fallback-hint {
   font-size: 12px;
   color: #c07d16;

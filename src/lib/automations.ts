@@ -37,6 +37,9 @@ type StepRow = {
   id: string;
   title: string | null;
   image_path: string | null;
+  // Markierungen des Aufnahme-Schritts (Welle 37): 1:1 in den Snapshot kopiert, fürs
+  // Referenzbild (App-Detail + Extension-Miss-Ansicht). Form = steps.highlights (jsonb).
+  highlights: unknown;
   selector: { css?: string; text?: string; role?: string } | null;
   page_url: string | null;
   is_decision: boolean | null;
@@ -158,7 +161,7 @@ export async function convertTutorialToAutomation(
   // 2) Schritte + Branches laden.
   const { data: stepsData } = await admin
     .from("steps")
-    .select("id, title, image_path, selector, page_url, is_decision, position")
+    .select("id, title, image_path, highlights, selector, page_url, is_decision, position")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -220,6 +223,9 @@ export async function convertTutorialToAutomation(
       page_url: s.page_url,
       param_key: paramKey,
       image_path: s.image_path,
+      // Markierungen 1:1 vom Tutorial-Schritt übernehmen (inkl. blur-Einträgen — die sind im
+      // Referenzbild ok). Spalte automation_steps.highlights existiert seit Migration 0031.
+      highlights: Array.isArray(s.highlights) ? s.highlights : null,
     };
   });
 
