@@ -2571,10 +2571,11 @@ async function guideStart(idOrSlug, source) {
     return;
   }
   // „Bring mich hin" (Punkt F): passt der Tab nicht, in einem neuen Tab auf der Startseite
-  // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden. NUR für Konto-Touren:
-  // Doku-Touren würden sonst ungefragt die Steply-App öffnen — sie laufen still im Panel
-  // (Screenshots), und ein Overlay erscheint nur, wenn der Nutzer ohnehin in der App ist.
-  if (!isDoc) await guideBringToStartIfNeeded();
+  // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden. Gilt seit v2.9.1
+  // AUCH für Doku-Touren (Richard, 06.07.): Wer „Steply lernen" startet, will in die App
+  // gebracht werden — ohne Navigation liefe die Tour nur im Screenshot-Fallback. Schritte
+  // ohne page_url (z. B. Hub-Tour) bleiben wie gehabt im aktuellen Tab.
+  await guideBringToStartIfNeeded();
   // Port + Ping an den (final gebundenen) Tab (Welle 33, Fix 2).
   guideLinkStart(guide.tabId);
   sendGuideEvent("started", null);
