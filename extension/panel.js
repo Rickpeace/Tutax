@@ -3324,14 +3324,13 @@ function execWaitTabComplete(tabId) {
       return;
     }
     const timer = setTimeout(finish, EXEC_NAV_TIMEOUT);
-    // Falls der Tab bereits „complete" ist, nicht ewig warten.
-    try {
-      chrome.tabs.get(tabId).then((tab) => {
-        if (tab && tab.status === "complete") finish();
-      }).catch(() => {});
-    } catch (err) {
-      /* egal */
-    }
+    // KEIN „Tab ist doch schon complete"-Frühstart mehr (Hotfix 06.07. abends, Richards
+    // Timeout bei Schritt 1): Direkt nach tabs.update/create meldet chrome.tabs.get für
+    // einen Wimpernschlag noch den complete-Status der ALTEN Seite — der Lauf schickte
+    // den Schritt dann auf die sterbende Seite, die Navigation riss das Content-Script
+    // weg und die Antwort kam nie (9s-Timeout-Miss). Beide Aufrufer rufen diese Funktion
+    // NUR nach einer echten Navigation auf — ein onUpdated-complete kommt also immer;
+    // EXEC_NAV_TIMEOUT bleibt als Sicherheitsnetz.
   });
 }
 
