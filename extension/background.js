@@ -337,7 +337,9 @@ async function updateBadgeForTab(tabId, url) {
       clearBadge(tabId);
       return;
     }
-    const n = SM.matchTutorials(url, tutorials).length;
+    // Nur VEROEFFENTLICHTE zaehlen — konsistent mit dem Default der Fuehren-Liste
+    // („Diese Seite + Live"); sonst verspricht das Badge mehr, als die Liste zeigt.
+    const n = SM.matchTutorials(url, tutorials).filter((t) => t.status === "published").length;
     if (n > 0) {
       try {
         chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
