@@ -278,9 +278,23 @@ case-insensitive Wiederverwendung) direkt im Sofort-Panel; beim Anker-Modus
 ausgeblendet. Tests (alle grün auf gemergtem Stand): test-guide-api-live,
 test-guide-resolve (11), test-site-context-live, test-site-match (41),
 test-guide-category-live (18), test-recorder-live-Regression + Build/Lint.
-Richards Live-Test-Feedback → **Welle 32** (Eingabe-Schritt-Selektoren,
-Overlay-Intensität, gefilterte Führen-Liste m. Kategorien, Banner nur im
-Anker-Modus, Icon-Badge, „Bring mich hin").
+Richards Live-Test-Feedback → Welle 32 (s. u.).
+**Opus Welle 32 + Fable (06.07.):** 🎯 **Führungs-Feedback-Welle** — Extension
+v2.6.0. (A) Eingabe-Schritte: Aufnahme erfasst jetzt auch bei blur-Schritten den
+Selektor (Label als text), Resolver prüft Felder gegen label/placeholder/
+aria-label/name statt textContent, Weiterschalten bei Enter/blur-mit-Wert
+(Checkbox/Select bei change) statt pointerdown. (B) Overlay: Hingucker-Zoom +
+Glow-Blitz beim Erscheinen, ruhiger 1,2s-Puls, größeres Badge (Web-Animations-
+API). (C) Führen-Liste: Default „Diese Seite + Live", Filter-Chips (session-
+persistent), Kategorien-Gruppen; API-Liste liefert category {id,name}|null
+(löst auch globale Kategorien auf). (D) Banner nur noch im Anker-Modus;
+einheitliche 2-zeilige Treffer-Karten (Kategorie-Chip, Schrittzahl, Status-
+Punkt) für „Für diese Seite" + „Führen". (E) Icon-Badge (Koralle, Trefferzahl,
+NUR published — Fable-Fix beim Merge) via background-SW + site-match/
+importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
+öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
+daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
+guide-api-live um category, recorder-Regression).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

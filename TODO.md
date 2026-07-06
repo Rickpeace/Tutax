@@ -28,7 +28,12 @@
      Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
   4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
      End-zu-End; Absender muss „Steply" heißen).
-- [ ] **Extension v2.5.1 in Chrome testen** (NEU LADEN; nach Welle-32-Merge → v2.6.0).
+- [ ] **Extension v2.6.0 in Chrome testen** (NEU LADEN). Welle 32 ist gemerged:
+  Eingabe-Schritte werden live geführt (Enter/Feld-verlassen = weiter),
+  auffälligeres Overlay, Führen-Liste gefiltert („Diese Seite + Live" Default,
+  Kategorien-Gruppen), Banner nur im Anker-Modus, Icon-Badge (nur published),
+  „Bring mich hin". Kern-Szenario: Sofort-Anleitung MIT Eingabefeld aufnehmen
+  → live führen → Feld wird markiert, Eingabe schaltet weiter.
   NEU in v2.5.x (Wellen 31a–d): „Anleitung führen" (Live-Overlay auf der echten
   Seite, Klick = weiter, Verzweigungen, Fallback bei totem Selektor) · „📍 Für
   diese Seite" (Panel zeigt passende Tutorials zur offenen Website; Bestand:

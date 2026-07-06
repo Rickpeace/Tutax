@@ -18,8 +18,10 @@ Letztes Update: 2026-07-06 (LIVE-FÜHRUNG + Seiten-Erkennung, s. §7h; davor War
 > APIs: `/api/recorder/tutorials(+/[id])`, `/api/recorder/categories`,
 > `/api/recorder/guide-event`. Tests: `test-guide-api-live`, `test-guide-resolve`,
 > `test-site-context-live`, `test-site-match`, `test-guide-category-live`.
-> **Welle 32 läuft** (Feedback: Eingabe-Schritte, Overlay-Intensität, gefilterte
-> Liste, Icon-Badge, „Bring mich hin") — Stand danach in REVIEW.md.
+> **Welle 32 GEMERGED (v2.6.0)**: Eingabe-Schritte live führbar (Selektor auch bei
+> blur-Aufnahme, weiter bei Enter/blur-mit-Wert), Overlay mit Hingucker-Zoom+Glow,
+> Führen-Liste „Diese Seite + Live" mit Kategorien-Gruppen, Banner nur im Anker-
+> Modus, Icon-Badge (nur published), „Bring mich hin". Details REVIEW.md.
 
 ## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — LIVE (Commit 172717b)
 > Komplettes visuelles Redesign nach dem High-Fidelity-Handoff (Nunito, Creme #FDF9F3,
