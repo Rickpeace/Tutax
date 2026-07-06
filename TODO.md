@@ -22,6 +22,9 @@
      AUCH in Vercel stehen (sonst verschickt Prod keine Einladungs-Mails, nur
      Link-Fallback). `INVITE_FROM_EMAIL` dabei auf `"Steply" <noreply@dentdoc.de>`
      umbenennen (stand auf „Taxtut"; lokal schon umbenannt).
+     **Dazu `ELEVENLABS_API_KEY` prüfen** (06.07.): Fehlt er in Vercel, fällt das
+     Vorlesen beim Kunden-Publish STILL auf die OpenAI-Stimme zurück statt
+     ElevenLabs/„Helmut Clark" (lokal ist der Key gesetzt).
   3. **Klick-Test (2 Min)**: Auf tutax-ivory „Passwort vergessen" mit deiner
      Adresse → Mail kommt? Link führt auf tutax-ivory (NICHT localhost) zu /reset?
      Falls Link falsch: Supabase → Auth → URL Configuration → Site URL +
