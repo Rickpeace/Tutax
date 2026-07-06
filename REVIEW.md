@@ -249,6 +249,13 @@ Bewusst offen: globale Admin-Kategorien, /impressum+/datenschutz.
 **Fable direkt (06.07.):** Builder-Kurzbeschreibung editierbar (Geisterfeld:
 /h zeigte sie, niemand konnte sie pflegen) · Extension v2.4.1 (Ziel-Banner
 immer Klartext: ohne Ziel „wird als neues Tutorial angelegt").
+**Opus Welle 30 + Fable (06.07.):** 🌐 **Sprachen von Anfang an**: Sprachfrage
+im Onboarding (Deutsch fix; EN/PL/TR bei Business anhakbar, Free/Pro als
+Teaser mit Abo-Link; speichert über bestehende saveLanguages-Action) ·
+Browser-Sprach-Vorschlag auf /h (dezente schließbare Leiste in Zielsprache,
+nur wenn Sprache aktiviert; localStorage je Slug; NIE Auto-Redirect; Shell
+bleibt statisch). Beweis scripts/test-lang-suggest.mjs 18/18 (Playwright-Locale,
+echter Onboarding-Login, Screenshots gesichtet).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
