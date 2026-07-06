@@ -28,7 +28,14 @@
      Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
   4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
      End-zu-End; Absender muss „Steply" heißen).
-- [ ] **Extension v2.2.0 (Onboarding) in Chrome testen**: NEU LADEN → v2.2.0.
+- [ ] **Extension v2.4.0 in Chrome testen** (NEU LADEN → v2.4.0). NEU seit v2.2:
+  Sofort-Anleitung-Karte + Builder-„Ab hier aufnehmen" öffnen die Seitenleiste
+  DIREKT · Aufnahme-Anker: Schritte landen an der gewählten Stelle/im Ast,
+  Fallback nie verlustig · Auto-Schwärzung: Passwort-/Key-/IBAN-Felder werden
+  automatisch als Blur vorgeschlagen („bitte prüfen"-Hinweis im Editor,
+  Publish-Dialog warnt bei ungeprüften) · kein F5 mehr nötig (Builder lädt nach
+  Upload selbst nach) · CapsLock-Warnung in allen Passwortfeldern ·
+  Team-Entfernen mit Bestätigung. Alt-Checkliste (v2.2.0):
   Onboarding-Checks: Einstellungen → Einbetten → „Extension verbinden" → Karte
   UND Seitenleiste zeigen „Verbunden mit <Konto>" (Leiste offen lassen: aktualisiert
   live) · „Neue Anleitung" → dritte Karte ⚡ Sofort-Anleitung zeigt „Installiert

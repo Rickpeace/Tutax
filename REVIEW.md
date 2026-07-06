@@ -220,6 +220,23 @@ Aufnahme-Inhalte** (lange Titel/URLs/Emojis aus der Sofort-Anleitung): Wizard
 Druckansicht — nur break-words/min-w-0/line-clamp, pixeltreu bei normalem
 Inhalt. Beweis: `scripts/test-wizard-hostile.mjs` (Playwright, Seed feindlicher
 Tutorials, scrollWidth-Asserts Desktop+Mobil, 22/22 grün, Screenshots gesichtet).
+**Opus Wellen 27/28 + Fable-Hotfixes (06.07.):** ⚓ **Aufnahme-Anker (W27,
+v2.3.0)**: „Ab hier mit Extension aufnehmen" an jedem Builder-Einfügepunkt +
+Verzweigungs-Ast; guide-complete mit optionalem target{tutorialId, anchor};
+Ketten-Umverdrahtung bewiesen (mittig/leerer Ast/Rejoin), Fallback „nie
+verloren" (fremdes Konto/published/>40 → neues Tutorial, 200+fallback:true) ·
+🕶️ **Auto-Schwärzung (W28, v2.4.0)**: content.js sammelt sichtbare sensible
+Felder (password, api-key/token/iban-Label-Muster, data-steply-sensitive) als
+Geometrie (NIE Inhalte) → Server erzeugt blur-Highlights mit suggested:true →
+Editor-Hinweis „bitte prüfen" (Speichern = geprüft) → Publish-Dialog warnt bei
+ungeprüften · ⌨️ CapsLock-Warnung (PasswordInput in allen 5 Formularen) ·
+Team-Entfernen/Einladung-Zurückziehen geschärft · **Fable direkt:**
+Auth-Mail-Templates deutsch (token_hash-Direktlinks; Magic-Link-Kette
+E2E-bewiesen: /auth/confirm als ROUTE-HANDLER — als Seite verwarf Next das
+Session-Cookie nach verifyOtp, Nutzer blieb ausgeloggt) · Auto-Refresh nach
+Extension-Upload (ContentUpdatedRefresh im /app-Layout) · Entf löscht Form im
+Bild-Editor · Nachimpfung altoffener Tabs (v2.2.2) · Karten-Klick öffnet
+Seitenleiste (v2.2.1).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
