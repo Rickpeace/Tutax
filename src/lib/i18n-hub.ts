@@ -117,7 +117,11 @@ type Key =
   | "chatNotConfigured"
   | "chatOffTopic"
   | "chatClarify"
-  | "chatNoAnswer";
+  | "chatNoAnswer"
+  // Welle 30 — Browser-Sprach-Vorschlag auf der Hilfe-Seite. Text steht immer in der
+  // ZIELsprache (z. B. Englisch für en), nie in der aktuellen Seitensprache.
+  | "langSuggest"
+  | "langSuggestGo";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -197,6 +201,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
       "Ich bin der Hilfe-Assistent von {name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.",
     chatClarify: "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?",
     chatNoAnswer: "Das kann ich Ihnen leider nicht sicher beantworten.",
+    langSuggest: "Diese Hilfe-Seite auf Deutsch anzeigen?",
+    langSuggestGo: "Auf Deutsch ansehen",
   },
   en: {
     next: "Next",
@@ -274,6 +280,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
       "I'm {name}'s help assistant and can only help with questions about the organization and its guides.",
     chatClarify: "Could you describe your request a bit more precisely?",
     chatNoAnswer: "I'm afraid I can't answer that reliably.",
+    langSuggest: "View this help page in English?",
+    langSuggestGo: "View in English",
   },
   pl: {
     next: "Dalej",
@@ -351,6 +359,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
       "Jestem asystentem pomocy {name} i mogę pomóc tylko w pytaniach dotyczących organizacji i jej instrukcji.",
     chatClarify: "Czy możesz opisać swoją sprawę nieco dokładniej?",
     chatNoAnswer: "Niestety nie mogę tego pewnie odpowiedzieć.",
+    langSuggest: "Wyświetlić tę stronę pomocy po polsku?",
+    langSuggestGo: "Zobacz po polsku",
   },
   tr: {
     next: "İleri",
@@ -428,6 +438,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
       "Ben {name} yardım asistanıyım ve yalnızca kuruluş ve kılavuzlarıyla ilgili sorularda yardımcı olabilirim.",
     chatClarify: "Talebinizi biraz daha ayrıntılı açıklayabilir misiniz?",
     chatNoAnswer: "Maalesef bunu kesin olarak yanıtlayamıyorum.",
+    langSuggest: "Bu yardım sayfasını Türkçe görüntülemek ister misiniz?",
+    langSuggestGo: "Türkçe görüntüle",
   },
 };
 

@@ -10,6 +10,7 @@ import { getCatalog } from "@/lib/templates";
 import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 import { LangSwitcher } from "@/components/viewer/lang-switcher";
+import { LangSuggestBar } from "@/components/viewer/lang-suggest-bar";
 import {
   resolveLang,
   labelsFor,
@@ -244,6 +245,14 @@ export default async function HubPage({
           />
         )}
       </header>
+
+      {/* Browser-Sprach-Vorschlag (Welle 30): dezent, schließbar, rein clientseitig. */}
+      <LangSuggestBar
+        accountSlug={account.slug}
+        languages={languages}
+        currentLang={lang}
+        basePath={`/h/${account.slug}`}
+      />
 
       {/* Hero (Design 3b): zentrierte Frage + große Suche (Suche wohnt im Browser). */}
       <div
