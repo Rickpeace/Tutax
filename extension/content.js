@@ -1148,7 +1148,23 @@
       if (mode === "text" && guideFieldHasValue(el)) guideAdvance();
     };
     const onKeydown = (e) => {
-      if (mode === "text" && (e.key === "Enter" || e.keyCode === 13)) guideAdvance();
+      if ((mode === "text" || mode === "select") && (e.key === "Enter" || e.keyCode === 13)) {
+        guideAdvance();
+      }
+    };
+    // Natives <select> (Hotfix 06.07.): Waehlt man die BEREITS eingestellte Option erneut,
+    // feuert KEIN change (Wert unveraendert) — der Schritt schaltete dann nie weiter.
+    // Chrome dispatcht beim Waehlen einer Option (auch derselben) einen click auf dem
+    // <select> OHNE frisches eigenes pointerdown (das ging ans native Popup). Ein click
+    // ohne kurz vorangegangenes pointerdown = Option gewaehlt -> weiter. Auf-/Zuklappen
+    // (pointerdown + click direkt auf dem Element) schaltet NICHT weiter. Feuert Chrome
+    // den click mal nicht, bleibt es beim heutigen Verhalten (change/Enter) — kein Risiko.
+    let lastDownAt = 0;
+    const onDown = () => {
+      lastDownAt = Date.now();
+    };
+    const onClick = () => {
+      if (mode === "select" && Date.now() - lastDownAt > 150) guideAdvance();
     };
     try {
       el.addEventListener("change", onChange, true);
@@ -1156,7 +1172,12 @@
         el.addEventListener("blur", onBlur, true);
         el.addEventListener("keydown", onKeydown, true);
       }
-      guideFieldListeners = { el, onChange, onBlur, onKeydown };
+      if (mode === "select") {
+        el.addEventListener("keydown", onKeydown, true);
+        el.addEventListener("pointerdown", onDown, true);
+        el.addEventListener("click", onClick, true);
+      }
+      guideFieldListeners = { el, onChange, onBlur, onKeydown, onDown, onClick };
     } catch (err) {
       guideFieldListeners = null;
     }
@@ -1218,11 +1239,13 @@
     window.removeEventListener("scroll", guideReposition, true);
     window.removeEventListener("resize", guideReposition, true);
     if (guideFieldListeners) {
-      const { el, onChange, onBlur, onKeydown } = guideFieldListeners;
+      const { el, onChange, onBlur, onKeydown, onDown, onClick } = guideFieldListeners;
       try {
         el.removeEventListener("change", onChange, true);
         el.removeEventListener("blur", onBlur, true);
         el.removeEventListener("keydown", onKeydown, true);
+        if (onDown) el.removeEventListener("pointerdown", onDown, true);
+        if (onClick) el.removeEventListener("click", onClick, true);
       } catch (err) {
         /* egal */
       }
