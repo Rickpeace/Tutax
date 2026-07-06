@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CategoryPicker } from "@/components/builder/category-picker";
+import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
 import {
   setTutorialTitle,
@@ -35,6 +36,7 @@ export function TutorialHeader({
   isBusiness,
   categories,
   categoryId,
+  siteDomains,
   languages,
   translationsStale,
 }: {
@@ -47,6 +49,7 @@ export function TutorialHeader({
   isBusiness: boolean;
   categories: { id: string; name: string }[];
   categoryId: string | null;
+  siteDomains: string[];
   languages: ExtraLang[];
   translationsStale: boolean;
 }) {
@@ -350,6 +353,9 @@ export function TutorialHeader({
             </div>
             <span className="text-line">·</span>
             <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
+            <span className="text-line">·</span>
+            {/* „Gilt für Website" (Welle 31c): Basis-Domains, für die die Anleitung gilt. */}
+            <SiteDomainsPicker tutorialId={tutorialId} initialDomains={siteDomains} />
           </div>
         </div>
 
