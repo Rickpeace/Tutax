@@ -23,6 +23,7 @@ import {
 } from "@/lib/guide";
 import { refineGuideSteps } from "@/lib/guide-ai";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
+import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 
 // Sofort-Anleitung (Welle 22), Schritt 2: complete.
 // Nachdem die Extension alle WebPs an die signierten URLs hochgeladen hat, meldet sie
@@ -89,6 +90,9 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     image_path: s.path,
     image_width: s.w,
     image_height: s.h,
+    // Seiten-Kontext (Welle 31c): URL der Seite zum Klick-Zeitpunkt. Bisher verworfen —
+    // jetzt persistiert (Basis für „Für diese Seite" + site_domains-Seeding). Leer → null.
+    page_url: s.url || null,
     // Klick-Rechteck + (Welle 28) je ein „blur“-Highlight pro sensiblem Feld (suggested:true).
     // Ohne `sensitive` bleibt es beim einen Rechteck – exakt das heutige Verhalten.
     highlights: [highlightFromRect(s.rect), ...suggestedBlurHighlights(s.sensitive)],
@@ -97,6 +101,44 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     position: posBase + i + 1,
     is_decision: false,
   }));
+}
+
+/**
+ * Seiten-Kontext säen (Welle 31c): aus den (neuen) Schritt-URLs die distinct normalisierten
+ * Basis-Domains ableiten und `tutorials.site_domains` als Union mit dem Bestand setzen (max
+ * 10, dedupliziert, sortiert). Läuft für BEIDE Pfade (neues Tutorial + Einfügen in ein
+ * bestehendes). Wirft NIE — ein Fehler hier darf die Aufnahme-Antwort niemals kippen.
+ */
+async function seedSiteDomains(
+  admin: SupabaseClient,
+  tutorialId: string,
+  steps: GuideStepInput[],
+): Promise<void> {
+  try {
+    const add: string[] = [];
+    const seen = new Set<string>();
+    for (const s of steps) {
+      const d = normalizeDomain(s.url || "");
+      if (d && !seen.has(d)) {
+        seen.add(d);
+        add.push(d);
+      }
+    }
+    if (!add.length) return; // keine plausiblen Domains → nichts zu tun
+
+    const { data: tut } = await admin
+      .from("tutorials")
+      .select("site_domains")
+      .eq("id", tutorialId)
+      .maybeSingle();
+    const existing = Array.isArray(tut?.site_domains) ? (tut.site_domains as string[]) : [];
+    const merged = mergeDomains(existing, add);
+    // Nur schreiben, wenn sich etwas ändert (spart ein Update beim reinen Einfügen).
+    if (merged.length === existing.length && merged.every((d, i) => d === existing[i])) return;
+    await admin.from("tutorials").update({ site_domains: merged }).eq("id", tutorialId);
+  } catch (e) {
+    console.error("[guide-complete] site_domains:", e instanceof Error ? e.message : e);
+  }
 }
 
 /** Die neuen Schritte für den after()-Feinschliff aufbereiten (Vorlagen-Texte pro Schritt). */
@@ -340,6 +382,8 @@ export async function POST(req: NextRequest) {
     } else {
       const ins = await insertIntoTarget(admin, account.id, parsed, steps);
       if (ins.ok) {
+        // Seiten-Kontext (Welle 31c): site_domains als Union mit dem Ziel-Tutorial säen.
+        await seedSiteDomains(admin, parsed.tutorialId, steps);
         // KI-Feinschliff NUR über die neuen Schritte.
         after(() =>
           refineGuideSteps(admin, refineInput(steps, ins.rows)).catch((e) =>
@@ -370,6 +414,9 @@ export async function POST(req: NextRequest) {
 
   const created = await createNewTutorial(admin, account.id, title, steps);
   if ("error" in created) return recorderJson({ error: created.error }, created.status);
+
+  // Seiten-Kontext (Welle 31c): site_domains des neuen Tutorials aus den Schritt-URLs säen.
+  await seedSiteDomains(admin, created.tutorialId, steps);
 
   return recorderJson(
     fallbackReason
