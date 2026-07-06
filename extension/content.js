@@ -122,6 +122,43 @@
     }
   });
 
+  // ---- Aufnahme-Anker: „Ab hier mit Extension aufnehmen" (Welle 27) ----------
+  // Ein Einfügepunkt im Steply-Builder postet {type:"steply-record-into", target, label}.
+  // GLEICHE Origin-Bindung wie beim Pairing/Panel-Oeffnen. Wir reichen NUR ein sauberes,
+  // laengen-gekapptes Ziel an background.js weiter (dort: Seitenleiste synchron oeffnen +
+  // pendingTarget speichern). Die Herkunft (origin) bestimmt background aus dem Sender,
+  // nicht aus dem Payload. Der target-Inhalt (tutorialId/anchor) wird ausserdem serverseitig
+  // in guide-complete streng geprueft (Konto-Eigentum, Entwurf, Anker) - hier nur Hygiene.
+  function cleanId(v) {
+    return typeof v === "string" ? v.slice(0, 100).trim() : "";
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    if (event.origin !== location.origin) return;
+    const d = event.data;
+    if (!d || d.__steply !== true || d.type !== "steply-record-into") return;
+    const t = d.target && typeof d.target === "object" ? d.target : null;
+    const a = t && t.anchor && typeof t.anchor === "object" ? t.anchor : null;
+    if (!t || !a) return;
+    const tutorialId = cleanId(t.tutorialId);
+    if (!tutorialId) return;
+    // Genau EIN Anker-Feld durchreichen (afterStepId ODER branchId).
+    let anchor = null;
+    if (cleanId(a.afterStepId)) anchor = { afterStepId: cleanId(a.afterStepId) };
+    else if (cleanId(a.branchId)) anchor = { branchId: cleanId(a.branchId) };
+    if (!anchor) return;
+    const label = typeof d.label === "string" ? d.label.slice(0, 160).trim() : "";
+    try {
+      chrome.runtime.sendMessage({
+        type: "steply-record-into",
+        target: { tutorialId, anchor },
+        label,
+      });
+    } catch (err) {
+      /* Extension nicht erreichbar - der Builder zeigt den manuellen Weg als Fallback */
+    }
+  });
+
   let recording = false;
   let startEpoch = 0;
   // Modus der laufenden Aufnahme: "video" (Screencast + Klick-Zeitstempel, Bestand) oder

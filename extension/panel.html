@@ -19,6 +19,15 @@
     <!-- Dezenter Update-Hinweis (nie blockierend); Link wird per JS verdrahtet. -->
     <p id="updateHint" class="update-hint" hidden></p>
 
+    <!-- Aufnahme-Anker (Welle 27): Ziel, in das die Aufnahme eingefuegt wird. -->
+    <div id="targetBanner" class="target-banner" hidden>
+      <span class="target-icon" aria-hidden="true">&#127919;</span>
+      <span class="target-text">
+        Aufnahme f&uuml;r: <strong id="targetLabel"></strong>
+      </span>
+      <button id="targetClear" class="target-clear" type="button">Ziel verwerfen</button>
+    </div>
+
     <!-- ============ (a) NICHT VERBUNDEN: Token / App-URL ============ -->
     <section id="connect" hidden>
       <p class="lead">Mit Steply verbinden</p>

@@ -177,3 +177,52 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
   return false;
 });
+
+// Aufnahme-Anker: „Ab hier mit Extension aufnehmen" (Welle 27). Ein Einfügepunkt im
+// Builder reicht {type:"steply-record-into", target, label} ueber content.js hierher.
+// Zwei Dinge, SYNCHRON (die Klick-Geste der Seite muss durchreichen):
+//   1) chrome.sidePanel.open({tabId}) - KEIN await davor, sonst geht die Geste verloren.
+//   2) chrome.storage.local.set({ pendingTarget }) mit origin AUS DEM SENDER (nicht aus
+//      dem Payload) + Zeitstempel. Das Panel liest pendingTarget beim Oeffnen/via
+//      storage.onChanged, zeigt „Aufnahme fuer: <label>" und schickt das Ziel beim
+//      Fertigstellen an guide-complete - aber NUR, wenn origin zur App-URL passt.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-record-into") return false;
+  if (!sender || !sender.tab || sender.tab.id == null) return false;
+
+  // Herkunft aus dem Sender bestimmen (vertrauenswuerdiger als ein Payload-Wert).
+  let origin = "";
+  try {
+    origin = sender.origin || (sender.url ? new URL(sender.url).origin : "");
+  } catch (err) {
+    origin = "";
+  }
+
+  // (1) Seitenleiste SYNCHRON oeffnen (Geste!).
+  try {
+    if (chrome.sidePanel && typeof chrome.sidePanel.open === "function") {
+      chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {
+        /* Geste abgelaufen - Fallback bleibt der Symbol-Klick */
+      });
+    }
+  } catch (err) {
+    /* sidePanel.open nicht verfuegbar */
+  }
+
+  // (2) Ziel merken (best effort). target/label kamen bereits gehygienet aus content.js.
+  try {
+    chrome.storage.local
+      .set({
+        pendingTarget: {
+          target: msg.target || null,
+          label: typeof msg.label === "string" ? msg.label : "",
+          origin,
+          ts: Date.now(),
+        },
+      })
+      .catch(() => {});
+  } catch (err) {
+    /* storage nicht verfuegbar */
+  }
+  return false;
+});

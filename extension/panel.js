@@ -33,6 +33,10 @@
 const els = {
   interruptedHint: document.getElementById("interruptedHint"),
   updateHint: document.getElementById("updateHint"),
+  // Aufnahme-Anker (Welle 27)
+  targetBanner: document.getElementById("targetBanner"),
+  targetLabel: document.getElementById("targetLabel"),
+  targetClear: document.getElementById("targetClear"),
   status: document.getElementById("status"),
   // connect (a)
   connect: document.getElementById("connect"),
@@ -113,6 +117,76 @@ const DEFAULT_APP_URL = "https://app.steply.de";
 function appBase() {
   const raw = (cfg.appUrl || DEFAULT_APP_URL).trim().replace(/\/+$/, "");
   return raw || DEFAULT_APP_URL;
+}
+
+// ── Aufnahme-Anker (Welle 27) ──────────────────────────────────────────────
+// Wurde die Aufnahme aus einem Einfuegepunkt im Builder angestossen, liegt hier das Ziel
+// (background.js hat es beim Oeffnen in chrome.storage.local.pendingTarget gelegt):
+//   { target: { tutorialId, anchor }, label, origin, ts }
+// Die Aufnahme wird beim Fertigstellen an genau diese Stelle eingehaengt - aber NUR, wenn
+// origin zur konfigurierten App-URL passt (sonst normal als neues Tutorial hochladen).
+let pendingTarget = null;
+// Aeltere Ziele beim Oeffnen verwerfen (der Nutzer hat die Aufnahme vermutlich vergessen).
+const PENDING_TARGET_MAX_AGE_MS = 30 * 60 * 1000;
+
+// Ziel aus dem Storage laden; abgelaufene (>30 min) sofort verwerfen. Fail-silent.
+async function loadPendingTarget() {
+  try {
+    const res = await chrome.storage.local.get("pendingTarget");
+    const pt = res && res.pendingTarget;
+    if (pt && pt.target && typeof pt.ts === "number" && Date.now() - pt.ts <= PENDING_TARGET_MAX_AGE_MS) {
+      pendingTarget = pt;
+    } else {
+      pendingTarget = null;
+      if (pt) await chrome.storage.local.remove("pendingTarget").catch(() => {});
+    }
+  } catch (err) {
+    pendingTarget = null;
+  }
+  renderTargetBanner();
+}
+
+// Banner „Aufnahme fuer: <label>" ein-/ausblenden.
+function renderTargetBanner() {
+  if (!els.targetBanner) return;
+  if (pendingTarget) {
+    const label = (pendingTarget.label || "").toString();
+    els.targetLabel.textContent = label || "diese Stelle";
+    els.targetBanner.hidden = false;
+  } else {
+    els.targetBanner.hidden = true;
+  }
+}
+
+// Ziel vergessen: aus dem Storage raeumen + Banner weg. (Verwerfen-Knopf & nach Abschluss.)
+async function clearPendingTarget() {
+  pendingTarget = null;
+  try {
+    await chrome.storage.local.remove("pendingTarget");
+  } catch (err) {
+    /* egal */
+  }
+  renderTargetBanner();
+}
+
+// „Ziel verwerfen"-Knopf: Ziel raeumen; die naechste Aufnahme laeuft normal (neues Tutorial).
+async function discardTarget() {
+  await clearPendingTarget();
+  setStatus("Ziel verworfen - die Aufnahme wird als neues Tutorial gespeichert.", "");
+}
+
+// Nur nutzen, wenn die Herkunft der konfigurierten App-URL entspricht (sonst ignorieren).
+function targetForUpload() {
+  if (!pendingTarget || !pendingTarget.target) return null;
+  const origin = (pendingTarget.origin || "").replace(/\/+$/, "");
+  let appOrigin = "";
+  try {
+    appOrigin = new URL(appBase()).origin;
+  } catch (err) {
+    appOrigin = "";
+  }
+  if (!origin || origin !== appOrigin) return null;
+  return pendingTarget.target;
 }
 
 async function loadConfig() {
@@ -1050,6 +1124,9 @@ async function finishGuide() {
     );
     els.guideProgress.textContent = "";
   }
+  // Aufnahme-Anker (Welle 27): nach dem Upload-Versuch (Erfolg/Fallback/Fehler) IMMER raeumen,
+  // damit die naechste Aufnahme nicht versehentlich am alten Ziel landet + Banner verschwindet.
+  await clearPendingTarget();
 }
 
 async function uploadGuide() {
@@ -1098,10 +1175,15 @@ async function uploadGuide() {
     if (s.selector) step.selector = s.selector;
     return step;
   });
+  // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.
+  const uploadTarget = targetForUpload();
+  const completeBody = { token: cfg.token, steps };
+  if (uploadTarget) completeBody.target = uploadTarget;
+
   const compRes = await fetch(base + "/api/recorder/guide-complete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: cfg.token, steps }),
+    body: JSON.stringify(completeBody),
   });
   const comp = await compRes.json().catch(() => ({}));
   if (!compRes.ok || !comp.tutorialId) {
@@ -1112,7 +1194,19 @@ async function uploadGuide() {
   els.guideProgress.textContent = "";
   els.guideUploadDone.hidden = false;
   const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
-  setStatus("Anleitung erstellt" + orgHint + " - als Entwurf in Steply.", "ok");
+  if (comp.fallback) {
+    // Ziel war nicht nutzbar -> der Server hat ein NEUES Tutorial angelegt (Aufnahme nie verloren).
+    const why = comp.fallbackReason ? " " + comp.fallbackReason : "";
+    setStatus(
+      "An der Zielstelle nicht moeglich - als neues Tutorial gespeichert" + orgHint + "." + why,
+      "error"
+    );
+  } else if (uploadTarget) {
+    setStatus("Aufnahme an der Zielstelle eingefuegt" + orgHint + " - als Entwurf in Steply.", "ok");
+  } else {
+    setStatus("Anleitung erstellt" + orgHint + " - als Entwurf in Steply.", "ok");
+  }
+  // „In Steply oeffnen" fuehrt zum ZIEL-Tutorial (bei Einfuegen) bzw. zum neuen (Fallback/Standard).
   const openUrl = base + "/app/tutorials/" + comp.tutorialId;
   if (els.guideOpenApp) {
     els.guideOpenApp.onclick = () => chrome.tabs.create({ url: openUrl, active: true });
@@ -1168,6 +1262,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // Nur wenn wir gerade auf Connect oder Start stehen, die Auswahl (neu) zeigen.
     if (!els.connect.hidden || !els.start.hidden) showStart();
   });
+});
+
+// Aufnahme-Anker (Welle 27): Wird das Panel WAEHREND es offen ist aus einem Einfuegepunkt
+// angestossen (Builder -> content.js -> background.js -> pendingTarget), aktualisiert sich
+// das Banner SOFORT. (background.js oeffnet die Seitenleiste zwar synchron, aber ein bereits
+// offenes Panel bekommt kein „open" -> darum hier auf die storage-Aenderung reagieren.)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.pendingTarget) return;
+  loadPendingTarget();
 });
 
 // ============================================================================
@@ -1233,6 +1336,7 @@ els.stop.addEventListener("click", stop);
 els.guideStop.addEventListener("click", finishGuide);
 els.again.addEventListener("click", newRecording);
 els.guideAgain.addEventListener("click", newRecording);
+if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);
 
 // Panel wird geschlossen (Seitenleiste zu / Fenster zu): laufende Streams sauber
 // stoppen (sonst bleibt der Mikro-/Freigabe-Indikator haengen) und Zustand raeumen,
@@ -1262,6 +1366,8 @@ window.addEventListener("pagehide", () => {
   // Klemmende/abgebrochene Aufnahme verwerfen, BEVOR wir irgendetwas anzeigen.
   await reconcile();
   await loadConfig();
+  // Aufnahme-Anker (Welle 27): Ziel laden (abgelaufene >30 min werden verworfen) + Banner.
+  await loadPendingTarget();
   if (hasToken) {
     showStart();
   } else {
