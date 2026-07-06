@@ -37,13 +37,27 @@ function elem({ tag = "div", attrs = {}, text = "", css = null }) {
 function makeRoot(elements) {
   return {
     _els: elements,
-    querySelector(css) {
-      for (const el of this._els) if (el._css && el._css === css) return el;
+    querySelector(sel) {
+      // label[for="…"] fuer die Eingabefeld-Tests aufloesen (Beschriftung ueber for-Bindung).
+      const m = /^label\[for="(.*)"\]$/.exec(sel);
+      if (m) {
+        for (const el of this._els) {
+          if ((el.tagName || "").toLowerCase() === "label" && el.getAttribute("for") === m[1]) {
+            return el;
+          }
+        }
+        return null;
+      }
+      for (const el of this._els) if (el._css && el._css === sel) return el;
       return null;
     },
     querySelectorAll() {
       // Der Test behandelt jedes registrierte Element als klickbaren Kandidaten.
       return this._els.slice();
+    },
+    getElementById(id) {
+      for (const el of this._els) if (el.getAttribute("id") === id) return el;
+      return null;
     },
   };
 }
@@ -115,6 +129,66 @@ function makeRoot(elements) {
   ok(resolveSelector(root, {}).confidence === null, "Randfall: leerer Selektor -> null");
   // css verfehlt + kein Text -> keine textbasierte Rettung möglich -> null.
   ok(resolveSelector(root, { css: "#gibtsnicht" }).el === null, "Randfall: css verfehlt, kein Text -> null");
+}
+
+// ── Eingabefelder (Welle 32, Punkt A): Text-Gegenprobe NICHT gegen textContent ──────────
+// Ein input/textarea/select hat leeren textContent. Der matchbare Text kommt aus der
+// BESCHRIFTUNG: <label for> / aria-label / aria-labelledby / placeholder / name.
+{
+  // Stufe 1 (der Kernfall aus Richards Bug): css trifft ein input, dessen textContent LEER
+  // ist, aber der Selektor-Text = das LABEL. Frueher scheiterte die Gegenprobe (textContent
+  // ""), jetzt greift sie ueber das <label for> -> exact statt Fallback.
+  const input = elem({ tag: "input", attrs: { id: "email", type: "email" }, css: "#email" });
+  const label = elem({ tag: "label", attrs: { for: "email" }, text: "E-Mail" });
+  const root = makeRoot([input, label]);
+  let r = resolveSelector(root, { css: "#email", text: "E-Mail", role: "textbox" });
+  ok(r.el === input && r.confidence === "exact", "Eingabe Stufe 1: css trifft input + Label-Gegenprobe (leerer textContent) -> exact");
+}
+{
+  // Stufe 2: css veraltet, aber Rolle=textbox + exakter LABEL-Text (ueber label[for]) -> text.
+  const input = elem({ tag: "input", attrs: { id: "iban", type: "text" }, css: "#iban-neu" });
+  const label = elem({ tag: "label", attrs: { for: "iban" }, text: "IBAN" });
+  const noise = elem({ tag: "button", text: "IBAN", css: "#btn" }); // gleicher Text, andere Rolle
+  const root = makeRoot([input, label, noise]);
+  const r = resolveSelector(root, { css: "#iban-alt", text: "IBAN", role: "textbox" });
+  ok(r.el === input && r.confidence === "text", "Eingabe Stufe 2: Rolle textbox + Label-Text (label[for]) -> text");
+}
+{
+  // placeholder als Beschriftung (kein <label>): Stufe 2 exakt ueber placeholder.
+  const input = elem({ tag: "input", attrs: { type: "text", placeholder: "Suchbegriff" }, css: "#s" });
+  const root = makeRoot([input]);
+  const r = resolveSelector(root, { css: "#weg", text: "Suchbegriff", role: "textbox" });
+  ok(r.el === input && r.confidence === "text", "Eingabe: placeholder als Beschriftung -> text");
+}
+{
+  // aria-label als Beschriftung.
+  const input = elem({ tag: "input", attrs: { type: "text", "aria-label": "Betrag" }, css: "#b" });
+  const root = makeRoot([input]);
+  const r = resolveSelector(root, { css: "#weg", text: "Betrag", role: "textbox" });
+  ok(r.el === input && r.confidence === "text", "Eingabe: aria-label als Beschriftung -> text");
+}
+{
+  // aria-labelledby -> Text des referenzierten Elements (getElementById).
+  const cap = elem({ tag: "span", attrs: { id: "cap1" }, text: "Kundennummer" });
+  const input = elem({ tag: "input", attrs: { type: "text", "aria-labelledby": "cap1" }, css: "#k" });
+  const root = makeRoot([cap, input]);
+  const r = resolveSelector(root, { css: "#weg", text: "Kundennummer", role: "textbox" });
+  ok(r.el === input && r.confidence === "text", "Eingabe: aria-labelledby -> referenzierter Text -> text");
+}
+{
+  // textarea ueber name (letzte Stufe der Beschriftungskette).
+  const ta = elem({ tag: "textarea", attrs: { name: "nachricht" }, css: "#msg" });
+  const root = makeRoot([ta]);
+  const r = resolveSelector(root, { css: "#weg", text: "nachricht", role: "textbox" });
+  ok(r.el === ta && r.confidence === "text", "Eingabe: textarea ueber name -> text");
+}
+{
+  // select ueber <label for> — textContent (Options) darf NICHT als Text genommen werden.
+  const sel = elem({ tag: "select", attrs: { id: "land" }, text: "Deutschland Österreich Schweiz", css: "#land" });
+  const label = elem({ tag: "label", attrs: { for: "land" }, text: "Land" });
+  const root = makeRoot([sel, label]);
+  const r = resolveSelector(root, { css: "#land-alt", text: "Land", role: "combobox" });
+  ok(r.el === sel && r.confidence === "text", "Eingabe: select ueber Label (nicht Options-textContent) -> text");
 }
 
 console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen verifiziert.");

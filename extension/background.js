@@ -1,5 +1,15 @@
 "use strict";
 
+// site-match.js (klassisches Script mit UMD-Huelle) -> stellt self.SteplySiteMatch fuer den
+// Icon-Badge bereit (Welle 32, Punkt E). importScripts ist in MV3-Service-Workern NUR
+// synchron im Top-Level erlaubt, daher ganz oben. Scheitert es, bleibt der Rest des Workers
+// funktionsfaehig (updateBadgeForTab prueft self.SteplySiteMatch und macht sonst nichts).
+try {
+  importScripts("site-match.js");
+} catch (err) {
+  /* ohne Matching-Modul: kein Badge, aber Pairing/Capture/Panel laufen weiter */
+}
+
 // Steply Recorder - Hintergrund-Service-Worker (v2).
 //
 // Zwei winzige Aufgaben, mehr nicht:
@@ -226,3 +236,147 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
   return false;
 });
+
+// ============================================================================
+// ICON-BADGE beim Browsen (Welle 32, Punkt E)
+//
+// Beim Tab-Wechsel / Neuladen zeigen wir am Extension-Symbol die Zahl der Tutorials, die zur
+// gerade offenen Website passen (Koralle-Badge). DATENSCHUTZ-PFLICHT: Das Matching laeuft
+// REIN LOKAL — die besuchte Tab-URL wird NUR hier im Browser gegen die gecachten site_domains
+// abgeglichen und verlaesst NIEMALS den Browser. Vom Server holen wir ausschliesslich die
+// Tutorial-LISTE (inkl. site_domains), ~5 min in chrome.storage.local gecacht (die
+// Seitenleiste frischt denselben Cache beim Laden mit auf). OHNE Token: kein Badge.
+// ============================================================================
+const BADGE_COLOR = "#ef6a4e"; // Koralle (--brand)
+const BADGE_TTL = 5 * 60 * 1000; // 5 min
+const BADGE_DEFAULT_APP_URL = "https://app.steply.de";
+
+async function badgeAppBase() {
+  try {
+    const cfg = await chrome.storage.local.get("steplyAppUrl");
+    const raw = String((cfg && cfg.steplyAppUrl) || BADGE_DEFAULT_APP_URL)
+      .trim()
+      .replace(/\/+$/, "");
+    return raw || BADGE_DEFAULT_APP_URL;
+  } catch (err) {
+    return BADGE_DEFAULT_APP_URL;
+  }
+}
+
+// Tutorial-Liste fuer den Badge: aus dem 5-min-Cache; ist er alt/leer, mit dem gespeicherten
+// Token neu holen (NUR die Liste — es geht KEINE besuchte URL raus). Ohne Token: null.
+async function getBadgeTutorials() {
+  const now = Date.now();
+  let cache = null;
+  try {
+    cache = (await chrome.storage.local.get("badgeCache")).badgeCache || null;
+  } catch (err) {
+    cache = null;
+  }
+  if (cache && Array.isArray(cache.tutorials) && now - (cache.at || 0) < BADGE_TTL) {
+    return cache.tutorials;
+  }
+  let token = "";
+  try {
+    token = (await chrome.storage.local.get("steplyToken")).steplyToken || "";
+  } catch (err) {
+    token = "";
+  }
+  if (!token) {
+    try {
+      await chrome.storage.local.remove("badgeCache");
+    } catch (err) {
+      /* egal */
+    }
+    return null;
+  }
+  try {
+    const base = await badgeAppBase();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(base + "/api/recorder/tutorials", {
+      headers: { Authorization: "Bearer " + token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return cache && Array.isArray(cache.tutorials) ? cache.tutorials : null;
+    const body = await res.json().catch(() => ({}));
+    const tutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
+    try {
+      await chrome.storage.local.set({ badgeCache: { tutorials, at: now } });
+    } catch (err) {
+      /* egal */
+    }
+    return tutorials;
+  } catch (err) {
+    return cache && Array.isArray(cache.tutorials) ? cache.tutorials : null;
+  }
+}
+
+function clearBadge(tabId) {
+  try {
+    chrome.action.setBadgeText({ text: "", tabId });
+  } catch (err) {
+    /* egal */
+  }
+}
+
+async function updateBadgeForTab(tabId, url) {
+  if (tabId == null) return;
+  try {
+    const SM = self.SteplySiteMatch;
+    if (!SM) return; // Matching-Modul nicht geladen -> Badge einfach nicht anfassen
+    // DATENSCHUTZ: `url` bleibt hier lokal; nur der site_domains-Abgleich nutzt sie.
+    const host = SM.hostnameOf(url);
+    if (!host) {
+      clearBadge(tabId);
+      return;
+    }
+    const tutorials = await getBadgeTutorials();
+    if (!tutorials) {
+      clearBadge(tabId);
+      return;
+    }
+    const n = SM.matchTutorials(url, tutorials).length;
+    if (n > 0) {
+      try {
+        chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+      } catch (err) {
+        /* egal */
+      }
+      try {
+        chrome.action.setBadgeText({ text: String(n), tabId });
+      } catch (err) {
+        /* egal */
+      }
+    } else {
+      clearBadge(tabId);
+    }
+  } catch (err) {
+    /* Badge ist reiner Komfort - nie stoeren */
+  }
+}
+
+// Aktiven Tab beobachten. tab.url ist dank host_permissions <all_urls> auf http(s)-Seiten
+// verfuegbar; chrome://-/leere Tabs liefern kein url -> hostnameOf=null -> Badge leer.
+if (chrome.tabs && chrome.tabs.onActivated) {
+  chrome.tabs.onActivated.addListener((info) => {
+    const tabId = info && info.tabId;
+    if (tabId == null) return;
+    chrome.tabs
+      .get(tabId)
+      .then((tab) => updateBadgeForTab(tabId, tab && tab.url))
+      .catch(() => {
+        /* Tab weg / kein Zugriff */
+      });
+  });
+}
+if (chrome.tabs && chrome.tabs.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (!changeInfo) return;
+    // Nur bei URL-Wechsel oder fertigem Laden neu bewerten (nicht bei jedem Zwischenstatus).
+    if (changeInfo.url || changeInfo.status === "complete") {
+      updateBadgeForTab(tabId, (tab && tab.url) || changeInfo.url || "");
+    }
+  });
+}

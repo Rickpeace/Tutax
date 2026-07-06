@@ -14,10 +14,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // Session aufruft). KEINE Cookies. CORS: RECORDER_ME_CORS (GET/OPTIONS + Authorization).
 //
 // Antwort: { tutorials: [{ id, title, slug, status, visibility, site_domains, stepCount,
-//   selectorCount, updated_at }] } — NUR Tutorials des Token-Kontos, updated_at desc, max 200.
-// selectorCount = Schritte mit non-null selector (Live-Führung mit Bildschirm-Markierung
-// möglich). stepCount + selectorCount kommen aus EINER Steps-Query (kein N+1) und werden in
-// JS je Tutorial aggregiert.
+//   selectorCount, category, updated_at }] } — NUR Tutorials des Token-Kontos, updated_at
+//   desc, max 200. selectorCount = Schritte mit non-null selector (Live-Führung mit
+// Bildschirm-Markierung möglich). stepCount + selectorCount kommen aus EINER Steps-Query
+// (kein N+1) und werden in JS je Tutorial aggregiert.
+// category (Welle 32, Punkt C): { id, name } | null je Tutorial. EINE zusätzliche
+// categories-Query über die vorkommenden category_ids — löst dabei AUCH globale Kategorien
+// (account_id IS NULL) auf, weil per id (nicht per account_id) gefiltert wird. Kein N+1.
 
 type TutorialRow = {
   id: string;
@@ -26,6 +29,7 @@ type TutorialRow = {
   status: string | null;
   visibility: string | null;
   site_domains: string[] | null;
+  category_id: string | null;
   updated_at: string;
 };
 
@@ -47,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   const { data: tuts } = await admin
     .from("tutorials")
-    .select("id, title, slug, status, visibility, site_domains, updated_at")
+    .select("id, title, slug, status, visibility, site_domains, category_id, updated_at")
     .eq("account_id", account.id)
     .order("updated_at", { ascending: false })
     .limit(200)
@@ -73,6 +77,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Kategorie-Namen je Tutorial: EINE Query über die vorkommenden category_ids. Über id
+  // gefiltert (nicht account_id) -> löst auch GLOBALE Kategorien (account_id IS NULL) auf.
+  const catIds = [...new Set(tutorials.map((t) => t.category_id).filter((v): v is string => !!v))];
+  const catById = new Map<string, { id: string; name: string }>();
+  if (catIds.length) {
+    const { data: cats } = await admin
+      .from("categories")
+      .select("id, name")
+      .in("id", catIds)
+      .returns<{ id: string; name: string | null }[]>();
+    for (const c of cats ?? []) catById.set(c.id, { id: c.id, name: c.name ?? "" });
+  }
+
   const out = tutorials.map((t) => {
     const c = counts.get(t.id) ?? { stepCount: 0, selectorCount: 0 };
     return {
@@ -84,6 +101,7 @@ export async function GET(req: NextRequest) {
       site_domains: Array.isArray(t.site_domains) ? t.site_domains : [],
       stepCount: c.stepCount,
       selectorCount: c.selectorCount,
+      category: t.category_id ? catById.get(t.category_id) ?? null : null,
       updated_at: t.updated_at,
     };
   });

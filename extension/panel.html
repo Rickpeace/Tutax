@@ -228,6 +228,18 @@
     <section id="fuehren" hidden>
       <button id="fuehrenBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
       <p class="lead">Anleitung live f&uuml;hren</p>
+      <!-- Filter-Chips (Welle 32, Punkt C): Default „Diese Seite" + „Live". Auswahl bleibt
+           in chrome.storage.session. Matching REIN LOKAL (site-match.js). -->
+      <div id="fuehrenFilters" class="fuehren-filters" hidden>
+        <div class="chip-group" role="group" aria-label="Seiten-Filter">
+          <button id="chipSite" class="chip" type="button">Diese Seite</button>
+          <button id="chipAll" class="chip" type="button">Alle</button>
+        </div>
+        <div class="chip-group" role="group" aria-label="Status-Filter">
+          <button id="chipLive" class="chip" type="button">Live</button>
+          <button id="chipDrafts" class="chip" type="button">Auch Entw&uuml;rfe</button>
+        </div>
+      </div>
       <p id="fuehrenHint" class="note" hidden></p>
       <div id="fuehrenList" class="fuehren-list" aria-live="polite"></div>
     </section>

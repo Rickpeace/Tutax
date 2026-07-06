@@ -33,10 +33,75 @@
     return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase();
   }
 
-  // Sichtbarer (normalisierter) Text eines Elements. Nutzt textContent (Stub-freundlich).
-  function textOf(el) {
+  function tagOf(el) {
+    return el && el.tagName ? String(el.tagName).toLowerCase() : "";
+  }
+
+  // Eingabefelder haben KEINEN sichtbaren textContent — ihr matchbarer Text ist die
+  // BESCHRIFTUNG. Erfasst input (ausser button-artige), textarea, select, contenteditable.
+  function isEditableEl(el) {
+    var tag = tagOf(el);
+    if (tag === "textarea" || tag === "select") return true;
+    if (tag === "input") {
+      var type = String(getAttr(el, "type") || "text").toLowerCase();
+      return !/^(button|submit|reset|image)$/.test(type);
+    }
+    var ce = getAttr(el, "contenteditable");
+    if (ce === "" || String(ce).toLowerCase() === "true") return true;
+    return false;
+  }
+
+  // "-Zeichen fuer einen [for="…"]-Selektor maskieren (pures Modul, kein CSS.escape).
+  function attrEsc(v) {
+    return String(v == null ? "" : v).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  // Beschriftung einer Eingabe-Kontrolle (SPIEGELT die Aufnahme-Kette in content.js):
+  // aria-label > aria-labelledby > <label for> > placeholder > name. Braucht `scope` fuer
+  // die Referenz-Aufloesung (getElementById / label[for]); fehlt sie im Stub, faellt der
+  // jeweilige Schritt einfach aus (Guards).
+  function editableLabelText(el, scope) {
+    var aria = getAttr(el, "aria-label");
+    if (aria && norm(aria)) return norm(aria);
+    var labelledby = getAttr(el, "aria-labelledby");
+    if (labelledby && scope && typeof scope.getElementById === "function") {
+      var acc = "";
+      var ids = String(labelledby).split(/\s+/);
+      for (var i = 0; i < ids.length; i++) {
+        var ref = ids[i] ? scope.getElementById(ids[i]) : null;
+        if (ref) {
+          var rt = norm(ref.textContent || "");
+          if (rt) acc += (acc ? " " : "") + rt;
+        }
+      }
+      if (acc) return acc;
+    }
+    var id = getAttr(el, "id");
+    if (id && scope && typeof scope.querySelector === "function") {
+      try {
+        var lbl = scope.querySelector('label[for="' + attrEsc(id) + '"]');
+        if (lbl) {
+          var lt = norm(lbl.textContent || "");
+          if (lt) return lt;
+        }
+      } catch (err) {
+        /* ungueltige id -> ignorieren */
+      }
+    }
+    var ph = getAttr(el, "placeholder");
+    if (ph && norm(ph)) return norm(ph);
+    var nm = getAttr(el, "name");
+    if (nm && norm(nm)) return norm(nm);
+    return "";
+  }
+
+  // Matchbarer (normalisierter) Text eines Elements. Fuer Eingabefelder die BESCHRIFTUNG
+  // (label/placeholder/aria/name) statt des leeren textContent — sonst textContent. `scope`
+  // ist noetig, um label[for]/aria-labelledby aufzuloesen.
+  function textOf(el, scope) {
     if (!el) return "";
     try {
+      if (isEditableEl(el)) return editableLabelText(el, scope);
       return norm(el.textContent || "");
     } catch (err) {
       return "";
@@ -122,7 +187,7 @@
       }
       if (hit) {
         if (!wantText) return { el: hit, confidence: "exact" };
-        if (containsEither(textOf(hit), wantText)) return { el: hit, confidence: "exact" };
+        if (containsEither(textOf(hit, scope), wantText)) return { el: hit, confidence: "exact" };
         // css traf, aber Text passt nicht (SPA umgebaut / css zeigt woanders hin) ->
         // NICHT hier verankern, sondern die textbasierten Stufen versuchen.
       }
@@ -138,14 +203,14 @@
     for (var i = 0; i < cands.length; i++) {
       var el = cands[i];
       if (wantRole && roleOf(el) !== wantRole) continue;
-      if (textOf(el) === wantText) exactMatches.push(el);
+      if (textOf(el, scope) === wantText) exactMatches.push(el);
     }
     if (exactMatches.length === 1) return { el: exactMatches[0], confidence: "text" };
 
     // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
     var fuzzyMatches = [];
     for (var j = 0; j < cands.length; j++) {
-      var t = textOf(cands[j]);
+      var t = textOf(cands[j], scope);
       if (t && containsEither(t, wantText)) fuzzyMatches.push(cands[j]);
     }
     if (fuzzyMatches.length === 1) return { el: fuzzyMatches[0], confidence: "fuzzy" };

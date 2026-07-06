@@ -1,7 +1,7 @@
 // Live-Test der Live-Führungs-API (Welle 31, §5). Startet einen lokalen Next-Server auf
 // PORT=3014 und prüft die drei Recorder-Routen der Live-Führung:
 //   (a) GET  /api/recorder/tutorials       — falscher Token -> 401; Liste NUR Konto-Tutorials,
-//       mit stepCount/selectorCount/site_domains; CORS + OPTIONS.
+//       mit stepCount/selectorCount/site_domains/category ({id,name}|null); CORS + OPTIONS.
 //   (b) GET  /api/recorder/tutorials/[id]  — steps+branches+selector, signierte imageUrl,
 //       Entscheidungs-Frage; fremde ID -> 404; falscher Token -> 401.
 //   (c) POST /api/recorder/guide-event     — legt events-Zeile (type='guide') an; falscher
@@ -128,6 +128,30 @@ try {
   const seedB = await seedTutorial(B.accountId, tokenB); // Fremd-Tutorial (Konto B)
   ok(!!seedA.tutorialId && !!seedB.tutorialId, "Testdaten angelegt (2 Konten, je 1 Tutorial)");
 
+  // Kategorie (Welle 32, Punkt C): Konto-Kategorie anlegen + Tutorial A zuordnen; zusätzlich
+  // ein „nacktes" Tutorial OHNE Kategorie für den null-Fall.
+  const catName = "API Kategorie " + stamp;
+  const { data: catRow } = await admin
+    .from("categories")
+    .insert({ account_id: A.accountId, name: catName, position: 0 })
+    .select("id")
+    .single();
+  const catId = catRow.id;
+  await admin.from("tutorials").update({ category_id: catId }).eq("id", seedA.tutorialId);
+  const { data: bareRow } = await admin
+    .from("tutorials")
+    .insert({
+      account_id: A.accountId,
+      title: "Ohne Kategorie " + stamp,
+      status: "draft",
+      slug: `guide-live-bare-${stamp}`,
+      visibility: "public",
+      site_domains: [],
+    })
+    .select("id")
+    .single();
+  const bareId = bareRow.id;
+
   console.log("… Next-Server auf Port", PORT, "wird gestartet (kann einen Moment dauern) …");
   server = spawn("npx", ["next", "dev", "-p", String(PORT)], {
     env: { ...process.env, PORT: String(PORT) },
@@ -163,6 +187,11 @@ try {
   ok(mine && mine.selectorCount === 1, `selectorCount = 1 (nur Schritt 1 hat Selektor) (war ${mine && mine.selectorCount})`);
   ok(mine && Array.isArray(mine.site_domains) && mine.site_domains.includes("example.com"), "site_domains übertragen");
   ok(mine && mine.slug === seedA.slug && mine.status === "draft", "slug + status korrekt");
+  // category (Welle 32, Punkt C): {id,name} bei Tutorial mit Kategorie, null ohne.
+  ok(mine && mine.category && mine.category.id === catId && mine.category.name === catName,
+    `category = {id,name} bei Tutorial mit Kategorie (war ${JSON.stringify(mine && mine.category)})`);
+  const bare = (listBody.tutorials || []).find((t) => t.id === bareId);
+  ok(bare && bare.category === null, `category = null bei Tutorial ohne Kategorie (war ${JSON.stringify(bare && bare.category)})`);
 
   // ── (b) GET /api/recorder/tutorials/[id] ────────────────────────────────────
   const detBad = await getAuth("/api/recorder/tutorials/" + seedA.tutorialId, crypto.randomUUID());

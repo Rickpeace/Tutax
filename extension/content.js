@@ -666,7 +666,16 @@
     const out = {};
     const css = cssPathFor(el);
     if (css) out.css = css;
-    const text = clampLabel(visibleText(el) || "", 80);
+    // Text-Gegenprobe fuer die Live-Fuehrung: Eingabefelder (input/textarea/select/
+    // contenteditable) haben KEINEN sichtbaren textContent — als `text` daher das zugehoerige
+    // LABEL erfassen (dieselbe Kette wie labelFor: <label>/aria/Ueberschrift/placeholder/name).
+    // So findet guide-resolve.js das Feld ueber label/placeholder/aria wieder, statt am leeren
+    // textContent zu scheitern (Richards Bug: „Tragen Sie … ein" wurde nicht markiert).
+    const editable = editableInfo(controlForLabel(el));
+    const rawText = editable.editable
+      ? labelForEditable(editable.control, editable.kind)
+      : visibleText(el);
+    const text = clampLabel(rawText || "", 80);
     if (text) out.text = text;
     const role = roleFor(el).slice(0, 40);
     if (role) out.role = role;
@@ -1056,6 +1065,84 @@
   let guideTargetEl = null; // aufgeloestes Ziel-Element
   let guideSearchTimer = null; // SPA-Nachversuch (Intervall)
   let guideRafPending = false; // Reposition-Drossel (requestAnimationFrame)
+  let guideAdvanceModeCur = "click"; // wie das Ziel „weiter" ausloest (s. guideAdvanceMode)
+  let guideFieldListeners = null; // { el, onChange, onBlur, onKeydown } fuer Eingabe-Ziele
+  let guideAdvanced = false; // Doppel-„weiter"-Schutz (Enter + blur / mehrere pointerdown)
+
+  // Genau EINMAL „weiter" pro Schritt melden (Enter + folgendes blur duerfen NICHT zwei
+  // Schritte ueberspringen). Der Reset passiert beim naechsten steply-guide-show.
+  function guideAdvance() {
+    if (guideAdvanced) return;
+    guideAdvanced = true;
+    try {
+      chrome.runtime.sendMessage({ type: "steply-guide-advance" });
+    } catch (err) {
+      /* Panel evtl. geschlossen - egal */
+    }
+  }
+
+  // Wie ein aufgeloestes Ziel „weiter" schaltet:
+  //   "click"  -> pointerdown (Buttons/Links/normale Klick-Ziele; Bestand).
+  //   "text"   -> Enter im Feld ODER Verlassen (blur/change) mit NICHT-leerem Wert
+  //               (input[text], textarea, contenteditable, role=textbox/searchbox/combobox).
+  //   "toggle" -> change (Checkbox/Radio).
+  //   "select" -> change (natives <select>).
+  // Ein Klick IN ein Textfeld darf NICHT weiterschalten — sonst kommt man nie zum Tippen.
+  function guideAdvanceMode(el) {
+    if (!el || el.nodeType !== 1) return "click";
+    const tag = (el.tagName || "").toLowerCase();
+    const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+    if (tag === "select") return "select";
+    if (tag === "textarea") return "text";
+    if (tag === "input") {
+      if (/^(checkbox|radio)$/.test(type)) return "toggle";
+      if (/^(button|submit|reset|image|file|range|color)$/.test(type)) return "click";
+      return "text"; // text/email/search/password/number/tel/url/date/...
+    }
+    if (el.isContentEditable === true) return "text";
+    const role = ((el.getAttribute && el.getAttribute("role")) || "").toLowerCase();
+    if (role === "textbox" || role === "searchbox" || role === "combobox") return "text";
+    return "click";
+  }
+
+  // Hat ein Textfeld einen NICHT-leeren Wert? (contenteditable ueber textContent.)
+  function guideFieldHasValue(el) {
+    try {
+      if (el.isContentEditable === true) return !!String(el.textContent || "").trim();
+      return !!String(el.value == null ? "" : el.value).trim();
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Fuer Eingabe-Ziele die passenden Listener setzen (Klick-Ziele laufen ueber pointerdown).
+  function attachGuideFieldListeners(el, mode) {
+    guideFieldListeners = null;
+    if (mode === "click") return;
+    const onChange = () => {
+      if (mode === "toggle" || mode === "select") {
+        guideAdvance();
+      } else if (mode === "text" && guideFieldHasValue(el)) {
+        guideAdvance();
+      }
+    };
+    const onBlur = () => {
+      if (mode === "text" && guideFieldHasValue(el)) guideAdvance();
+    };
+    const onKeydown = (e) => {
+      if (mode === "text" && (e.key === "Enter" || e.keyCode === 13)) guideAdvance();
+    };
+    try {
+      el.addEventListener("change", onChange, true);
+      if (mode === "text") {
+        el.addEventListener("blur", onBlur, true);
+        el.addEventListener("keydown", onKeydown, true);
+      }
+      guideFieldListeners = { el, onChange, onBlur, onKeydown };
+    } catch (err) {
+      guideFieldListeners = null;
+    }
+  }
 
   function guideCleanup() {
     if (guideSearchTimer) {
@@ -1065,6 +1152,17 @@
     document.removeEventListener("pointerdown", onGuidePointerDown, true);
     window.removeEventListener("scroll", guideReposition, true);
     window.removeEventListener("resize", guideReposition, true);
+    if (guideFieldListeners) {
+      const { el, onChange, onBlur, onKeydown } = guideFieldListeners;
+      try {
+        el.removeEventListener("change", onChange, true);
+        el.removeEventListener("blur", onBlur, true);
+        el.removeEventListener("keydown", onKeydown, true);
+      } catch (err) {
+        /* egal */
+      }
+      guideFieldListeners = null;
+    }
     if (guideOverlayEl && guideOverlayEl.parentNode) {
       try {
         guideOverlayEl.parentNode.removeChild(guideOverlayEl);
@@ -1078,17 +1176,14 @@
     guideTargetEl = null;
   }
 
-  // pointerdown auf dem Ziel (oder einem Kind) -> „weiter". Capture-Phase, damit es auch
-  // feuert, wenn die Seite stopPropagation nutzt bzw. sofort navigiert.
+  // pointerdown auf dem Ziel (oder einem Kind) -> „weiter" — NUR fuer Klick-Ziele. Textfelder/
+  // Checkbox/Select schalten ueber ihre eigenen Listener (s. attachGuideFieldListeners) weiter.
+  // Capture-Phase, damit es auch feuert, wenn die Seite stopPropagation nutzt bzw. navigiert.
   function onGuidePointerDown(event) {
-    if (!guideTargetEl) return;
+    if (!guideTargetEl || guideAdvanceModeCur !== "click") return;
     const t = event.target;
     if (t === guideTargetEl || (guideTargetEl.contains && guideTargetEl.contains(t))) {
-      try {
-        chrome.runtime.sendMessage({ type: "steply-guide-advance" });
-      } catch (err) {
-        /* Panel evtl. geschlossen - egal */
-      }
+      guideAdvance();
     }
   }
 
@@ -1114,7 +1209,7 @@
       fs.width = r.width + pad * 2 + "px";
       fs.height = r.height + pad * 2 + "px";
       if (guideBadgeEl) {
-        let badgeTop = top - 22;
+        let badgeTop = top - 25;
         if (badgeTop < 2) badgeTop = top + 2; // oben kein Platz -> nach innen
         guideBadgeEl.style.left = Math.max(2, left) + "px";
         guideBadgeEl.style.top = badgeTop + "px";
@@ -1143,7 +1238,9 @@
     fst.border = "3px solid #ef6a4e";
     fst.borderRadius = "10px";
     fst.pointerEvents = "none";
-    fst.boxShadow = "0 0 0 3px rgba(239,106,78,0.28)";
+    fst.transformOrigin = "center center";
+    // Ruhe-Zustand des Glows (der Puls/Blitz animiert darauf auf).
+    fst.boxShadow = GUIDE_GLOW_BASE;
     container.appendChild(frame);
 
     const badge = document.createElement("div");
@@ -1152,11 +1249,14 @@
     bst.pointerEvents = "none";
     bst.background = "#ef6a4e";
     bst.color = "#fff";
-    bst.font = "600 12px/1.4 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-    bst.padding = "2px 8px";
+    // Groesser + kontrastreicher (Welle 32, Punkt B): kraeftigere Schrift, weisser Rahmen +
+    // dunkler Schlagschatten, damit die Pille auf jedem Untergrund lesbar bleibt.
+    bst.font = "800 13px/1.35 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    bst.padding = "3px 9px";
     bst.borderRadius = "999px";
-    bst.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+    bst.boxShadow = "0 0 0 2px rgba(255,255,255,0.85), 0 2px 8px rgba(0,0,0,0.35)";
     bst.whiteSpace = "nowrap";
+    bst.letterSpacing = "0.02em";
     badge.textContent = (step.index || 1) + "/" + (step.total || 1);
     container.appendChild(badge);
 
@@ -1165,29 +1265,72 @@
     guideFrameEl = frame;
     guideBadgeEl = badge;
 
-    // Sanfter Puls (Koralle-Glow) ueber die Web-Animations-API - kein globales CSS noetig.
+    // ERSCHEINEN: kurzer „Hingucker" (Aufziehen 1.15 -> 1.0 + kraeftiger Glow-Blitz), danach
+    // ruhiger Dauer-Puls (~1,2s). Alles ueber die Web-Animations-API — kein globales CSS.
+    startGuideAppear(frame);
+  }
+
+  // Ruhe-Glow (Basis) und der kraeftige „Blitz"-Glow (Erscheinen/Puls-Hochpunkt).
+  const GUIDE_GLOW_BASE =
+    "0 0 0 3px rgba(239,106,78,0.55), 0 0 15px 3px rgba(239,106,78,0.35)";
+  const GUIDE_GLOW_FLASH =
+    "0 0 0 6px rgba(239,106,78,0.6), 0 0 34px 12px rgba(239,106,78,0.5)";
+  const GUIDE_GLOW_DIM =
+    "0 0 0 8px rgba(239,106,78,0.12), 0 0 26px 9px rgba(239,106,78,0.14)";
+
+  // Ruhiger Dauer-Puls (~1,2s): Glow-Ring atmet zwischen kraeftig und weich. Bewusst NICHT
+  // epilepsie-artig (weiche ease-in-out-Rampe, moderater Frequenzbereich).
+  function startGuidePulse(frame) {
     try {
       frame.animate(
         [
-          { boxShadow: "0 0 0 3px rgba(239,106,78,0.35)" },
-          { boxShadow: "0 0 0 9px rgba(239,106,78,0.04)" },
-          { boxShadow: "0 0 0 3px rgba(239,106,78,0.35)" },
+          { boxShadow: GUIDE_GLOW_BASE },
+          { boxShadow: GUIDE_GLOW_DIM },
+          { boxShadow: GUIDE_GLOW_BASE },
         ],
-        { duration: 1400, iterations: Infinity, easing: "ease-in-out" }
+        { duration: 1200, iterations: Infinity, easing: "ease-in-out" }
       );
     } catch (err) {
-      /* ohne Animation trotzdem sichtbar */
+      /* ohne Animation trotzdem sichtbar (statischer Basis-Glow bleibt) */
+    }
+  }
+
+  // „Hingucker" beim Erscheinen: einmaliges Aufziehen (Zoom 1.15 -> 1.0) + Glow-Blitz, dann
+  // in den Dauer-Puls uebergehen. Faellt bei fehlender Animations-API sofort auf den Puls.
+  function startGuideAppear(frame) {
+    let anim = null;
+    try {
+      anim = frame.animate(
+        [
+          { transform: "scale(1.15)", boxShadow: GUIDE_GLOW_FLASH },
+          { transform: "scale(0.98)", boxShadow: GUIDE_GLOW_BASE, offset: 0.72 },
+          { transform: "scale(1)", boxShadow: GUIDE_GLOW_BASE },
+        ],
+        { duration: 520, easing: "cubic-bezier(0.22,1,0.36,1)" }
+      );
+    } catch (err) {
+      anim = null;
+    }
+    if (anim) {
+      anim.onfinish = () => startGuidePulse(frame);
+      anim.oncancel = () => {};
+    } else {
+      startGuidePulse(frame);
     }
   }
 
   // Ziel gefunden: Overlay bauen, verankern, in Sicht scrollen, Listener setzen.
   function guideAttach(el, step) {
     guideTargetEl = el;
+    guideAdvanceModeCur = guideAdvanceMode(el);
     buildGuideOverlay(step);
     guideReposition();
     window.addEventListener("scroll", guideReposition, true);
     window.addEventListener("resize", guideReposition, true);
     document.addEventListener("pointerdown", onGuidePointerDown, true);
+    // Eingabe-Ziele (Textfeld/Checkbox/Select) schalten NICHT bei pointerdown weiter, sondern
+    // erst nach Eingabe (Enter/blur/change) — s. attachGuideFieldListeners.
+    attachGuideFieldListeners(el, guideAdvanceModeCur);
     try {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
     } catch (err) {
@@ -1209,6 +1352,7 @@
   // Einen Schritt anzeigen: Element aufloesen (SPA-tolerant), sonst found:false melden.
   function showGuideStep(step) {
     guideCleanup(); // vorherigen Zustand restlos abbauen
+    guideAdvanced = false; // „weiter"-Schutz je Schritt zuruecksetzen
     const resolver =
       (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
     if (!step || !step.selector || !resolver) {
