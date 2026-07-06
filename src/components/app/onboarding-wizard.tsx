@@ -1,20 +1,54 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles, ArrowRight, Wand2, PencilLine, Palette } from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Sparkles, ArrowRight, Wand2, PencilLine, Palette, Globe, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { completeOnboarding, skipOnboarding } from "@/app/onboarding/actions";
+import { saveLanguages } from "@/app/app/settings/branding/actions";
+import { EXTRA_LANGS, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 
-export function OnboardingWizard({ initialName }: { initialName: string }) {
+export function OnboardingWizard({
+  initialName,
+  isBusiness,
+  initialLanguages,
+}: {
+  initialName: string;
+  isBusiness: boolean;
+  initialLanguages: ExtraLang[];
+}) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName);
   const [website, setWebsite] = useState("");
+  const [langs, setLangs] = useState<Set<ExtraLang>>(new Set(initialLanguages));
   const [pending, startTransition] = useTransition();
 
+  function toggleLang(lang: ExtraLang, on: boolean) {
+    setLangs((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(lang);
+      else next.delete(lang);
+      return next;
+    });
+  }
+
   function finish() {
-    startTransition(() => completeOnboarding({ name, websiteUrl: website }));
+    startTransition(async () => {
+      // Sprachen über die bestehende Branding-Action speichern (Server-Gate bleibt dort).
+      // Nur Business-Konten können hier überhaupt etwas ausgewählt haben.
+      if (isBusiness && langs.size > 0) {
+        const res = await saveLanguages([...langs]);
+        if (!res.ok) {
+          toast.error(res.error || "Sprachen konnten nicht gespeichert werden");
+          return; // Onboarding NICHT abschließen, Nutzer kann korrigieren
+        }
+      }
+      await completeOnboarding({ name, websiteUrl: website });
+    });
   }
   function skip() {
     startTransition(() => skipOnboarding());
@@ -84,6 +118,68 @@ export function OnboardingWizard({ initialName }: { initialName: string }) {
                 rekonstruiert sie daraus Ihre Farben, Schriften und das Look &amp; Feel –
                 auf Wunsch automatisch.
               </p>
+            </div>
+
+            {/* Sprachen (Welle 30): „damit das gleich am Anfang drin ist“. Business kann
+                direkt anhaken; Free/Pro sehen die Auswahl als Teaser. Überspringbar. */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="flex items-center gap-1.5">
+                  <Globe className="size-3.5 text-primary" />
+                  Sprachen Ihrer Hilfe-Seite
+                </Label>
+                {!isBusiness && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Crown className="size-3" /> Business
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                In welchen Sprachen soll Ihre Hilfe-Seite erscheinen? Deutsch ist immer dabei.
+              </p>
+              <div className="space-y-2.5 rounded-lg border border-border p-3">
+                <label className="flex items-center gap-2.5 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    className="size-4 accent-[var(--primary)] opacity-70"
+                  />
+                  Deutsch
+                  <span className="text-xs text-muted-foreground">(immer an)</span>
+                </label>
+                {EXTRA_LANGS.map((lang) => {
+                  const on = langs.has(lang);
+                  return (
+                    <label
+                      key={lang}
+                      className={`flex items-center gap-2.5 text-sm text-ink ${
+                        isBusiness ? "cursor-pointer" : "cursor-not-allowed"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={!isBusiness || pending}
+                        onChange={(e) => toggleLang(lang, e.target.checked)}
+                        className="size-4 accent-[var(--primary)] disabled:opacity-50"
+                      />
+                      {LANG_NAME[lang]}
+                    </label>
+                  );
+                })}
+              </div>
+              {!isBusiness && (
+                <p className="text-xs text-muted-foreground">
+                  Mehrsprachige Hilfe-Seite gibt es im Business-Tarif.{" "}
+                  <Link
+                    href="/app/settings/abo"
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    Mehr erfahren
+                  </Link>
+                </p>
+              )}
             </div>
           </div>
 
