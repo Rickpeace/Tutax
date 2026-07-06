@@ -202,6 +202,24 @@ steply-recorder.json, nie blockierend) · „Neues Tutorial" mit DRITTER Karte
 ⚡ Sofort-Anleitung (erkennt Installation am DOM-Marker `data-steply-recorder`)
 · Store-Paket `extension/store/LISTING.md` (Texte, Berechtigungs-Begründungen,
 Richard-Checkliste). Zwischenlösung bis Chrome-Web-Store-Konto existiert.
+**Fable-Hotfixes v2.2.1–v2.2.3 (05.–06.07., aus Richards Tests):** ⚡-Karte im
+„Neue Anleitung"-Dialog öffnet die Seitenleiste DIREKT (Klick-Geste reicht via
+content→background zu sidePanel.open() durch, Chrome ≥116) · content.js wird in
+ALTOFFENE Tabs nachgeimpft (scripting-Permission; vorher blieben Klicks stumm,
+bis man die Seite neu lud) + Panel-Warnung bei chrome://-Tabs · Textqualität:
+zitat-sichere Titel-Kürzung (templateTitle kürzt das Zitat-Innere, Quotes immer
+paarig), Kachel-Überschrift schlägt Metadaten-aria („…19 minutes"), Feinschliff
+darf lange Labels paraphrasieren, keine Emojis, Text ≠ Titel-Echo ·
+E-Mail-Audit: Einladungs-Mail auf Steply-Branding/warme CI (war „Taxtut" +
+Alt-Indigo!), Resend live bewiesen, 4 Richard-Handgriffe in TODO (Supabase-SMTP
+via Resend = kritisch für Kunden-Auth-Mails).
+**Opus Welle 26 + Fable (06.07.):** 🛡️ **Darstellungs-Härtung gegen echte
+Aufnahme-Inhalte** (lange Titel/URLs/Emojis aus der Sofort-Anleitung): Wizard
+(Titel, Verzweigungs-Antworten), RichText zentral, /h-Tutorial-Seite, Hub-Karten
+(line-clamp-2 + Grid-min-w-0), Bibliothek-Karten, Builder-Schrittliste,
+Druckansicht — nur break-words/min-w-0/line-clamp, pixeltreu bei normalem
+Inhalt. Beweis: `scripts/test-wizard-hostile.mjs` (Playwright, Seed feindlicher
+Tutorials, scrollWidth-Asserts Desktop+Mobil, 22/22 grün, Screenshots gesichtet).
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
