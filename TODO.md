@@ -28,12 +28,16 @@
      Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
   4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
      End-zu-End; Absender muss „Steply" heißen).
-- [ ] **Extension v2.6.0 in Chrome testen** (NEU LADEN). Welle 32 ist gemerged:
-  Eingabe-Schritte werden live geführt (Enter/Feld-verlassen = weiter),
-  auffälligeres Overlay, Führen-Liste gefiltert („Diese Seite + Live" Default,
-  Kategorien-Gruppen), Banner nur im Anker-Modus, Icon-Badge (nur published),
-  „Bring mich hin". Kern-Szenario: Sofort-Anleitung MIT Eingabefeld aufnehmen
-  → live führen → Feld wird markiert, Eingabe schaltet weiter.
+- [ ] **Extension v2.7.0 in Chrome testen** (NEU LADEN). Stand: Welle 32
+  (Eingabe-Schritte live führbar, Overlay auffälliger, Führen-Liste „Diese
+  Seite + Live" mit Kategorien, Icon-Badge, „Bring mich hin") + Welle 33
+  (Markierungen auf Panel-Screenshots pixelgenau, Overlay räumt sich nach
+  Panel-Schließen selbst ab, 5s-Suche mit Grund-Anzeige, Banner gehärtet,
+  stabile Selektor-Anker statt Base-UI-Wegwerf-IDs). Kern-Szenarien:
+  (a) frische Sofort-Anleitung MIT Eingabefeld → live führen → Feld markiert,
+  Eingabe schaltet weiter; (b) Führung starten, Panel schließen → Badge auf
+  der Seite verschwindet binnen Sekunden; (c) Schritt mit Screenshot in
+  anderem Seitenverhältnis → Markierung sitzt exakt.
   NEU in v2.5.x (Wellen 31a–d): „Anleitung führen" (Live-Overlay auf der echten
   Seite, Klick = weiter, Verzweigungen, Fallback bei totem Selektor) · „📍 Für
   diese Seite" (Panel zeigt passende Tutorials zur offenen Website; Bestand:

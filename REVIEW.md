@@ -295,6 +295,23 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Fable-Hotfix v2.6.1 + Opus Welle 33 (06.07., v2.7.0):** 🔧 **Führungs-Bugfixes**
+nach Richards zweiter Test-Runde. Hotfix: globales `[hidden]{display:none
+!important}` in styles.css — `.target-banner{display:flex}` überstimmte das
+hidden-Attribut, das „Aufnahme für:"-Banner klebte IMMER sichtbar (leer) und
+„Ziel verwerfen" wirkte tot; gleiche Falle latent in 3 weiteren Panel-Bereichen.
+Welle 33: (1) Panel-Screenshot-Markierungen pixelgenau (aspect-ratio-Frame
+`--run-ar` statt object-fit-Letterbox; Beweis scripts/test-run-geometry.mjs);
+(2) Overlay-Lifecycle — Führungs-Port Panel↔SW (onDisconnect → hide an Tab),
+20s-Ping/60s-Watchdog im content.js, Ziel weg → Overlay sofort verstecken statt
+bei 0,0 kleben; (3) Element-Suche 5s mit MutationObserver + `reason` im
+Fallback-Hinweis („… nicht zu finden (timeout)"); (4) Banner-Härtung
+(target-banner.js, nur bei echtem Ziel, Selbstheilung kaputter Storage-Objekte,
+Init-try/catch); (5) **flüchtige IDs** (DB-Diagnose: Base UI vergibt je Render
+neue `#base-ui-_r_*`-IDs!) — Aufnahme wählt nur noch stabile Anker
+(isVolatileId geteilt), Resolver springt bei toten Wegwerf-ID-css direkt zur
+role+Text-Suche (reason "volatile-id"). Tests grün: guide-resolve (erweitert),
+target-banner (neu), run-geometry (neu), Build.
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle
