@@ -99,6 +99,9 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     highlights: [highlightFromRect(s.rect), ...suggestedBlurHighlights(s.sensitive)],
     // selector (Welle 24): Vorbau für Live-Führung. Fehlt bei alten Extensions -> null.
     selector: s.selector ?? null,
+    // file_meta (Welle 39, Datei-Brücke): {role:download|upload, filename, mime, size} — NUR
+    // Metadaten, nie Datei-Bytes. Fehlt bei normalen Schritten/alten Extensions -> null.
+    file_meta: s.file_meta ?? null,
     position: posBase + i + 1,
     is_decision: false,
   }));

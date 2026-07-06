@@ -46,6 +46,13 @@
     });
     var total = list.length;
 
+    // Datei-Brücke (Welle 39): Download-/Upload-Schritte in Ablauf-Reihenfolge verknüpfen
+    // (Download liefert key file1/file2…, Upload verbraucht den passenden Download). Wirft,
+    // wenn ein Upload keinen vorherigen Download hat (defensiv — die Konvertierung fängt das
+    // schon ab, aber ein re-derivierter Plan bleibt dadurch garantiert konsistent).
+    var linked = linkFileSteps(list);
+    if (!linked.ok) throw new Error(linked.error);
+
     return list.map(function (s, idx) {
       var s0 = s || {};
       var action = {
@@ -60,6 +67,9 @@
         // Markierungen fürs Referenzbild in der Miss-Ansicht (Welle 37). Immer ein Array.
         highlights: Array.isArray(s0.highlights) ? s0.highlights : [],
       };
+      // Datei-Brücke: {role:'download',key} bzw. {role:'upload',source}. Nur setzen, wenn der
+      // Schritt eine Datei trägt (sonst bleibt das Feld weg — bestehende Abläufe unverändert).
+      if (linked.links[idx]) action.file_meta = linked.links[idx];
       // Wert nur setzen, wenn der Schritt einen Parameter referenziert und ein Wert vorliegt.
       if (s0.param_key && Object.prototype.hasOwnProperty.call(vals, s0.param_key)) {
         action.value = vals[s0.param_key];
@@ -179,12 +189,73 @@
     return submitOutcome(prevUrl, events) === "bounced";
   }
 
+  // ── linkFileSteps (Welle 39, Datei-Brücke) ────────────────────────────────────
+  // Ordnet die Datei-Schritte eines Ablaufs in REIHENFOLGE zu: jeder Download-Schritt liefert
+  // eine Datei unter einem key (file1, file2, …); jeder Upload-Schritt verbraucht die passende
+  // Datei (1. Upload ← 1. Download, 2. Upload ← 2. Download; FIFO). Der Schlüssel ist die
+  // ROLLE aus step.file_meta.role — die tatsächliche Aktion (click/upload) ist egal.
+  //   steps: geordnetes Array; je Eintrag optional { file_meta: { role: 'download'|'upload' } }.
+  //   → { ok:true, links:[ null | {role:'download',key} | {role:'upload',source} ] } (parallel)
+  //   → { ok:false, error, index }  wenn ein Upload keinen vorherigen Download hat.
+  // SICHERHEIT: rein strukturell — keine Datei-Bytes, keine Werte. Wirft nie.
+  function linkFileSteps(steps) {
+    var list = Array.isArray(steps) ? steps : [];
+    var links = new Array(list.length).fill(null);
+    var pool = []; // noch nicht verbrauchte Download-keys (FIFO)
+    var dlCount = 0;
+    for (var i = 0; i < list.length; i++) {
+      var fm = list[i] && list[i].file_meta;
+      var role = fm && typeof fm.role === "string" ? fm.role : "";
+      if (role === "download") {
+        var key = "file" + ++dlCount;
+        links[i] = { role: "download", key: key };
+        pool.push(key);
+      } else if (role === "upload") {
+        if (!pool.length) {
+          return {
+            ok: false,
+            index: i,
+            error:
+              "Der Ablauf lädt eine Datei hoch, aber vorher wird keine heruntergeladen.",
+          };
+        }
+        links[i] = { role: "upload", source: pool.shift() };
+      }
+    }
+    return { ok: true, links: links };
+  }
+
+  // ── planFileChunks (Welle 39) ─────────────────────────────────────────────────
+  // Größen-Planung für den Transport einer Datei (base64) ans Content-Script. Bleibt die
+  // base64-Länge unter singleMax, geht sie als EINE Nachricht; sonst in ⌈len/chunkSize⌉
+  // Stücken (Chunk-Protokoll `steply-exec-file-chunk`). Rein arithmetisch, testbar.
+  function planFileChunks(b64len, singleMax, chunkSize) {
+    var len = typeof b64len === "number" && b64len > 0 ? Math.floor(b64len) : 0;
+    var single = typeof singleMax === "number" && singleMax > 0 ? singleMax : 8 * 1024 * 1024;
+    var cs = typeof chunkSize === "number" && chunkSize > 0 ? chunkSize : 4 * 1024 * 1024;
+    if (len === 0) return { mode: "single", chunks: 0, chunkSize: cs };
+    if (len <= single) return { mode: "single", chunks: 1, chunkSize: cs };
+    return { mode: "chunked", chunks: Math.ceil(len / cs), chunkSize: cs };
+  }
+
+  // ── fileCapDecision (Welle 39) ────────────────────────────────────────────────
+  // Deckel-Entscheidung: Dateien bis `cap` (Standard 50 MB) werden im Speicher getragen
+  // (Weg 1). Darüber → Disk/Mensch-Fallback (Weg 2/3), nie 66 MB base64 durch den Speicher.
+  function fileCapDecision(size, cap) {
+    var c = typeof cap === "number" && cap > 0 ? cap : 50 * 1024 * 1024;
+    var s = typeof size === "number" && size >= 0 ? size : 0;
+    return s > c ? "disk-fallback" : "memory";
+  }
+
   var api = {
     buildRunPlan: buildRunPlan,
     needsNavigation: needsNavigation,
     redactDetail: redactDetail,
     submitOutcome: submitOutcome,
     submitBounced: submitBounced,
+    linkFileSteps: linkFileSteps,
+    planFileChunks: planFileChunks,
+    fileCapDecision: fileCapDecision,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

@@ -17,6 +17,7 @@ import {
   ToggleRight,
   Globe,
   ChevronDown,
+  Upload,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
 import type { Highlight } from "@/lib/types";
@@ -42,12 +43,18 @@ export type AutomationStepView = {
   id: string;
   position: number;
   title: string;
-  action: "click" | "fill" | "select" | "toggle";
+  action: "click" | "fill" | "select" | "toggle" | "upload";
   paramKey: string | null;
   imagePath: string | null;
   // Markierungen des Aufnahme-Schritts (Welle 37) — Overlay auf dem Referenz-Screenshot.
   // Bestands-Automationen haben []; dann wird kein Overlay gezeichnet.
   highlights: Highlight[];
+  // Datei-Brücke (Welle 39): Download-Schritt liefert eine Datei (key), Upload-Schritt
+  // verbraucht sie (source=key eines vorherigen Download-Schritts). null = normaler Schritt.
+  fileMeta:
+    | { role: "download"; key: string; filename?: string }
+    | { role: "upload"; source: string; filename?: string }
+    | null;
 };
 
 export type AutomationRunView = {
@@ -67,6 +74,7 @@ const ACTION_META: Record<
   fill: { label: "Ausfüllen", Icon: Type },
   select: { label: "Auswählen", Icon: ListChecks },
   toggle: { label: "Umschalten", Icon: ToggleRight },
+  upload: { label: "Datei hochladen", Icon: Upload },
 };
 
 const MODE_LABEL: Record<string, string> = {
@@ -354,6 +362,14 @@ export function AutomationDetail({
             const meta = ACTION_META[s.action];
             const open = openStepId === s.id;
             const imageUrl = stepImageUrls[s.id];
+            // Datei-Brücke (Welle 39): Download liefert eine Datei, Upload verbraucht die
+            // Datei aus dem Download-Schritt mit passendem key.
+            const uploadSource = s.fileMeta?.role === "upload" ? s.fileMeta.source : null;
+            const uploadSourceNo = uploadSource
+              ? steps.find(
+                  (d) => d.fileMeta?.role === "download" && d.fileMeta.key === uploadSource,
+                )?.position ?? null
+              : null;
             return (
               <li
                 key={s.id}
@@ -378,6 +394,22 @@ export function AutomationDetail({
                     <code className="hidden shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground sm:inline">
                       {s.paramKey}
                     </code>
+                  )}
+                  {s.fileMeta?.role === "download" && (
+                    <span
+                      className="flex shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-[3px] text-[11px] font-extrabold text-accent-foreground"
+                      title={s.fileMeta.filename ? `Liefert „${s.fileMeta.filename}“` : "Liefert Datei"}
+                    >
+                      📥 liefert Datei
+                    </span>
+                  )}
+                  {s.fileMeta?.role === "upload" && (
+                    <span
+                      className="flex shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-[3px] text-[11px] font-extrabold text-accent-foreground"
+                      title={s.fileMeta.filename ? `Datei „${s.fileMeta.filename}“` : "Getragene Datei"}
+                    >
+                      📤 {uploadSourceNo ? `Datei aus Schritt ${uploadSourceNo}` : "Datei"}
+                    </span>
                   )}
                   <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2">
                     <meta.Icon className="size-3" /> {meta.label}

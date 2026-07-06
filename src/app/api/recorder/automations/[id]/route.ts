@@ -36,6 +36,8 @@ type StepRow = {
   param_key: string | null;
   image_path: string | null;
   highlights: unknown;
+  // Datei-Brücke (Welle 39): {role:download,key} liefert / {role:upload,source} verbraucht.
+  file_meta: unknown;
 };
 
 export async function OPTIONS() {
@@ -73,7 +75,7 @@ export async function GET(
 
   const { data: stepsData } = await admin
     .from("automation_steps")
-    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights")
+    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -122,6 +124,12 @@ export async function GET(
         imageUrl: urlByStep.get(s.id) ?? null,
         // Markierungen fürs Referenzbild (Welle 37). Bestands-Automationen: highlights=null → [].
         highlights: Array.isArray(s.highlights) ? s.highlights : [],
+        // Datei-Brücke (Welle 39): {role:download,key} | {role:upload,source} | null. NUR die
+        // Verknüpfung — NIE Datei-Bytes. Bestands-Automationen: file_meta=null.
+        file_meta:
+          s.file_meta && typeof s.file_meta === "object" && !Array.isArray(s.file_meta)
+            ? s.file_meta
+            : null,
       })),
     },
     { status: 200, headers: RECORDER_ME_CORS },

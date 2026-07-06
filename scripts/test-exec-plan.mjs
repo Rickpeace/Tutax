@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -160,5 +160,73 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(submitOutcome(LOGIN, null) === "pending", "submitOutcome: events null → pending");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome verifiziert.");
+// ══════════ linkFileSteps (Welle 39, Datei-Brücke) ══════════
+{
+  const dl = () => ({ file_meta: { role: "download" } });
+  const up = () => ({ file_meta: { role: "upload" } });
+  const plain = () => ({});
+
+  // 1 Download → 1 Upload: key file1, source file1.
+  let r = linkFileSteps([dl(), plain(), up()]);
+  ok(r.ok, "linkFileSteps: Download→Upload ok");
+  ok(r.links[0] && r.links[0].role === "download" && r.links[0].key === "file1", "linkFileSteps: Download bekommt key file1");
+  ok(r.links[1] === null, "linkFileSteps: Nicht-Datei-Schritt bleibt null");
+  ok(r.links[2] && r.links[2].role === "upload" && r.links[2].source === "file1", "linkFileSteps: Upload verweist auf file1");
+
+  // Zwei Paare in Reihenfolge (FIFO): 1. Upload←file1, 2. Upload←file2.
+  r = linkFileSteps([dl(), dl(), up(), up()]);
+  ok(r.ok && r.links[0].key === "file1" && r.links[1].key === "file2", "linkFileSteps: zwei Downloads → file1/file2");
+  ok(r.links[2].source === "file1" && r.links[3].source === "file2", "linkFileSteps: FIFO (1.Upload←file1, 2.Upload←file2)");
+
+  // Upload OHNE vorherigen Download → sprechender Fehler.
+  r = linkFileSteps([up()]);
+  ok(!r.ok && /lädt eine Datei hoch/.test(r.error) && r.index === 0, "linkFileSteps: Upload ohne Download → Fehler + index");
+
+  // Upload NACH verbrauchtem Download (2 Uploads, 1 Download) → Fehler beim zweiten.
+  r = linkFileSteps([dl(), up(), up()]);
+  ok(!r.ok && r.index === 2, "linkFileSteps: mehr Uploads als Downloads → Fehler beim überzähligen Upload");
+
+  // Ohne Datei-Schritte → alles null, ok.
+  r = linkFileSteps([plain(), plain()]);
+  ok(r.ok && r.links.every((l) => l === null), "linkFileSteps: keine Datei-Schritte → alle null");
+  ok(linkFileSteps(null).ok, "linkFileSteps: null → ok (leer)");
+}
+
+// buildRunPlan reicht file_meta durch (Download-key / Upload-source in Reihenfolge).
+{
+  const automation = { id: "a", params: [] };
+  const steps = [
+    { id: "d", position: 0, action: "click", selector: { css: "#dl" }, file_meta: { role: "download", filename: "x.pdf" } },
+    { id: "u", position: 1, action: "upload", selector: { css: "#up" }, file_meta: { role: "upload", filename: "x.pdf" } },
+  ];
+  const plan = buildRunPlan(automation, steps, {});
+  ok(plan[0].file_meta && plan[0].file_meta.role === "download" && plan[0].file_meta.key === "file1", "buildRunPlan: Download-Schritt trägt file_meta key file1");
+  ok(plan[1].file_meta && plan[1].file_meta.role === "upload" && plan[1].file_meta.source === "file1", "buildRunPlan: Upload-Schritt trägt file_meta source file1");
+  ok(plan[1].action === "upload", "buildRunPlan: Upload behält action='upload'");
+
+  // Upload ohne Download → buildRunPlan wirft (defensiv, konsistenter Plan).
+  let threw = false;
+  try { buildRunPlan(automation, [{ id: "u", position: 0, action: "upload", file_meta: { role: "upload" } }], {}); } catch (e) { threw = true; }
+  ok(threw, "buildRunPlan: Upload ohne vorherigen Download wirft");
+}
+
+// ══════════ planFileChunks (Welle 39) ══════════
+{
+  ok(planFileChunks(0, 8, 4).mode === "single" && planFileChunks(0, 8, 4).chunks === 0, "planFileChunks: leer → single/0 chunks");
+  ok(planFileChunks(8, 8, 4).mode === "single" && planFileChunks(8, 8, 4).chunks === 1, "planFileChunks: genau singleMax → single/1");
+  const big = planFileChunks(9, 8, 4);
+  ok(big.mode === "chunked" && big.chunks === 3, "planFileChunks: 9 über singleMax 8, chunkSize 4 → 3 chunks");
+  ok(planFileChunks(1000, 500, 250).chunks === 4, "planFileChunks: 1000/250 → 4 chunks");
+}
+
+// ══════════ fileCapDecision (Welle 39, 50-MB-Deckel) ══════════
+{
+  const CAP = 50 * 1024 * 1024;
+  ok(fileCapDecision(1024, CAP) === "memory", "fileCapDecision: kleine Datei → memory (Weg 1)");
+  ok(fileCapDecision(CAP, CAP) === "memory", "fileCapDecision: genau 50 MB → memory (Grenze inklusiv)");
+  ok(fileCapDecision(CAP + 1, CAP) === "disk-fallback", "fileCapDecision: >50 MB → disk-fallback (Weg 2/3)");
+  ok(fileCapDecision(60 * 1024 * 1024) === "disk-fallback", "fileCapDecision: 60 MB mit Default-Cap → disk-fallback");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision verifiziert.");
 process.exitCode = failed ? 1 : 0;

@@ -10,8 +10,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // einer sprechenden Meldung abgelehnt. Server-only, aber bewusst testbar (die Live-Tests
 // importieren convertTutorialToAutomation direkt).
 
-/** Was die Ausführ-Engine tut. fill/select ziehen ihren Wert aus einem Parameter. */
-export type AutomationAction = "click" | "fill" | "select" | "toggle";
+/** Was die Ausführ-Engine tut. fill/select ziehen ihren Wert aus einem Parameter.
+ *  upload (Welle 39, Datei-Brücke) legt eine zuvor heruntergeladene Datei ins Feld. */
+export type AutomationAction = "click" | "fill" | "select" | "toggle" | "upload";
+
+// ── Datei-Brücke (Welle 39) ──────────────────────────────────────────────────
+// Rolle eines Aufnahme-Schritts: hat sein Klick einen Download ausgelöst / bekam sein Feld
+// einen Upload? Nur die Rolle steuert die Verknüpfung — Datei-Bytes liegen NIE auf dem Server.
+export type StepFileRole = "download" | "upload";
+// Snapshot-Verknüpfung: Download liefert eine Datei (key), Upload verbraucht sie (source=key).
+export type StepFileLink =
+  | { role: "download"; key: string; filename?: string }
+  | { role: "upload"; source: string; filename?: string };
+
+export const AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD =
+  "Der Ablauf lädt eine Datei hoch, aber vorher wird keine heruntergeladen.";
 
 /** Parameter-DEFINITION (WERTE liegen NIE hier — nur die Metadaten). */
 export type AutomationParam = {
@@ -44,6 +57,8 @@ type StepRow = {
   page_url: string | null;
   is_decision: boolean | null;
   position: number;
+  // Datei-Brücke (Welle 39): Rolle des Aufnahme-Schritts (Download-Auslöser / Upload-Feld).
+  file_meta: { role?: string; filename?: string; mime?: string; size?: number } | null;
 };
 
 type BranchRow = {
@@ -60,6 +75,36 @@ export function actionForRole(role: string | null | undefined): AutomationAction
   if (r === "combobox") return "select";
   if (r === "checkbox" || r === "radio" || r === "switch") return "toggle";
   return "click";
+}
+
+/**
+ * Datei-Schritte eines Ablaufs in REIHENFOLGE verknüpfen (Welle 39, Datei-Brücke) — die
+ * TS-Spiegelung der puren linkFileSteps aus extension/exec-plan.js (dort für die Extension +
+ * node getestet). Jeder Download liefert file1/file2…; jeder Upload verbraucht den passenden
+ * Download (FIFO: 1. Upload ← 1. Download). Upload ohne verfügbaren Download → wirft
+ * AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD. Gibt ein zu `execSteps` paralleles Array (null | Link) zurück.
+ */
+export function linkFileSteps(
+  execSteps: { file_meta: StepRow["file_meta"] }[],
+): (StepFileLink | null)[] {
+  const links: (StepFileLink | null)[] = new Array(execSteps.length).fill(null);
+  const pool: string[] = []; // noch nicht verbrauchte Download-keys (FIFO)
+  let dlCount = 0;
+  for (let i = 0; i < execSteps.length; i++) {
+    const fm = execSteps[i].file_meta;
+    const role = fm && typeof fm.role === "string" ? fm.role : "";
+    const filename = fm && typeof fm.filename === "string" ? fm.filename : undefined;
+    if (role === "download") {
+      const key = `file${++dlCount}`;
+      links[i] = { role: "download", key, ...(filename ? { filename } : {}) };
+      pool.push(key);
+    } else if (role === "upload") {
+      const source = pool.shift();
+      if (!source) throw new Error(AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD);
+      links[i] = { role: "upload", source, ...(filename ? { filename } : {}) };
+    }
+  }
+  return links;
 }
 
 /**
@@ -161,7 +206,7 @@ export async function convertTutorialToAutomation(
   // 2) Schritte + Branches laden.
   const { data: stepsData } = await admin
     .from("steps")
-    .select("id, title, image_path, highlights, selector, page_url, is_decision, position")
+    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -186,15 +231,28 @@ export async function convertTutorialToAutomation(
   if (executable.length < 2) throw new Error(AUTOMATION_ERR_TOO_FEW);
 
   // 5) Schritte in automation_steps + Parameter ableiten.
+  // Datei-Brücke (Welle 39): ZUERST die Download-/Upload-Verknüpfung berechnen (wirft bei
+  // Upload ohne vorherigen Download). Läuft über ALLE ausführbaren Schritte in Reihenfolge.
+  const fileLinks = linkFileSteps(executable);
+
   const params: AutomationParam[] = [];
   const usedKeys = new Set<string>();
   let emptyCounter = 0;
 
   const stepRows = executable.map((s, i) => {
-    const action = actionForRole(s.selector?.role);
+    const fileLink = fileLinks[i];
+    // Datei-Brücke: ein Upload-Feld wird zur 'upload'-Aktion (kein Parameter); ein Download-
+    // Klick bleibt 'click'. Sonst wie bisher aus der ARIA-Rolle abgeleitet.
+    const action: AutomationAction =
+      fileLink?.role === "upload"
+        ? "upload"
+        : fileLink?.role === "download"
+          ? "click"
+          : actionForRole(s.selector?.role);
     let paramKey: string | null = null;
 
     // fill/select brauchen einen Wert → Parameter. toggle wird nur „angehakt“ (kein Param).
+    // upload zieht seinen Wert aus der getragenen Datei (source), nicht aus einem Parameter.
     if (action === "fill" || action === "select") {
       const label = (s.selector?.text || s.title || "Eingabe").trim();
       let base = slugKey(label);
@@ -226,6 +284,9 @@ export async function convertTutorialToAutomation(
       // Markierungen 1:1 vom Tutorial-Schritt übernehmen (inkl. blur-Einträgen — die sind im
       // Referenzbild ok). Spalte automation_steps.highlights existiert seit Migration 0031.
       highlights: Array.isArray(s.highlights) ? s.highlights : null,
+      // Datei-Brücke (Welle 39): {role:download,key} liefert / {role:upload,source} verbraucht.
+      // Werte bleiben IMMER lokal im Browser — hier steht nur die Verknüpfung (Spalte per 0032).
+      file_meta: fileLink,
     };
   });
 
