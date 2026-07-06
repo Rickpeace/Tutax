@@ -237,6 +237,18 @@ Session-Cookie nach verifyOtp, Nutzer blieb ausgeloggt) · Auto-Refresh nach
 Extension-Upload (ContentUpdatedRefresh im /app-Layout) · Entf löscht Form im
 Bild-Editor · Nachimpfung altoffener Tabs (v2.2.2) · Karten-Klick öffnet
 Seitenleiste (v2.2.1).
+**Opus Welle 29 + Fable (06.07.):** 🌍 **Hilfe-Seite VOLLSTÄNDIG mehrsprachig**
+(Audit aller /h-Texte im Bericht): Kategorienamen via `categories.name_i18n`
+(Migration 0028, Batch je Sprache, `_src`-Feld erkennt Umbenennungen) ·
+Druckansicht mit ?lang (Übersetzungen + Wörterbuch, lang im Cache-Key) ·
+Beschreibung im Delta-Auto-Sync (setTutorialDescription → stale + after-Delta) ·
+Rest-Lücken (Wizard-Labels, Fußzeilen, Sprachumschalter-aria) ins Wörterbuch ·
+Chat-Hülle lokalisiert + Bot antwortet in Besuchersprache. Live-Test 27/27
+(EN-Hub: „Tax Basics", Druck EN ohne deutsches „Wenn", DE-Regression grün).
+Bewusst offen: globale Admin-Kategorien, /impressum+/datenschutz.
+**Fable direkt (06.07.):** Builder-Kurzbeschreibung editierbar (Geisterfeld:
+/h zeigte sie, niemand konnte sie pflegen) · Extension v2.4.1 (Ziel-Banner
+immer Klartext: ohne Ziel „wird als neues Tutorial angelegt").
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

@@ -74,9 +74,11 @@
 - [x] ~~Recorder v2: clicks.json im „Aus Video"-Dialog~~ **GEBAUT (02.07., Welle 10a).**
   → Zusammen mit Extension-Test einmal Ende-zu-Ende probieren (Aufnahme → beide
   Dateien hochladen → exakte Schrittgrenzen; wirkt erst nach `deploy.sh`).
-- [x] ~~Mehrsprachige Hilfe-Seite~~ **GEBAUT (02.07., Welle 13):** EN/PL/TR mit
-  Auto-Sync (Publish=Vollübersetzung, Edits=Delta). → Unter Branding Sprachen
-  anhaken und einmal live ansehen. Offen v1: Kategorienamen + Druckansicht deutsch.
+- [x] ~~Mehrsprachige Hilfe-Seite~~ **GEBAUT (02.07., Welle 13) + KOMPLETT (06.07.,
+  Welle 29):** EN/PL/TR mit Auto-Sync; seit W29 wirklich ALLES übersetzt —
+  Kategorienamen (name_i18n, Migration 0028), Druckansicht (?lang), Beschreibung
+  im Delta-Sync, Wizard-/Fußzeilen-Reste, Chat antwortet in Besuchersprache.
+  Bewusst offen: globale Admin-Vorlagen-Kategorien + Impressum/Datenschutz deutsch.
 - [ ] **Ton/Vorlesen** (Welle 14 LÄUFT): OpenAI-TTS beim Publish, ▶ im Wizard.
   Offen danach: Stimme wählbar, Audio auch für Übersetzungen.
 - [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
