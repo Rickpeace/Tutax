@@ -92,8 +92,16 @@ chrome.runtime.onMessage.addListener(() => false);
 // Worker bleibt für den onDisconnect am Leben; deshalb ist das zuverlässiger als ein hide,
 // das das sterbende Panel-Dokument noch selbst zu senden versucht.
 if (chrome.runtime.onConnect) {
+  // Zwei gleichartige Lebensadern: „steply-guide" (Live-Führung) und „steply-exec"
+  // (Automationen-Ausführung, Welle 36b). Bricht der Port ab (Panel geschlossen/abgestürzt),
+  // räumen wir das jeweilige Overlay/den Cursor auf dem gebundenen Tab ab.
+  const PORT_HIDE = {
+    "steply-guide": "steply-guide-hide",
+    "steply-exec": "steply-exec-hide",
+  };
   chrome.runtime.onConnect.addListener((port) => {
-    if (!port || port.name !== "steply-guide") return;
+    if (!port || !Object.prototype.hasOwnProperty.call(PORT_HIDE, port.name)) return;
+    const hideType = PORT_HIDE[port.name];
     let boundTabId = null;
     port.onMessage.addListener((msg) => {
       if (msg && msg.type === "bind" && typeof msg.tabId === "number") {
@@ -103,7 +111,7 @@ if (chrome.runtime.onConnect) {
     port.onDisconnect.addListener(() => {
       if (boundTabId == null) return;
       try {
-        const p = chrome.tabs.sendMessage(boundTabId, { type: "steply-guide-hide" });
+        const p = chrome.tabs.sendMessage(boundTabId, { type: hideType });
         if (p && p.catch) p.catch(() => {});
       } catch (err) {
         /* Tab evtl. weg / ohne Content-Script - egal */

@@ -92,6 +92,17 @@
         </span>
       </button>
 
+      <!-- Automationen (Welle 36b): aufgezeichnete Abläufe von der Extension AUSFÜHREN
+           lassen. NUR bei gepairtem Token sichtbar (Automationen sind Kontodaten) -
+           panel.js blendet die Karte ohne Token aus. -->
+      <button id="cardAutomations" class="card-choice" type="button" hidden>
+        <span class="card-emoji" aria-hidden="true">&#9881;&#65039;</span>
+        <span class="card-body">
+          <strong>Automationen</strong>
+          <em>Aufgezeichnete Abl&auml;ufe automatisch ausf&uuml;hren - mit sichtbarer Maus.</em>
+        </span>
+      </button>
+
       <!-- „Steply lernen" (Welle 35): IMMER sichtbar - auch ohne Verbindung (Onboarding).
            Öffnet die öffentlichen Steply-Doku-Touren (kein Token nötig). -->
       <button id="cardSteplyLearn" class="card-choice" type="button">
@@ -299,8 +310,111 @@
       <div id="steplyLearnList" class="fuehren-list" aria-live="polite"></div>
     </section>
 
+    <!-- ============ AUTOMATIONEN (Welle 36b): Liste ============ -->
+    <section id="automations" hidden>
+      <button id="autoListBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
+      <p class="lead">&#9881;&#65039; Automationen</p>
+      <p id="autoListHint" class="note" hidden></p>
+      <div id="autoList" class="fuehren-list" aria-live="polite"></div>
+    </section>
+
+    <!-- ============ AUTOMATIONEN (Welle 36b): Vorbereitung ============ -->
+    <section id="autoPrep" hidden>
+      <button id="autoPrepBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
+      <h2 id="autoPrepTitle" class="run-title"></h2>
+
+      <!-- (a) Domain-Hinweis (Sicherheit: der Nutzer sieht VOR dem Start, wo gearbeitet wird). -->
+      <p id="autoDomainHint" class="auto-domain"></p>
+
+      <!-- (b) Parameter-Formular (dynamisch aus params). Werte leben NUR lokal. -->
+      <div id="autoParamForm" class="auto-params"></div>
+
+      <button id="autoClearValues" class="btn auto-clear" type="button" hidden>
+        Gespeicherte Werte l&ouml;schen
+      </button>
+
+      <!-- (c) Modus-Wahl: Halbautomatik ist Standard (Sicherheit). -->
+      <fieldset class="auto-modes">
+        <legend>Wie soll der Lauf ablaufen?</legend>
+        <label class="mode">
+          <input type="radio" name="autoMode" id="autoModeSemi" value="semi" checked />
+          <span>
+            <strong>Schritt f&uuml;r Schritt best&auml;tigen</strong>
+            <em>Empfohlen - Sie best&auml;tigen jeden Schritt selbst.</em>
+          </span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="autoMode" id="autoModeAuto" value="auto" />
+          <span>
+            <strong>Automatisch durchlaufen</strong>
+            <em>L&auml;uft ohne Nachfrage - pausiert nur bei Problemen.</em>
+          </span>
+        </label>
+      </fieldset>
+
+      <!-- (d) Start (zugleich die Sicherheits-Best&auml;tigung fuer die Domain oben). -->
+      <button id="autoStart" class="btn btn-primary" type="button">Lauf starten</button>
+      <p id="autoPrepHint" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- ============ AUTOMATIONEN (Welle 36b): Lauf-Ansicht ============ -->
+    <section id="autoRun" hidden>
+      <div class="run-top">
+        <button id="autoExit" class="link-back" type="button">&larr; Abbrechen</button>
+        <span id="autoProgress" class="run-progress"></span>
+      </div>
+      <div id="autoBar" class="run-bar"><span></span></div>
+
+      <h2 id="autoStepTitle" class="run-title"></h2>
+      <p id="autoStepAction" class="auto-step-action"></p>
+
+      <!-- Live-Status (Vollautomatik) bzw. „wird ausgefuehrt". -->
+      <p id="autoLiveStatus" class="auto-live" hidden></p>
+
+      <!-- Pausen-/Miss-Box: klare Meldung + Referenz-Screenshot (imageUrl), falls vorhanden. -->
+      <div id="autoMissBox" class="auto-miss" hidden>
+        <p id="autoMissText" class="auto-miss-text"></p>
+        <div id="autoMissImageWrap" class="run-image-wrap auto-miss-image" hidden>
+          <div class="run-image-frame">
+            <img id="autoMissImage" class="run-image" alt="" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Dezenter Download-Hinweis (chrome.downloads-Ereignis waehrend des Laufs). -->
+      <p id="autoDownloadNote" class="auto-download" hidden>&#8595; Download gestartet &#10003;</p>
+
+      <!-- Steuer-Knoepfe: panel.js zeigt je nach Zustand die passende Gruppe. -->
+      <div class="auto-controls">
+        <div id="autoCtlSemi" class="auto-ctl-row" hidden>
+          <button id="autoExec" class="btn btn-primary" type="button">Ausf&uuml;hren</button>
+          <button id="autoSkip" class="btn" type="button">&Uuml;berspringen</button>
+        </div>
+        <div id="autoCtlAuto" class="auto-ctl-row" hidden>
+          <button id="autoPause" class="btn" type="button">Pause</button>
+        </div>
+        <div id="autoCtlPaused" class="auto-ctl-row" hidden>
+          <button id="autoResume" class="btn btn-primary" type="button">Fortsetzen</button>
+        </div>
+        <div id="autoCtlMiss" class="auto-ctl-row" hidden>
+          <button id="autoContinue" class="btn btn-primary" type="button">Weiter</button>
+        </div>
+        <button id="autoCancel" class="btn auto-cancel" type="button">Abbrechen</button>
+      </div>
+
+      <!-- Ende: Fertig / Abgebrochen. -->
+      <div id="autoDone" class="run-done" hidden>
+        <div class="done-check">&#10003;</div>
+        <h2 id="autoDoneTitle">Fertig &#127881;</h2>
+        <p id="autoDoneText" class="lead"></p>
+        <button id="autoDoneList" class="btn" type="button">Andere Automation</button>
+      </div>
+    </section>
+
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
+    <!-- exec-plan.js (Welle 36b) VOR panel.js: stellt das globale SteplyExecPlan bereit. -->
+    <script src="exec-plan.js"></script>
     <!-- site-match.js (Welle 31c) VOR panel.js: stellt das globale SteplySiteMatch bereit. -->
     <script src="site-match.js"></script>
     <!-- target-banner.js (Welle 33, Fix 4): pure Banner-Entscheidung, VOR panel.js. -->
