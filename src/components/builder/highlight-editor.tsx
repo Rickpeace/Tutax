@@ -185,6 +185,22 @@ export function HighlightEditor({
     setSelectedId(null);
   }
 
+  // Entf/Backspace löscht die ausgewählte Form — aber nie beim Tippen in einem
+  // Eingabefeld (Titel/Text daneben bleiben davon unberührt).
+  useEffect(() => {
+    if (!selectedId) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      deleteSelected();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteSelected liest nur selectedId/highlights
+  }, [selectedId, highlights]);
+
   function toggleZoom() {
     if (!selectedId) return;
     onChange(highlights.map((h) => (h.id === selectedId ? { ...h, zoom: !h.zoom } : h)));

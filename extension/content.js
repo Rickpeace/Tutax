@@ -932,6 +932,21 @@
     }
   });
 
+  // "Inhalt aktualisiert"-Signal der Seitenleiste (nach erfolgreichem Upload) in die
+  // Seite weiterreichen - ein offener Builder/die Bibliothek laedt dann ohne F5 nach
+  // (die App lauscht via ContentUpdatedRefresh; auf fremden Seiten verpufft es einfach).
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg || msg.type !== "steply-content-updated") return;
+    try {
+      window.postMessage(
+        { __steply: true, type: "steply-content-updated" },
+        location.origin
+      );
+    } catch (err) {
+      /* egal */
+    }
+  });
+
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
     if (rec && typeof rec.startedAt === "number") {

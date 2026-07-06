@@ -8,6 +8,7 @@ import {
   CreateTabTrigger,
 } from "@/components/app/app-header";
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
+import { ContentUpdatedRefresh } from "@/components/app/content-updated-refresh";
 import { requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +28,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // flex-1 (Body ist flex-col): füllt den Viewport, damit die Höhenkette bis
     // zur Bibliotheks-Sidebar durchreicht — sonst endet deren border-r beim Inhalt.
     <div className="flex flex-1 flex-col">
+      {/* Extension-Uploads erscheinen ohne F5 (client-only, rendert nichts). */}
+      <ContentUpdatedRefresh />
       <Suspense fallback={<div className="h-16 border-b-2 border-line bg-card" />}>
         <AppHeader
           bell={

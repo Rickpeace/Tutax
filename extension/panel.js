@@ -766,6 +766,7 @@ async function uploadToSteply(videoBlob) {
   els.uploadDone.hidden = false;
   const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
   setStatus("Hochgeladen" + orgHint + " - das Tutorial wird erstellt.", "ok");
+  notifyAppTabs();
   if (els.openApp) {
     els.openApp.onclick = () => {
       chrome.tabs.create({ url: base + "/app", active: true });
@@ -801,6 +802,33 @@ let guideFinishing = false;
 
 function guideBusyHint() {
   setStatus("Screenshot wird erfasst ...");
+}
+
+// Nach erfolgreichem Upload alle offenen App-Tabs benachrichtigen: content.js reicht
+// das Signal in die Seite weiter, die App (ContentUpdatedRefresh) laedt die Daten nach -
+// ein offener Builder/die Bibliothek zeigt die neue Aufnahme ohne F5.
+function notifyAppTabs() {
+  try {
+    const base = appBase();
+    chrome.tabs
+      .query({})
+      .then((tabs) => {
+        for (const t of tabs || []) {
+          if (t.id != null && typeof t.url === "string" && t.url.startsWith(base)) {
+            chrome.tabs
+              .sendMessage(t.id, { type: "steply-content-updated" })
+              .catch(() => {
+                /* Tab ohne Content-Script - egal */
+              });
+          }
+        }
+      })
+      .catch(() => {
+        /* egal - reiner Komfort */
+      });
+  } catch (err) {
+    /* egal */
+  }
 }
 
 // Warnen, wenn der gerade aktive Tab prinzipiell nicht aufnehmbar ist (chrome://,
@@ -1193,6 +1221,7 @@ async function uploadGuide() {
   // Erfolg.
   els.guideProgress.textContent = "";
   els.guideUploadDone.hidden = false;
+  notifyAppTabs();
   const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
   if (comp.fallback) {
     // Ziel war nicht nutzbar -> der Server hat ein NEUES Tutorial angelegt (Aufnahme nie verloren).
