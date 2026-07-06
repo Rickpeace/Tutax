@@ -1124,3 +1124,199 @@ body {
   border-color: var(--brand);
   color: var(--ink);
 }
+
+/* ===== Automationen (Welle 36b) ===== */
+
+/* Karte in der Automationen-Liste: Titel + Meta (Schritt-/Parameterzahl). */
+.auto-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.auto-card:hover {
+  border-color: var(--brand);
+  background: #fdf3ec;
+}
+
+.auto-card .auto-card-emoji {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.auto-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.auto-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-card-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Domain-Hinweis in der Vorbereitung (Sicherheit: WO wird gearbeitet). */
+.auto-domain {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #ffe8e2;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 2px 0 14px;
+}
+
+.auto-domain strong {
+  font-weight: 700;
+}
+
+/* Parameter-Formular. */
+.auto-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.auto-param {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--cream);
+}
+
+.auto-param-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+
+.auto-param-req {
+  color: var(--stop);
+  margin-left: 2px;
+}
+
+.auto-param-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.auto-param-input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+  border-color: var(--brand);
+}
+
+.auto-param-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 7px;
+  cursor: pointer;
+}
+
+.auto-clear {
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  padding: 8px 12px;
+}
+
+/* Modus-Wahl (Halbautomatik ist Standard). */
+.auto-modes {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+  margin: 0 0 14px;
+}
+
+.auto-modes legend {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+/* Lauf-Ansicht. */
+.auto-step-action {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.auto-live {
+  font-size: 13px;
+  color: var(--brand-dark);
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.auto-miss {
+  border: 1px solid #f0e2c4;
+  background: #fdf6e8;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 0 0 12px;
+}
+
+.auto-miss-text {
+  font-size: 12.5px;
+  color: #c07d16;
+  margin: 0 0 8px;
+}
+
+.auto-miss-image {
+  margin-bottom: 0;
+}
+
+.auto-download {
+  font-size: 12.5px;
+  color: var(--ok);
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.auto-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auto-ctl-row {
+  display: flex;
+  gap: 8px;
+}
+
+.auto-ctl-row .btn {
+  flex: 1 1 0;
+}
+
+.auto-cancel {
+  color: var(--stop);
+}

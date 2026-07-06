@@ -129,6 +129,48 @@ const els = {
   steplyLearnBack: document.getElementById("steplyLearnBack"),
   steplyLearnHint: document.getElementById("steplyLearnHint"),
   steplyLearnList: document.getElementById("steplyLearnList"),
+  // Automationen (Welle 36b): Start-Karte + Liste + Vorbereitung + Lauf-Ansicht.
+  cardAutomations: document.getElementById("cardAutomations"),
+  automations: document.getElementById("automations"),
+  autoListBack: document.getElementById("autoListBack"),
+  autoListHint: document.getElementById("autoListHint"),
+  autoList: document.getElementById("autoList"),
+  autoPrep: document.getElementById("autoPrep"),
+  autoPrepBack: document.getElementById("autoPrepBack"),
+  autoPrepTitle: document.getElementById("autoPrepTitle"),
+  autoDomainHint: document.getElementById("autoDomainHint"),
+  autoParamForm: document.getElementById("autoParamForm"),
+  autoClearValues: document.getElementById("autoClearValues"),
+  autoModeSemi: document.getElementById("autoModeSemi"),
+  autoModeAuto: document.getElementById("autoModeAuto"),
+  autoStart: document.getElementById("autoStart"),
+  autoPrepHint: document.getElementById("autoPrepHint"),
+  autoRun: document.getElementById("autoRun"),
+  autoExit: document.getElementById("autoExit"),
+  autoProgress: document.getElementById("autoProgress"),
+  autoBar: document.getElementById("autoBar"),
+  autoStepTitle: document.getElementById("autoStepTitle"),
+  autoStepAction: document.getElementById("autoStepAction"),
+  autoLiveStatus: document.getElementById("autoLiveStatus"),
+  autoMissBox: document.getElementById("autoMissBox"),
+  autoMissText: document.getElementById("autoMissText"),
+  autoMissImageWrap: document.getElementById("autoMissImageWrap"),
+  autoMissImage: document.getElementById("autoMissImage"),
+  autoDownloadNote: document.getElementById("autoDownloadNote"),
+  autoCtlSemi: document.getElementById("autoCtlSemi"),
+  autoCtlAuto: document.getElementById("autoCtlAuto"),
+  autoCtlPaused: document.getElementById("autoCtlPaused"),
+  autoCtlMiss: document.getElementById("autoCtlMiss"),
+  autoExec: document.getElementById("autoExec"),
+  autoSkip: document.getElementById("autoSkip"),
+  autoPause: document.getElementById("autoPause"),
+  autoResume: document.getElementById("autoResume"),
+  autoContinue: document.getElementById("autoContinue"),
+  autoCancel: document.getElementById("autoCancel"),
+  autoDone: document.getElementById("autoDone"),
+  autoDoneTitle: document.getElementById("autoDoneTitle"),
+  autoDoneText: document.getElementById("autoDoneText"),
+  autoDoneList: document.getElementById("autoDoneList"),
 };
 
 // ---- Zustand ----
@@ -423,6 +465,10 @@ function show(section) {
   els.guideRun.hidden = section !== "guideRun";
   // „Steply lernen" (Welle 35): eigene Doku-Touren-Ansicht.
   if (els.steplyLearn) els.steplyLearn.hidden = section !== "steplyLearn";
+  // Automationen (Welle 36b): Liste / Vorbereitung / Lauf.
+  if (els.automations) els.automations.hidden = section !== "automations";
+  if (els.autoPrep) els.autoPrep.hidden = section !== "autoPrep";
+  if (els.autoRun) els.autoRun.hidden = section !== "autoRun";
 }
 
 function fmtTime(totalSeconds) {
@@ -498,6 +544,8 @@ function showStart() {
   // Live-Führung (Welle 31): braucht ebenfalls eine Verbindung (Tutorial-Liste laden).
   els.cardGuideRun.disabled = !hasToken;
   els.cardGuideRun.title = hasToken ? "" : "Zuerst mit Steply verbinden.";
+  // Automationen (Welle 36b): NUR bei gepairtem Token sichtbar (Automationen sind Kontodaten).
+  if (els.cardAutomations) els.cardAutomations.hidden = !hasToken;
   updateConnInfo();
   setStatus("");
   show("start");
@@ -2800,6 +2848,861 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 window.SteplyGuide = { start: guideStart };
 
 // ============================================================================
+// AUTOMATIONEN (Welle 36b): aufgezeichnete Abläufe von der Extension AUSFÜHREN.
+//
+// Eigenständiger Modus neben der Führung — nutzt dieselbe Selektor-Auflösung
+// (guide-resolve.js) und dieselbe Overlay-Denkweise, aber das Content-Script
+// FÜHRT die Aktionen aus (click/fill/select/toggle) mit einer animierten Maus.
+//
+// SICHERHEIT (nicht verhandelbar):
+//   1) NIE raten und klicken — Selektor-Miss/mehrdeutig ⇒ Lauf PAUSIERT sofort.
+//   2) Parameter-Werte leben NUR in chrome.storage.local (nur nach „Im Browser
+//      merken"); Werte gehen NIE in Logs oder Server-Payloads.
+//   3) Vor dem Start Domain-Anzeige + Start-Bestätigung (die Vorbereitungs-Ansicht).
+//   4) Vollautomatik ist Opt-in pro Lauf — Standard ist Halbautomatik.
+//
+// Der Lauf ist an EINEN Tab gebunden (wie die Führung). Port „steply-exec" +
+// Ping halten Overlay/Cursor im Tab am Leben; Panel zu ⇒ background räumt ab.
+// API-Routen baut PARALLEL Welle 36a; fehlen sie (404/Fehler), endet die
+// Sektion/der Lauf sauber mit einer Meldung.
+// ============================================================================
+
+const exec = {
+  automation: null, // { id, title, site_domains, params:[{key,label,type,required}] }
+  steps: [], // Detail-Schritte vom Server
+  plan: [], // buildRunPlan-Ausgabe (geordnet, mit aufgelösten Werten — bleibt LOKAL)
+  values: {}, // Parameter-Werte (LOKAL; NIE geloggt/gesendet)
+  mode: "semi", // „semi" (Halbautomatik, Default) | „auto" (Vollautomatik)
+  autoMode: false,
+  runId: null, // Server-Lauf-ID (best effort)
+  tabId: null, // gebundener Tab
+  index: 0, // aktueller Schritt (0-basiert) im plan
+  running: false,
+  paused: false,
+  phase: "idle", // idle | ready | executing | miss | paused | done | aborted
+  lastMissReason: "",
+  finished: false, // Doppel-finish-Schutz
+};
+
+const EXEC_STEP_TIMEOUT = 9000; // ms: 5s Selektor-Suche + Animation + Puffer
+const EXEC_AUTO_GAP = 700; // ms Pause zwischen Schritten in der Vollautomatik
+const EXEC_NAV_TIMEOUT = 15000; // ms auf „complete" nach einer Navigation warten
+
+// ── Werte-Handling (lokal) ────────────────────────────────────────────────────
+// chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
+// NUR wenn „merken" aktiv. Secrets ebenso (nur mit Häkchen). Werte verlassen den
+// Browser NIE. Fail-silent — ohne gespeicherte Werte startet man eben mit leerem Feld.
+async function loadAutoValues(automationId) {
+  if (!automationId) return {};
+  try {
+    const r = await chrome.storage.local.get("autoValues");
+    const all = r && r.autoValues && typeof r.autoValues === "object" ? r.autoValues : {};
+    const one = all[automationId];
+    return one && typeof one === "object" ? one : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+async function saveAutoValues(automationId, values) {
+  if (!automationId) return;
+  try {
+    const r = await chrome.storage.local.get("autoValues");
+    const all = r && r.autoValues && typeof r.autoValues === "object" ? r.autoValues : {};
+    if (values && Object.keys(values).length) all[automationId] = values;
+    else delete all[automationId];
+    await chrome.storage.local.set({ autoValues: all });
+  } catch (err) {
+    /* Speichern optional — der Lauf funktioniert auch ohne Merken */
+  }
+}
+
+async function clearAutoValues(automationId) {
+  if (!automationId) return;
+  try {
+    const r = await chrome.storage.local.get("autoValues");
+    const all = r && r.autoValues && typeof r.autoValues === "object" ? r.autoValues : {};
+    delete all[automationId];
+    await chrome.storage.local.set({ autoValues: all });
+  } catch (err) {
+    /* egal */
+  }
+}
+
+// ── Liste ─────────────────────────────────────────────────────────────────────
+async function showAutomations() {
+  if (!hasToken) return; // Karte ist ohnehin nur mit Token sichtbar
+  show("automations");
+  setStatus("");
+  els.autoListHint.hidden = true;
+  els.autoList.textContent = "";
+  const loading = document.createElement("p");
+  loading.className = "note";
+  loading.textContent = "Automationen werden geladen …";
+  els.autoList.appendChild(loading);
+
+  let body = null;
+  try {
+    const res = await fetch(appBase() + "/api/recorder/automations", {
+      headers: { Authorization: "Bearer " + cfg.token },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    body = await res.json().catch(() => null);
+  } catch (err) {
+    els.autoList.textContent = "";
+    els.autoListHint.textContent = "Die Automationen konnten nicht geladen werden.";
+    els.autoListHint.hidden = false;
+    return;
+  }
+  const list = body && Array.isArray(body.automations) ? body.automations : [];
+  els.autoList.textContent = "";
+  if (!list.length) {
+    els.autoListHint.textContent =
+      "Noch keine Automationen. In der Steply-Bibliothek ein Tutorial öffnen → „Als Automation nutzen“.";
+    els.autoListHint.hidden = false;
+    return;
+  }
+  for (const a of list) els.autoList.appendChild(buildAutomationCard(a));
+}
+
+function buildAutomationCard(a) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "auto-card";
+
+  const emoji = document.createElement("span");
+  emoji.className = "auto-card-emoji";
+  emoji.setAttribute("aria-hidden", "true");
+  emoji.textContent = "⚙️";
+  row.appendChild(emoji);
+
+  const main = document.createElement("span");
+  main.className = "auto-card-main";
+  const title = document.createElement("span");
+  title.className = "auto-card-title";
+  title.textContent = a.title || "Ohne Titel";
+  main.appendChild(title);
+
+  const meta = document.createElement("span");
+  meta.className = "auto-card-meta";
+  const sc = Number(a.stepCount) || 0;
+  const pc = Number(a.paramCount) || 0;
+  const stepsTxt = sc === 1 ? "1 Schritt" : sc + " Schritte";
+  const paramsTxt = pc === 1 ? "1 Parameter" : pc + " Parameter";
+  meta.textContent = stepsTxt + " · " + paramsTxt;
+  main.appendChild(meta);
+  row.appendChild(main);
+
+  row.addEventListener("click", () => showAutoPrep(a.id));
+  return row;
+}
+
+// ── Vorbereitung ───────────────────────────────────────────────────────────────
+async function showAutoPrep(automationId) {
+  show("autoPrep");
+  setStatus("");
+  els.autoPrepHint.textContent = "";
+  els.autoPrepHint.className = "status";
+  els.autoPrepTitle.textContent = "Automation wird geladen …";
+  els.autoDomainHint.textContent = "";
+  els.autoParamForm.textContent = "";
+  els.autoClearValues.hidden = true;
+
+  // Detail laden (404 fremd / Fehler → zurück zur Liste mit Hinweis).
+  let det = null;
+  try {
+    const res = await fetch(appBase() + "/api/recorder/automations/" + encodeURIComponent(automationId), {
+      headers: { Authorization: "Bearer " + cfg.token },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    det = await res.json().catch(() => null);
+  } catch (err) {
+    els.autoPrepTitle.textContent = "";
+    els.autoPrepHint.textContent = "Diese Automation konnte nicht geladen werden.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
+  if (!det || !det.automation || !Array.isArray(det.steps)) {
+    els.autoPrepTitle.textContent = "";
+    els.autoPrepHint.textContent = "Diese Automation ist unvollständig.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
+
+  exec.automation = det.automation;
+  exec.steps = det.steps;
+  exec.plan = [];
+  exec.values = {};
+
+  els.autoPrepTitle.textContent = exec.automation.title || "Automation";
+
+  // (a) Domain-Hinweis (Sicherheit: WO wird gearbeitet).
+  const domains = Array.isArray(exec.automation.site_domains) ? exec.automation.site_domains.filter(Boolean) : [];
+  els.autoDomainHint.textContent = "";
+  const dlead = document.createTextNode("Diese Automation arbeitet auf: ");
+  els.autoDomainHint.appendChild(dlead);
+  const dstrong = document.createElement("strong");
+  dstrong.textContent = domains.length ? domains.join(", ") : "der aufgezeichneten Website";
+  els.autoDomainHint.appendChild(dstrong);
+
+  // (b) Parameter-Formular aus params (+ gespeicherte Werte vorbefüllen).
+  const params = Array.isArray(exec.automation.params) ? exec.automation.params : [];
+  const saved = await loadAutoValues(exec.automation.id);
+  await buildParamForm(params, saved);
+  els.autoClearValues.hidden = !(saved && Object.keys(saved).length);
+
+  // (c) Modus: Halbautomatik ist Default.
+  els.autoModeSemi.checked = true;
+  els.autoModeAuto.checked = false;
+}
+
+// Parameter-Formular bauen: je Feld Label (required-Markierung), Input (secret → password)
+// und eine Checkbox „Im Browser merken" (aktiv, wenn ein Wert gespeichert war).
+async function buildParamForm(params, saved) {
+  els.autoParamForm.textContent = "";
+  saved = saved || {};
+  if (!params.length) {
+    const none = document.createElement("p");
+    none.className = "note";
+    none.textContent = "Diese Automation braucht keine Eingaben.";
+    els.autoParamForm.appendChild(none);
+    return;
+  }
+  for (const p of params) {
+    if (!p || typeof p.key !== "string") continue;
+    const wrap = document.createElement("div");
+    wrap.className = "auto-param";
+    wrap.dataset.key = p.key;
+
+    const label = document.createElement("label");
+    label.className = "auto-param-label";
+    label.textContent = p.label || p.key;
+    if (p.required) {
+      const req = document.createElement("span");
+      req.className = "auto-param-req";
+      req.textContent = "*";
+      req.title = "Pflichtfeld";
+      label.appendChild(req);
+    }
+
+    const input = document.createElement("input");
+    input.className = "auto-param-input";
+    // Secrets als password-Input (maskiert). autocomplete aus, damit nichts vorschlägt.
+    input.type = p.type === "secret" ? "password" : "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    const savedVal = Object.prototype.hasOwnProperty.call(saved, p.key) ? saved[p.key] : "";
+    input.value = savedVal != null ? String(savedVal) : "";
+    const inputId = "autoParam__" + p.key;
+    input.id = inputId;
+    label.setAttribute("for", inputId);
+
+    const rememberWrap = document.createElement("label");
+    rememberWrap.className = "auto-param-remember";
+    const remember = document.createElement("input");
+    remember.type = "checkbox";
+    remember.className = "auto-param-remember-box";
+    // War ein Wert gespeichert, ist „merken" vorab aktiv.
+    remember.checked = Object.prototype.hasOwnProperty.call(saved, p.key);
+    const rememberTxt = document.createElement("span");
+    rememberTxt.textContent = "Im Browser merken";
+    rememberWrap.appendChild(remember);
+    rememberWrap.appendChild(rememberTxt);
+
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    wrap.appendChild(rememberWrap);
+    els.autoParamForm.appendChild(wrap);
+  }
+}
+
+// Werte + „merken"-Häkchen aus dem Formular lesen. LIEFERT { values, toRemember }.
+// values = alle aktuellen Feldwerte (für den Lauf, lokal); toRemember = nur die mit Häkchen.
+function readParamForm() {
+  const values = {};
+  const toRemember = {};
+  const rows = els.autoParamForm.querySelectorAll(".auto-param");
+  rows.forEach((row) => {
+    const key = row.dataset ? row.dataset.key : "";
+    if (!key) return;
+    const input = row.querySelector(".auto-param-input");
+    const box = row.querySelector(".auto-param-remember-box");
+    const val = input ? input.value : "";
+    values[key] = val;
+    if (box && box.checked) toRemember[key] = val;
+  });
+  return { values, toRemember };
+}
+
+async function onAutoClearValues() {
+  if (!exec.automation) return;
+  await clearAutoValues(exec.automation.id);
+  // Felder leeren + Häkchen entfernen (nichts bleibt gespeichert).
+  const rows = els.autoParamForm.querySelectorAll(".auto-param");
+  rows.forEach((row) => {
+    const input = row.querySelector(".auto-param-input");
+    const box = row.querySelector(".auto-param-remember-box");
+    if (input) input.value = "";
+    if (box) box.checked = false;
+  });
+  els.autoClearValues.hidden = true;
+  els.autoPrepHint.textContent = "Gespeicherte Werte gelöscht.";
+  els.autoPrepHint.className = "status status-ok";
+}
+
+// ── Lauf: Port + Ping (Lebensader, Muster Welle 33) ────────────────────────────
+let execPort = null;
+let execPingTimer = null;
+
+function execPortOpen(tabId) {
+  execPortClose();
+  if (tabId == null) return;
+  try {
+    execPort = chrome.runtime.connect({ name: "steply-exec" });
+    execPort.postMessage({ type: "bind", tabId });
+    execPort.onDisconnect.addListener(() => {
+      execPort = null;
+      if (!els.autoRun.hidden && exec.tabId != null && exec.running) {
+        setTimeout(() => {
+          if (!execPort && !els.autoRun.hidden && exec.tabId != null && exec.running) execPortOpen(exec.tabId);
+        }, 0);
+      }
+    });
+  } catch (err) {
+    execPort = null;
+  }
+}
+
+function execPortClose() {
+  if (execPort) {
+    try {
+      execPort.disconnect();
+    } catch (err) {
+      /* egal */
+    }
+    execPort = null;
+  }
+}
+
+function execPingStart() {
+  execPingStop();
+  execPingTimer = setInterval(() => {
+    if (exec.tabId != null) sendExecToTab({ type: "steply-exec-ping" });
+  }, 20000);
+}
+
+function execPingStop() {
+  if (execPingTimer) {
+    clearInterval(execPingTimer);
+    execPingTimer = null;
+  }
+}
+
+function execLinkStart(tabId) {
+  execPortOpen(tabId);
+  execPingStart();
+}
+
+function execLinkStop() {
+  execPingStop();
+  execPortClose();
+}
+
+function sendExecToTab(msg) {
+  if (exec.tabId == null) return;
+  try {
+    const p = chrome.tabs.sendMessage(exec.tabId, msg);
+    if (p && p.catch) p.catch(() => {});
+  } catch (err) {
+    /* Tab evtl. ohne Content-Script — egal */
+  }
+}
+
+// ── Lauf: Download-Hinweis ─────────────────────────────────────────────────────
+let execDownloadHandler = null;
+let execDownloadNoteTimer = null;
+
+function execAddDownloadWatch() {
+  if (!chrome.downloads || !chrome.downloads.onCreated) return;
+  execDownloadHandler = () => showExecDownloadNote();
+  try {
+    chrome.downloads.onCreated.addListener(execDownloadHandler);
+  } catch (err) {
+    execDownloadHandler = null;
+  }
+}
+
+function execRemoveDownloadWatch() {
+  if (execDownloadHandler && chrome.downloads && chrome.downloads.onCreated) {
+    try {
+      chrome.downloads.onCreated.removeListener(execDownloadHandler);
+    } catch (err) {
+      /* egal */
+    }
+  }
+  execDownloadHandler = null;
+  if (execDownloadNoteTimer) {
+    clearTimeout(execDownloadNoteTimer);
+    execDownloadNoteTimer = null;
+  }
+}
+
+function showExecDownloadNote() {
+  if (els.autoRun.hidden || !els.autoDownloadNote) return;
+  els.autoDownloadNote.hidden = false;
+  if (execDownloadNoteTimer) clearTimeout(execDownloadNoteTimer);
+  execDownloadNoteTimer = setTimeout(() => {
+    if (els.autoDownloadNote) els.autoDownloadNote.hidden = true;
+  }, 6000);
+}
+
+// ── Lauf: Ergebnis-Warteschlange (content.js meldet steply-exec-result zurück) ──
+let execResultSeq = 0;
+let execPending = null; // { token, resolve, timer }
+
+function execSendStep(planStep) {
+  return new Promise((resolve) => {
+    const token = ++execResultSeq;
+    let settled = false;
+    const done = (r) => {
+      if (settled) return;
+      settled = true;
+      if (execPending && execPending.token === token) execPending = null;
+      clearTimeout(timer);
+      resolve(r);
+    };
+    const timer = setTimeout(() => done({ ok: false, reason: "timeout" }), EXEC_STEP_TIMEOUT);
+    execPending = { token, resolve: done, timer };
+    // Nachricht an den gebundenen Tab. value bleibt lokal — NIE geloggt.
+    sendExecToTab({
+      type: "steply-exec-step",
+      token,
+      step: {
+        selector: planStep.selector,
+        action: planStep.action,
+        value: planStep.value,
+        index: planStep.index,
+        total: planStep.total,
+      },
+    });
+  });
+}
+
+// ── Lauf: Navigation zwischen Schritten ────────────────────────────────────────
+function execWaitTabComplete(tabId) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      try {
+        chrome.tabs.onUpdated.removeListener(onUpd);
+      } catch (err) {
+        /* egal */
+      }
+      clearTimeout(timer);
+      resolve();
+    };
+    const onUpd = (id, changeInfo) => {
+      if (id === tabId && changeInfo && changeInfo.status === "complete") finish();
+    };
+    try {
+      chrome.tabs.onUpdated.addListener(onUpd);
+    } catch (err) {
+      finish();
+      return;
+    }
+    const timer = setTimeout(finish, EXEC_NAV_TIMEOUT);
+    // Falls der Tab bereits „complete" ist, nicht ewig warten.
+    try {
+      chrome.tabs.get(tabId).then((tab) => {
+        if (tab && tab.status === "complete") finish();
+      }).catch(() => {});
+    } catch (err) {
+      /* egal */
+    }
+  });
+}
+
+async function execNavigateIfNeeded(planStep) {
+  const curUrl = await tabUrlById(exec.tabId);
+  if (typeof SteplyExecPlan === "undefined") return;
+  if (!SteplyExecPlan.needsNavigation(curUrl, planStep)) return;
+  if (!planStep.page_url) return;
+  try {
+    await chrome.tabs.update(exec.tabId, { url: planStep.page_url });
+    await execWaitTabComplete(exec.tabId);
+    // Content-Scripts nach der Navigation sicher da (deklarativ ohnehin; Nachimpfung schadet nicht).
+    try {
+      chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+    } catch (err) {
+      /* egal */
+    }
+  } catch (err) {
+    /* Navigation fehlgeschlagen — der Schritt läuft dann mit Miss/Pause auf */
+  }
+}
+
+// „Bring mich hin": passt der aktive Tab nicht zur Automation (site_domains bzw. Startseite
+// von Schritt 1), einen neuen Tab auf der Startseite öffnen + Lauf daran binden.
+async function execEnsureStartTab(firstStep) {
+  if (typeof SteplySiteMatch === "undefined") return;
+  const pageUrl = firstStep && typeof firstStep.page_url === "string" ? firstStep.page_url : "";
+  const targetHost = SteplySiteMatch.hostnameOf(pageUrl);
+  const curUrl = await tabUrlById(exec.tabId);
+  const curHost = SteplySiteMatch.hostnameOf(curUrl);
+
+  let matches = false;
+  if (curHost && targetHost) {
+    if (baseDomain(curHost) === baseDomain(targetHost)) {
+      matches = true;
+    } else {
+      const domains = Array.isArray(exec.automation.site_domains) ? exec.automation.site_domains : null;
+      if (domains) {
+        for (const d of domains) {
+          if (SteplySiteMatch.matchesDomain(curHost, d)) {
+            matches = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (matches) return; // schon auf der richtigen Seite
+  if (!pageUrl) return; // keine Startseite → aktueller Tab
+  try {
+    const tab = await chrome.tabs.create({ url: pageUrl, active: true });
+    if (tab && tab.id != null) {
+      exec.tabId = tab.id;
+      await execWaitTabComplete(exec.tabId);
+    }
+  } catch (err) {
+    /* Tab ließ sich nicht öffnen → aktueller Tab (Fallback) */
+  }
+}
+
+// ── Lauf: Server-Events (best effort; NIE mit Parameter-Werten) ─────────────────
+async function execPostStart() {
+  if (!cfg.token || !exec.automation) return null;
+  try {
+    const res = await fetch(appBase() + "/api/recorder/automation-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: cfg.token,
+        automationId: exec.automation.id,
+        event: "start",
+        mode: exec.mode,
+      }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => ({}));
+    return body && body.runId ? body.runId : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function execPostFinish(status, detail) {
+  if (!cfg.token || !exec.runId) return;
+  const body = { token: cfg.token, runId: exec.runId, event: "finish", status: status };
+  body.currentStep = exec.index + 1;
+  // detail NIE mit Parameter-Werten — zusätzlich durch redactDetail als Sicherheitsnetz.
+  if (detail && typeof SteplyExecPlan !== "undefined") {
+    const red = SteplyExecPlan.redactDetail(detail);
+    if (red) body.detail = red;
+  }
+  try {
+    await fetch(appBase() + "/api/recorder/automation-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    /* Fehler still — der Lauf ist für den Nutzer trotzdem beendet */
+  }
+}
+
+// ── Lauf: Start ─────────────────────────────────────────────────────────────────
+async function startAutoRun() {
+  if (!exec.automation) return;
+  els.autoPrepHint.textContent = "";
+  els.autoPrepHint.className = "status";
+  if (typeof SteplyExecPlan === "undefined") {
+    els.autoPrepHint.textContent = "Ausführ-Modul nicht geladen — Extension bitte neu laden.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
+
+  // Werte lesen + (nur mit Häkchen) merken.
+  const { values, toRemember } = readParamForm();
+  exec.values = values;
+  exec.mode = els.autoModeAuto && els.autoModeAuto.checked ? "auto" : "semi";
+  exec.autoMode = exec.mode === "auto";
+
+  // Plan bauen — wirft bei fehlendem Pflicht-Parameter (VOR jedem Tab-Zugriff).
+  try {
+    exec.plan = SteplyExecPlan.buildRunPlan(exec.automation, exec.steps, exec.values);
+  } catch (err) {
+    els.autoPrepHint.textContent = err && err.message ? err.message : "Eingaben unvollständig.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
+  if (!exec.plan.length) {
+    els.autoPrepHint.textContent = "Diese Automation hat keine Schritte.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
+
+  // Merken (lokal, nur Häkchen-Felder). Werte verlassen den Browser nie.
+  await saveAutoValues(exec.automation.id, toRemember);
+
+  // Tab binden + ggf. zur Startseite bringen.
+  exec.tabId = await guideActiveTabId();
+  try {
+    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+  } catch (err) {
+    /* egal */
+  }
+  await execEnsureStartTab(exec.plan[0]);
+
+  // Server-Lauf registrieren (best effort).
+  exec.runId = await execPostStart();
+
+  exec.index = 0;
+  exec.running = true;
+  exec.paused = false;
+  exec.finished = false;
+  exec.lastMissReason = "";
+  execLinkStart(exec.tabId);
+  execAddDownloadWatch();
+
+  show("autoRun");
+  if (els.autoDownloadNote) els.autoDownloadNote.hidden = true;
+
+  if (exec.autoMode) {
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+    }, EXEC_AUTO_GAP);
+  } else {
+    exec.phase = "ready";
+    execRenderRun();
+  }
+}
+
+// ── Lauf: einen Schritt ausführen ────────────────────────────────────────────────
+async function execExecuteCurrent() {
+  if (!exec.running || exec.phase === "executing") return;
+  const planStep = exec.plan[exec.index];
+  if (!planStep) {
+    execFinish("success");
+    return;
+  }
+  exec.phase = "executing";
+  execRenderRun();
+
+  await execNavigateIfNeeded(planStep);
+  if (!exec.running) return; // mitten in der Navigation abgebrochen
+
+  const res = await execSendStep(planStep);
+  if (!exec.running) return; // während des Wartens abgebrochen
+
+  if (res && res.ok) {
+    execAdvance();
+  } else {
+    execEnterMiss(res ? res.reason : "unbekannt");
+  }
+}
+
+function execAdvance() {
+  exec.index++;
+  if (exec.index >= exec.plan.length) {
+    execFinish("success");
+    return;
+  }
+  if (exec.autoMode && !exec.paused) {
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+    }, EXEC_AUTO_GAP);
+  } else {
+    exec.phase = "ready";
+    execRenderRun();
+  }
+}
+
+// Selektor-Miss/mehrdeutig → PAUSE (kein Fallback-Klick, Sicherheitsregel 1).
+function execEnterMiss(reason) {
+  exec.lastMissReason = typeof reason === "string" ? reason : "";
+  exec.paused = true; // Vollautomatik anhalten
+  exec.phase = "miss";
+  execRenderRun();
+}
+
+// „Weiter" nach einem Miss: der Nutzer hat den Schritt selbst erledigt → als erledigt
+// überspringen und weiterlaufen (in der Vollautomatik automatisch fortsetzen).
+function execContinueAfterMiss() {
+  if (exec.autoMode) exec.paused = false;
+  execAdvance();
+}
+
+// „Überspringen" (Halbautomatik): aktuellen Schritt ohne Ausführung weitergehen.
+function execSkip() {
+  if (!exec.running || exec.phase === "executing") return;
+  execAdvance();
+}
+
+function execPauseAuto() {
+  exec.paused = true;
+  exec.phase = "paused";
+  execRenderRun();
+}
+
+function execResumeAuto() {
+  if (!exec.running) return;
+  exec.paused = false;
+  exec.phase = "running";
+  execRenderRun();
+  setTimeout(() => {
+    if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+  }, 0);
+}
+
+function execAbort() {
+  execFinish("aborted");
+}
+
+async function execFinish(status, detail) {
+  if (exec.finished) return;
+  exec.finished = true;
+  exec.running = false;
+  exec.paused = false;
+  execLinkStop();
+  execRemoveDownloadWatch();
+  sendExecToTab({ type: "steply-exec-hide" });
+  // Server-Event (best effort; detail geht durch redactDetail, nie Werte).
+  execPostFinish(status, detail || "");
+  exec.phase = status === "success" ? "done" : "aborted";
+  execRenderDone(status);
+}
+
+// ── Lauf: Rendering ──────────────────────────────────────────────────────────────
+function execActionLabel(action) {
+  if (action === "fill") return "Eingabe";
+  if (action === "select") return "Auswahl";
+  if (action === "toggle") return "Umschalten";
+  return "Klick";
+}
+
+function execShowCtl(which) {
+  els.autoCtlSemi.hidden = which !== "semi";
+  els.autoCtlAuto.hidden = which !== "auto";
+  els.autoCtlPaused.hidden = which !== "paused";
+  els.autoCtlMiss.hidden = which !== "miss";
+}
+
+function execRenderRun() {
+  els.autoDone.hidden = true;
+  const planStep = exec.plan[exec.index] || null;
+  const total = exec.plan.length;
+  const num = Math.min(exec.index + 1, total);
+  els.autoProgress.textContent = "Schritt " + num + " von " + total;
+  const pct = total ? Math.round((num / total) * 100) : 0;
+  if (els.autoBar.firstElementChild) els.autoBar.firstElementChild.style.width = pct + "%";
+
+  els.autoStepTitle.textContent = planStep ? planStep.title || execActionLabel(planStep.action) : "";
+  els.autoStepAction.textContent = planStep ? execActionLabel(planStep.action) : "";
+
+  // Miss-Box nur im Miss-Zustand.
+  if (exec.phase === "miss") {
+    const reason = exec.lastMissReason ? " (" + exec.lastMissReason + ")" : "";
+    els.autoMissText.textContent =
+      "Schritt " + num + ": Stelle nicht gefunden" + reason +
+      " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
+    const imgUrl = planStep && planStep.imageUrl ? planStep.imageUrl : "";
+    if (imgUrl) {
+      els.autoMissImage.src = imgUrl;
+      els.autoMissImageWrap.hidden = false;
+    } else {
+      els.autoMissImage.removeAttribute("src");
+      els.autoMissImageWrap.hidden = true;
+    }
+    els.autoMissBox.hidden = false;
+  } else {
+    els.autoMissBox.hidden = true;
+  }
+
+  // Live-Status.
+  if (exec.phase === "executing") {
+    els.autoLiveStatus.textContent = "Schritt wird ausgeführt …";
+    els.autoLiveStatus.hidden = false;
+  } else if (exec.phase === "running" && exec.autoMode) {
+    els.autoLiveStatus.textContent = "Läuft automatisch …";
+    els.autoLiveStatus.hidden = false;
+  } else if (exec.phase === "paused") {
+    els.autoLiveStatus.textContent = "Pausiert.";
+    els.autoLiveStatus.hidden = false;
+  } else {
+    els.autoLiveStatus.hidden = true;
+  }
+
+  // Abbrechen ist während des ganzen Laufs verfügbar (nur auf dem Ende-Screen weg).
+  if (els.autoCancel) els.autoCancel.hidden = false;
+
+  // Steuer-Knöpfe je Zustand.
+  if (exec.phase === "miss") {
+    execShowCtl("miss");
+  } else if (exec.phase === "paused") {
+    execShowCtl("paused");
+  } else if (exec.autoMode) {
+    execShowCtl("auto");
+    els.autoPause.disabled = exec.phase !== "running" && exec.phase !== "executing";
+  } else {
+    execShowCtl("semi");
+    const busy = exec.phase === "executing";
+    els.autoExec.disabled = busy;
+    els.autoSkip.disabled = busy;
+  }
+}
+
+function execRenderDone(status) {
+  execShowCtl("none");
+  if (els.autoCancel) els.autoCancel.hidden = true;
+  els.autoMissBox.hidden = true;
+  els.autoLiveStatus.hidden = true;
+  els.autoDownloadNote.hidden = true;
+  els.autoStepTitle.textContent = "";
+  els.autoStepAction.textContent = "";
+  if (els.autoBar.firstElementChild) {
+    els.autoBar.firstElementChild.style.width = status === "success" ? "100%" : els.autoBar.firstElementChild.style.width;
+  }
+  if (status === "success") {
+    els.autoDoneTitle.textContent = "Fertig 🎉";
+    els.autoDoneText.textContent = "Die Automation ist durchgelaufen.";
+    els.autoProgress.textContent = "Fertig";
+  } else {
+    els.autoDoneTitle.textContent = "Abgebrochen";
+    els.autoDoneText.textContent = "Der Lauf wurde beendet.";
+    els.autoProgress.textContent = "Abgebrochen";
+  }
+  els.autoDone.hidden = false;
+}
+
+// content.js → Panel: Schritt-Ergebnis (ok / Miss mit Grund). NIE bei ok:false klicken —
+// der Lauf pausiert; die Entscheidung trifft der Nutzer.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-exec-result") return;
+  if (els.autoRun.hidden) return;
+  if (exec.tabId != null && sender && sender.tab && sender.tab.id !== exec.tabId) return;
+  if (!execPending) return;
+  if (msg.token != null && execPending.token !== msg.token) return;
+  execPending.resolve({ ok: !!msg.ok, reason: typeof msg.reason === "string" ? msg.reason : "" });
+});
+
+// ============================================================================
 // EVENTS
 // ============================================================================
 
@@ -2848,6 +3751,41 @@ els.runDoneList.addEventListener("click", () => showFuehren());
 if (els.cardSteplyLearn) els.cardSteplyLearn.addEventListener("click", () => showSteplyLearn());
 if (els.steplyLearnBack) els.steplyLearnBack.addEventListener("click", () => showStart());
 
+// Automationen (Welle 36b): Karte (nur mit Token) → Liste → Vorbereitung → Lauf.
+if (els.cardAutomations)
+  els.cardAutomations.addEventListener("click", () => {
+    if (hasToken) showAutomations();
+  });
+if (els.autoListBack) els.autoListBack.addEventListener("click", () => showStart());
+if (els.autoPrepBack) els.autoPrepBack.addEventListener("click", () => showAutomations());
+if (els.autoClearValues) els.autoClearValues.addEventListener("click", onAutoClearValues);
+if (els.autoStart) els.autoStart.addEventListener("click", startAutoRun);
+// Lauf-Ansicht: Steuer-Knöpfe.
+if (els.autoExec) els.autoExec.addEventListener("click", () => execExecuteCurrent());
+if (els.autoSkip) els.autoSkip.addEventListener("click", () => execSkip());
+if (els.autoPause) els.autoPause.addEventListener("click", () => execPauseAuto());
+if (els.autoResume) els.autoResume.addEventListener("click", () => execResumeAuto());
+if (els.autoContinue) els.autoContinue.addEventListener("click", () => execContinueAfterMiss());
+if (els.autoCancel) els.autoCancel.addEventListener("click", () => execAbort());
+if (els.autoExit)
+  els.autoExit.addEventListener("click", () => {
+    if (exec.running) execAbort();
+    else showAutomations();
+  });
+if (els.autoDoneList) els.autoDoneList.addEventListener("click", () => showAutomations());
+// Halbautomatik: Enter löst „Ausführen" aus (nur im wartenden Zustand).
+document.addEventListener("keydown", (e) => {
+  if (els.autoRun.hidden) return;
+  if (e.key !== "Enter") return;
+  if (!exec.autoMode && exec.phase === "ready") {
+    e.preventDefault();
+    execExecuteCurrent();
+  } else if (exec.phase === "miss") {
+    e.preventDefault();
+    execContinueAfterMiss();
+  }
+});
+
 // Panel wird geschlossen (Seitenleiste zu / Fenster zu): laufende Streams sauber
 // stoppen (sonst bleibt der Mikro-/Freigabe-Indikator haengen) und Zustand raeumen,
 // damit die NAECHSTE Oeffnung garantiert sauber startet. pagehide feuert beim Abbau
@@ -2867,6 +3805,13 @@ window.addEventListener("pagehide", () => {
   // Live-Führung (Welle 31): Overlay auf der Seite best-effort ausblenden (der Zustand
   // bleibt in chrome.storage.session -> beim Wiederöffnen wird resümiert + neu markiert).
   if (!els.guideRun.hidden) sendGuideToTab({ type: "steply-guide-hide" });
+  // Automationen (Welle 36b): laufenden Lauf stoppen + Cursor/Overlay im Tab abräumen.
+  // Der Port bricht beim Dokument-Abbau ohnehin ab → background sendet exec-hide (robust);
+  // das direkte hide hier ist nur Best-effort. KEIN Resume — ein Ausführ-Lauf startet nie
+  // ungefragt von selbst weiter (Sicherheit).
+  exec.running = false;
+  execPingStop();
+  if (!els.autoRun.hidden) sendExecToTab({ type: "steply-exec-hide" });
 });
 
 // ============================================================================

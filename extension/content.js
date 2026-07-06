@@ -1620,9 +1620,581 @@
     }
   });
 
+  // ============================================================================
+  // AUTOMATIONEN-AUSFÜHRUNG (Welle 36b): Das Panel schickt pro Schritt
+  // {type:"steply-exec-step", step:{selector, action, value?, index, total}, token}.
+  // Wir lösen das Element via SteplyGuideResolve auf (5s, MutationObserver — Muster
+  // showGuideStep), zeigen eine ANIMIERTE Maus (Koralle-Zeiger mit Schatten, gleitet vom
+  // letzten Punkt/Bildschirmmitte zum Ziel ~450ms, „Klick-Puls" beim Ausführen) + einen
+  // Rahmen ums Ziel, und FÜHREN dann die Aktion aus:
+  //   click  → pointer/mouse-Gesten + el.click()
+  //   fill   → React-sicherer value-Setter + input/change + blur (Wert NIE geloggt)
+  //   select → Option per value ODER sichtbarem Text; nicht gefunden ⇒ Miss (kein Raten)
+  //   toggle → Klick-Sequenz (Checkbox/Radio/Switch)
+  // Antwort: {type:"steply-exec-result", token, ok:true} bzw. {ok:false, reason}.
+  // SICHERHEIT: Bei ok:false wird NIEMALS geklickt — der Lauf pausiert im Panel.
+  // „steply-exec-hide" räumt Cursor/Rahmen restlos ab; Ping/Watchdog (60s) wie die Führung.
+  // Eigener Namespace + eigene IDs → keine Kollision mit der Führung.
+  // ============================================================================
+  const EXEC_OVERLAY_ID = "__steply-exec-frame";
+  const EXEC_CURSOR_ID = "__steply-exec-cursor";
+  const EXEC_GLOW = "0 0 0 3px rgba(239,106,78,0.5), 0 0 14px 3px rgba(239,106,78,0.32)";
+  const EXEC_SIGNAL_MAX_IDLE = 60000;
+
+  let execCursorEl = null; // persistente animierte Maus (überlebt Schritte)
+  let execFrameEl = null; // Rahmen ums aktuelle Ziel
+  let execLastPoint = null; // { x, y } — letzte Cursor-Position (Start der nächsten Animation)
+  let execSearchObserver = null;
+  let execSearchTick = null;
+  let execSearchTimeout = null;
+  let execLastSignalAt = 0;
+  let execWatchdog = null;
+
+  function execWait(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  function execStopSearch() {
+    if (execSearchObserver) {
+      try {
+        execSearchObserver.disconnect();
+      } catch (err) {
+        /* egal */
+      }
+      execSearchObserver = null;
+    }
+    if (execSearchTick) {
+      clearInterval(execSearchTick);
+      execSearchTick = null;
+    }
+    if (execSearchTimeout) {
+      clearTimeout(execSearchTimeout);
+      execSearchTimeout = null;
+    }
+  }
+
+  function execStopWatchdog() {
+    if (execWatchdog) {
+      clearInterval(execWatchdog);
+      execWatchdog = null;
+    }
+  }
+
+  // Verwaiste Cursor/Rahmen früherer (per Reload verwaister) Script-Instanzen abräumen.
+  function execRemoveStrays() {
+    try {
+      document.querySelectorAll('[id="' + EXEC_OVERLAY_ID + '"]').forEach((n) => {
+        if (n !== execFrameEl) {
+          try {
+            n.remove();
+          } catch (err) {
+            /* egal */
+          }
+        }
+      });
+      document.querySelectorAll('[id="' + EXEC_CURSOR_ID + '"]').forEach((n) => {
+        if (n !== execCursorEl) {
+          try {
+            n.remove();
+          } catch (err) {
+            /* egal */
+          }
+        }
+      });
+    } catch (err) {
+      /* egal */
+    }
+  }
+
+  function execRemoveFrame() {
+    if (execFrameEl && execFrameEl.parentNode) {
+      try {
+        execFrameEl.parentNode.removeChild(execFrameEl);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    execFrameEl = null;
+  }
+
+  function execCleanup() {
+    execStopSearch();
+    execStopWatchdog();
+    execRemoveFrame();
+    if (execCursorEl && execCursorEl.parentNode) {
+      try {
+        execCursorEl.parentNode.removeChild(execCursorEl);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    execCursorEl = null;
+    execLastPoint = null;
+    execRemoveStrays();
+  }
+
+  // Maus-Zeiger (Koralle, weißer Rand, weicher Schatten) — per createElementNS gebaut, damit
+  // KEIN innerHTML/Trusted-Types-Problem auf strengen Seiten entsteht. Die Spitze liegt bei
+  // (4,2) im SVG; der Container wird um (-4,-2) verschoben, damit sie auf dem Zielpunkt sitzt.
+  function execEnsureCursor() {
+    if (execCursorEl && execCursorEl.isConnected) return execCursorEl;
+    const c = document.createElement("div");
+    c.id = EXEC_CURSOR_ID;
+    const s = c.style;
+    s.position = "fixed";
+    s.zIndex = "2147483647";
+    s.pointerEvents = "none";
+    s.left = "0";
+    s.top = "0";
+    s.width = "24px";
+    s.height = "24px";
+    s.transform = "translate(-4px, -2px)";
+    s.filter = "drop-shadow(0 3px 5px rgba(0,0,0,0.35))";
+    try {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("width", "24");
+      svg.setAttribute("height", "24");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", "M4 2 L4 20 L9 15 L12.5 22 L15.5 20.8 L12 14 L19 14 Z");
+      path.setAttribute("fill", "#ef6a4e");
+      path.setAttribute("stroke", "#ffffff");
+      path.setAttribute("stroke-width", "1.4");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(path);
+      c.appendChild(svg);
+    } catch (err) {
+      // Ohne SVG: ein einfacher Koralle-Punkt reicht als sichtbare Maus.
+      c.style.background = "#ef6a4e";
+      c.style.borderRadius = "50%";
+      c.style.border = "2px solid #fff";
+    }
+    (document.documentElement || document.body).appendChild(c);
+    execCursorEl = c;
+    if (!execLastPoint) {
+      execLastPoint = { x: (window.innerWidth || 0) / 2, y: (window.innerHeight || 0) / 2 };
+    }
+    execPlaceCursor(execLastPoint.x, execLastPoint.y);
+    return c;
+  }
+
+  function execPlaceCursor(x, y) {
+    if (!execCursorEl) return;
+    execCursorEl.style.left = x + "px";
+    execCursorEl.style.top = y + "px";
+    execLastPoint = { x: x, y: y };
+  }
+
+  function execRectOf(el) {
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    let r = null;
+    try {
+      r = el.getBoundingClientRect();
+    } catch (err) {
+      r = null;
+    }
+    if (!r) return { left: vw / 2, top: vh / 2, width: 0, height: 0, cx: vw / 2, cy: vh / 2 };
+    return {
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
+    };
+  }
+
+  // Maus in ~450ms ease-out zum Ziel gleiten lassen. Promise löst nach dem Ankommen.
+  function execAnimateCursorTo(x, y) {
+    execEnsureCursor();
+    const from = execLastPoint || { x: (window.innerWidth || 0) / 2, y: (window.innerHeight || 0) / 2 };
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        execPlaceCursor(x, y);
+        resolve();
+      };
+      try {
+        const anim = execCursorEl.animate(
+          [
+            { left: from.x + "px", top: from.y + "px" },
+            { left: x + "px", top: y + "px" },
+          ],
+          { duration: 450, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" }
+        );
+        anim.onfinish = finish;
+        anim.oncancel = finish;
+        // Sicherheitsnetz, falls onfinish nie feuert (Tab im Hintergrund u. ä.).
+        setTimeout(finish, 620);
+      } catch (err) {
+        finish();
+      }
+    });
+  }
+
+  // Kurzer „Klick-Puls": Koralle-Ring, der aufploppt und verblasst.
+  function execClickPulse(x, y) {
+    try {
+      const ring = document.createElement("div");
+      const s = ring.style;
+      s.position = "fixed";
+      s.zIndex = "2147483647";
+      s.pointerEvents = "none";
+      s.left = x - 14 + "px";
+      s.top = y - 14 + "px";
+      s.width = "28px";
+      s.height = "28px";
+      s.borderRadius = "50%";
+      s.border = "3px solid #ef6a4e";
+      s.boxShadow = "0 0 0 3px rgba(239,106,78,0.25)";
+      (document.documentElement || document.body).appendChild(ring);
+      ring
+        .animate(
+          [
+            { opacity: 0.9, transform: "scale(0.5)" },
+            { opacity: 0.7, transform: "scale(1.0)", offset: 0.5 },
+            { opacity: 0, transform: "scale(1.7)" },
+          ],
+          { duration: 500, easing: "ease-out" }
+        ).onfinish = () => ring.remove();
+    } catch (err) {
+      /* Puls ist optional */
+    }
+  }
+
+  function execShowFrame(rect) {
+    execRemoveFrame();
+    const f = document.createElement("div");
+    f.id = EXEC_OVERLAY_ID;
+    const s = f.style;
+    s.position = "fixed";
+    s.zIndex = "2147483646";
+    s.pointerEvents = "none";
+    s.boxSizing = "border-box";
+    s.border = "3px solid #ef6a4e";
+    s.borderRadius = "10px";
+    s.boxShadow = EXEC_GLOW;
+    const pad = 4;
+    s.left = rect.left - pad + "px";
+    s.top = rect.top - pad + "px";
+    s.width = rect.width + pad * 2 + "px";
+    s.height = rect.height + pad * 2 + "px";
+    (document.documentElement || document.body).appendChild(f);
+    execFrameEl = f;
+  }
+
+  function execSendResult(token, ok, reason) {
+    try {
+      chrome.runtime.sendMessage({
+        type: "steply-exec-result",
+        token: token,
+        ok: !!ok,
+        reason: ok ? "" : reason || "unbekannt",
+      });
+    } catch (err) {
+      /* Panel evtl. geschlossen — egal */
+    }
+  }
+
+  // Realistische Zeiger-/Maus-Gesten (pointerdown, mousedown, pointerup, mouseup). Der
+  // eigentliche Klick kommt danach über el.click() — GENAU EINMAL. (Kein zusätzlich
+  // dispatchtes click-Event, sonst würde eine Checkbox/ein Switch doppelt umgeschaltet.)
+  function execPointerGesture(el) {
+    let cx = 0;
+    let cy = 0;
+    try {
+      const r = el.getBoundingClientRect();
+      cx = r.left + r.width / 2;
+      cy = r.top + r.height / 2;
+    } catch (err) {
+      /* egal */
+    }
+    const base = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, button: 0 };
+    const fire = (type, usePointer) => {
+      try {
+        if (usePointer && typeof PointerEvent === "function") {
+          el.dispatchEvent(new PointerEvent(type, base));
+        } else {
+          el.dispatchEvent(new MouseEvent(type, base));
+        }
+      } catch (err) {
+        try {
+          el.dispatchEvent(new MouseEvent(type, base));
+        } catch (e) {
+          /* egal */
+        }
+      }
+    };
+    fire("pointerdown", true);
+    fire("mousedown", false);
+    fire("pointerup", true);
+    fire("mouseup", false);
+  }
+
+  function execClick(el) {
+    try {
+      execPointerGesture(el);
+      el.click();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "click-error" };
+    }
+  }
+
+  function execToggle(el) {
+    try {
+      execPointerGesture(el);
+      el.click();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "toggle-error" };
+    }
+  }
+
+  // React-sicheres Befüllen: nativen value-Setter nutzen (React hört auf den echten Setter),
+  // dann input + change dispatchen, dann blur. Der WERT wird NIE geloggt.
+  function execFill(el, value) {
+    const v = value == null ? "" : String(value);
+    try {
+      if (el.isContentEditable === true) {
+        try {
+          el.focus();
+        } catch (e) {
+          /* egal */
+        }
+        el.textContent = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        try {
+          el.blur();
+        } catch (e) {
+          /* egal */
+        }
+        return { ok: true };
+      }
+      const tag = (el.tagName || "").toLowerCase();
+      const proto =
+        tag === "textarea"
+          ? HTMLTextAreaElement.prototype
+          : tag === "input"
+            ? HTMLInputElement.prototype
+            : null;
+      if (!proto) return { ok: false, reason: "not-fillable" };
+      try {
+        el.focus();
+      } catch (e) {
+        /* egal */
+      }
+      const desc = Object.getOwnPropertyDescriptor(proto, "value");
+      if (desc && desc.set) desc.set.call(el, v);
+      else el.value = v;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      try {
+        el.blur();
+      } catch (e) {
+        /* egal */
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "fill-error" };
+    }
+  }
+
+  // Option per value ODER sichtbarem Text wählen (beides versuchen). Nicht gefunden ⇒ Miss
+  // (kein Raten). Nur natives <select>.
+  function execSelect(el, value) {
+    if ((el.tagName || "").toLowerCase() !== "select") return { ok: false, reason: "not-a-select" };
+    const want = value == null ? "" : String(value);
+    const wantLc = want.trim().toLowerCase();
+    const opts = el.options || [];
+    let match = null;
+    for (let i = 0; i < opts.length; i++) {
+      if (opts[i].value === want) {
+        match = opts[i];
+        break;
+      }
+    }
+    if (!match) {
+      for (let j = 0; j < opts.length; j++) {
+        const t = (opts[j].textContent || "").trim().toLowerCase();
+        if (t && t === wantLc) {
+          match = opts[j];
+          break;
+        }
+      }
+    }
+    if (!match) return { ok: false, reason: "option-not-found" };
+    try {
+      const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+      if (desc && desc.set) desc.set.call(el, match.value);
+      else el.value = match.value;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "select-error" };
+    }
+  }
+
+  function execDoAction(el, step) {
+    const action = step && step.action;
+    if (action === "fill") return execFill(el, step.value);
+    if (action === "select") return execSelect(el, step.value);
+    if (action === "toggle") return execToggle(el);
+    return execClick(el); // Default: click
+  }
+
+  // Ziel gefunden → in Sicht scrollen, Maus hinführen, Puls, Aktion, Ergebnis melden.
+  async function execPerform(el, step, token) {
+    execEnsureCursor();
+    try {
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    } catch (err) {
+      try {
+        el.scrollIntoView();
+      } catch (e) {
+        /* egal */
+      }
+    }
+    await execWait(180); // kurzem smooth-Scroll Zeit geben, dann die reale Lage messen
+    const rect = execRectOf(el);
+    execShowFrame(rect);
+    await execAnimateCursorTo(rect.cx, rect.cy);
+    execClickPulse(rect.cx, rect.cy); // „Klick-Puls" beim Ausführen
+    let result;
+    try {
+      result = execDoAction(el, step);
+    } catch (err) {
+      result = { ok: false, reason: "action-error" };
+    }
+    // WICHTIG bei navigierenden Klicks: das Ergebnis SYNCHRON nach der Aktion senden — die
+    // Nachricht ist dann beim Browser, bevor eine Navigation die Seite abbaut (Muster wie
+    // steply-guide-advance).
+    execSendResult(token, result && result.ok, result && result.reason);
+  }
+
+  // Einen Ausführ-Schritt bearbeiten: Element auflösen (bis 5s, MutationObserver + Tick),
+  // sonst Miss + Grund melden. NIEMALS bei Miss klicken (Sicherheit).
+  function execRunStep(step, token) {
+    execStopSearch();
+    execRemoveFrame(); // alten Rahmen weg; die Maus bleibt für die nächste Animation
+    if (!step || !step.selector) {
+      execSendResult(token, false, "no-selector");
+      return;
+    }
+    const resolver =
+      (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
+    if (!resolver) {
+      execSendResult(token, false, "no-resolver");
+      return;
+    }
+    const MAX_WAIT = 5000;
+    let lastReason = "timeout";
+    let done = false;
+
+    const finishMiss = () => {
+      if (done) return;
+      done = true;
+      execStopSearch();
+      execSendResult(token, false, lastReason);
+    };
+
+    const tryResolve = () => {
+      if (done) return true;
+      let res = null;
+      try {
+        res = resolver(document, step.selector);
+      } catch (err) {
+        res = null;
+      }
+      if (res && res.el) {
+        // Noch ohne Layout (0×0 — Hydration/PPR)? Nicht andocken, weiter suchen.
+        let rr = null;
+        try {
+          rr = res.el.getBoundingClientRect();
+        } catch (err) {
+          rr = null;
+        }
+        if (!rr || (rr.width <= 0 && rr.height <= 0)) {
+          lastReason = "target-hidden";
+          return false;
+        }
+        done = true;
+        execStopSearch();
+        execPerform(res.el, step, token);
+        return true;
+      }
+      if (res && res.reason) lastReason = res.reason;
+      return false;
+    };
+
+    if (tryResolve()) return;
+
+    let obsPending = false;
+    try {
+      execSearchObserver = new MutationObserver(() => {
+        if (obsPending || done) return;
+        obsPending = true;
+        setTimeout(() => {
+          obsPending = false;
+          tryResolve();
+        }, 60);
+      });
+      execSearchObserver.observe(document.documentElement || document, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (err) {
+      execSearchObserver = null;
+    }
+    execSearchTick = setInterval(tryResolve, 250);
+    execSearchTimeout = setTimeout(finishMiss, MAX_WAIT);
+  }
+
+  function execNoteSignal() {
+    execLastSignalAt = Date.now();
+  }
+
+  function execStartWatchdog() {
+    if (execWatchdog) return;
+    execWatchdog = setInterval(() => {
+      if (!execCursorEl && !execFrameEl) {
+        execStopWatchdog();
+        return;
+      }
+      if (Date.now() - execLastSignalAt > EXEC_SIGNAL_MAX_IDLE) {
+        // >60s kein Schritt/Ping → Panel vermutlich hart weg, selbst abräumen.
+        execCleanup();
+      }
+    }, 10000);
+  }
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg) return;
+    if (msg.type === "steply-exec-step") {
+      execNoteSignal();
+      execRunStep(msg.step, msg.token);
+      execStartWatchdog();
+      return;
+    }
+    if (msg.type === "steply-exec-ping") {
+      execNoteSignal();
+      return;
+    }
+    if (msg.type === "steply-exec-hide") {
+      execCleanup();
+      return;
+    }
+  });
+
   // Beim Laden dieser Script-Instanz sofort Zombie-Overlays verwaister Vorgaenger entsorgen
   // (die Nachimpfung offener Tabs raeumt so nach jedem Extension-Reload automatisch auf).
   guideRemoveStrays();
+  execRemoveStrays();
 
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
