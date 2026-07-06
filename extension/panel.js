@@ -35,6 +35,7 @@ const els = {
   updateHint: document.getElementById("updateHint"),
   // Aufnahme-Anker (Welle 27)
   targetBanner: document.getElementById("targetBanner"),
+  targetPrefix: document.getElementById("targetPrefix"),
   targetLabel: document.getElementById("targetLabel"),
   targetClear: document.getElementById("targetClear"),
   status: document.getElementById("status"),
@@ -146,12 +147,24 @@ async function loadPendingTarget() {
   renderTargetBanner();
 }
 
-// Banner „Aufnahme fuer: <label>" ein-/ausblenden.
+// Ziel-Banner: sagt IMMER, wo die Aufnahme landet (Richards Wunsch) -
+//   mit Ziel:  "Aufnahme fuer: <label>" + "Ziel verwerfen"
+//   ohne Ziel: neutral "Aufnahme wird als neues Tutorial angelegt" (nur wenn verbunden)
 function renderTargetBanner() {
   if (!els.targetBanner) return;
   if (pendingTarget) {
-    const label = (pendingTarget.label || "").toString();
-    els.targetLabel.textContent = label || "diese Stelle";
+    // trim: ein Leerzeichen-Label liess die Zeile frueher LEER aussehen.
+    const label = String(pendingTarget.label || "").trim();
+    if (els.targetPrefix) els.targetPrefix.textContent = "Aufnahme für: ";
+    els.targetLabel.textContent = label || "die gewählte Stelle im Tutorial";
+    els.targetBanner.classList.remove("target-banner-neutral");
+    if (els.targetClear) els.targetClear.hidden = false;
+    els.targetBanner.hidden = false;
+  } else if (hasToken) {
+    if (els.targetPrefix) els.targetPrefix.textContent = "";
+    els.targetLabel.textContent = "Aufnahme wird als neues Tutorial angelegt";
+    els.targetBanner.classList.add("target-banner-neutral");
+    if (els.targetClear) els.targetClear.hidden = true;
     els.targetBanner.hidden = false;
   } else {
     els.targetBanner.hidden = true;
@@ -403,6 +416,8 @@ async function saveCfg() {
 
 // ---- (b) Start / Auswahl ----
 function showStart() {
+  // Banner-Zustand kann von hasToken abhaengen (neutraler "neues Tutorial"-Modus).
+  renderTargetBanner();
   els.cardGuide.disabled = !hasToken;
   els.cardGuide.title = hasToken
     ? ""
