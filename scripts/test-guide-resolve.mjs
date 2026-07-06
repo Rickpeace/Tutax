@@ -7,7 +7,7 @@
 // Nutzung:  node scripts/test-guide-resolve.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { resolveSelector } = require("../extension/guide-resolve.js");
+const { resolveSelector, isVolatileId } = require("../extension/guide-resolve.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -19,7 +19,7 @@ const ok = (c, m) => {
 // Ein Element: { tag, attrs, text, css }. css = der (fiktive) eindeutige Pfad, unter dem
 // querySelector es findet. Alle Elemente gelten als „klickbar" (der Test kontrolliert die
 // Menge) -> querySelectorAll(CLICKABLE_SELECTOR) gibt schlicht alle zurück.
-function elem({ tag = "div", attrs = {}, text = "", css = null }) {
+function elem({ tag = "div", attrs = {}, text = "", css = null, wrapLabel = null }) {
   return {
     tagName: String(tag).toUpperCase(),
     _attrs: attrs,
@@ -30,6 +30,10 @@ function elem({ tag = "div", attrs = {}, text = "", css = null }) {
     },
     hasAttribute(name) {
       return Object.prototype.hasOwnProperty.call(this._attrs, name);
+    },
+    // Minimaler closest('label')-Stub fuer den Wrapping-<label>-Fall (Welle 33, Fix 3).
+    closest(sel) {
+      return sel === "label" && wrapLabel ? wrapLabel : null;
     },
   };
 }
@@ -189,6 +193,65 @@ function makeRoot(elements) {
   const root = makeRoot([sel, label]);
   const r = resolveSelector(root, { css: "#land-alt", text: "Land", role: "combobox" });
   ok(r.el === sel && r.confidence === "text", "Eingabe: select ueber Label (nicht Options-textContent) -> text");
+}
+
+// ── Eingabefeld INNERHALB eines <label> (Welle 33, Fix 3): closest('label')-Text ──────────
+{
+  // Kein for-Attribut, keine id — die Beschriftung ist der Text des umschliessenden <label>.
+  // role=textbox grenzt das <label> selbst (das ja auch „Geburtsdatum" traegt) sauber aus.
+  const label = elem({ tag: "label", text: "Geburtsdatum" });
+  const input = elem({ tag: "input", attrs: { type: "text" }, css: "#gd", wrapLabel: label });
+  const root = makeRoot([input, label]);
+  const r = resolveSelector(root, { css: "#gd-alt", text: "Geburtsdatum", role: "textbox" });
+  ok(r.el === input && r.confidence === "text", "Eingabe: Wrapping-<label> (closest) als Beschriftung -> text");
+}
+
+// ── Grund-Rückgabe (Welle 33, Fix 3): reason für die Panel-Anzeige/Telemetrie ─────────────
+{
+  ok(resolveSelector(null, { css: "#x" }).reason === "no-selector", "reason: root null -> no-selector");
+  ok(resolveSelector(makeRoot([]), null).reason === "no-selector", "reason: selector null -> no-selector");
+  // Leerer Selektor {} hat weder css noch text -> css-miss (nichts, woran man verankern könnte).
+  ok(resolveSelector(makeRoot([]), {}).reason === "css-miss", "reason: leerer Selektor -> css-miss");
+
+  const root = makeRoot([elem({ tag: "button", text: "OK", css: "#ok" })]);
+  ok(resolveSelector(root, { css: "#weg" }).reason === "css-miss", "reason: css verfehlt, kein Text -> css-miss");
+
+  // css hit + passender Text -> Treffer, reason null.
+  const btn = elem({ tag: "button", text: "Speichern", css: "#save" });
+  ok(resolveSelector(makeRoot([btn]), { css: "#save", text: "Speichern" }).reason === null, "reason: Treffer -> null");
+
+  // Text im Selektor, aber nirgends vorhanden -> text-mismatch.
+  const r1 = resolveSelector(makeRoot([btn]), { css: "#weg", text: "Gibtsnicht", role: "button" });
+  ok(r1.el === null && r1.reason === "text-mismatch", "reason: Text nirgends -> text-mismatch");
+
+  // Zwei gleiche Texte, keine Rolle -> mehrdeutig -> ambiguous.
+  const a = elem({ tag: "button", text: "Löschen", css: "#d1" });
+  const b = elem({ tag: "button", text: "Löschen", css: "#d2" });
+  const r2 = resolveSelector(makeRoot([a, b]), { text: "Löschen" });
+  ok(r2.el === null && r2.reason === "ambiguous", "reason: zwei Treffer -> ambiguous");
+}
+
+// ── Flüchtige IDs (Welle 33, Fix 5): isVolatileId + Bestandsschutz für alte Aufnahmen ─────
+{
+  ok(isVolatileId("base-ui-_R_1mtabrb_") === true, "isVolatileId: base-ui-… -> flüchtig");
+  ok(isVolatileId("_r_6_") === true, "isVolatileId: _r_6_ (useId) -> flüchtig");
+  ok(isVolatileId(":r5:") === true, "isVolatileId: :r5: -> flüchtig");
+  ok(isVolatileId("radix-42") === true, "isVolatileId: radix-… -> flüchtig");
+  ok(isVolatileId("123456") === true, "isVolatileId: rein numerisch -> flüchtig");
+  ok(isVolatileId("invite-email") === false, "isVolatileId: sprechende id -> stabil");
+
+  // Alte Aufnahme mit flüchtigem-ID-css: css trifft NICHT (ID hat sich geändert) -> Stufe 2
+  // findet die Menü-Schaltfläche über role+Text; Grund wird als volatile-id gemeldet, wenn
+  // (hier separat geprüft) gar nichts mehr passt.
+  const menu = elem({ tag: "button", text: "Menü öffnen", css: "#base-ui-_r_66_" });
+  const root = makeRoot([menu]);
+  const r = resolveSelector(root, { css: "#base-ui-_R_1mtabrb_", text: "Menü öffnen", role: "button" });
+  ok(r.el === menu && r.confidence === "text", "Flüchtige-ID-css verfehlt -> Stufe 2 (role+Text) findet -> text");
+
+  // Flüchtiger-ID-css verfehlt UND nichts Passendes da -> reason volatile-id (statt css-miss).
+  const noise = elem({ tag: "button", text: "Ganz anderer Knopf", css: "#other" });
+  const r2 = resolveSelector(makeRoot([noise]), { css: "#base-ui-_r_6_", text: "Menü öffnen", role: "button" });
+  ok(r2.el === null && r2.reason === "volatile-id", "Flüchtige-ID-css tot + kein Text-Treffer -> reason volatile-id");
 }
 
 console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen verifiziert.");

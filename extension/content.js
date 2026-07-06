@@ -568,9 +568,17 @@
   // Wird serverseitig streng validiert und in steps.selector gespeichert; noch NIRGENDS
   // gelesen (Vorbau fuer Live-Fuehrung). KEINE generierten Klassennamen (sc-/css-/Hashes) -
   // wir bauen den css-Pfad bewusst OHNE Klassen (id > data-testid > name/aria-label > nth).
+  // Flüchtige-ID-Prüfung (Welle 33, Fix 5): dieselbe Liste wie im Resolver (guide-resolve.js
+  // wird VOR content.js injiziert -> globaler Namespace steht bereit). Fehlt sie ausnahmsweise,
+  // greifen die lokalen Muster in isStableId weiter.
+  function isVolatileIdShared(id) {
+    var R = globalThis.SteplyGuideResolve;
+    return !!(R && typeof R.isVolatileId === "function" && R.isVolatileId(id));
+  }
   function isStableId(id) {
     if (!id || typeof id !== "string") return false;
     if (id.length > 64) return false;
+    if (isVolatileIdShared(id)) return false; // Base UI / Radix / useId & Co. -> nie als Anker
     if (id.indexOf(":") >= 0) return false; // React useId ":r5:" u. ae.
     if (/^\d+$/.test(id)) return false; // rein numerisch
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i.test(id)) return false; // UUID-artig
@@ -1063,11 +1071,21 @@
   let guideFrameEl = null; // pulsierender Rahmen
   let guideBadgeEl = null; // Schritt-Pille „3/12"
   let guideTargetEl = null; // aufgeloestes Ziel-Element
-  let guideSearchTimer = null; // SPA-Nachversuch (Intervall)
+  // Element-Suche (Welle 33, Fix 3): MutationObserver + Fallback-Tick + Timeout statt starrem
+  // Kurz-Polling. Alle drei werden von guideStopSearch() zentral abgeraeumt.
+  let guideSearchObserver = null;
+  let guideSearchTick = null;
+  let guideSearchTimeout = null;
   let guideRafPending = false; // Reposition-Drossel (requestAnimationFrame)
   let guideAdvanceModeCur = "click"; // wie das Ziel „weiter" ausloest (s. guideAdvanceMode)
   let guideFieldListeners = null; // { el, onChange, onBlur, onKeydown } fuer Eingabe-Ziele
   let guideAdvanced = false; // Doppel-„weiter"-Schutz (Enter + blur / mehrere pointerdown)
+  let guideTargetLost = false; // Ziel verschwand (SPA/0x0) -> Overlay versteckt, found:false EINMAL
+  // Selbstschutz (Welle 33, Fix 2b): laeuft ein Overlay, aber kommt >60s kein show/ping mehr
+  // (Panel hart geschlossen, Port-Hide verpasst), raeumt das Content-Script SELBST ab.
+  let guideLastSignalAt = 0;
+  let guideWatchdog = null;
+  const GUIDE_SIGNAL_MAX_IDLE = 60000;
 
   // Genau EINMAL „weiter" pro Schritt melden (Enter + folgendes blur duerfen NICHT zwei
   // Schritte ueberspringen). Der Reset passiert beim naechsten steply-guide-show.
@@ -1144,11 +1162,37 @@
     }
   }
 
-  function guideCleanup() {
-    if (guideSearchTimer) {
-      clearInterval(guideSearchTimer);
-      guideSearchTimer = null;
+  // Laufende Element-Suche (Observer + Tick + Timeout) restlos stoppen.
+  function guideStopSearch() {
+    if (guideSearchObserver) {
+      try {
+        guideSearchObserver.disconnect();
+      } catch (err) {
+        /* egal */
+      }
+      guideSearchObserver = null;
     }
+    if (guideSearchTick) {
+      clearInterval(guideSearchTick);
+      guideSearchTick = null;
+    }
+    if (guideSearchTimeout) {
+      clearTimeout(guideSearchTimeout);
+      guideSearchTimeout = null;
+    }
+  }
+
+  function guideStopWatchdog() {
+    if (guideWatchdog) {
+      clearInterval(guideWatchdog);
+      guideWatchdog = null;
+    }
+  }
+
+  function guideCleanup() {
+    guideStopSearch();
+    guideStopWatchdog();
+    guideTargetLost = false;
     document.removeEventListener("pointerdown", onGuidePointerDown, true);
     window.removeEventListener("scroll", guideReposition, true);
     window.removeEventListener("resize", guideReposition, true);
@@ -1187,6 +1231,13 @@
     }
   }
 
+  // Rahmen + Badge zeigen/verstecken (Welle 33, Fix 2c): verschwindet das Ziel, darf das
+  // Badge nicht bei 0,0 kleben — dann verstecken wir das Overlay komplett.
+  function guideSetOverlayVisible(on) {
+    if (guideFrameEl) guideFrameEl.style.display = on ? "" : "none";
+    if (guideBadgeEl) guideBadgeEl.style.display = on ? "" : "none";
+  }
+
   // Rahmen + Badge an die aktuelle Element-Position setzen (gedrosselt via rAF).
   function guideReposition() {
     if (guideRafPending) return;
@@ -1198,7 +1249,27 @@
       try {
         r = guideTargetEl.getBoundingClientRect();
       } catch (err) {
+        r = null;
+      }
+      // Ziel weg (aus dem DOM entfernt / SPA-Umbau) oder unsichtbar (0×0)? Overlay NICHT bei
+      // 0,0 kleben lassen — verstecken und EINMALIG found:false melden (kein Spam pro Frame).
+      // Kommt das Element zurueck, zeigt das naechste Reposition/Show es wieder an.
+      const lost = !guideTargetEl.isConnected || !r || (r.width <= 0 && r.height <= 0);
+      if (lost) {
+        guideSetOverlayVisible(false);
+        if (!guideTargetLost) {
+          guideTargetLost = true;
+          try {
+            chrome.runtime.sendMessage({ type: "steply-guide-status", found: false, reason: "target-gone" });
+          } catch (err) {
+            /* Panel evtl. zu - egal */
+          }
+        }
         return;
+      }
+      if (guideTargetLost) {
+        guideTargetLost = false;
+        guideSetOverlayVisible(true);
       }
       const pad = 4;
       const left = r.left - pad;
@@ -1349,23 +1420,61 @@
     }
   }
 
-  // Einen Schritt anzeigen: Element aufloesen (SPA-tolerant), sonst found:false melden.
+  // „Signal" (show/ping) merken + Watchdog starten (Selbstschutz, Welle 33, Fix 2b).
+  function guideNoteSignal() {
+    guideLastSignalAt = Date.now();
+  }
+  function guideStartWatchdog() {
+    if (guideWatchdog) return;
+    guideWatchdog = setInterval(() => {
+      if (!guideOverlayEl) {
+        guideStopWatchdog(); // kein Overlay -> Watchdog nicht noetig
+        return;
+      }
+      if (Date.now() - guideLastSignalAt > GUIDE_SIGNAL_MAX_IDLE) {
+        // >60s kein show/ping -> Panel vermutlich hart weg, Overlay selbst abraeumen.
+        guideCleanup();
+        return;
+      }
+      // Ziel-Verlust auch OHNE Scroll/Resize erkennen (SPA entfernt das Element still).
+      guideReposition();
+    }, 10000);
+  }
+
+  // Einen Schritt anzeigen: Element aufloesen, dann bis ~5s SPA-tolerant nachversuchen
+  // (MutationObserver + 250ms-Fallback-Tick), sonst found:false + Grund melden (Welle 33, Fix 3).
   function showGuideStep(step) {
-    guideCleanup(); // vorherigen Zustand restlos abbauen
+    guideCleanup(); // vorherigen Zustand + laufende Suche restlos abbauen
     guideAdvanced = false; // „weiter"-Schutz je Schritt zuruecksetzen
+    guideTargetLost = false;
     const resolver =
       (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
     if (!step || !step.selector || !resolver) {
       try {
-        chrome.runtime.sendMessage({ type: "steply-guide-status", found: false });
+        chrome.runtime.sendMessage({ type: "steply-guide-status", found: false, reason: "no-selector" });
       } catch (err) {
         /* egal */
       }
       return;
     }
-    const startedAt = Date.now();
-    const MAX_WAIT = 1500;
+
+    const MAX_WAIT = 5000;
+    let lastReason = "timeout"; // wenn nie ein definitiver Grund kam: schlicht „nicht rechtzeitig"
+    let done = false;
+
+    const finishMiss = () => {
+      if (done) return;
+      done = true;
+      guideStopSearch();
+      try {
+        chrome.runtime.sendMessage({ type: "steply-guide-status", found: false, reason: lastReason });
+      } catch (err) {
+        /* egal */
+      }
+    };
+
     const tryResolve = () => {
+      if (done) return true;
       let res = null;
       try {
         res = resolver(document, step.selector);
@@ -1373,37 +1482,52 @@
         res = null;
       }
       if (res && res.el) {
+        done = true;
+        guideStopSearch();
         guideAttach(res.el, step);
         return true;
       }
+      if (res && res.reason) lastReason = res.reason;
       return false;
     };
+
     if (tryResolve()) return;
-    // SPA-tolerant: in Intervallen nachversuchen (Inhalt laedt evtl. nach).
-    guideSearchTimer = setInterval(() => {
-      if (tryResolve()) {
-        if (guideSearchTimer) {
-          clearInterval(guideSearchTimer);
-          guideSearchTimer = null;
-        }
-      } else if (Date.now() - startedAt > MAX_WAIT) {
-        if (guideSearchTimer) {
-          clearInterval(guideSearchTimer);
-          guideSearchTimer = null;
-        }
-        try {
-          chrome.runtime.sendMessage({ type: "steply-guide-status", found: false });
-        } catch (err) {
-          /* egal */
-        }
-      }
-    }, 150);
+
+    // MutationObserver reagiert SOFORT auf neu gerenderten Inhalt; ein kurzer Zeit-Guard
+    // (~60ms) buendelt Mutations-Stuerme, damit die Aufloesung nicht pro Knoten feuert.
+    let obsPending = false;
+    try {
+      guideSearchObserver = new MutationObserver(() => {
+        if (obsPending || done) return;
+        obsPending = true;
+        setTimeout(() => {
+          obsPending = false;
+          tryResolve();
+        }, 60);
+      });
+      guideSearchObserver.observe(document.documentElement || document, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (err) {
+      guideSearchObserver = null;
+    }
+    // Fallback-Tick fuer Aenderungen, die keine DOM-Mutation ausloesen (spaetes Layout u. ae.).
+    guideSearchTick = setInterval(tryResolve, 250);
+    guideSearchTimeout = setTimeout(finishMiss, MAX_WAIT);
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
     if (msg.type === "steply-guide-show") {
+      guideNoteSignal();
       showGuideStep(msg.step);
+      guideStartWatchdog();
+      return;
+    }
+    if (msg.type === "steply-guide-ping") {
+      // Lebenszeichen des Panels (Welle 33, Fix 2b): verlaengert den Selbstschutz-Zeitgeber.
+      guideNoteSignal();
       return;
     }
     if (msg.type === "steply-guide-hide") {

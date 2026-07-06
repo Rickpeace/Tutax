@@ -88,6 +88,20 @@
         /* ungueltige id -> ignorieren */
       }
     }
+    // Eingabefeld INNERHALB eines <label> (kein for-Attribut): der sichtbare Label-Text ist
+    // die Beschriftung. Spiegelt content.js associatedLabelText (closest('label')). textContent
+    // eines <input>/<select> zaehlt nicht zum Label-Text -> keine Wert-Leckage.
+    try {
+      if (el && typeof el.closest === "function") {
+        var wrap = el.closest("label");
+        if (wrap) {
+          var wt = norm(wrap.textContent || "");
+          if (wt) return wt;
+        }
+      }
+    } catch (err) {
+      /* egal */
+    }
     var ph = getAttr(el, "placeholder");
     if (ph && norm(ph)) return norm(ph);
     var nm = getAttr(el, "name");
@@ -168,9 +182,45 @@
     return list;
   }
 
+  // ── Flüchtige IDs (Welle 33, Fix 5) ──────────────────────────────────────────────────
+  // Base UI / Radix / React useId u. ä. vergeben pro Render WECHSELNDE IDs
+  // (#base-ui-_R_1m…, #base-ui-_r_6_, :r5:, radix-…). Als css-Selektor sind sie bei der
+  // Führung praktisch immer tot. EINE geteilte Prüfung (content.js nutzt sie beim Aufnehmen,
+  // um solche IDs gar nicht erst als Anker zu wählen; der Resolver, um NICHT vergeblich zu
+  // warten). Stabile sprechende IDs (#invite-email) sind NICHT flüchtig.
+  function isVolatileId(id) {
+    if (!id || typeof id !== "string") return true; // kein/ungültig -> nicht als Anker taugen
+    if (/^base-ui-/i.test(id)) return true;
+    if (/^_[rR]_/.test(id)) return true; // React useId "_r_6_" / "_R_…"
+    if (/^:r/i.test(id)) return true; // Doppelpunkt-Variante ":r5:"
+    if (/^radix-/i.test(id)) return true;
+    if (/^react-aria/i.test(id)) return true;
+    if (/^headlessui-/i.test(id)) return true;
+    if (/^mui-/i.test(id)) return true;
+    if (/^\d+$/.test(id)) return true; // rein numerisch
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i.test(id)) return true; // UUID-artig
+    return false;
+  }
+
+  // Zielt ein css-Selektor (grob) auf eine flüchtige #id? Zieht #id-Token heraus und prüft sie.
+  function cssTargetsVolatileId(css) {
+    if (typeof css !== "string" || css.indexOf("#") < 0) return false;
+    var m = css.match(/#([^\s>#.\[\]:]+)/g);
+    if (!m) return false;
+    for (var i = 0; i < m.length; i++) {
+      var id = m[i].slice(1).replace(/\\/g, "");
+      if (isVolatileId(id)) return true;
+    }
+    return false;
+  }
+
+  // Rückgabe: { el, confidence, reason }. `reason` (Welle 33, Fix 3) begründet einen MISS
+  // für die Panel-Anzeige/Telemetrie und ist rein ADDITIV — Aufrufer, die nur el/confidence
+  // lesen, bleiben unberührt. Werte: "no-selector" | "css-miss" | "volatile-id" |
+  // "text-mismatch" | "ambiguous". Bei Treffer ist reason null.
   function resolveSelector(scope, selector) {
     if (!scope || !selector || typeof selector !== "object") {
-      return { el: null, confidence: null };
+      return { el: null, confidence: null, reason: "no-selector" };
     }
     var css = typeof selector.css === "string" ? selector.css : "";
     var wantText = norm(selector.text || "");
@@ -178,6 +228,7 @@
       typeof selector.role === "string" ? selector.role.trim().toLowerCase() : "";
 
     // ── Stufe 1: css exakt (mit grober Textprüfung, falls text vorhanden) ──────────
+    var cssVolatile = false;
     if (css) {
       var hit = null;
       try {
@@ -186,15 +237,24 @@
         hit = null;
       }
       if (hit) {
-        if (!wantText) return { el: hit, confidence: "exact" };
-        if (containsEither(textOf(hit, scope), wantText)) return { el: hit, confidence: "exact" };
+        if (!wantText) return { el: hit, confidence: "exact", reason: null };
+        if (containsEither(textOf(hit, scope), wantText)) {
+          return { el: hit, confidence: "exact", reason: null };
+        }
         // css traf, aber Text passt nicht (SPA umgebaut / css zeigt woanders hin) ->
         // NICHT hier verankern, sondern die textbasierten Stufen versuchen.
+      } else {
+        // css verfehlt: war es ein flüchtiger-ID-Selektor (alte Aufnahme, Base UI & Co.)?
+        // Dann ist der css-Pfad chancenlos -> Stufe 2/3 tragen die Auflösung; als Grund
+        // melden wir „volatile-id" statt eines irreführenden „css-miss".
+        cssVolatile = cssTargetsVolatileId(css);
       }
     }
 
-    // Ohne Text sind Stufe 2/3 nicht möglich.
-    if (!wantText) return { el: null, confidence: null };
+    // Ohne Text sind Stufe 2/3 nicht möglich -> css hat schlicht nicht getroffen.
+    if (!wantText) {
+      return { el: null, confidence: null, reason: cssVolatile ? "volatile-id" : "css-miss" };
+    }
 
     var cands = clickableCandidates(scope);
 
@@ -205,7 +265,7 @@
       if (wantRole && roleOf(el) !== wantRole) continue;
       if (textOf(el, scope) === wantText) exactMatches.push(el);
     }
-    if (exactMatches.length === 1) return { el: exactMatches[0], confidence: "text" };
+    if (exactMatches.length === 1) return { el: exactMatches[0], confidence: "text", reason: null };
 
     // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
     var fuzzyMatches = [];
@@ -213,12 +273,24 @@
       var t = textOf(cands[j], scope);
       if (t && containsEither(t, wantText)) fuzzyMatches.push(cands[j]);
     }
-    if (fuzzyMatches.length === 1) return { el: fuzzyMatches[0], confidence: "fuzzy" };
+    if (fuzzyMatches.length === 1) return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
 
-    return { el: null, confidence: null };
+    // Kein eindeutiger Treffer: mehrere Kandidaten (ambiguous), sonst — bei totem
+    // flüchtigen-ID-css — „volatile-id", andernfalls schlicht „text-mismatch".
+    var reason =
+      exactMatches.length > 1 || fuzzyMatches.length > 1
+        ? "ambiguous"
+        : cssVolatile
+          ? "volatile-id"
+          : "text-mismatch";
+    return { el: null, confidence: null, reason: reason };
   }
 
-  var api = { resolveSelector: resolveSelector, CLICKABLE_SELECTOR: CLICKABLE_SELECTOR };
+  var api = {
+    resolveSelector: resolveSelector,
+    CLICKABLE_SELECTOR: CLICKABLE_SELECTOR,
+    isVolatileId: isVolatileId,
+  };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic content-script (globaler Namespace).
   if (typeof module !== "undefined" && module.exports) {

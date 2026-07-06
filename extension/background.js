@@ -85,6 +85,33 @@ chrome.runtime.onMessage.addListener((msg) => {
 // Verwaiste Klick-/Schritt-Nachrichten absorbieren (siehe oben). Nichts zu tun.
 chrome.runtime.onMessage.addListener(() => false);
 
+// Führungs-Port (Welle 33, Fix 2a): Das Panel hält während einer laufenden Führung einen
+// Port offen und nennt uns EINMALIG den gebundenen Tab. Bricht der Port ab (Panel geschlossen,
+// neu geladen oder abgestürzt), räumen wir das Overlay auf DIESEM Tab ab — sonst bleibt das
+// Schritt-Badge („6/6") auf der Seite kleben, obwohl das Panel längst zu ist. Der Service-
+// Worker bleibt für den onDisconnect am Leben; deshalb ist das zuverlässiger als ein hide,
+// das das sterbende Panel-Dokument noch selbst zu senden versucht.
+if (chrome.runtime.onConnect) {
+  chrome.runtime.onConnect.addListener((port) => {
+    if (!port || port.name !== "steply-guide") return;
+    let boundTabId = null;
+    port.onMessage.addListener((msg) => {
+      if (msg && msg.type === "bind" && typeof msg.tabId === "number") {
+        boundTabId = msg.tabId;
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      if (boundTabId == null) return;
+      try {
+        const p = chrome.tabs.sendMessage(boundTabId, { type: "steply-guide-hide" });
+        if (p && p.catch) p.catch(() => {});
+      } catch (err) {
+        /* Tab evtl. weg / ohne Content-Script - egal */
+      }
+    });
+  });
+}
+
 // Screenshot-Dienst fuer die Seitenleiste: chrome.tabs.captureVisibleTab scheitert
 // direkt im Panel-Kontext an einem Chromium-Bug (crbug.com/40916430 - activeTab
 // greift dort nicht), im Service Worker funktioniert derselbe Aufruf. Das Panel
