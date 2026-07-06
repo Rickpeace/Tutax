@@ -49,7 +49,7 @@ function injectIntoOpenTabs() {
       for (const tab of tabs || []) {
         if (tab.id == null || tab.discarded) continue;
         chrome.scripting
-          .executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
+          .executeScript({ target: { tabId: tab.id }, files: ["guide-resolve.js", "content.js"] })
           .catch(() => {
             /* Tab nicht injizierbar - beim naechsten echten Laden greift das Manifest */
           });

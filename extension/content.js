@@ -1035,6 +1035,239 @@
     }
   });
 
+  // ============================================================================
+  // LIVE-FUEHRUNG (Welle 31): Overlay auf der ECHTEN Seite (Tango/WalkMe-Prinzip).
+  //
+  // Das Panel schickt pro Schritt {type:"steply-guide-show", step:{selector,title,index,
+  // total}}. Wir loesen das Element via SteplyGuideResolve.resolveSelector auf (SPA-
+  // tolerant: bis ~1,5 s in Intervallen nachversuchen), zeichnen einen pulsierenden
+  // Koralle-Rahmen (#ef6a4e) + ein Schritt-Badge „3/12", scrollen das Element in die Mitte
+  // und lassen die Markierung Scroll/Resize folgen. Ein pointerdown auf dem Ziel (Capture)
+  // meldet {type:"steply-guide-advance"}. Nicht gefunden -> {type:"steply-guide-status",
+  // found:false}. „steply-guide-hide" raeumt Overlay + Listener restlos auf. Das Overlay
+  // selbst ist pointer-events:none -> Klicks gehen an die echte Seite. Stile isoliert per
+  // Inline-Style (wie showCapturePulse), Puls ueber die Web-Animations-API (kein globales CSS).
+  // Der Installations-Guard oben sorgt dafuer, dass dieser Block pro Dokument nur EINMAL laeuft.
+  // ============================================================================
+  const GUIDE_OVERLAY_ID = "__steply-guide-overlay";
+  let guideOverlayEl = null; // Container (Rahmen + Badge)
+  let guideFrameEl = null; // pulsierender Rahmen
+  let guideBadgeEl = null; // Schritt-Pille „3/12"
+  let guideTargetEl = null; // aufgeloestes Ziel-Element
+  let guideSearchTimer = null; // SPA-Nachversuch (Intervall)
+  let guideRafPending = false; // Reposition-Drossel (requestAnimationFrame)
+
+  function guideCleanup() {
+    if (guideSearchTimer) {
+      clearInterval(guideSearchTimer);
+      guideSearchTimer = null;
+    }
+    document.removeEventListener("pointerdown", onGuidePointerDown, true);
+    window.removeEventListener("scroll", guideReposition, true);
+    window.removeEventListener("resize", guideReposition, true);
+    if (guideOverlayEl && guideOverlayEl.parentNode) {
+      try {
+        guideOverlayEl.parentNode.removeChild(guideOverlayEl);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    guideOverlayEl = null;
+    guideFrameEl = null;
+    guideBadgeEl = null;
+    guideTargetEl = null;
+  }
+
+  // pointerdown auf dem Ziel (oder einem Kind) -> „weiter". Capture-Phase, damit es auch
+  // feuert, wenn die Seite stopPropagation nutzt bzw. sofort navigiert.
+  function onGuidePointerDown(event) {
+    if (!guideTargetEl) return;
+    const t = event.target;
+    if (t === guideTargetEl || (guideTargetEl.contains && guideTargetEl.contains(t))) {
+      try {
+        chrome.runtime.sendMessage({ type: "steply-guide-advance" });
+      } catch (err) {
+        /* Panel evtl. geschlossen - egal */
+      }
+    }
+  }
+
+  // Rahmen + Badge an die aktuelle Element-Position setzen (gedrosselt via rAF).
+  function guideReposition() {
+    if (guideRafPending) return;
+    guideRafPending = true;
+    requestAnimationFrame(() => {
+      guideRafPending = false;
+      if (!guideTargetEl || !guideFrameEl) return;
+      let r;
+      try {
+        r = guideTargetEl.getBoundingClientRect();
+      } catch (err) {
+        return;
+      }
+      const pad = 4;
+      const left = r.left - pad;
+      const top = r.top - pad;
+      const fs = guideFrameEl.style;
+      fs.left = left + "px";
+      fs.top = top + "px";
+      fs.width = r.width + pad * 2 + "px";
+      fs.height = r.height + pad * 2 + "px";
+      if (guideBadgeEl) {
+        let badgeTop = top - 22;
+        if (badgeTop < 2) badgeTop = top + 2; // oben kein Platz -> nach innen
+        guideBadgeEl.style.left = Math.max(2, left) + "px";
+        guideBadgeEl.style.top = badgeTop + "px";
+      }
+    });
+  }
+
+  function buildGuideOverlay(step) {
+    const container = document.createElement("div");
+    container.id = GUIDE_OVERLAY_ID;
+    const cs = container.style;
+    cs.position = "fixed";
+    cs.zIndex = "2147483647";
+    cs.pointerEvents = "none";
+    cs.left = "0";
+    cs.top = "0";
+    cs.margin = "0";
+    cs.padding = "0";
+    cs.border = "0";
+    cs.background = "transparent";
+
+    const frame = document.createElement("div");
+    const fst = frame.style;
+    fst.position = "fixed";
+    fst.boxSizing = "border-box";
+    fst.border = "3px solid #ef6a4e";
+    fst.borderRadius = "10px";
+    fst.pointerEvents = "none";
+    fst.boxShadow = "0 0 0 3px rgba(239,106,78,0.28)";
+    container.appendChild(frame);
+
+    const badge = document.createElement("div");
+    const bst = badge.style;
+    bst.position = "fixed";
+    bst.pointerEvents = "none";
+    bst.background = "#ef6a4e";
+    bst.color = "#fff";
+    bst.font = "600 12px/1.4 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    bst.padding = "2px 8px";
+    bst.borderRadius = "999px";
+    bst.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+    bst.whiteSpace = "nowrap";
+    badge.textContent = (step.index || 1) + "/" + (step.total || 1);
+    container.appendChild(badge);
+
+    (document.documentElement || document.body).appendChild(container);
+    guideOverlayEl = container;
+    guideFrameEl = frame;
+    guideBadgeEl = badge;
+
+    // Sanfter Puls (Koralle-Glow) ueber die Web-Animations-API - kein globales CSS noetig.
+    try {
+      frame.animate(
+        [
+          { boxShadow: "0 0 0 3px rgba(239,106,78,0.35)" },
+          { boxShadow: "0 0 0 9px rgba(239,106,78,0.04)" },
+          { boxShadow: "0 0 0 3px rgba(239,106,78,0.35)" },
+        ],
+        { duration: 1400, iterations: Infinity, easing: "ease-in-out" }
+      );
+    } catch (err) {
+      /* ohne Animation trotzdem sichtbar */
+    }
+  }
+
+  // Ziel gefunden: Overlay bauen, verankern, in Sicht scrollen, Listener setzen.
+  function guideAttach(el, step) {
+    guideTargetEl = el;
+    buildGuideOverlay(step);
+    guideReposition();
+    window.addEventListener("scroll", guideReposition, true);
+    window.addEventListener("resize", guideReposition, true);
+    document.addEventListener("pointerdown", onGuidePointerDown, true);
+    try {
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    } catch (err) {
+      try {
+        el.scrollIntoView();
+      } catch (e) {
+        /* egal */
+      }
+    }
+    // Nach dem (smooth) Scrollen neu positionieren - die Box hat sich bewegt.
+    setTimeout(guideReposition, 320);
+    try {
+      chrome.runtime.sendMessage({ type: "steply-guide-status", found: true });
+    } catch (err) {
+      /* egal */
+    }
+  }
+
+  // Einen Schritt anzeigen: Element aufloesen (SPA-tolerant), sonst found:false melden.
+  function showGuideStep(step) {
+    guideCleanup(); // vorherigen Zustand restlos abbauen
+    const resolver =
+      (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
+    if (!step || !step.selector || !resolver) {
+      try {
+        chrome.runtime.sendMessage({ type: "steply-guide-status", found: false });
+      } catch (err) {
+        /* egal */
+      }
+      return;
+    }
+    const startedAt = Date.now();
+    const MAX_WAIT = 1500;
+    const tryResolve = () => {
+      let res = null;
+      try {
+        res = resolver(document, step.selector);
+      } catch (err) {
+        res = null;
+      }
+      if (res && res.el) {
+        guideAttach(res.el, step);
+        return true;
+      }
+      return false;
+    };
+    if (tryResolve()) return;
+    // SPA-tolerant: in Intervallen nachversuchen (Inhalt laedt evtl. nach).
+    guideSearchTimer = setInterval(() => {
+      if (tryResolve()) {
+        if (guideSearchTimer) {
+          clearInterval(guideSearchTimer);
+          guideSearchTimer = null;
+        }
+      } else if (Date.now() - startedAt > MAX_WAIT) {
+        if (guideSearchTimer) {
+          clearInterval(guideSearchTimer);
+          guideSearchTimer = null;
+        }
+        try {
+          chrome.runtime.sendMessage({ type: "steply-guide-status", found: false });
+        } catch (err) {
+          /* egal */
+        }
+      }
+    }, 150);
+  }
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg) return;
+    if (msg.type === "steply-guide-show") {
+      showGuideStep(msg.step);
+      return;
+    }
+    if (msg.type === "steply-guide-hide") {
+      guideCleanup();
+      return;
+    }
+  });
+
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
     if (rec && typeof rec.startedAt === "number") {
