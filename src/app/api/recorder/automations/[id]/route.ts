@@ -35,6 +35,7 @@ type StepRow = {
   page_url: string | null;
   param_key: string | null;
   image_path: string | null;
+  highlights: unknown;
 };
 
 export async function OPTIONS() {
@@ -72,7 +73,7 @@ export async function GET(
 
   const { data: stepsData } = await admin
     .from("automation_steps")
-    .select("id, position, title, action, selector, page_url, param_key, image_path")
+    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -119,6 +120,8 @@ export async function GET(
         page_url: s.page_url ?? null,
         param_key: s.param_key ?? null,
         imageUrl: urlByStep.get(s.id) ?? null,
+        // Markierungen fürs Referenzbild (Welle 37). Bestands-Automationen: highlights=null → [].
+        highlights: Array.isArray(s.highlights) ? s.highlights : [],
       })),
     },
     { status: 200, headers: RECORDER_ME_CORS },

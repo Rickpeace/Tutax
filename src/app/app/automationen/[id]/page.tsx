@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import type { AutomationParam } from "@/lib/automations";
+import type { Highlight } from "@/lib/types";
 import {
   AutomationDetail,
   type AutomationStepView,
@@ -33,7 +34,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key, image_path")
+      .select("id, position, title, action, param_key, image_path, highlights")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -55,6 +56,8 @@ export default async function AutomationDetailPage({
     action: s.action as AutomationStepView["action"],
     paramKey: (s.param_key as string | null) ?? null,
     imagePath: (s.image_path as string | null) ?? null,
+    // Markierungen fürs Referenzbild (Welle 37). Bestands-Automationen: highlights=null → [].
+    highlights: Array.isArray(s.highlights) ? (s.highlights as Highlight[]) : [],
   }));
 
   const runs: AutomationRunView[] = (runsData ?? []).map((r) => ({

@@ -155,6 +155,7 @@ const els = {
   autoMissBox: document.getElementById("autoMissBox"),
   autoMissText: document.getElementById("autoMissText"),
   autoMissImageWrap: document.getElementById("autoMissImageWrap"),
+  autoMissImageFrame: document.getElementById("autoMissImageFrame"),
   autoMissImage: document.getElementById("autoMissImage"),
   autoDownloadNote: document.getElementById("autoDownloadNote"),
   autoCtlSemi: document.getElementById("autoCtlSemi"),
@@ -3344,33 +3345,62 @@ async function execNavigateIfNeeded(planStep) {
   }
 }
 
-// „Bring mich hin": passt der aktive Tab nicht zur Automation (site_domains bzw. Startseite
-// von Schritt 1), einen neuen Tab auf der Startseite öffnen + Lauf daran binden.
+// „Bring mich hin" (Welle 37, Fix 2): bringt den Nutzer wirklich an die STARTSEITE von
+// Schritt 1 — nicht nur auf die richtige Domain. Vergleich jetzt Host + PFAD via
+// SteplyExecPlan.needsNavigation:
+//   • Schritt 1 braucht KEINE Navigation (gleiche Seite) → hier bleiben.
+//   • gleiche Basis-Domain, anderer Pfad → im GEBUNDENEN Tab navigieren (kein neuer Tab).
+//   • andere Domain (oder curUrl unlesbar/chrome://) → NEUER Tab + Lauf umbinden (wie bisher).
+//   • Schritt 1 ohne page_url → hier bleiben (wie bisher).
 async function execEnsureStartTab(firstStep) {
-  if (typeof SteplySiteMatch === "undefined") return;
+  if (typeof SteplyExecPlan === "undefined") return;
   const pageUrl = firstStep && typeof firstStep.page_url === "string" ? firstStep.page_url : "";
-  const targetHost = SteplySiteMatch.hostnameOf(pageUrl);
-  const curUrl = await tabUrlById(exec.tabId);
-  const curHost = SteplySiteMatch.hostnameOf(curUrl);
+  if (!pageUrl) return; // keine Startseite → aktueller Tab (wie bisher)
 
-  let matches = false;
-  if (curHost && targetHost) {
-    if (baseDomain(curHost) === baseDomain(targetHost)) {
-      matches = true;
-    } else {
-      const domains = Array.isArray(exec.automation.site_domains) ? exec.automation.site_domains : null;
-      if (domains) {
-        for (const d of domains) {
-          if (SteplySiteMatch.matchesDomain(curHost, d)) {
-            matches = true;
-            break;
+  const curUrl = await tabUrlById(exec.tabId);
+  // Ist Schritt 1 (Host ODER Pfad) schon erreicht? Dann NICHT umziehen.
+  if (!SteplyExecPlan.needsNavigation(curUrl, firstStep)) return;
+
+  // Navigation nötig. Sind wir auf DERSELBEN Website (Basis-Domain bzw. site_domains) und ist
+  // die aktuelle URL lesbar? → im gebundenen Tab navigieren. Sonst → neuer Tab + umbinden.
+  let sameSite = false;
+  if (typeof SteplySiteMatch !== "undefined") {
+    const curHost = SteplySiteMatch.hostnameOf(curUrl);
+    const targetHost = SteplySiteMatch.hostnameOf(pageUrl);
+    if (curHost && targetHost) {
+      if (baseDomain(curHost) === baseDomain(targetHost)) {
+        sameSite = true;
+      } else {
+        const domains = Array.isArray(exec.automation.site_domains) ? exec.automation.site_domains : null;
+        if (domains) {
+          for (const d of domains) {
+            if (SteplySiteMatch.matchesDomain(curHost, d)) {
+              sameSite = true;
+              break;
+            }
           }
         }
       }
     }
   }
-  if (matches) return; // schon auf der richtigen Seite
-  if (!pageUrl) return; // keine Startseite → aktueller Tab
+
+  if (sameSite) {
+    // Gleiche Website, anderer Pfad → im GEBUNDENEN Tab zur Startseite navigieren.
+    try {
+      await chrome.tabs.update(exec.tabId, { url: pageUrl });
+      await execWaitTabComplete(exec.tabId);
+      try {
+        chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+      } catch (err) {
+        /* egal */
+      }
+    } catch (err) {
+      /* Navigation fehlgeschlagen — der Lauf läuft dann mit Miss/Pause auf */
+    }
+    return;
+  }
+
+  // Andere Domain (oder curUrl unlesbar/chrome://) → NEUER Tab auf der Startseite + umbinden.
   try {
     const tab = await chrome.tabs.create({ url: pageUrl, active: true });
     if (tab && tab.id != null) {
@@ -3605,6 +3635,64 @@ function execShowCtl(which) {
   els.autoCtlMiss.hidden = which !== "miss";
 }
 
+// Miss-Referenzbild + Markierungen (Welle 37, Fix 4). Gleiche aspect-ratio-Frame-Technik wie
+// die Führung (guideRenderImage): der Rahmen erhält das ECHTE Bild-Verhältnis (aus den
+// natürlichen Bildmaßen — die Automation-API liefert keine Maße), damit die Prozent-Boxen
+// pixelgenau am gerenderten Bild hängen statt am Container (kein object-fit-Letterbox-Versatz).
+// Blur-Markierungen als dunkle Box (decken den sensiblen Bereich ab), Rest als Koralle-Rahmen.
+// Bestands-Automationen ohne Markierungen (highlights=[]) → einfach nur das Bild, kein Fehler.
+function execRenderMissImage(planStep) {
+  const img = els.autoMissImage;
+  const frame = els.autoMissImageFrame || (img && img.parentNode);
+  if (!img || !frame) return;
+  const clearHl = () => frame.querySelectorAll(".run-hl, .run-hl-blur").forEach((n) => n.remove());
+  clearHl();
+  const imgUrl = planStep && planStep.imageUrl ? planStep.imageUrl : "";
+  if (!imgUrl) {
+    img.onload = null;
+    img.onerror = null;
+    img.removeAttribute("src");
+    frame.style.removeProperty("--run-ar");
+    els.autoMissImageWrap.hidden = true;
+    return;
+  }
+  const highlights =
+    planStep && Array.isArray(planStep.highlights) ? planStep.highlights : [];
+  const paint = () => {
+    const nw = img.naturalWidth || 0;
+    const nh = img.naturalHeight || 0;
+    if (nw > 0 && nh > 0) frame.style.setProperty("--run-ar", String(nw / nh));
+    else frame.style.removeProperty("--run-ar");
+    clearHl();
+    highlights.forEach((h) => {
+      if (!h || typeof h !== "object") return;
+      const box = document.createElement("div");
+      const s = box.style;
+      s.left = clamp01(h.x) * 100 + "%";
+      s.top = clamp01(h.y) * 100 + "%";
+      s.width = clamp01(h.w) * 100 + "%";
+      s.height = clamp01(h.h) * 100 + "%";
+      if (h.type === "blur") {
+        box.className = "run-hl-blur";
+      } else {
+        box.className = "run-hl";
+        if (h.type === "ellipse") s.borderRadius = "50%";
+        if (h.color) s.borderColor = h.color;
+      }
+      frame.appendChild(box);
+    });
+  };
+  img.onload = paint;
+  img.onerror = () => {
+    frame.style.removeProperty("--run-ar");
+    clearHl();
+  };
+  img.src = imgUrl;
+  els.autoMissImageWrap.hidden = false;
+  // Aus dem Cache geladene Bilder feuern onload evtl. nicht erneut → sofort zeichnen.
+  if (img.complete && img.naturalWidth > 0) paint();
+}
+
 function execRenderRun() {
   els.autoDone.hidden = true;
   const planStep = exec.plan[exec.index] || null;
@@ -3623,14 +3711,7 @@ function execRenderRun() {
     els.autoMissText.textContent =
       "Schritt " + num + ": Stelle nicht gefunden" + reason +
       " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
-    const imgUrl = planStep && planStep.imageUrl ? planStep.imageUrl : "";
-    if (imgUrl) {
-      els.autoMissImage.src = imgUrl;
-      els.autoMissImageWrap.hidden = false;
-    } else {
-      els.autoMissImage.removeAttribute("src");
-      els.autoMissImageWrap.hidden = true;
-    }
+    execRenderMissImage(planStep);
     els.autoMissBox.hidden = false;
   } else {
     els.autoMissBox.hidden = true;

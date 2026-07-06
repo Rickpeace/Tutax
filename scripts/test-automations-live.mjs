@@ -83,7 +83,7 @@ async function seedLinear(accountId, title, steps, { decisionAt } = {}) {
     selector: s.selector ?? null,
     page_url: "https://abrechnung.example/login",
     is_decision: decisionAt === i,
-    highlights: [],
+    highlights: s.highlights ?? [],
     position: i + 1,
   }));
   await admin.from("steps").insert(rows);
@@ -106,6 +106,15 @@ try {
     process.exit(0);
   }
 
+  // Preflight (Welle 37): Existiert automation_steps.highlights (Migration 0031)?
+  const probeHl = await admin.from("automation_steps").select("highlights").limit(1);
+  if (probeHl.error) {
+    console.log("⚠  Spalte automation_steps.highlights fehlt (Migration 0031 noch nicht live angewandt).");
+    console.log("   Grund:", probeHl.error.message);
+    console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
+    process.exit(0);
+  }
+
   const A = await mkUser(`steply-auto-a-${stamp}@example.com`);
   const B = await mkUser(`steply-auto-b-${stamp}@example.com`);
   accounts.push(A, B);
@@ -120,8 +129,13 @@ try {
   imgPaths.push(imgPath);
 
   // ── (A) Kern-Logik ─────────────────────────────────────────────────────────────
+  // Der „Anmelden"-Schritt trägt Markierungen (inkl. blur) → müssen 1:1 in den Snapshot.
+  const seedHl = [
+    { id: "hl-rect", type: "rect", x: 0.1, y: 0.2, w: 0.3, h: 0.12, color: "#ef6a4e" },
+    { id: "hl-blur", type: "blur", x: 0.5, y: 0.5, w: 0.2, h: 0.08 },
+  ];
   const tut4 = await seedLinear(A.accountId, "Belege herunterladen " + stamp, [
-    { title: "Anmelden", selector: { role: "button", text: "Anmelden" }, image_path: imgPath },
+    { title: "Anmelden", selector: { role: "button", text: "Anmelden" }, image_path: imgPath, highlights: seedHl },
     { title: "Weiter", selector: { role: "button", text: "Weiter" } },
     { title: "E-Mail eingeben", selector: { role: "textbox", text: "E-Mail" } },
     { title: "Hinweis: fertig", selector: null }, // ohne Selektor → wird übersprungen
@@ -132,12 +146,21 @@ try {
   const autoId = conv.automationId;
 
   const { data: aSteps } = await admin
-    .from("automation_steps").select("position, action, param_key, selector, image_path")
+    .from("automation_steps").select("position, action, param_key, selector, image_path, highlights")
     .eq("automation_id", autoId).order("position", { ascending: true });
   ok(aSteps.length === 3, `3 automation_steps (Schritt ohne Selektor übersprungen) (war ${aSteps.length})`);
   const fill = aSteps.find((s) => s.action === "fill");
   ok(!!fill && !!fill.param_key, `fill-Schritt hat param_key (${fill && fill.param_key})`);
   ok(aSteps.filter((s) => s.action === "click").every((s) => s.param_key === null), "click-Schritte ohne param_key");
+
+  // Highlights (Welle 37, Fix 4): 1:1 vom Tutorial-Schritt in den Snapshot kopiert (inkl. blur).
+  const hlStep = aSteps.find((s) => s.image_path === imgPath);
+  ok(hlStep && Array.isArray(hlStep.highlights) && hlStep.highlights.length === 2,
+    `Snapshot kopiert highlights (2 inkl. blur) — war ${JSON.stringify(hlStep && hlStep.highlights)}`);
+  ok(hlStep && (hlStep.highlights || []).some((h) => h && h.type === "blur"),
+    "Snapshot: blur-Highlight mitkopiert");
+  ok(hlStep && (hlStep.highlights || []).some((h) => h && h.type === "rect" && h.color === "#ef6a4e"),
+    "Snapshot: rect-Highlight mit Farbe 1:1 übernommen");
 
   const { data: autoRow } = await admin.from("automations").select("params, site_domains, source_tutorial_id, title").eq("id", autoId).single();
   ok(Array.isArray(autoRow.params) && autoRow.params.length === 1, `genau 1 Parameter (war ${autoRow.params && autoRow.params.length})`);
@@ -220,6 +243,10 @@ try {
   const noImg = det.steps.find((s) => s.imageUrl === null);
   ok(!!withImg, "Detail: mind. ein Schritt mit signierter imageUrl (http)");
   ok(!!noImg, "Detail: mind. ein Schritt mit imageUrl = null");
+  // Highlights je Schritt (Welle 37, Fix 4): Array immer, mit blur beim markierten Schritt.
+  ok(det.steps.every((s) => Array.isArray(s.highlights)), "Detail: highlights je Schritt immer Array (auch [])");
+  const detHl = det.steps.find((s) => Array.isArray(s.highlights) && s.highlights.length === 2);
+  ok(detHl && detHl.highlights.some((h) => h.type === "blur"), "Detail: markierter Schritt liefert highlights (inkl. blur)");
   const fillDet = det.steps.find((s) => s.action === "fill");
   ok(fillDet && fillDet.param_key === fill.param_key && fillDet.selector, "Detail: fill-Schritt mit param_key + selector");
 

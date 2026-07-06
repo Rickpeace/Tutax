@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
+import type { Highlight } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,6 +45,9 @@ export type AutomationStepView = {
   action: "click" | "fill" | "select" | "toggle";
   paramKey: string | null;
   imagePath: string | null;
+  // Markierungen des Aufnahme-Schritts (Welle 37) — Overlay auf dem Referenz-Screenshot.
+  // Bestands-Automationen haben []; dann wird kein Overlay gezeichnet.
+  highlights: Highlight[];
 };
 
 export type AutomationRunView = {
@@ -397,11 +401,10 @@ export function AutomationDetail({
                         Der Screenshot konnte nicht geladen werden.
                       </p>
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={imageUrl}
+                      <StepScreenshot
+                        url={imageUrl}
+                        highlights={s.highlights}
                         alt={`Screenshot zu Schritt ${s.position}: ${s.title || "Schritt"}`}
-                        className="max-h-80 w-full rounded-lg border border-line object-contain"
                       />
                     )}
                   </div>
@@ -476,5 +479,61 @@ export function AutomationDetail({
         </DialogContent>
       </Dialog>
     </main>
+  );
+}
+
+/** 0..1 auf Prozent des Bild-Rahmens abbilden (defensiv gegen Nicht-Zahlen). */
+function boxStyle(h: Highlight): CSSProperties {
+  const c = (n: number) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : 0));
+  return {
+    left: `${c(h.x) * 100}%`,
+    top: `${c(h.y) * 100}%`,
+    width: `${c(h.w) * 100}%`,
+    height: `${c(h.h) * 100}%`,
+  };
+}
+
+/**
+ * Referenz-Screenshot mit Markierungs-Overlay (Welle 37, Fix 4). GEOMETRIE: Die Prozent-Boxen
+ * hängen an einem shrink-wrap-Container, der EXAKT das gerenderte Bild umschließt — das <img>
+ * ist `block` (KEIN object-contain), also gibt es keinen Letterbox-Versatz, und die Boxen
+ * skalieren rein über CSS mit dem Bild mit (keine Pixel-Messung nötig). Blur-Markierungen als
+ * halbtransparente dunkle Box, alles andere als Koralle-Rahmen (Ellipse rund).
+ */
+function StepScreenshot({
+  url,
+  highlights,
+  alt,
+}: {
+  url: string;
+  highlights: Highlight[];
+  alt: string;
+}) {
+  return (
+    <div className="flex justify-center">
+      <div className="relative inline-block max-w-full">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt={alt} className="block max-h-80 max-w-full rounded-lg border border-line" />
+        {highlights.map((h) =>
+          h.type === "blur" ? (
+            <div
+              key={h.id}
+              className="pointer-events-none absolute rounded-md"
+              style={{ ...boxStyle(h), backgroundColor: "rgba(17, 24, 39, 0.72)" }}
+            />
+          ) : (
+            <div
+              key={h.id}
+              className="pointer-events-none absolute border-2 border-primary"
+              style={{
+                ...boxStyle(h),
+                borderRadius: h.type === "ellipse" ? "50%" : "6px",
+                ...(h.color ? { borderColor: h.color } : {}),
+              }}
+            />
+          ),
+        )}
+      </div>
+    </div>
   );
 }

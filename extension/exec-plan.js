@@ -21,9 +21,9 @@
 (function (root) {
   // ── buildRunPlan ────────────────────────────────────────────────────────────
   // automation: { id, title, site_domains, params: [{key,label,type:'text'|'secret',required}] }
-  // steps:      [{ id, position, title, action, selector, page_url, param_key, imageUrl }]
+  // steps:      [{ id, position, title, action, selector, page_url, param_key, imageUrl, highlights? }]
   // values:     { [paramKey]: string }   (lokal; NIE geloggt)
-  // → [{ index, total, title, action, selector, page_url, param_key, imageUrl, value? }]
+  // → [{ index, total, title, action, selector, page_url, param_key, imageUrl, highlights, value? }]
   function buildRunPlan(automation, steps, values) {
     var vals = values && typeof values === "object" ? values : {};
     var params = automation && Array.isArray(automation.params) ? automation.params : [];
@@ -57,6 +57,8 @@
         page_url: typeof s0.page_url === "string" ? s0.page_url : "",
         param_key: s0.param_key || null,
         imageUrl: s0.imageUrl != null ? s0.imageUrl : null,
+        // Markierungen fürs Referenzbild in der Miss-Ansicht (Welle 37). Immer ein Array.
+        highlights: Array.isArray(s0.highlights) ? s0.highlights : [],
       };
       // Wert nur setzen, wenn der Schritt einen Parameter referenziert und ein Wert vorliegt.
       if (s0.param_key && Object.prototype.hasOwnProperty.call(vals, s0.param_key)) {
