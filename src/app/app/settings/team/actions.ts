@@ -26,11 +26,12 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
   if (!key || !from) return false;
   const roleLabel = role === "owner" ? "Inhaber" : "Bearbeiter";
   const org = escapeHtml(orgName);
-  const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#101524">
+  const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
+    <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
     <h2 style="margin:0 0 8px">Einladung zu ${org}</h2>
-    <p style="color:#3b4254;line-height:1.55">Du wurdest als <b>${roleLabel}</b> zu <b>${org}</b> auf Steply eingeladen. Klick zum Beitreten und lege ein Passwort fest:</p>
-    <p style="margin:24px 0"><a href="${link}" style="background:#3d4ee6;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
-    <p style="color:#6b7280;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>${link}</p>
+    <p style="color:#5c5049;line-height:1.55">Du wurdest als <b>${roleLabel}</b> zum Team von <b>${org}</b> auf Steply eingeladen. Hast du schon ein Steply-Konto, meldest du dich einfach mit deinem bestehenden Passwort an — du wechselst danach automatisch ins neue Team. Sonst legst du beim Beitreten ein Passwort fest:</p>
+    <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
+    <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>${link}</p>
   </div>`;
   try {
     const res = await fetch("https://api.resend.com/emails", {
