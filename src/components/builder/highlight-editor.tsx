@@ -20,6 +20,18 @@ const MIN = 0.01;
 const ZOOM = 2;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
+// Auto-Schwärzung (Welle 28): Sobald der Autor die Markierungen eines Schritts speichert
+// (= irgendeine Änderung), gelten die automatisch vorgeschlagenen Blurs als GEPRÜFT — der
+// `suggested`-Marker fällt weg (Feld ganz entfernen, damit die DB kein `suggested:false` hält).
+function markReviewed(list: Highlight[]): Highlight[] {
+  return list.map((h) => {
+    if (!h.suggested) return h;
+    const next = { ...h };
+    delete next.suggested;
+    return next;
+  });
+}
+
 export function HighlightEditor({
   url,
   highlights,
@@ -35,6 +47,11 @@ export function HighlightEditor({
   const [draft, setDraft] = useState<Highlight | null>(null);
   const [live, setLive] = useState<Highlight | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+
+  // Jede gespeicherte Highlight-Liste läuft durch markReviewed: eine Änderung an den
+  // Markierungen gilt als Prüfung der Auto-Schwärzungen (Welle 28).
+  const commit = (list: Highlight[]) => onChange(markReviewed(list));
+  const hasSuggested = highlights.some((h) => h.suggested);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const drawStart = useRef<{ x: number; y: number } | null>(null);
@@ -155,14 +172,14 @@ export function HighlightEditor({
     if (draft) {
       const n = normalize(draft);
       if (Math.abs(n.w) >= MIN || Math.abs(n.h) >= MIN) {
-        onChange([...highlights, n]);
+        commit([...highlights, n]);
         setSelectedId(n.id);
       }
       setDraft(null);
       drawStart.current = null;
     } else if (live) {
       const n = normalize(live);
-      onChange(highlights.map((h) => (h.id === n.id ? n : h)));
+      commit(highlights.map((h) => (h.id === n.id ? n : h)));
       setLive(null);
       manip.current = null;
     }
@@ -181,7 +198,7 @@ export function HighlightEditor({
 
   function deleteSelected() {
     if (!selectedId) return;
-    onChange(highlights.filter((h) => h.id !== selectedId));
+    commit(highlights.filter((h) => h.id !== selectedId));
     setSelectedId(null);
   }
 
@@ -203,7 +220,7 @@ export function HighlightEditor({
 
   function toggleZoom() {
     if (!selectedId) return;
-    onChange(highlights.map((h) => (h.id === selectedId ? { ...h, zoom: !h.zoom } : h)));
+    commit(highlights.map((h) => (h.id === selectedId ? { ...h, zoom: !h.zoom } : h)));
   }
 
   const selected = highlights.find((h) => h.id === selectedId) ?? null;
@@ -268,6 +285,19 @@ export function HighlightEditor({
           </div>
         )}
       </div>
+
+      {/* Auto-Schwärzung (Welle 28): dezenter Hinweis, solange vorgeschlagene Blurs
+          ungeprüft sind. Verschwindet, sobald der Autor die Markierungen speichert. */}
+      {hasSuggested && (
+        <div className="flex items-start gap-2 rounded-lg border-2 border-primary/30 bg-accent px-3 py-2 text-xs text-ink">
+          <EyeOff className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <span>
+            <b>Automatisch geschwärzt — bitte prüfen.</b> Sensible Felder wurden erkannt und
+            unkenntlich gemacht. Verschieben, anpassen oder löschen Sie die Markierungen bei
+            Bedarf; jede Änderung bestätigt die Prüfung.
+          </span>
+        </div>
+      )}
 
       {/* Bild + Overlay */}
       <div
