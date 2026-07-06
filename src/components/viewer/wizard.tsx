@@ -579,7 +579,7 @@ export function Wizard({
                   ref={titleRef}
                   tabIndex={-1}
                   data-tx="step-title"
-                  className="min-w-0 flex-1 text-lg font-bold outline-none sm:text-xl"
+                  className="min-w-0 flex-1 break-words text-lg font-bold outline-none sm:text-xl"
                   style={{
                     color: "var(--brand-title, var(--brand-ink))",
                     fontFamily: "var(--brand-font-heading)",
@@ -634,7 +634,7 @@ export function Wizard({
                     key={b.id}
                     data-tx="btn"
                     onClick={() => go(b.target_step_id)}
-                    className="w-full border-2 bg-white px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
+                    className="w-full break-words border-2 bg-white px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
                     style={{
                       borderColor: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
                       color: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",

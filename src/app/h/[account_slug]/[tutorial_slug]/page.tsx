@@ -257,7 +257,7 @@ export default async function ViewerPage({
           <div className="min-w-0 flex-1">
             <div
               data-tx="title"
-              className="text-xl font-extrabold"
+              className="break-words text-xl font-extrabold"
               style={{
                 fontFamily: fonts.heading,
                 fontWeight: "var(--brand-heading-weight, 800)",
@@ -287,7 +287,7 @@ export default async function ViewerPage({
 
         <h1
           data-tx="tut-title"
-          className="mb-3 text-base font-semibold"
+          className="mb-3 break-words text-base font-semibold"
           style={{
             color: "var(--brand-title, var(--brand-ink))",
             fontFamily: fonts.heading,

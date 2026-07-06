@@ -244,7 +244,7 @@ export function TutorialCard({
       <div className="flex min-w-0 flex-1 flex-col px-3.5 pb-3 pt-3">
         <div className="flex items-start gap-2">
           <Link href={`/app/tutorials/${tutorial.id}`} className="min-w-0 flex-1">
-            <h3 className="line-clamp-2 text-sm font-extrabold leading-[1.3] text-ink group-hover:text-primary">
+            <h3 className="line-clamp-2 break-words text-sm font-extrabold leading-[1.3] text-ink group-hover:text-primary">
               {tutorial.title}
             </h3>
           </Link>

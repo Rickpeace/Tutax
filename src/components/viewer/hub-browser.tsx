@@ -208,7 +208,9 @@ export function HubBrowser({
           {groups.map((g) => {
             const fam: CategoryColor | null = colorful ? categoryColor(g.name) : null;
             return (
-              <section key={g.name} data-tx="cats">
+              // min-w-0: verhindert, dass eine lange, ungebrochene Kategorie/Titel-Kette
+              // die Grid-Spalte aufbläht (horizontaler Overflow).
+              <section key={g.name} data-tx="cats" className="min-w-0">
                 <div className="mb-3 flex items-center gap-2.5">
                   <span
                     aria-hidden
@@ -223,7 +225,7 @@ export function HubBrowser({
                   </span>
                   <h2
                     data-tx="cat"
-                    className="text-[17px] font-black"
+                    className="min-w-0 break-words text-[17px] font-black"
                     style={{
                       fontFamily: "var(--brand-font-heading)",
                       color: "var(--brand-title, var(--brand-ink))",
@@ -231,7 +233,7 @@ export function HubBrowser({
                   >
                     {g.name}
                   </h2>
-                  <span className="text-xs font-extrabold text-muted-foreground">
+                  <span className="shrink-0 text-xs font-extrabold text-muted-foreground">
                     {g.items.length}
                   </span>
                 </div>
@@ -264,7 +266,7 @@ export function HubBrowser({
                       <div className="min-w-0 flex-1">
                         <div
                           data-tx="card-title"
-                          className="text-sm font-extrabold"
+                          className="line-clamp-2 break-words text-sm font-extrabold"
                           style={{
                             color: "var(--brand-ink)",
                             fontFamily: "var(--brand-font-heading)",

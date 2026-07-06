@@ -156,14 +156,14 @@ export default async function PrintPage({
                 {initial}
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <div
-                className="text-lg font-extrabold"
+                className="break-words text-lg font-extrabold"
                 style={{ fontFamily: fonts.heading, color: "var(--brand-title, var(--brand-ink))" }}
               >
                 {account.name}
               </div>
-              <div className="text-sm text-muted-foreground">{tutorial.title}</div>
+              <div className="break-words text-sm text-muted-foreground">{tutorial.title}</div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 print:hidden">
@@ -178,7 +178,7 @@ export default async function PrintPage({
         </div>
 
         <h1
-          className="mb-6 text-2xl font-extrabold"
+          className="mb-6 break-words text-2xl font-extrabold"
           style={{ fontFamily: fonts.heading, color: "var(--brand-title, var(--brand-ink))" }}
         >
           {tutorial.title}
@@ -197,7 +197,7 @@ export default async function PrintPage({
                     {i + 1}.
                   </span>
                   <h2
-                    className="text-lg font-bold"
+                    className="min-w-0 break-words text-lg font-bold"
                     style={{ fontFamily: fonts.heading, color: "var(--brand-title, var(--brand-ink))" }}
                   >
                     {step.title?.trim() || "Schritt"}
@@ -222,7 +222,7 @@ export default async function PrintPage({
 
                 {/* Verzweigungen als „Wenn X → weiter mit Schritt N"-Zeilen. */}
                 {step.is_decision && bs.length > 0 && (
-                  <div className="mt-2 space-y-1 border-l-2 border-black/10 pl-3 text-sm">
+                  <div className="mt-2 space-y-1 break-words border-l-2 border-black/10 pl-3 text-sm">
                     {bs.map((b) => {
                       const targetNo = b.target_step_id ? numberById.get(b.target_step_id) : null;
                       return (
