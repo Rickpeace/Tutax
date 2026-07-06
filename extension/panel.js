@@ -83,6 +83,12 @@ const els = {
   guideCount: document.getElementById("guideCount"),
   guideList: document.getElementById("guideList"),
   guideStop: document.getElementById("guideStop"),
+  // Titel + Kategorie (Welle 31d)
+  guideMeta: document.getElementById("guideMeta"),
+  guideTitle: document.getElementById("guideTitle"),
+  guideCatWrap: document.getElementById("guideCatWrap"),
+  guideCategory: document.getElementById("guideCategory"),
+  guideCategoryNew: document.getElementById("guideCategoryNew"),
   // guideDone (e)
   guideDone: document.getElementById("guideDone"),
   guideProgress: document.getElementById("guideProgress"),
@@ -455,6 +461,9 @@ function showStart() {
   updateInterruptedHint();
   // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt.
   if (hasToken && !accountName) fetchAccountName();
+  // Kategorien (Welle 31d) schon jetzt warm laden (kurz gecacht), damit die Auswahl beim
+  // Aufnahme-Start ohne Wartezeit steht. Fail-silent, nicht blockierend.
+  if (hasToken) loadRecCategories();
   // „Fuer diese Seite" (Welle 31c) auffrischen (nutzt gecachte Liste; matcht lokal).
   refreshSiteMatch();
 }
@@ -909,6 +918,9 @@ async function startGuide() {
   els.guideList.textContent = "";
   setStatus("");
   show("guideLive");
+  // Titel + Kategorie (Welle 31d): Block vorbereiten (nicht blockierend — die Kategorie-
+  // Liste lädt asynchron; Aufnahme startet sofort). Bei Aufnahme-Anker bleibt er aus.
+  guideMetaPrepare();
   // Altoffene Tabs nachimpfen (v2.2.2): ohne das fehlte content.js in Tabs, die vor dem
   // (Neu-)Laden der Extension geoeffnet wurden - Klicks dort blieben stumm.
   try {
@@ -1256,6 +1268,13 @@ async function uploadGuide() {
   const uploadTarget = targetForUpload();
   const completeBody = { token: cfg.token, steps };
   if (uploadTarget) completeBody.target = uploadTarget;
+  // Titel + Kategorie (Welle 31d): NUR im Neu-Tutorial-Modus. guideTitleValue/
+  // guideCategoryPayload liefern nur etwas, wenn der Meta-Block sichtbar ist (kein
+  // Aufnahme-Anker) — beim Einfügen ins Ziel-Tutorial werden beide bewusst weggelassen.
+  const metaTitle = guideTitleValue();
+  if (metaTitle) completeBody.title = metaTitle;
+  const metaCategory = guideCategoryPayload();
+  if (metaCategory) completeBody.category = metaCategory;
 
   const compRes = await fetch(base + "/api/recorder/guide-complete", {
     method: "POST",
@@ -1270,6 +1289,10 @@ async function uploadGuide() {
   // Erfolg.
   els.guideProgress.textContent = "";
   els.guideUploadDone.hidden = false;
+  // Titel + Kategorie (Welle 31d): nach erfolgreichem Upload Felder + Session zurücksetzen,
+  // damit die nächste Aufnahme frisch startet. (Bei Fehler bleiben die Werte erhalten.)
+  guideMetaReset();
+  guideMetaClear();
   notifyAppTabs();
   const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
   if (comp.fallback) {
@@ -1289,6 +1312,194 @@ async function uploadGuide() {
   if (els.guideOpenApp) {
     els.guideOpenApp.onclick = () => chrome.tabs.create({ url: openUrl, active: true });
   }
+}
+
+// ============================================================================
+// TITEL + KATEGORIE (Welle 31d): beim Aufnehmen einer NEUEN Sofort-Anleitung schon im
+// Panel einen Titel eingeben + eine Kategorie wählen (bestehende ODER neue anlegen). NUR
+// im Neu-Aufnahme-Modus — bei aktivem Aufnahme-Anker (pendingTarget) blendet der Block
+// aus (das Ziel-Tutorial hat Titel + Kategorie bereits). Werte leben in
+// chrome.storage.session (überleben einen Panel-Reload während der Aufnahme) und reisen
+// beim Fertigstellen mit an guide-complete. Nach erfolgreichem Upload: zurücksetzen.
+// ============================================================================
+
+const NEW_CATEGORY_VALUE = "__new__"; // Sentinel der Option „＋ Neue Kategorie …"
+
+let recCategories = null; // gecachte Liste [{id,name}] oder null (nicht verfügbar)
+let recCategoriesFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
+let recCategoriesOk = false; // war der letzte Fetch erfolgreich?
+const REC_CATEGORIES_TTL = 5 * 60 * 1000; // Liste ~5 min im Speicher cachen
+
+// Kategorien des verbundenen Kontos holen (Bearer-Token), ~5 min gecacht. Bei Fehler/
+// Offline: null -> die Auswahl bleibt still ausgeblendet, das Titel-Feld bleibt.
+async function loadRecCategories() {
+  if (!cfg.token) return null;
+  if (Date.now() - recCategoriesFetchedAt < REC_CATEGORIES_TTL) {
+    return recCategoriesOk ? recCategories : null; // Cache (auch „unverfügbar" wird gecacht)
+  }
+  recCategoriesFetchedAt = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(appBase() + "/api/recorder/categories", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + cfg.token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      recCategoriesOk = false;
+      recCategories = null;
+      return null;
+    }
+    const body = await res.json().catch(() => ({}));
+    recCategories = Array.isArray(body.categories) ? body.categories : [];
+    recCategoriesOk = true;
+    return recCategories;
+  } catch (err) {
+    recCategoriesOk = false;
+    recCategories = null;
+    return null;
+  }
+}
+
+// Aktuelle Feldwerte in chrome.storage.session spiegeln (fail-silent).
+async function guideMetaSave() {
+  try {
+    await chrome.storage.session.set({
+      guideMeta: {
+        title: els.guideTitle ? els.guideTitle.value || "" : "",
+        cat: els.guideCategory ? els.guideCategory.value || "" : "",
+        catNew: els.guideCategoryNew ? els.guideCategoryNew.value || "" : "",
+      },
+    });
+  } catch (err) {
+    /* Session-Storage optional */
+  }
+}
+
+async function guideMetaLoad() {
+  try {
+    const r = await chrome.storage.session.get("guideMeta");
+    return r && r.guideMeta ? r.guideMeta : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function guideMetaClear() {
+  try {
+    await chrome.storage.session.remove("guideMeta");
+  } catch (err) {
+    /* egal */
+  }
+}
+
+// Felder leeren (nach erfolgreichem Upload / für die nächste Aufnahme).
+function guideMetaReset() {
+  if (els.guideTitle) els.guideTitle.value = "";
+  if (els.guideCategory) els.guideCategory.value = "";
+  if (els.guideCategoryNew) {
+    els.guideCategoryNew.value = "";
+    els.guideCategoryNew.hidden = true;
+  }
+}
+
+// Kategorie-Dropdown aufbauen: „Keine Kategorie" + Konto-Kategorien + „＋ Neue Kategorie …".
+// Bei fehlender/kaputter Liste (Offline/Fehler): Auswahl still ausblenden.
+function buildCategoryOptions(cats, selectedValue) {
+  const wrap = els.guideCatWrap;
+  const sel = els.guideCategory;
+  if (!wrap || !sel) return;
+  if (!Array.isArray(cats)) {
+    wrap.hidden = true;
+    if (els.guideCategoryNew) els.guideCategoryNew.hidden = true;
+    return;
+  }
+  sel.textContent = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "Keine Kategorie";
+  sel.appendChild(none);
+  for (const c of cats) {
+    if (!c || typeof c.id !== "string") continue;
+    const o = document.createElement("option");
+    o.value = c.id;
+    o.textContent = c.name || "Ohne Namen";
+    sel.appendChild(o);
+  }
+  const neu = document.createElement("option");
+  neu.value = NEW_CATEGORY_VALUE;
+  neu.textContent = "＋ Neue Kategorie …";
+  sel.appendChild(neu);
+
+  // Auswahl wiederherstellen (nur, wenn die Option noch existiert).
+  if (selectedValue && Array.prototype.some.call(sel.options, (o) => o.value === selectedValue)) {
+    sel.value = selectedValue;
+  } else {
+    sel.value = "";
+  }
+  if (els.guideCategoryNew) els.guideCategoryNew.hidden = sel.value !== NEW_CATEGORY_VALUE;
+  wrap.hidden = false;
+}
+
+// Beim Start einer Sofort-Aufnahme: Block vorbereiten (ein-/ausblenden, Werte + Kategorien).
+async function guideMetaPrepare() {
+  if (!els.guideMeta) return;
+  // Aufnahme-Anker aktiv -> ganzer Block aus (Titel/Kategorie gehören dem Ziel-Tutorial).
+  if (pendingTarget && pendingTarget.target) {
+    els.guideMeta.hidden = true;
+    return;
+  }
+  els.guideMeta.hidden = false;
+
+  // Gespeicherte Werte (überleben einen Panel-Reload während der Aufnahme).
+  const saved = await guideMetaLoad();
+  if (els.guideTitle) {
+    els.guideTitle.value = saved && typeof saved.title === "string" ? saved.title : "";
+  }
+  if (els.guideCategoryNew) {
+    els.guideCategoryNew.value = saved && typeof saved.catNew === "string" ? saved.catNew : "";
+  }
+
+  // Kategorien lazy laden (kurz gecacht); bei Fehler bleibt nur das Titel-Feld.
+  const cats = await loadRecCategories();
+  buildCategoryOptions(cats, saved && typeof saved.cat === "string" ? saved.cat : "");
+}
+
+// Auswahl geändert: „＋ Neue Kategorie …" blendet das Namensfeld ein.
+function onGuideCategoryChange() {
+  const isNew = els.guideCategory && els.guideCategory.value === NEW_CATEGORY_VALUE;
+  if (els.guideCategoryNew) {
+    els.guideCategoryNew.hidden = !isNew;
+    if (isNew) {
+      try {
+        els.guideCategoryNew.focus();
+      } catch (err) {
+        /* egal */
+      }
+    }
+  }
+  guideMetaSave();
+}
+
+// Titel für den complete-Request (leer -> nicht mitschicken, Server vergibt Default-Titel).
+function guideTitleValue() {
+  if (!els.guideMeta || els.guideMeta.hidden || !els.guideTitle) return "";
+  return (els.guideTitle.value || "").trim();
+}
+
+// Kategorie-Nutzlast für den complete-Request: { id } | { name } | null.
+function guideCategoryPayload() {
+  if (!els.guideMeta || els.guideMeta.hidden) return null;
+  if (!els.guideCatWrap || els.guideCatWrap.hidden || !els.guideCategory) return null;
+  const v = els.guideCategory.value;
+  if (!v) return null; // „Keine Kategorie"
+  if (v === NEW_CATEGORY_VALUE) {
+    const name = els.guideCategoryNew ? (els.guideCategoryNew.value || "").trim() : "";
+    return name ? { name } : null;
+  }
+  return { id: v };
 }
 
 // ============================================================================
@@ -1516,6 +1727,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     accountName = ""; // neu ermitteln (Token koennte auf ein anderes Konto zeigen)
     fetchAccountName();
     siteMatchFetchedAt = 0; // „Fuer diese Seite"-Cache verwerfen (Token wechselte evtl. Konto)
+    recCategoriesFetchedAt = 0; // Kategorie-Cache (Welle 31d) verwerfen (Token evtl. anderes Konto)
     if (recording) return; // laufende Aufnahme nie unterbrechen
     // Nur wenn wir gerade auf Connect oder Start stehen, die Auswahl (neu) zeigen.
     if (!els.connect.hidden || !els.start.hidden) showStart();
@@ -2109,6 +2321,11 @@ els.micRetry.addEventListener("click", micPreflight);
 els.begin.addEventListener("click", begin);
 els.stop.addEventListener("click", stop);
 els.guideStop.addEventListener("click", finishGuide);
+// Titel + Kategorie (Welle 31d): Feldwerte in die Session spiegeln; „＋ Neue Kategorie …"
+// blendet das Namensfeld ein.
+if (els.guideTitle) els.guideTitle.addEventListener("input", guideMetaSave);
+if (els.guideCategory) els.guideCategory.addEventListener("change", onGuideCategoryChange);
+if (els.guideCategoryNew) els.guideCategoryNew.addEventListener("input", guideMetaSave);
 els.again.addEventListener("click", newRecording);
 els.guideAgain.addEventListener("click", newRecording);
 if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);

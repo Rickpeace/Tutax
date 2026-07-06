@@ -415,6 +415,61 @@ body {
   background: var(--cream);
 }
 
+/* ===== Welle 31d: Titel + Kategorie fuer die neue Sofort-Anleitung =====
+   Kompakter Block im Aufnahme-Screen (guideLive), im warmen Panel-Look. */
+.guide-meta {
+  margin: 12px 0 4px;
+  padding: 10px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--cream);
+}
+
+/* Engere .field-Variante fuer den kompakten Meta-Block. */
+.guide-meta .field-compact {
+  margin: 0;
+}
+
+.guide-meta .field-compact + .field-compact {
+  margin-top: 10px;
+}
+
+/* Kategorie-Dropdown im Stil der Textfelder (.field > input). */
+.guide-cat-select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.guide-cat-select:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+  border-color: var(--brand);
+}
+
+/* Eingabefeld fuer eine neue Kategorie (erscheint unter dem Dropdown). */
+#guideCategoryNew {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+#guideCategoryNew:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+  border-color: var(--brand);
+}
+
 /* ===== Start-Auswahl: zwei grosse Karten (Tango-Look) ===== */
 .card-choice {
   display: flex;

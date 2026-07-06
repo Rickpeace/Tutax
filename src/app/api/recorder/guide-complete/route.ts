@@ -17,6 +17,7 @@ import {
   mkBody,
   defaultGuideTitle,
   parseGuideTarget,
+  parseGuideCategory,
   MAX_GUIDE_STEPS,
   type GuideStepInput,
   type GuideTarget,
@@ -138,6 +139,69 @@ async function seedSiteDomains(
     await admin.from("tutorials").update({ site_domains: merged }).eq("id", tutorialId);
   } catch (e) {
     console.error("[guide-complete] site_domains:", e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Kategorie zuordnen (Welle 31d, ADDITIV): das optionale `category` aus dem Body auf das
+ * NEU angelegte Tutorial anwenden. ENTWEDER { id } (bestehende) ODER { name } (neu/vorhanden).
+ *   • { id }:   gehört die Kategorie dem Konto? → category_id setzen; fremde/unbekannte id →
+ *               still ignorieren (kein Fehler, Aufnahme geht nie verloren).
+ *   • { name }: existiert (case-insensitiv) schon eine Kategorie dieses Namens → die nehmen;
+ *               sonst anlegen (max-position+1, wie createCategory in tutorials/[id]/actions.ts).
+ * Wirft NIE — jeder Fehler wird geloggt, schlimmstenfalls bleibt das Tutorial ohne Kategorie.
+ * NUR für den Neu-Tutorial-Pfad gedacht (der Einfüge-Pfad ruft dies gar nicht auf).
+ */
+async function applyGuideCategory(
+  admin: SupabaseClient,
+  accountId: string,
+  tutorialId: string,
+  raw: unknown,
+): Promise<void> {
+  try {
+    const cat = parseGuideCategory(raw);
+    if (!cat) return; // fehlt/kaputt → still ignorieren
+
+    let categoryId: string | null = null;
+    if ("id" in cat) {
+      // Eigentums-Check: nur Kategorien DES Kontos (globale mit account_id IS NULL zählen nicht).
+      const { data: row } = await admin
+        .from("categories")
+        .select("id")
+        .eq("id", cat.id)
+        .eq("account_id", accountId)
+        .maybeSingle();
+      if (!row) return; // fremde/unbekannte id → still ignorieren
+      categoryId = row.id as string;
+    } else {
+      // name: case-insensitiver Abgleich gegen die Konto-Kategorien; sonst neu anlegen.
+      const { data: existing } = await admin
+        .from("categories")
+        .select("id, name, position")
+        .eq("account_id", accountId);
+      const list = existing ?? [];
+      const wanted = cat.name.toLocaleLowerCase("de-DE");
+      const hit = list.find(
+        (c) => String(c.name ?? "").toLocaleLowerCase("de-DE") === wanted,
+      );
+      if (hit) {
+        categoryId = hit.id as string;
+      } else {
+        const maxPos = list.reduce((m, c) => Math.max(m, Number(c.position) || 0), -1);
+        const { data: created } = await admin
+          .from("categories")
+          .insert({ account_id: accountId, name: cat.name, position: maxPos + 1 })
+          .select("id")
+          .single();
+        categoryId = created ? (created.id as string) : null;
+      }
+    }
+
+    if (categoryId) {
+      await admin.from("tutorials").update({ category_id: categoryId }).eq("id", tutorialId);
+    }
+  } catch (e) {
+    console.error("[guide-complete] category:", e instanceof Error ? e.message : e);
   }
 }
 
@@ -354,6 +418,7 @@ export async function POST(req: NextRequest) {
     title?: unknown;
     steps?: unknown;
     target?: unknown;
+    category?: unknown;
   };
 
   const account = await accountForRecorderToken(body?.token);
@@ -417,6 +482,10 @@ export async function POST(req: NextRequest) {
 
   // Seiten-Kontext (Welle 31c): site_domains des neuen Tutorials aus den Schritt-URLs säen.
   await seedSiteDomains(admin, created.tutorialId, steps);
+
+  // Kategorie (Welle 31d): optionales `category` NUR im Neu-Tutorial-Pfad (Standard + Fallback)
+  // anwenden. Fehlerresistent — kippt die Aufnahme-Antwort niemals (schlimmstenfalls ohne Kategorie).
+  await applyGuideCategory(admin, account.id, created.tutorialId, body?.category);
 
   return recorderJson(
     fallbackReason
