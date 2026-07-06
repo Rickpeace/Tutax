@@ -112,6 +112,7 @@ const els = {
   runProgress: document.getElementById("runProgress"),
   runBar: document.getElementById("runBar"),
   runImageWrap: document.getElementById("runImageWrap"),
+  runImageFrame: document.getElementById("runImageFrame"),
   runImage: document.getElementById("runImage"),
   runFallbackHint: document.getElementById("runFallbackHint"),
   runTitle: document.getElementById("runTitle"),
@@ -186,20 +187,39 @@ async function loadPendingTarget() {
 // Tutorial angelegt" ist bewusst entfernt (Richards Wunsch, zu viel Rauschen).
 function renderTargetBanner() {
   if (!els.targetBanner) return;
-  if (pendingTarget) {
-    // trim: ein Leerzeichen-Label liess die Zeile frueher LEER aussehen.
-    const label = String(pendingTarget.label || "").trim();
+  // Defensiv (Welle 33, Fix 4): Banner NUR bei echtem Ziel (pendingTarget && .target). Die
+  // Entscheidung liegt in der puren, testbaren target-banner.js; fehlt das Modul, greift die
+  // Inline-Logik als Fallback.
+  const state =
+    (typeof SteplyTargetBanner !== "undefined" && SteplyTargetBanner.targetBannerState(pendingTarget)) || {
+      show: !!(pendingTarget && pendingTarget.target),
+      label: "die gewählte Stelle im Tutorial",
+      broken: !!(pendingTarget && !pendingTarget.target),
+    };
+  if (state.show) {
     if (els.targetPrefix) els.targetPrefix.textContent = "Aufnahme für: ";
-    els.targetLabel.textContent = label || "die gewählte Stelle im Tutorial";
+    els.targetLabel.textContent = state.label;
     els.targetBanner.classList.remove("target-banner-neutral");
     if (els.targetClear) els.targetClear.hidden = false;
     els.targetBanner.hidden = false;
   } else {
+    // Kaputtes pendingTarget (Objekt ohne target, Altbestand) aktiv wegräumen (Selbstheilung).
+    if (state.broken) {
+      pendingTarget = null;
+      try {
+        const r = chrome.storage.local.remove("pendingTarget");
+        if (r && r.catch) r.catch(() => {});
+      } catch (err) {
+        /* egal */
+      }
+    }
     els.targetBanner.hidden = true;
   }
 }
 
 // Ziel vergessen: aus dem Storage raeumen + Banner weg. (Verwerfen-Knopf & nach Abschluss.)
+// Härtung (Welle 33, Fix 4): jeder Schritt in try/catch; das Banner wird als LETZTE Zeile
+// notfalls hart versteckt — egal, was Storage/Render vorher werfen.
 async function clearPendingTarget() {
   pendingTarget = null;
   try {
@@ -207,13 +227,23 @@ async function clearPendingTarget() {
   } catch (err) {
     /* egal */
   }
-  renderTargetBanner();
+  try {
+    renderTargetBanner();
+  } catch (err) {
+    /* egal */
+  }
+  if (els.targetBanner) els.targetBanner.hidden = true;
 }
 
 // „Ziel verwerfen"-Knopf: Ziel raeumen; die naechste Aufnahme laeuft normal (neues Tutorial).
 async function discardTarget() {
-  await clearPendingTarget();
-  setStatus("Ziel verworfen - die Aufnahme wird als neues Tutorial gespeichert.", "");
+  try {
+    await clearPendingTarget();
+    setStatus("Ziel verworfen - die Aufnahme wird als neues Tutorial gespeichert.", "");
+  } catch (err) {
+    // Selbst bei einem Fehler muss der Knopf sichtbar wirken: Banner hart verstecken.
+    if (els.targetBanner) els.targetBanner.hidden = true;
+  }
 }
 
 // Nur nutzen, wenn die Herkunft der konfigurierten App-URL entspricht (sonst ignorieren).
@@ -1900,6 +1930,68 @@ function sendGuideToTab(msg) {
   }
 }
 
+// ── Führungs-Lebensader (Welle 33, Fix 2) ──────────────────────────────────────────────
+// a) Ein Port zum background hält den gebundenen Tab fest: Schließt/crasht das Panel, bricht
+//    der Port ab und background blendet das Overlay auf DEM Tab aus (kein „6/6"-Kleber).
+// b) Ein Ping (~20s) hält den Selbstschutz-Timer im content.js wach.
+let guidePort = null;
+let guidePingTimer = null;
+
+function guidePortOpen(tabId) {
+  guidePortClose();
+  if (tabId == null) return;
+  try {
+    guidePort = chrome.runtime.connect({ name: "steply-guide" });
+    guidePort.postMessage({ type: "bind", tabId });
+    guidePort.onDisconnect.addListener(() => {
+      guidePort = null;
+      // Worker evtl. neu gestartet: solange die Führung sichtbar läuft, Port neu aufbauen.
+      if (!els.guideRun.hidden && guide.tabId != null) {
+        setTimeout(() => {
+          if (!guidePort && !els.guideRun.hidden && guide.tabId != null) guidePortOpen(guide.tabId);
+        }, 0);
+      }
+    });
+  } catch (err) {
+    guidePort = null;
+  }
+}
+
+function guidePortClose() {
+  if (guidePort) {
+    try {
+      guidePort.disconnect();
+    } catch (err) {
+      /* egal */
+    }
+    guidePort = null;
+  }
+}
+
+function guidePingStart() {
+  guidePingStop();
+  guidePingTimer = setInterval(() => {
+    if (guide.tabId != null) sendGuideToTab({ type: "steply-guide-ping" });
+  }, 20000);
+}
+
+function guidePingStop() {
+  if (guidePingTimer) {
+    clearInterval(guidePingTimer);
+    guidePingTimer = null;
+  }
+}
+
+// Beim Start/Fortsetzen einer Führung Port + Ping öffnen; beim Beenden schließen.
+function guideLinkStart(tabId) {
+  guidePortOpen(tabId);
+  guidePingStart();
+}
+function guideLinkStop() {
+  guidePingStop();
+  guidePortClose();
+}
+
 // Telemetrie (fire-and-forget, fail-silent): started | completed | selector_miss.
 function sendGuideEvent(kind, stepTitle) {
   try {
@@ -2000,13 +2092,28 @@ function guideLinearNext(step) {
 // Screenshot + Highlight-Rechtecke (normalisiert 0..1) zeichnen. Blur-Highlights werden
 // beim Veröffentlichen in die Pixel gebrannt -> hier nicht nachgezeichnet.
 function guideRenderImage(step) {
-  els.runImageWrap.querySelectorAll(".run-hl").forEach((n) => n.remove());
+  // Markierungen liegen jetzt im .run-image-frame (Welle 33, Fix 1) — dort aufraeumen.
+  const frame = els.runImageFrame || els.runImageWrap;
+  frame.querySelectorAll(".run-hl").forEach((n) => n.remove());
   if (!step.imageUrl) {
     els.runImageWrap.hidden = true;
     els.runImage.removeAttribute("src");
     return;
   }
   els.runImageWrap.hidden = false;
+  // Seitenverhaeltnis aus der API (imageWidth/imageHeight): der Rahmen bekommt GENAU das
+  // Bild-Verhaeltnis -> die Markierungen (in % dieses Rahmens) sitzen pixelgenau und liegen
+  // schon VOR dem Bild-Load richtig. Ohne verlaessliche Masse: Default-Verhaeltnis (--run-ar
+  // faellt in der CSS auf 1.6 zurueck) + object-fit:contain als Sicherheitsnetz.
+  if (els.runImageFrame) {
+    const iw = Number(step.imageWidth);
+    const ih = Number(step.imageHeight);
+    if (iw > 0 && ih > 0) {
+      els.runImageFrame.style.setProperty("--run-ar", String(iw / ih));
+    } else {
+      els.runImageFrame.style.removeProperty("--run-ar");
+    }
+  }
   els.runImage.src = step.imageUrl;
   (Array.isArray(step.highlights) ? step.highlights : []).forEach((h) => {
     if (!h || typeof h !== "object" || h.type === "blur") return;
@@ -2019,7 +2126,7 @@ function guideRenderImage(step) {
     s.height = clamp01(h.h) * 100 + "%";
     if (h.type === "ellipse") s.borderRadius = "50%";
     if (h.color) s.borderColor = h.color;
-    els.runImageWrap.appendChild(box);
+    frame.appendChild(box);
   });
 }
 
@@ -2160,6 +2267,7 @@ function guideAnswer(targetId) {
 }
 
 async function guideExit() {
+  guideLinkStop(); // Port + Ping schließen (background blendet auf Disconnect ohnehin aus)
   sendGuideToTab({ type: "steply-guide-hide" });
   await guideClearSession();
   guide.curId = null;
@@ -2265,6 +2373,8 @@ async function guideStart(tutorialId) {
   // „Bring mich hin" (Punkt F): passt der Tab nicht, in einem neuen Tab auf der Startseite
   // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden.
   await guideBringToStartIfNeeded();
+  // Port + Ping an den (final gebundenen) Tab (Welle 33, Fix 2).
+  guideLinkStart(guide.tabId);
   sendGuideEvent("started", null);
   show("guideRun");
   guideRenderStep();
@@ -2445,6 +2555,8 @@ async function guideMaybeResume() {
   guide.curId = st.curId;
   guide.history = Array.isArray(st.history) ? st.history.filter((h) => guide.stepById.has(h)) : [];
   guide.tabId = typeof st.tabId === "number" ? st.tabId : null;
+  // Wieder aufgenommene Führung: Port + Ping erneut aufbauen (Welle 33, Fix 2).
+  guideLinkStart(guide.tabId);
   show("guideRun");
   guideRenderStep();
   return true;
@@ -2466,9 +2578,14 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
   if (msg.found === false) {
     const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+    // Grund dezent in Klammern (Welle 33, Fix 3): hilft beim Debuggen künftiger Fälle.
+    const reason = typeof msg.reason === "string" ? msg.reason.trim() : "";
+    const suffix = reason ? " (" + reason + ")" : "";
     guideSetFallback(
       true,
-      "Diese Stelle ist auf der Seite gerade nicht zu finden - orientieren Sie sich am Screenshot.",
+      "Diese Stelle ist auf der Seite gerade nicht zu finden" +
+        suffix +
+        " - orientieren Sie sich am Screenshot.",
     );
     sendGuideEvent("selector_miss", step ? step.title : null);
   }
@@ -2497,6 +2614,11 @@ window.SteplyGuide = { start: guideStart };
 // EVENTS
 // ============================================================================
 
+// „Ziel verwerfen" GANZ FRÜH verdrahten (Welle 33, Fix 4): der Knopf muss selbst dann noch
+// funktionieren, wenn eine spätere Zeile hier oder die Init wirft — deshalb vor allen
+// ungeschützten addEventListener-Aufrufen (els.saveCfg u. a. könnten theoretisch werfen).
+if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);
+
 els.saveCfg.addEventListener("click", saveCfg);
 els.skipConnect.addEventListener("click", () => showStart());
 els.connBtn.addEventListener("click", () => showConnect());
@@ -2518,7 +2640,7 @@ if (els.guideCategory) els.guideCategory.addEventListener("change", onGuideCateg
 if (els.guideCategoryNew) els.guideCategoryNew.addEventListener("input", guideMetaSave);
 els.again.addEventListener("click", newRecording);
 els.guideAgain.addEventListener("click", newRecording);
-if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);
+// (targetClear-Listener ist bereits ganz oben in diesem Block verdrahtet.)
 // Live-Führung (Welle 31).
 els.cardGuideRun.addEventListener("click", () => {
   if (hasToken) showFuehren();
@@ -2541,6 +2663,10 @@ els.runDoneList.addEventListener("click", () => showFuehren());
 window.addEventListener("pagehide", () => {
   cleanupStreams();
   guideActive = false;
+  // Ping stoppen (Welle 33, Fix 2). Der Port bricht beim Dokument-Abbau ohnehin ab ->
+  // background blendet das Overlay auf dem gebundenen Tab zuverlässig aus (das ist der
+  // robuste Weg; das direkte hide unten kann während des Teardowns verpuffen).
+  guidePingStop();
   try {
     chrome.storage.local.remove("rec");
   } catch (err) {
@@ -2555,28 +2681,42 @@ window.addEventListener("pagehide", () => {
 // INIT
 // ============================================================================
 (async () => {
-  // Fenster-ID des Panels bestimmen (fuer captureVisibleTab + Multi-Tab-Filter).
+  // Härtung (Welle 33, Fix 4): die gesamte Init in try/catch. Wirft ein Schritt (Storage/
+  // Netz/DOM), landen wir nicht bei still kaputten Knöpfen, sondern zeigen einen Hinweis.
   try {
-    const w = await chrome.windows.getCurrent();
-    panelWindowId = w && w.id != null ? w.id : null;
+    // Fenster-ID des Panels bestimmen (fuer captureVisibleTab + Multi-Tab-Filter).
+    try {
+      const w = await chrome.windows.getCurrent();
+      panelWindowId = w && w.id != null ? w.id : null;
+    } catch (err) {
+      panelWindowId = null;
+    }
+    // Klemmende/abgebrochene Aufnahme verwerfen, BEVOR wir irgendetwas anzeigen.
+    await reconcile();
+    await loadConfig();
+    // Aufnahme-Anker (Welle 27): Ziel laden (abgelaufene >30 min werden verworfen) + Banner.
+    await loadPendingTarget();
+    // Live-Führung (Welle 31): eine laufende Führung nach Panel-Schließen fortsetzen.
+    const resumedGuide = await guideMaybeResume();
+    if (!resumedGuide) {
+      if (hasToken) {
+        showStart();
+      } else {
+        showConnect();
+      }
+    }
+    // Nebenlaeufig, nicht blockierend: Kontoname anzeigen + auf neue Version pruefen.
+    fetchAccountName();
+    checkForUpdate();
   } catch (err) {
-    panelWindowId = null;
-  }
-  // Klemmende/abgebrochene Aufnahme verwerfen, BEVOR wir irgendetwas anzeigen.
-  await reconcile();
-  await loadConfig();
-  // Aufnahme-Anker (Welle 27): Ziel laden (abgelaufene >30 min werden verworfen) + Banner.
-  await loadPendingTarget();
-  // Live-Führung (Welle 31): eine laufende Führung nach Panel-Schließen fortsetzen.
-  const resumedGuide = await guideMaybeResume();
-  if (!resumedGuide) {
-    if (hasToken) {
-      showStart();
-    } else {
-      showConnect();
+    try {
+      setStatus(
+        "Die Seitenleiste konnte nicht vollständig starten — Extension bitte neu laden.",
+        "error",
+      );
+    } catch (e) {
+      /* selbst setStatus scheiterte (DOM kaputt) - dann bleibt nur die Konsole */
+      console.warn("Steply: Panel-Init fehlgeschlagen:", err);
     }
   }
-  // Nebenlaeufig, nicht blockierend: Kontoname anzeigen + auf neue Version pruefen.
-  fetchAccountName();
-  checkForUpdate();
 })();

@@ -253,7 +253,9 @@
       <div id="runBar" class="run-bar"><span></span></div>
 
       <div id="runImageWrap" class="run-image-wrap" hidden>
-        <img id="runImage" class="run-image" alt="" />
+        <div id="runImageFrame" class="run-image-frame">
+          <img id="runImage" class="run-image" alt="" />
+        </div>
       </div>
       <p id="runFallbackHint" class="run-fallback-hint" hidden></p>
 
@@ -278,6 +280,8 @@
 
     <!-- site-match.js (Welle 31c) VOR panel.js: stellt das globale SteplySiteMatch bereit. -->
     <script src="site-match.js"></script>
+    <!-- target-banner.js (Welle 33, Fix 4): pure Banner-Entscheidung, VOR panel.js. -->
+    <script src="target-banner.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>
