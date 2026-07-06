@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -311,11 +311,22 @@ export function TabBar({ createAction }: { createAction: React.ReactNode }) {
   );
 }
 
-/** Trigger-Optik des „Aufnehmen"-Tabs (wird an NewTutorialButton übergeben). */
-export function CreateTabTrigger() {
+/**
+ * Trigger-Optik des „Aufnehmen"-Tabs (wird an NewTutorialButton als Base-UI-render
+ * übergeben). MUSS eingehende Props (onClick/ref/aria vom DialogTrigger) durchreichen
+ * und die ref forwarden — sonst bleibt der mobile Knopf tot (Base UI klont das Element
+ * und hängt den Öffnen-Handler an genau diese Props). Genau das war der Bug: der
+ * Trigger rannte die Props ins Leere, mobil passierte beim Tippen nichts.
+ */
+export const CreateTabTrigger = forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function CreateTabTrigger(props, ref) {
   return (
     <button
+      ref={ref}
       type="button"
+      {...props}
       className="flex min-w-16 flex-col items-center gap-1 rounded-2xl px-3 py-1.5 text-[10px] font-extrabold text-primary"
     >
       <span className="grid size-5 place-items-center rounded-full bg-primary text-[13px] font-black leading-none text-white shadow-[0_2px_0_var(--primary-pressed)]">
@@ -324,4 +335,4 @@ export function CreateTabTrigger() {
       Aufnehmen
     </button>
   );
-}
+});
