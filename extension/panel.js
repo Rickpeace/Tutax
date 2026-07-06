@@ -153,7 +153,11 @@ let hasToken = false;
 // und Start-Screen als „Verbunden mit X" gezeigt - so faellt eine Fehlbindung sofort auf.
 let accountName = "";
 
-const DEFAULT_APP_URL = "https://app.steply.de";
+// Fallback ohne Pairing (u. a. „Steply lernen" direkt nach der Installation).
+// app.steply.de ist noch NICHT mit der App verdrahtet (antwortet 403) — bis die
+// Domain steht, zeigt der Fallback auf die echte Prod-URL. Beim Domain-Umzug
+// HIER + in background.js (BADGE_DEFAULT_APP_URL) umstellen.
+const DEFAULT_APP_URL = "https://tutax-ivory.vercel.app";
 
 function appBase() {
   const raw = (cfg.appUrl || DEFAULT_APP_URL).trim().replace(/\/+$/, "");

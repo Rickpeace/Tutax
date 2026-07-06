@@ -276,7 +276,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // ============================================================================
 const BADGE_COLOR = "#ef6a4e"; // Koralle (--brand)
 const BADGE_TTL = 5 * 60 * 1000; // 5 min
-const BADGE_DEFAULT_APP_URL = "https://app.steply.de";
+// Gleicher Fallback wie DEFAULT_APP_URL im Panel (app.steply.de ist noch nicht
+// verdrahtet) — beim Domain-Umzug BEIDE Stellen umstellen.
+const BADGE_DEFAULT_APP_URL = "https://tutax-ivory.vercel.app";
 
 async function badgeAppBase() {
   try {
