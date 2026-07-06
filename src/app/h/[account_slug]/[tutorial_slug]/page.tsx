@@ -14,6 +14,7 @@ import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 import { LangSwitcher } from "@/components/viewer/lang-switcher";
+import { LangSuggestBar } from "@/components/viewer/lang-suggest-bar";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -233,6 +234,13 @@ export default async function ViewerPage({
         <style dangerouslySetInnerHTML={{ __html: sanitizeSkinCss(skinCss) }} />
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
+      {/* Browser-Sprach-Vorschlag (Welle 30): dezent, schließbar, rein clientseitig. */}
+      <LangSuggestBar
+        accountSlug={account.slug}
+        languages={languages}
+        currentLang={lang}
+        basePath={`/h/${account.slug}/${tutorial_slug}`}
+      />
       {/* lg-Breite für die Schrittlisten-Sidebar linearer Tutorials (Design 3a). */}
       <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl lg:max-w-4xl">
         <div data-tx="header" className="mb-4 flex items-center gap-3">
