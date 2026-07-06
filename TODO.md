@@ -4,6 +4,15 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
+- [ ] **Standard-Templates-Häkchen neu setzen** (Incident 06.07., s. REVIEW.md):
+  Die 6 DATEV-Vorlagen sind wiederhergestellt, aber die Aktivierungs-Häkchen
+  (account_templates) waren mit weg — in RichardTax/Muster GmbH einmal
+  Dashboard → „Standard-Anleitungen von Tutax" → gewünschte anhaken.
+- [ ] **Steply-Doku geführt testen**: Extension mit dem STEPLY-Doku-Konto pairen
+  (dessen Einstellungen → Einbetten) → auf tutax-ivory.vercel.app/app Panel
+  öffnen → „Für diese Seite" listet die 9 neuen Doku-Anleitungen → eine Tour
+  live führen lassen.
+
 - [ ] **`deploy.sh` ausführen + Test-Video** — schaltet auf Hetzner frei: Live-Aufbau,
   Klick-Modus, Szenen-Erkennung, Fortschritt, Frame-Picker-Timestamps, alle Fixes.
   ```

@@ -295,6 +295,23 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 34 + Fable (06.07.):** 📚 **Steply-Selbst-Doku KOMPLETT NEU + FÜHRBAR**
+(/h/steply): 9 Anleitungen/51 Schritte, frische Warm-Design-Screenshots (Playwright-
+Pipeline v3), erstmals mit `selector`/`page_url`/`site_domains` je Schritt → die Doku
+ist per Extension LIVE FÜHRBAR (Dogfooding; site_domains=tutax-ivory.vercel.app).
+Sofort-Anleitung als Standard auf Position 2 (Richards Direktive; auch im Neue-
+Anleitung-Dialog jetzt zuerst + „Empfohlen"-Chip). Neue Skripte: steply-help-content
+(geteilte Quelle), delete-steply-help (nur Steply-Konto, ID-Log); getCatalog sortiert
+jetzt deterministisch (created_at). ElevenLabs-Audio (Helmut Clark) für alle 51 Schritte.
+⚠️ **INCIDENT 06.07.:** Nach der Welle fehlten die 6 globalen DATEV-Templates + die
+komplette account_templates-Tabelle. Aufklärung: KEIN Skript verantwortlich (alle
+Löschungen id-/konto-scoped, Agent-Verlauf geprüft); wahrscheinlichste Ursache ist ein
+(Bulk-)Löschen in der Bibliothek durch den Plattform-Admin-Login — die RLS-Policy
+„admin manage template tutorials" erlaubte deleteTutorial auch auf Templates.
+BEHOBEN: Templates via seed-datev.mjs --templates wiederhergestellt (test-templates-live
+grün); deleteTutorial jetzt hart aufs eigene Konto gescopt (Vorlagen löscht nur noch
+/admin/deleteTemplate). OFFEN: account_templates-Häkchen (welche Konten Templates
+aktiviert hatten) müssen einmal neu gesetzt werden (Dashboard → Standard-Anleitungen).
 **Fable-Hotfix v2.6.1 + Opus Welle 33 (06.07., v2.7.0):** 🔧 **Führungs-Bugfixes**
 nach Richards zweiter Test-Runde. Hotfix: globales `[hidden]{display:none
 !important}` in styles.css — `.target-banner{display:flex}` überstimmte das

@@ -145,10 +145,20 @@ export async function renameTutorial(id: string, title: string) {
 }
 
 export async function deleteTutorial(id: string) {
+  const { account } = await requireAccount();
   const supabase = await createClient();
   await removeTutorialEmbeddings(supabase, id).catch(() => {});
   await invalidateTutorialTags(id); // VOR dem Delete (danach ist der Slug-Lookup weg)
-  const { error } = await supabase.from("tutorials").delete().eq("id", id);
+  // SCHUTZRIEGEL (Incident 06.07.): NUR eigene Tutorials. Der Plattform-Admin hat via
+  // RLS-Policy „admin manage template tutorials" auch Löschrecht auf GLOBALE Templates
+  // (account_id NULL) — ohne diese Scopung konnte ein (Bulk-)Löschen in der Bibliothek
+  // versehentlich die Standard-Vorlagen aller Kunden treffen. Vorlagen löscht
+  // ausschließlich /admin über deleteTemplate.
+  const { error } = await supabase
+    .from("tutorials")
+    .delete()
+    .eq("id", id)
+    .eq("account_id", account.id);
   if (error) throw new Error(error.message);
   revalidatePath("/app");
 }
