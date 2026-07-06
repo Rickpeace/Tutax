@@ -4,11 +4,8 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
-- [ ] **Migration 0030 anwenden (BLOCKIERT den Welle-36-Push!):**
-  `node --env-file=.env.local apply-0030.mjs` in tutax/ — legt die
-  Automationen-Tabellen an. Danach pusht Fable v2.9.0 + führt den
-  Live-Test aus. apply-0030.mjs danach löschen.
-- [ ] **Automationen testen (nach Push, Extension → v2.9.0):** echten Ablauf
+- [ ] **Automationen testen (Extension → v2.9.0; Migration 0030 + Push sind DURCH,
+  Live-Test grün):** echten Ablauf
   („Login + Belege herunterladen") per Sofort-Anleitung aufnehmen → Bibliothek
   → ⋮ „Als Automation nutzen" → /app/automationen → in der Extension Karte
   „⚙️ Automationen" → Parameter füllen (Passwort nur lokal merken!) →
