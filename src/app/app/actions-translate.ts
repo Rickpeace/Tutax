@@ -8,6 +8,7 @@ import {
   translateTutorialLangCore,
   translateStepLangCore,
   translateSegmentsCore,
+  translateAccountCategoriesCore,
   clearStaleCore,
   type ChatClient,
 } from "@/lib/translate-core";
@@ -43,7 +44,7 @@ const chat = (): ChatClient => openai() as unknown as ChatClient;
 // ---------------------------------------------------------------------------
 async function loadTutorialForTranslate(
   tutorialId: string,
-): Promise<{ source: TutorialForTranslate; languages: ExtraLang[] } | null> {
+): Promise<{ source: TutorialForTranslate; languages: ExtraLang[]; accountId: string } | null> {
   const admin = createAdminClient();
   const { data: tut } = await admin
     .from("tutorials")
@@ -73,6 +74,7 @@ async function loadTutorialForTranslate(
 
   return {
     languages,
+    accountId: tut.account_id as string,
     source: {
       title: tut.title,
       description: tut.description,
@@ -108,7 +110,7 @@ export async function translateTutorial(tutorialId: string): Promise<TranslateRe
   if (!aiConfigured()) throw new Error("KI ist nicht konfiguriert (OPENAI_API_KEY fehlt).");
   const loaded = await loadTutorialForTranslate(tutorialId);
   if (!loaded) throw new Error("Tutorial nicht gefunden.");
-  const { source, languages } = loaded;
+  const { source, languages, accountId } = loaded;
   if (!languages.length) throw new Error("Keine Zusatzsprachen aktiviert.");
   if (!source.title.trim() && !source.steps.length)
     throw new Error("Nichts zu übersetzen (leeres Tutorial).");
@@ -129,6 +131,13 @@ export async function translateTutorial(tutorialId: string): Promise<TranslateRe
       throw new Error(`Übersetzung für ${LANG_NAME[lang]} fehlgeschlagen: ${msg}`);
     }
     done.push(lang);
+  }
+  // Kategorienamen des Kontos mitübersetzen (billig: idempotent, ein Batch-Call je Sprache;
+  // sind alle aktuell, passiert nichts). Fehler dürfen die Tutorial-Übersetzung nicht kippen.
+  try {
+    await translateAccountCategoriesCore(admin, chat(), AI.models.chat, accountId, languages);
+  } catch (e) {
+    console.error("Kategorie-Übersetzung:", e instanceof Error ? e.message : e);
   }
   await invalidateTutorialTags(tutorialId, { force: true });
   return { languages: done };
