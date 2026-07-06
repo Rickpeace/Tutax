@@ -76,6 +76,11 @@ export function AppHeader({
             active={path.startsWith("/app/lernen")}
           />
           <NavPill
+            href="/app/automationen"
+            label="Automationen"
+            active={path.startsWith("/app/automationen")}
+          />
+          <NavPill
             href="/app/assistent/wissen"
             label="Assistent"
             active={

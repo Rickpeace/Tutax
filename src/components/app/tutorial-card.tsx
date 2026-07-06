@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   MoreVertical,
@@ -13,6 +14,7 @@ import {
   Check,
   Lock,
   Film,
+  Zap,
 } from "lucide-react";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
@@ -42,6 +44,7 @@ import {
   publishTutorial,
   unpublishTutorial,
 } from "@/app/app/actions";
+import { createAutomationFromTutorial } from "@/app/app/automationen/actions";
 
 /** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte). */
 export type LibraryTutorial = {
@@ -75,6 +78,7 @@ export function TutorialCard({
   accountSlug: string;
   categoryName: string | null;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -103,6 +107,21 @@ export function TutorialCard({
       try {
         await fn();
         toast.success(success);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
+
+  // Als Automation nutzen: Snapshot der Aufnahme erstellen und in die Automation springen.
+  // Ob überhaupt ausführbare Schritte (mit Selektoren) existieren, weiß die Karte nicht —
+  // deshalb immer anbieten; die Action wirft sonst eine sprechende Meldung (→ Toast).
+  function convertToAutomation() {
+    startTransition(async () => {
+      try {
+        const { automationId } = await createAutomationFromTutorial(tutorial.id);
+        toast.success("Als Automation angelegt");
+        router.push(`/app/automationen/${automationId}`);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
       }
@@ -320,6 +339,10 @@ export function TutorialCard({
                 onClick={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
               >
                 Duplizieren
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={convertToAutomation}>
+                <Zap className="size-4" /> Als Automation nutzen
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
