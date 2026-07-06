@@ -10,6 +10,13 @@
 //   title, body   — Anzeige-Text (Sie-Form)
 //   shot          — welcher Screenshot (Schluessel in shoot-steply-help.mjs SHOTS)
 //   target        — welches Element im Shot markiert/als Selektor erfasst wird (oder null)
+//   highlight     — (Welle 35, OPTIONAL) explizite Markierungs-Entscheidung fuer Schritte, die
+//                   die Playwright-Pipeline NICHT automatisch trifft:
+//                     • { x, y, w, h }  — Hand-Markierung (relative 0..1); Primaerfarbe + rounded
+//                                          setzen shoot-steply-help.mjs bzw. patch-steply-highlights.mjs
+//                     • null            — BEWUSST ohne Markierung (reiner Hinweis-/Ergebnis-Schritt
+//                                          oder Ziel nicht im Screenshot) — Entscheidung, keine Luecke
+//                     • fehlt           — normaler Schritt: Markierung kommt aus target (Auto-Box)
 // Die App-Route je Shot steht in SHOT_ROUTES (fuer page_url). null = keine stabile Prod-URL
 // (Builder ist dynamisch; oeffentliche Hub-Shots sind nur illustrativ).
 
@@ -89,6 +96,7 @@ export const TUTORIALS = [
         title: "Konto und Organisation",
         body: "Bei der ersten Anmeldung legt Steply automatisch eine Organisation für Sie an – oben links sehen Sie ihren Namen. Von hier aus verwalten Sie Anleitungen, Design, Team und Ihre öffentliche Hilfe-Seite." },
       { shot: "branding", target: null,
+        highlight: { x: 0.251, y: 0.211, w: 0.049, h: 0.036 }, // Hand (Welle 35): „Branding“-Reiter in den Einstellungen
         title: "Branding öffnen",
         body: "Unter „Einstellungen“ → „Branding“ legen Sie Name, Adresse (Slug), Logo und Farben Ihrer Hilfe-Seite fest. Eine Live-Vorschau zeigt jede Änderung sofort." },
       { shot: "branding", target: "website",
@@ -98,6 +106,7 @@ export const TUTORIALS = [
         title: "Design-Quelle wählen",
         body: "Sie entscheiden, welches Design live ist: Ihr manuelles Design, das KI-Design oder ein komplett generiertes Extrem-Design. Über die Vorschau prüfen Sie jede Variante, bevor Sie sie aktivieren." },
       { shot: "hub", target: null,
+        highlight: { x: 0.021, y: 0.009, w: 0.313, h: 0.058 }, // Hand (Welle 35): Marken-Kopf (Logo + Name) der Hilfe-Seite
         title: "Ihre Hilfe-Seite ansehen",
         body: "Ihre öffentliche Hilfe-Seite liegt unter Ihrer eigenen Adresse (steply.dev/h/…) im Look Ihrer Organisation. Über das „?“ in der App-Leiste erreichen Sie sie jederzeit." },
       { shot: "dashboard", target: "ausvideo",
@@ -112,18 +121,22 @@ export const TUTORIALS = [
     desc: "Der schnellste Weg – und unser Standard: einfach klicken, fertige Anleitung.",
     steps: [
       { shot: "dashboard", target: null,
+        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt (Standard-Empfehlung)
         title: "Der schnellste Weg – und unser Standard",
         body: "Die Sofort-Anleitung ist der empfohlene Standard-Weg: Die Steply-Erweiterung nimmt bei jedem Klick automatisch einen Screenshot auf und markiert das geklickte Element punktgenau. In Sekunden entsteht ein fertiger Entwurf – ohne Video, ohne Kommandos." },
       { shot: "einbetten", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Ziel (Browser-Store/Recorder-Bereich) nicht im Screenshot
         title: "Erweiterung installieren",
         body: "Installieren Sie die Steply-Recorder-Erweiterung einmalig für Chrome oder Edge. Danach erscheint sie als Seitenleiste in Ihrem Browser." },
       { shot: "einbetten", target: "token",
         title: "Mit Ihrem Konto verbinden",
         body: "Unter „Einstellungen“ → „Einbetten“ finden Sie den Bereich „Steply Recorder verbinden“ mit Ihrem persönlichen Verbindungs-Token. Ein Klick auf „Extension verbinden“ koppelt die Erweiterung mit Ihrem Konto." },
       { shot: "einbetten", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Ziel (Extension-Seitenleiste) nicht im Screenshot
         title: "Aufnahme mit Titel und Kategorie starten",
         body: "In der Seitenleiste geben Sie Titel und Kategorie an und starten die Aufnahme. Führen Sie die Aufgabe dann einfach normal durch – jeder Klick wird zu einem Schritt." },
       { shot: "builder", target: null,
+        highlight: { x: 0.592, y: 0.533, w: 0.023, h: 0.033 }, // Hand (Welle 35): „Blur“-Werkzeug in der Editor-Leiste
         title: "Automatische Schwärzung prüfen",
         body: "Steply erkennt sensible Felder (z. B. Namen oder Beträge) und schlägt vor, sie zu schwärzen. Prüfen Sie die Vorschläge vor dem Hochladen – beim Veröffentlichen wird die Schwärzung unwiderruflich ins Bild gebrannt." },
       { shot: "dashboard-job", target: "karte",
@@ -150,6 +163,7 @@ export const TUTORIALS = [
         title: "Live zusehen, wie es entsteht",
         body: "Nach dem Hochladen wächst der Entwurf live mit („Schritt 3 von 6 …“). Sie können das Fenster schließen – die fertige Anleitung erscheint auf dem Dashboard." },
       { shot: "builder", target: "video",
+        highlight: null, // bewusst ohne (Welle 35): „Bild aus Video wählen“ fehlt (kein Quellvideo im Demo-Builder)
         title: "Frame nachjustieren",
         body: "Hat die KI den falschen Moment erwischt? „Bild aus Video wählen“ öffnet in jedem Schritt eine Zeitleiste, auf der Sie zum richtigen Frame ziehen." },
       { shot: "video-dialog", target: "url",
@@ -170,6 +184,7 @@ export const TUTORIALS = [
         title: "Schritt beschreiben",
         body: "Jeder Schritt hat einen kurzen Titel im Imperativ (z. B. „App öffnen“) und einen Erklärtext. Fett, Listen und Links sind im Text möglich." },
       { shot: "builder", target: null,
+        highlight: { x: 0.49, y: 0.57, w: 0.338, h: 0.356 }, // Hand (Welle 35): Screenshot-Bereich des Schritt-Editors
         title: "Screenshot hinzufügen",
         body: "Fügen Sie pro Schritt ein Bild hinzu: anklicken, per Drag & Drop ablegen oder mit Strg+V einfügen. Der Zuschnitt-Dialog hilft beim passenden Rahmen." },
       { shot: "builder", target: "rechteck",
@@ -191,18 +206,22 @@ export const TUTORIALS = [
     desc: "Nutzer direkt auf der echten Seite Schritt für Schritt führen.",
     steps: [
       { shot: "dashboard", target: null,
+        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt
         title: "Was „Live führen“ bedeutet",
         body: "Statt nur zu lesen, führt Steply Ihre Nutzer direkt auf der echten Website: Ein Overlay zeigt Schritt für Schritt, wohin sie klicken müssen. So finden auch ungeübte Nutzer sicher ans Ziel." },
       { shot: "einbetten", target: "token",
         title: "Voraussetzung: Erweiterung verbinden",
         body: "Die Live-Führung läuft über die Steply-Erweiterung. Verbinden Sie sie einmalig mit Ihrem Konto (siehe „Sofort-Anleitung“) – der Verbindungs-Token steht unter „Einstellungen“ → „Einbetten“." },
       { shot: "dashboard", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Ziel (Extension-Seitenleiste) nicht im Screenshot
         title: "„Für diese Seite“ öffnen",
         body: "Öffnen Sie die Seitenleiste der Erweiterung. Unter „Für diese Seite“ listet Steply automatisch die Anleitungen, deren Website zur gerade geöffneten Seite passt." },
       { shot: "wizard-public", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Ziel (Seitenleisten-Knopf) nicht im Screenshot
         title: "Führung starten",
         body: "Ein Klick auf „Anleitung führen“ startet das Overlay. Passt der aktuelle Tab nicht zur Anleitung, öffnet Steply automatisch die richtige Startseite." },
       { shot: "wizard-public", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Ziel (Live-Overlay auf der echten Seite) nicht im Screenshot
         title: "Schritt für Schritt auf der echten Seite",
         body: "Das Overlay markiert das Ziel-Element live auf der Seite und begleitet jeden Schritt. Reine Hinweis-Schritte ohne Klick-Ziel zeigen ehrlich den hinterlegten Screenshot." },
     ],
@@ -243,15 +262,19 @@ export const TUTORIALS = [
         title: "Sprachen aktivieren (Business)",
         body: "Unter „Einstellungen“ → „Branding“ aktivieren Sie im Abschnitt „Sprachen“ zusätzliche Sprachen (Englisch, Polnisch, Türkisch). Deutsch ist immer an." },
       { shot: "branding", target: null,
+        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt (kein Bedien-Ziel im Branding-Shot)
         title: "Automatische Übersetzung",
         body: "Beim Veröffentlichen wird eine Anleitung vollständig übersetzt; spätere Änderungen nur als Delta – jeweils automatisch im Hintergrund. Sie pflegen also nur die deutsche Fassung." },
       { shot: "hub", target: null,
+        highlight: { x: 0.934, y: 0.036, w: 0.044, h: 0.024 }, // Hand (Welle 35): DE·EN-Sprachumschalter oben rechts
         title: "Sprachumschalter auf der Hilfe-Seite",
         body: "Besucher wählen ihre Sprache oben auf der Hilfe-Seite; die gewählte Sprache steckt in der Adresse und bleibt erhalten. Suchmaschinen erhalten passende hreflang-Angaben." },
       { shot: "wizard-public", target: "vorlesen",
+        highlight: null, // bewusst ohne (Welle 35): ▶-Symbol im Wizard-Shot nicht vorhanden (kein Audio im Demo)
         title: "Vorlesen (Business)",
         body: "Jeder Schritt lässt sich vorlesen: Über das ▶-Symbol im Wizard hören Nutzer den Erklärtext. Steply erzeugt die Audios automatisch beim Veröffentlichen." },
       { shot: "wizard-public", target: null,
+        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt
         title: "Immer aktuell – ohne Doppelkosten",
         body: "Ändert sich ein Text, frischt Steply Übersetzung und Audio automatisch nach. Ein Hash-Cache sorgt dafür, dass unveränderte Schritte nichts kosten." },
     ],
@@ -273,9 +296,11 @@ export const TUTORIALS = [
         title: "Wissen importieren",
         body: "Statt alles zu tippen, importieren Sie „Von Ihrer Website“ oder aus einem Dokument (PDF/Word). Steply erzeugt daraus Entwürfe – nichts wird automatisch veröffentlicht." },
       { shot: "eskalation", target: null,
+        highlight: { x: 0.172, y: 0.878, w: 0.115, h: 0.042 }, // Hand (Welle 35): „Person hinzufügen“ (Ansprechpartner & Schwerpunkte)
         title: "Ansprechpartner hinterlegen",
         body: "Unter „Assistent“ → „Kontakt & Eskalation“ legen Sie fest, an wen der Chat verweist, wenn er nicht weiterweiß – mit Terminbuchung, E-Mail und Telefon je Fachgebiet." },
       { shot: "fragen", target: null,
+        highlight: null, // bewusst ohne (Welle 35): „Entwurf erstellen“ fehlt (leerer Zustand ohne offene Fragen)
         title: "Offene Fragen zu Entwürfen machen",
         body: "Fragen, die der Chat nicht beantworten konnte, sammelt Steply unter „Assistent“ → „Offene Fragen“. Neben jeder Frage baut „Entwurf erstellen“ ein Anleitungs-Gerüst, das Sie nur noch ergänzen." },
       { shot: "dashboard", target: "insights",
@@ -294,15 +319,18 @@ export const TUTORIALS = [
         title: "Team einladen",
         body: "Unter „Einstellungen“ → „Team“ laden Sie Kolleginnen und Kollegen per E-Mail ein – als Inhaber (verwaltet alles) oder als Bearbeiter (pflegt Inhalte)." },
       { shot: "team", target: null,
+        highlight: null, // bewusst ohne (Welle 35): Annahme-Flow (Einladungs-Link der eingeladenen Person) nicht im Team-Screenshot
         title: "Einladung annehmen",
         body: "Die eingeladene Person klickt den Link, legt ein Passwort fest (oder meldet sich an) und landet direkt in Ihrer Organisation." },
       { shot: "dashboard", target: "switcher",
         title: "Mehrere Organisationen",
         body: "Wer zu mehreren Organisationen gehört, wechselt oben links im Kopfbereich. Jede Organisation hat ihre eigene Hilfe-Seite, ihr eigenes Design und ihr eigenes Team." },
       { shot: "builder", target: null,
+        highlight: { x: 0.404, y: 0.203, w: 0.204, h: 0.032 }, // Hand (Welle 35): „Im Lern-Bereich (Team, mit Nachweis)“-Schalter
         title: "Interne Anleitungen",
         body: "Anleitungen können „Intern“ statt „Öffentlich“ sein: Sie erscheinen nie auf der Hilfe-Seite und nie im Chatbot, sondern nur für Ihr Team." },
       { shot: "lernen", target: null,
+        highlight: { x: 0.158, y: 0.189, w: 0.682, h: 0.087 }, // Hand (Welle 35): Schulungskarte mit „0 von 2 im Team“-Nachweis
         title: "Lernen & Schulungsnachweis",
         body: "Unter „Lernen“ arbeitet das Team interne Anleitungen durch und markiert sie als absolviert. Inhaber sehen im Schulungsnachweis, wer was erledigt hat." },
     ],

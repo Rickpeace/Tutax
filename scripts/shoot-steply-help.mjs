@@ -335,10 +335,13 @@ for (const t of TUTORIALS) {
       if (error) { console.error("Upload", bucket, error.message); process.exit(1); }
     }
 
-    const box = st.target ? shot.boxes[st.target] : null;
-    const highlights = box
-      ? [{ id: uuid(), type: "rect", x: box.x, y: box.y, w: box.w, h: box.h, color: HIGHLIGHT_COLOR, rounded: true }]
-      : [];
+    const autoBox = st.target ? shot.boxes[st.target] : null;
+    const rect = (b) => [{ id: uuid(), type: "rect", x: b.x, y: b.y, w: b.w, h: b.h, color: HIGHLIGHT_COLOR, rounded: true }];
+    // Welle 35: Eine EXPLIZITE highlight-Entscheidung im Content-Modul hat Vorrang vor der Auto-
+    // Box (Playwright erreicht manche Ziele nicht). { x,y,w,h } = Hand-Markierung, null = bewusst
+    // ohne. So ueberlebt die Entscheidung auch einen kompletten Re-Shoot. Fehlt highlight: Auto-Box.
+    const highlights =
+      st.highlight !== undefined ? (st.highlight ? rect(st.highlight) : []) : autoBox ? rect(autoBox) : [];
     const selector = st.target ? shot.selectors[st.target] ?? null : null;
 
     await admin.from("steps").update({
@@ -347,7 +350,8 @@ for (const t of TUTORIALS) {
 
     written++;
     if (selector) withSel++;
-    console.log(`✓ ${t.title} · Schritt ${i + 1} ← ${st.shot}${box ? " +Markierung" : ""}${selector ? " +Selektor(" + st.target + ")" : ""}`);
+    const hlHint = highlights.length ? (st.highlight !== undefined ? " +Hand-Markierung" : " +Markierung") : "";
+    console.log(`✓ ${t.title} · Schritt ${i + 1} ← ${st.shot}${hlHint}${selector ? " +Selektor(" + st.target + ")" : ""}`);
   }
 }
 console.log(`\n✓ v3 fertig: ${written} Schritte bebildert, ${withSel} mit Selektor${missShot ? `, ${missShot} ohne Shot` : ""}.`);
