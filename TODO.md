@@ -4,8 +4,11 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
-- [ ] **Automationen testen (Extension → v2.9.0; Migration 0030 + Push sind DURCH,
-  Live-Test grün):** echten Ablauf
+- [ ] **Automationen testen (Extension → v2.9.2; Wellen 36+37 live):** Kern-Check
+  nach Welle 37: Login-Automation nochmal end-to-end (requestSubmit-Fix — landet
+  jetzt auf /app?) · Start von fremder Seite → bringt automatisch hin · Maus
+  ruhiger · Referenzbilder MIT Markierungen (Bestands-Automation dafür einmal neu
+  „Als Automation nutzen"). Ursprünglicher Ablauf: echten Ablauf
   („Login + Belege herunterladen") per Sofort-Anleitung aufnehmen → Bibliothek
   → ⋮ „Als Automation nutzen" → /app/automationen → in der Extension Karte
   „⚙️ Automationen" → Parameter füllen (Passwort nur lokal merken!) →

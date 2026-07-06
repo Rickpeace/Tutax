@@ -295,6 +295,22 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 37 + Fable (06.07., v2.9.2):** 🔧 **Automations-Feedback-Fixes** nach
+Richards erstem echten Lauf („Steply anmelden" — funktioniert!): (1) Submit-Buttons
+in Formularen werden per `form.requestSubmit(button)` ausgelöst statt roher
+Klick-Sequenz — schließt den Voll-Reload-Pfad aus, der den Login-Hänger erklärt
+(Playwright-Repro `scripts/repro-login-exec.mjs`: Fehlerklasse belegt, Fix → /app,
+Gegenprobe Nicht-Submit ok; exakter Live-Auslöser lokal nicht reproduzierbar,
+Härtung greift kategorisch). (2) Start-Navigation vergleicht Host+PFAD
+(needsNavigation auf Schritt 1): gleicher Host → tabs.update im gebundenen Tab,
+fremd → neuer Tab. (3) Maus ruhiger: EXEC_CURSOR_TRAVEL_MS 750 + DWELL 250.
+(4) Referenzbilder MIT Markierungen: Migration 0031 (automation_steps.highlights,
+von Richard angewandt), Snapshot kopiert 1:1, API liefert, App-Detail +
+Extension-Miss-Ansicht rendern Overlay pixelgenau (shrink-wrap statt
+object-contain; App-Overlay per Wegwerf-Playwright-E2E bestätigt). Bestands-
+Automationen: highlights=null → kein Overlay; einmal neu konvertieren. Tests grün:
+repro-login-exec, test-automations-live (erweitert, gegen Live-DB), exec-plan +
+guide-resolve-Regression, Build/Lint.
 **Opus Wellen 36a+36b + Fable (06.07., v2.9.0):** ⚙️ **AUTOMATIONEN (Stufe 1)** —
 dritte Produkt-Ebene (Helpdesk · internes Wissen · Automationen): aufgezeichnete
 Abläufe, die die Extension AUSFÜHRT. Migration 0030 (automations/steps/runs + RLS;
