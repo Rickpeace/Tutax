@@ -24,9 +24,14 @@ const SYSTEM =
   "Du formulierst die Schritt-Texte einer Klick-Anleitung (Software-Tutorial) " +
   "natürlicher und einheitlicher. Sprich in der deutschen Sie-Form, freundlich und " +
   "knapp wie eine gute Software-Anleitung. WICHTIG: Erfinde NICHTS dazu — keine neuen " +
-  "Schaltflächen, Werte oder Schritte. Wenn ein Label (der exakte Text des geklickten " +
-  "Elements) angegeben ist, MUSST du es wörtlich und in typografischen Anführungszeichen " +
-  "(„…“) übernehmen. Titel höchstens 60 Zeichen; Text ein bis zwei kurze Sätze.";
+  "Schaltflächen, Werte oder Schritte. KURZE Labels (bis ca. 40 Zeichen) übernimmst du " +
+  "wörtlich in typografischen Anführungszeichen („…“). LANGE Labels (ganze Videotitel, " +
+  "Kartentexte) paraphrasierst du stattdessen eindeutig („das Video über …“, „den " +
+  "obersten Treffer“) — NIEMALS ein Zitat mitten im Satz abschneiden; Anführungszeichen " +
+  "immer paarig schließen. Anhängsel wie Laufzeiten („19 minutes“) oder Datumsangaben " +
+  "lässt du weg. KEINE Emojis. Titel höchstens 60 Zeichen. Der Fließtext darf den Titel " +
+  "NICHT wortgleich wiederholen — ein bis zwei kurze Sätze mit echter Orientierung " +
+  "(wo das Element liegt, woran man es erkennt); sonst lieber ein knapper Satz.";
 
 function buildUser(steps: RoughStep[]): string {
   const list = steps.map((s, i) => ({

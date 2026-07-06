@@ -462,15 +462,44 @@
     return "";
   }
 
+  // Grosse Link-Kacheln (YouTube & Co.): aria-label/sichtbarer Text der GANZEN Kachel
+  // enthaelt oft Titel + Metadaten ("... 19 minutes"). Steckt im Element eine echte
+  // Ueberschrift, ist DEREN Text das sauberere Label.
+  function headingText(el) {
+    try {
+      const h =
+        el.querySelector &&
+        el.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"]');
+      if (!h) return "";
+      const t = visibleText(h);
+      return t && t.length <= 80 ? t : "";
+    } catch (err) {
+      return "";
+    }
+  }
+
   // Label fuer ein nicht editierbares Klick-Ziel. Kette: aria > sichtbarer Text >
   // zugehoeriges <label> (Checkbox/Radio/Slider haben selbst keinen Text!) > alt/title >
   // Feldueberschrift daneben > (nur Button-artige input) value > Tag.
-  // KEIN value fuer Textfelder (Datenschutz).
+  // KEIN value fuer Textfelder (Datenschutz). Ist der Normalweg LANG (>60, Kachel mit
+  // Metadaten), gewinnt eine enthaltene Ueberschrift.
   function clickLabel(el) {
     const aria = ariaLabelText(el);
-    if (aria && !looksLikeCode(aria)) return clampLabel(aria, 60);
+    if (aria && !looksLikeCode(aria)) {
+      if (aria.trim().length > 60) {
+        const h = headingText(el);
+        if (h && !looksLikeCode(h)) return clampLabel(h, 60);
+      }
+      return clampLabel(aria, 60);
+    }
     const text = visibleText(el);
-    if (text) return clampLabel(text, 60);
+    if (text) {
+      if (text.length > 60) {
+        const h = headingText(el);
+        if (h && !looksLikeCode(h)) return clampLabel(h, 60);
+      }
+      return clampLabel(text, 60);
+    }
     const assoc = associatedLabelText(el);
     if (assoc && !looksLikeCode(assoc)) return clampLabel(assoc, 60);
     const alt = el.getAttribute && (el.getAttribute("alt") || el.getAttribute("title"));

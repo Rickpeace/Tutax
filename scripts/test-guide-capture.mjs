@@ -116,6 +116,11 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
     <div>Lautstaerke</div>
     <input id="vol" type="range" min="0" max="10" value="3">
   </div>
+
+  <a id="ytcard" href="#" aria-label="I Tested the Cheapest Path to 96GB of VRAM for local AI by TechGuy 19 minutes 314,159 views" style="display:block;border:1px solid #ccc;padding:10px;text-decoration:none;color:inherit">
+    <h3 style="margin:0">I Tested the Cheapest Path to 96GB of VRAM</h3>
+    <span>TechGuy · 19 minutes · 314,159 views</span>
+  </a>
 </body></html>`;
 
 let browser;
@@ -286,6 +291,17 @@ try {
       document.documentElement.getAttribute("data-steply-recorder")
     );
     ok(marker === "2.2.0", `data-steply-recorder = „2.2.0" (aus getManifest) (war „${marker}")`);
+  }
+
+  // ---------- 15b) Grosse Link-Kachel: Ueberschrift schlaegt Metadaten-Label ----------
+  await reset();
+  await page.click("#ytcard");
+  {
+    const s = await sent();
+    ok(s.length === 1 && s[0].action === "click", `Video-Kachel: 1 Klick-Schritt (${s.length})`);
+    const lbl = s[0]?.label || "";
+    ok(lbl === "I Tested the Cheapest Path to 96GB of VRAM", `Kachel-Label = Ueberschrift ohne Metadaten (war „${lbl}")`);
+    ok(!/minutes|views/.test(lbl), "Laufzeit/Views NICHT im Label");
   }
 
   // ---------- 16) Pairing-Filter (Welle 25) ----------

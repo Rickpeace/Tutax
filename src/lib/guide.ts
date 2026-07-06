@@ -169,11 +169,20 @@ export function highlightFromRect(rect: GuideStepInput["rect"]): Highlight {
 export function templateTitle(step: GuideStepInput, index: number): string {
   const n = index + 1;
   if (!step.label) return `Schritt ${n}`;
-  const title =
-    step.action === "type"
-      ? `Tragen Sie „${step.label}“ ein`
-      : `Klicken Sie auf „${step.label}“`;
-  return title.slice(0, TITLE_MAX);
+  const wrap = (l: string) =>
+    step.action === "type" ? `Tragen Sie „${l}“ ein` : `Klicken Sie auf „${l}“`;
+  // ZITAT-SICHER kürzen (Richards YouTube-Fund): Der alte Hard-Cut nach dem Einsetzen
+  // schnitt das schließende „“" weg („…96GB of VRAM). Stattdessen das Zitat-INNERE an
+  // einer Wortgrenze kürzen — die Anführungszeichen bleiben immer paarig.
+  const room = TITLE_MAX - wrap("").length;
+  let label = step.label;
+  if (label.length > room) {
+    let cut = label.slice(0, Math.max(1, room - 1));
+    const sp = cut.lastIndexOf(" ");
+    if (sp >= Math.floor(room * 0.5)) cut = cut.slice(0, sp);
+    label = cut.replace(/[\s.,;:]+$/, "") + "…";
+  }
+  return wrap(label);
 }
 
 /**
