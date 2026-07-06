@@ -611,3 +611,201 @@ body {
 .target-clear:hover {
   text-decoration: underline;
 }
+
+/* ===== Live-Führung (Welle 31): Führen-Liste ===== */
+.fuehren-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 68vh;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+
+.fuehren-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.fuehren-item:hover {
+  border-color: var(--brand);
+  background: #fdf3ec;
+}
+
+.fuehren-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fuehren-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fuehren-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.fuehren-live {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--ok);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* ===== Live-Führung: Führungs-Ansicht ===== */
+.run-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.run-progress {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.run-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 6px 0 12px;
+}
+
+.run-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--brand);
+  transition: width 250ms ease-out;
+}
+
+.run-image-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--cream);
+  margin-bottom: 10px;
+}
+
+.run-image {
+  display: block;
+  width: 100%;
+  max-height: 190px;
+  object-fit: contain;
+}
+
+/* Fallback: Screenshot groß, damit man sich ohne Overlay orientieren kann. */
+.run-image-wrap.run-image-large .run-image {
+  max-height: 46vh;
+}
+
+/* Highlight-Rechtecke über dem Screenshot (normalisiert 0..1). */
+.run-hl {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--brand);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(239, 106, 78, 0.2);
+  pointer-events: none;
+}
+
+.run-fallback-hint {
+  font-size: 12px;
+  color: #c07d16;
+  background: #fdf6e8;
+  border: 1px solid #f0e2c4;
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin: 0 0 10px;
+}
+
+.run-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 2px 0 6px;
+  color: var(--ink);
+}
+
+.run-body {
+  font-size: 13.5px;
+  color: var(--ink);
+  margin-bottom: 14px;
+}
+
+.run-body p {
+  margin: 0 0 8px;
+}
+
+.run-body ul,
+.run-body ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.run-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-answer {
+  text-align: center;
+}
+
+.run-back-inline {
+  margin-top: 2px;
+}
+
+.run-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.run-nav .btn {
+  flex: 1 1 0;
+}
+
+.run-done {
+  text-align: center;
+  padding-top: 8px;
+}
+
+.run-done h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.run-done .btn {
+  margin-top: 12px;
+}
