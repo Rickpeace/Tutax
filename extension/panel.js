@@ -89,6 +89,27 @@ const els = {
   guideUploadDone: document.getElementById("guideUploadDone"),
   guideOpenApp: document.getElementById("guideOpenApp"),
   guideAgain: document.getElementById("guideAgain"),
+  // Live-Führung (Welle 31): Einstieg + Führen-Liste + Führungs-Ansicht.
+  cardGuideRun: document.getElementById("cardGuideRun"),
+  fuehren: document.getElementById("fuehren"),
+  fuehrenBack: document.getElementById("fuehrenBack"),
+  fuehrenHint: document.getElementById("fuehrenHint"),
+  fuehrenList: document.getElementById("fuehrenList"),
+  guideRun: document.getElementById("guideRun"),
+  runExit: document.getElementById("runExit"),
+  runProgress: document.getElementById("runProgress"),
+  runBar: document.getElementById("runBar"),
+  runImageWrap: document.getElementById("runImageWrap"),
+  runImage: document.getElementById("runImage"),
+  runFallbackHint: document.getElementById("runFallbackHint"),
+  runTitle: document.getElementById("runTitle"),
+  runBody: document.getElementById("runBody"),
+  runDecision: document.getElementById("runDecision"),
+  runNav: document.getElementById("runNav"),
+  runBack: document.getElementById("runBack"),
+  runNext: document.getElementById("runNext"),
+  runDone: document.getElementById("runDone"),
+  runDoneList: document.getElementById("runDoneList"),
 };
 
 // ---- Zustand ----
@@ -350,6 +371,9 @@ function show(section) {
   els.videoDone.hidden = section !== "videoDone";
   els.guideLive.hidden = section !== "guideLive";
   els.guideDone.hidden = section !== "guideDone";
+  // Live-Führung (Welle 31): eigene Bereiche.
+  els.fuehren.hidden = section !== "fuehren";
+  els.guideRun.hidden = section !== "guideRun";
 }
 
 function fmtTime(totalSeconds) {
@@ -422,6 +446,9 @@ function showStart() {
   els.cardGuide.title = hasToken
     ? ""
     : "Zuerst mit Steply verbinden (Direkt-Upload noetig).";
+  // Live-Führung (Welle 31): braucht ebenfalls eine Verbindung (Tutorial-Liste laden).
+  els.cardGuideRun.disabled = !hasToken;
+  els.cardGuideRun.title = hasToken ? "" : "Zuerst mit Steply verbinden.";
   updateConnInfo();
   setStatus("");
   show("start");
@@ -1366,6 +1393,523 @@ function newRecording() {
 }
 
 // ============================================================================
+// LIVE-FÜHRUNG (Welle 31): Tutorials aus der Seitenleiste auf der ECHTEN Website führen
+// (Tango/WalkMe). KLAR ABGEGRENZTER BLOCK (Welle 31c ergänzt PARALLEL andere Panel-Bereiche
+// und ruft window.SteplyGuide.start(id) aus ihrer Sektion „Für diese Seite" auf).
+//
+// Ablauf: „Führen"-Liste (GET /api/recorder/tutorials) -> Tutorial wählen -> Detail laden
+// (GET /api/recorder/tutorials/[id]) -> Schritt für Schritt. Pro NICHT-Entscheidungsschritt
+// MIT Selektor: „steply-guide-show" an den gebundenen Tab (Overlay auf der Seite). Ohne
+// Selektor / bei found:false: Fallback (Screenshot groß + Hinweis). Entscheidungen: Frage +
+// Antwort-Buttons aus den Branch-Labels (KEIN Overlay). Zustand in chrome.storage.session ->
+// Panel-Schließen/Öffnen überlebt die Führung. Führung ist an EINEN Tab gebunden.
+// ============================================================================
+
+const guide = {
+  tutorial: null, // { id, title, slug, status, visibility, root_step_id }
+  steps: [], // [{ id, title, body(HTML), imageUrl, imageWidth, imageHeight, highlights, selector, page_url, is_decision, question }]
+  branches: [], // [{ id, step_id, label, target_step_id, position }]
+  stepById: new Map(),
+  branchesByStep: new Map(),
+  curId: null,
+  history: [], // Pfad-History (Schritt-IDs)
+  tabId: null, // gebundener Tab
+};
+
+const clamp01 = (n) => (typeof n === "number" && isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+
+// Rich-Text-HTML sicher rendern: NUR einfache Tags (p/br/b/i/u/ul/ol/li), Rest wird zu
+// reinem Text (escaped). DOMParser("text/html") führt keine Skripte aus; wir bauen den Baum
+// aus FRISCHEN Elementen ohne Attribute neu -> keine Handler, keine href/style/on*.
+function renderSafeHtml(container, html) {
+  container.textContent = "";
+  const ALLOWED = { P: "p", BR: "br", B: "b", STRONG: "b", I: "i", EM: "i", U: "u", UL: "ul", OL: "ol", LI: "li" };
+  let parsed;
+  try {
+    parsed = new DOMParser().parseFromString(String(html || ""), "text/html");
+  } catch (err) {
+    container.textContent = String(html || "");
+    return;
+  }
+  const walk = (src, dst) => {
+    src.childNodes.forEach((node) => {
+      if (node.nodeType === 3) {
+        dst.appendChild(document.createTextNode(node.nodeValue));
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      const tag = ALLOWED[node.tagName];
+      if (tag) {
+        const el = document.createElement(tag);
+        walk(node, el);
+        dst.appendChild(el);
+      } else {
+        // Unbekannter Tag: nur seinen Inhalt übernehmen (der Tag selbst verschwindet).
+        walk(node, dst);
+      }
+    });
+  };
+  walk(parsed.body, container);
+}
+
+// Aktiver Tab des Panel-Fensters (die Führung bindet sich an diesen einen Tab).
+async function guideActiveTabId() {
+  try {
+    const q = panelWindowId == null ? { active: true, currentWindow: true } : { active: true, windowId: panelWindowId };
+    const tabs = await chrome.tabs.query(q);
+    return tabs && tabs[0] && tabs[0].id != null ? tabs[0].id : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function sendGuideToTab(msg) {
+  if (guide.tabId == null) return;
+  try {
+    const p = chrome.tabs.sendMessage(guide.tabId, msg);
+    if (p && p.catch) p.catch(() => {});
+  } catch (err) {
+    /* Tab evtl. ohne Content-Script - egal */
+  }
+}
+
+// Telemetrie (fire-and-forget, fail-silent): started | completed | selector_miss.
+function sendGuideEvent(kind, stepTitle) {
+  try {
+    const base = appBase();
+    const body = { token: cfg.token, kind: kind };
+    if (guide.tutorial && guide.tutorial.slug) body.tutorialSlug = guide.tutorial.slug;
+    if (stepTitle) body.stepTitle = stepTitle;
+    fetch(base + "/api/recorder/guide-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  } catch (err) {
+    /* Telemetrie darf die Führung nie stören */
+  }
+}
+
+async function guideSaveSession() {
+  try {
+    await chrome.storage.session.set({
+      guideState: {
+        tutorialId: guide.tutorial ? guide.tutorial.id : null,
+        curId: guide.curId,
+        history: guide.history.slice(),
+        tabId: guide.tabId,
+      },
+    });
+  } catch (err) {
+    /* Session-Storage optional - Führung läuft auch ohne */
+  }
+}
+
+async function guideClearSession() {
+  try {
+    await chrome.storage.session.remove("guideState");
+  } catch (err) {
+    /* egal */
+  }
+}
+
+// Detail eines Tutorials laden und die Graph-Strukturen aufbauen. true bei Erfolg.
+async function guideLoad(tutorialId) {
+  const base = appBase();
+  let det;
+  try {
+    const res = await fetch(base + "/api/recorder/tutorials/" + encodeURIComponent(tutorialId), {
+      headers: { Authorization: "Bearer " + cfg.token },
+    });
+    if (!res.ok) return false;
+    det = await res.json().catch(() => null);
+  } catch (err) {
+    return false;
+  }
+  if (!det || !det.tutorial || !Array.isArray(det.steps)) return false;
+  guide.tutorial = det.tutorial;
+  guide.steps = det.steps;
+  guide.branches = Array.isArray(det.branches) ? det.branches : [];
+  guide.stepById = new Map(guide.steps.map((s) => [s.id, s]));
+  guide.branchesByStep = new Map();
+  for (const b of guide.branches) {
+    const list = guide.branchesByStep.get(b.step_id) || [];
+    list.push(b);
+    guide.branchesByStep.set(b.step_id, list);
+  }
+  for (const list of guide.branchesByStep.values()) {
+    list.sort((a, b) => (a.position || 0) - (b.position || 0));
+  }
+  return true;
+}
+
+// Gesamtschrittzahl für den Fortschritt: nur bei LINEAREN Tutorials ehrlich (kein
+// Entscheidungsschritt, jeder Schritt max. EIN Ausgang) - dann Pfadlänge ab root; sonst
+// die reine Schrittzahl als grobe Orientierung. Spiegelt wizard.tsx.
+function guideTotal() {
+  const linear =
+    !guide.steps.some((s) => s.is_decision) &&
+    [...guide.branchesByStep.values()].every((b) => b.length <= 1);
+  if (!linear) return guide.steps.length;
+  let count = 0;
+  let id = guide.tutorial ? guide.tutorial.root_step_id : null;
+  const seen = new Set();
+  while (id != null && guide.stepById.has(id) && !seen.has(id)) {
+    seen.add(id);
+    count++;
+    const first = (guide.branchesByStep.get(id) || [])[0];
+    id = first ? first.target_step_id : null;
+  }
+  return count > 0 ? count : guide.steps.length;
+}
+
+// Ziel des Standard-Ausgangs eines (linearen) Schritts (branches[0]); null = Ende.
+function guideLinearNext(step) {
+  const list = guide.branchesByStep.get(step.id) || [];
+  if (!list.length) return null;
+  return list[0].target_step_id || null;
+}
+
+// Screenshot + Highlight-Rechtecke (normalisiert 0..1) zeichnen. Blur-Highlights werden
+// beim Veröffentlichen in die Pixel gebrannt -> hier nicht nachgezeichnet.
+function guideRenderImage(step) {
+  els.runImageWrap.querySelectorAll(".run-hl").forEach((n) => n.remove());
+  if (!step.imageUrl) {
+    els.runImageWrap.hidden = true;
+    els.runImage.removeAttribute("src");
+    return;
+  }
+  els.runImageWrap.hidden = false;
+  els.runImage.src = step.imageUrl;
+  (Array.isArray(step.highlights) ? step.highlights : []).forEach((h) => {
+    if (!h || typeof h !== "object" || h.type === "blur") return;
+    const box = document.createElement("div");
+    box.className = "run-hl";
+    const s = box.style;
+    s.left = clamp01(h.x) * 100 + "%";
+    s.top = clamp01(h.y) * 100 + "%";
+    s.width = clamp01(h.w) * 100 + "%";
+    s.height = clamp01(h.h) * 100 + "%";
+    if (h.type === "ellipse") s.borderRadius = "50%";
+    if (h.color) s.borderColor = h.color;
+    els.runImageWrap.appendChild(box);
+  });
+}
+
+// Fallback-Darstellung ein/aus: Screenshot groß + Hinweis (kein Overlay möglich).
+function guideSetFallback(on, hintText) {
+  if (on) {
+    els.runImageWrap.classList.add("run-image-large");
+    els.runFallbackHint.textContent = hintText || "";
+    els.runFallbackHint.hidden = !hintText;
+  } else {
+    els.runImageWrap.classList.remove("run-image-large");
+    els.runFallbackHint.hidden = true;
+    els.runFallbackHint.textContent = "";
+  }
+}
+
+function guideRenderDecision(step) {
+  els.runNav.hidden = true; // Entscheidungen gehen über die Antwort-Buttons weiter
+  els.runDecision.hidden = false;
+  els.runDecision.textContent = "";
+  const list = guide.branchesByStep.get(step.id) || [];
+  list.forEach((b) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary run-answer";
+    btn.textContent = b.label || "Weiter";
+    btn.addEventListener("click", () => guideAnswer(b.target_step_id));
+    els.runDecision.appendChild(btn);
+  });
+  if (guide.history.length) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "btn run-back-inline";
+    back.textContent = "Zurück";
+    back.addEventListener("click", guideGoBack);
+    els.runDecision.appendChild(back);
+  }
+}
+
+function guideRenderStep() {
+  const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+  if (!step) {
+    guideRenderDone();
+    return;
+  }
+  els.runDone.hidden = true;
+  guideSetFallback(false, "");
+
+  const idx = guide.history.length + 1;
+  const total = guideTotal();
+  els.runProgress.textContent = "Schritt " + idx + (total ? " von " + total : "");
+  const pct = total ? Math.round((idx / total) * 100) : 0;
+  if (els.runBar.firstElementChild) els.runBar.firstElementChild.style.width = pct + "%";
+
+  els.runTitle.textContent = step.is_decision
+    ? step.question || step.title || "Bitte wählen"
+    : step.title || "";
+  renderSafeHtml(els.runBody, step.body);
+  guideRenderImage(step);
+
+  if (step.is_decision) {
+    // KEIN Overlay bei Entscheidungen (es gibt kein einzelnes Ziel).
+    sendGuideToTab({ type: "steply-guide-hide" });
+    guideRenderDecision(step);
+  } else {
+    els.runDecision.hidden = true;
+    els.runNav.hidden = false;
+    els.runBack.disabled = guide.history.length === 0;
+    els.runBack.style.visibility = guide.history.length === 0 ? "hidden" : "visible";
+    els.runNext.textContent = guideLinearNext(step) ? "Weiter" : "Fertig 🎉";
+    const sel = step.selector;
+    if (sel && typeof sel === "object" && (sel.css || sel.text || sel.role)) {
+      // Overlay auf der Seite anfordern; found:false -> Fallback (siehe Message-Listener).
+      sendGuideToTab({
+        type: "steply-guide-show",
+        step: { selector: sel, title: step.title, index: idx, total: total },
+      });
+    } else {
+      // Ohne Selektor gleich Fallback (großer Screenshot + Hinweis).
+      sendGuideToTab({ type: "steply-guide-hide" });
+      guideSetFallback(
+        true,
+        "Für diesen Schritt gibt es keine Bildschirm-Markierung - orientieren Sie sich am Screenshot.",
+      );
+    }
+  }
+  guideSaveSession();
+}
+
+function guideRenderDone() {
+  sendGuideToTab({ type: "steply-guide-hide" });
+  sendGuideEvent("completed", null);
+  guide.curId = null;
+  els.runDecision.hidden = true;
+  els.runNav.hidden = true;
+  els.runImageWrap.hidden = true;
+  els.runFallbackHint.hidden = true;
+  els.runTitle.textContent = "";
+  els.runBody.textContent = "";
+  els.runProgress.textContent = "";
+  if (els.runBar.firstElementChild) els.runBar.firstElementChild.style.width = "100%";
+  els.runDone.hidden = false;
+  guideSaveSession();
+}
+
+function guideGoNext() {
+  const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+  if (!step) {
+    guideRenderDone();
+    return;
+  }
+  if (step.is_decision) return; // Entscheidungen nur über Antwort-Buttons
+  const target = guideLinearNext(step);
+  guide.history.push(guide.curId);
+  guide.curId = target;
+  if (guide.curId == null) {
+    guideRenderDone();
+    return;
+  }
+  guideRenderStep();
+}
+
+function guideGoBack() {
+  if (!guide.history.length) return;
+  guide.curId = guide.history.pop();
+  els.runDone.hidden = true;
+  guideRenderStep();
+}
+
+function guideAnswer(targetId) {
+  guide.history.push(guide.curId);
+  guide.curId = targetId || null;
+  if (guide.curId == null) {
+    guideRenderDone();
+    return;
+  }
+  guideRenderStep();
+}
+
+async function guideExit() {
+  sendGuideToTab({ type: "steply-guide-hide" });
+  await guideClearSession();
+  guide.curId = null;
+  guide.tutorial = null;
+  showStart();
+}
+
+// EINSTIEG (auch window.SteplyGuide.start): Tutorial laden und Führung starten.
+async function guideStart(tutorialId) {
+  if (!hasToken || !tutorialId) return;
+  setStatus("");
+  // Content-Scripts (guide-resolve.js + content.js) sicher in alle offenen Tabs impfen -
+  // deckt altoffene Tabs ab, die vor dem Extension-Laden geöffnet wurden. Die Injektion
+  // läuft parallel zum Detail-Laden (Netz) -> beim ersten „steply-guide-show" sind sie da.
+  try {
+    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+  } catch (err) {
+    /* deklarative Injektion deckt frisch geladene Seiten ab */
+  }
+  guide.tabId = await guideActiveTabId();
+  const okLoad = await guideLoad(tutorialId);
+  if (!okLoad) {
+    setStatus("Die Anleitung konnte nicht geladen werden.", "error");
+    return;
+  }
+  guide.curId = (guide.tutorial && guide.tutorial.root_step_id) || (guide.steps[0] && guide.steps[0].id) || null;
+  guide.history = [];
+  if (!guide.curId) {
+    setStatus("Diese Anleitung hat noch keine Schritte.", "error");
+    return;
+  }
+  sendGuideEvent("started", null);
+  show("guideRun");
+  guideRenderStep();
+}
+
+// „Führen"-Liste zeigen + Tutorials laden.
+async function showFuehren() {
+  if (!hasToken) return;
+  show("fuehren");
+  setStatus("");
+  els.fuehrenHint.hidden = true;
+  els.fuehrenList.textContent = "";
+  const loading = document.createElement("p");
+  loading.className = "note";
+  loading.textContent = "Anleitungen werden geladen …";
+  els.fuehrenList.appendChild(loading);
+
+  const base = appBase();
+  let body;
+  try {
+    const res = await fetch(base + "/api/recorder/tutorials", {
+      headers: { Authorization: "Bearer " + cfg.token },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    body = await res.json().catch(() => null);
+  } catch (err) {
+    els.fuehrenList.textContent = "";
+    els.fuehrenHint.textContent = "Die Anleitungen konnten nicht geladen werden.";
+    els.fuehrenHint.hidden = false;
+    return;
+  }
+  renderFuehrenList(body && Array.isArray(body.tutorials) ? body.tutorials : []);
+}
+
+function renderFuehrenList(tutorials) {
+  els.fuehrenList.textContent = "";
+  if (!tutorials.length) {
+    els.fuehrenHint.textContent = "Noch keine Anleitungen vorhanden.";
+    els.fuehrenHint.hidden = false;
+    return;
+  }
+  els.fuehrenHint.hidden = true;
+  // Veröffentlichte zuerst, Entwürfe danach (Server sortiert innerhalb schon updated_at desc).
+  const sorted = tutorials.slice().sort((a, b) => (a.status === "draft" ? 1 : 0) - (b.status === "draft" ? 1 : 0));
+  sorted.forEach((t) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "fuehren-item";
+
+    const main = document.createElement("span");
+    main.className = "fuehren-main";
+    const title = document.createElement("strong");
+    title.className = "fuehren-title";
+    title.textContent = t.title || "Ohne Titel";
+    main.appendChild(title);
+
+    const meta = document.createElement("span");
+    meta.className = "fuehren-meta";
+    const steps = Number(t.stepCount) || 0;
+    const canLive = (Number(t.selectorCount) || 0) > 0;
+    let metaText = steps + (steps === 1 ? " Schritt" : " Schritte");
+    if (t.status === "draft") metaText += " · Entwurf";
+    if (!canLive) metaText += " · ohne Bildschirm-Markierung";
+    meta.textContent = metaText;
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    if (canLive) {
+      const badge = document.createElement("span");
+      badge.className = "fuehren-live";
+      badge.textContent = "Live";
+      row.appendChild(badge);
+    }
+    row.addEventListener("click", () => guideStart(t.id));
+    els.fuehrenList.appendChild(row);
+  });
+}
+
+// Eine laufende Führung nach Panel-Schließen/Öffnen fortsetzen (chrome.storage.session).
+async function guideMaybeResume() {
+  if (!hasToken) return false;
+  let st = null;
+  try {
+    const r = await chrome.storage.session.get("guideState");
+    st = r && r.guideState;
+  } catch (err) {
+    st = null;
+  }
+  if (!st || !st.tutorialId || !st.curId) return false;
+  const okLoad = await guideLoad(st.tutorialId);
+  if (!okLoad || !guide.stepById.has(st.curId)) {
+    await guideClearSession();
+    return false;
+  }
+  guide.curId = st.curId;
+  guide.history = Array.isArray(st.history) ? st.history.filter((h) => guide.stepById.has(h)) : [];
+  guide.tabId = typeof st.tabId === "number" ? st.tabId : null;
+  show("guideRun");
+  guideRenderStep();
+  return true;
+}
+
+// content.js -> Panel: „weiter" (pointerdown auf dem markierten Element).
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-guide-advance") return;
+  if (els.guideRun.hidden) return;
+  // Nur vom gebundenen Tab akzeptieren.
+  if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
+  guideGoNext();
+});
+
+// content.js -> Panel: Selektor-Status. found:false -> Fallback + Drift-Telemetrie.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== "steply-guide-status") return;
+  if (els.guideRun.hidden) return;
+  if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
+  if (msg.found === false) {
+    const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+    guideSetFallback(
+      true,
+      "Diese Stelle ist auf der Seite gerade nicht zu finden - orientieren Sie sich am Screenshot.",
+    );
+    sendGuideEvent("selector_miss", step ? step.title : null);
+  }
+});
+
+// Navigation überleben: lädt der gebundene Tab fertig neu, den aktuellen Schritt erneut senden.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (els.guideRun.hidden) return;
+  if (guide.tabId == null || tabId !== guide.tabId) return;
+  if (changeInfo.status !== "complete") return;
+  const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+  if (!step || step.is_decision) return;
+  const sel = step.selector;
+  if (sel && typeof sel === "object" && (sel.css || sel.text || sel.role)) {
+    sendGuideToTab({
+      type: "steply-guide-show",
+      step: { selector: sel, title: step.title, index: guide.history.length + 1, total: guideTotal() },
+    });
+  }
+});
+
+// Welle 31c ruft dies aus ihrer Sektion „Für diese Seite" auf.
+window.SteplyGuide = { start: guideStart };
+
+// ============================================================================
 // EVENTS
 // ============================================================================
 
@@ -1386,6 +1930,15 @@ els.guideStop.addEventListener("click", finishGuide);
 els.again.addEventListener("click", newRecording);
 els.guideAgain.addEventListener("click", newRecording);
 if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);
+// Live-Führung (Welle 31).
+els.cardGuideRun.addEventListener("click", () => {
+  if (hasToken) showFuehren();
+});
+els.fuehrenBack.addEventListener("click", () => showStart());
+els.runExit.addEventListener("click", guideExit);
+els.runBack.addEventListener("click", guideGoBack);
+els.runNext.addEventListener("click", guideGoNext);
+els.runDoneList.addEventListener("click", () => showFuehren());
 
 // Panel wird geschlossen (Seitenleiste zu / Fenster zu): laufende Streams sauber
 // stoppen (sonst bleibt der Mikro-/Freigabe-Indikator haengen) und Zustand raeumen,
@@ -1399,6 +1952,9 @@ window.addEventListener("pagehide", () => {
   } catch (err) {
     /* best effort - die Versoehnung beim naechsten Oeffnen faengt es sowieso ab */
   }
+  // Live-Führung (Welle 31): Overlay auf der Seite best-effort ausblenden (der Zustand
+  // bleibt in chrome.storage.session -> beim Wiederöffnen wird resümiert + neu markiert).
+  if (!els.guideRun.hidden) sendGuideToTab({ type: "steply-guide-hide" });
 });
 
 // ============================================================================
@@ -1417,10 +1973,14 @@ window.addEventListener("pagehide", () => {
   await loadConfig();
   // Aufnahme-Anker (Welle 27): Ziel laden (abgelaufene >30 min werden verworfen) + Banner.
   await loadPendingTarget();
-  if (hasToken) {
-    showStart();
-  } else {
-    showConnect();
+  // Live-Führung (Welle 31): eine laufende Führung nach Panel-Schließen fortsetzen.
+  const resumedGuide = await guideMaybeResume();
+  if (!resumedGuide) {
+    if (hasToken) {
+      showStart();
+    } else {
+      showConnect();
+    }
   }
   // Nebenlaeufig, nicht blockierend: Kontoname anzeigen + auf neue Version pruefen.
   fetchAccountName();

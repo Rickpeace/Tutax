@@ -75,6 +75,15 @@
         </span>
       </button>
 
+      <!-- Live-Führung (Welle 31): Einstieg in die Führen-Liste. -->
+      <button id="cardGuideRun" class="card-choice" type="button">
+        <span class="card-emoji" aria-hidden="true">&#129517;</span>
+        <span class="card-body">
+          <strong>Anleitung f&uuml;hren</strong>
+          <em>Schritt f&uuml;r Schritt auf der echten Website - mit Markierung.</em>
+        </span>
+      </button>
+
       <div id="connInfo" class="conn-info">
         <span id="connText"></span>
         <button id="connBtn" type="button"></button>
@@ -185,6 +194,44 @@
         </div>
       </div>
       <button id="guideAgain" class="btn" type="button">Neue Aufnahme</button>
+    </section>
+
+    <!-- ============ LIVE-FÜHRUNG (Welle 31): Führen-Liste ============ -->
+    <section id="fuehren" hidden>
+      <button id="fuehrenBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
+      <p class="lead">Anleitung live f&uuml;hren</p>
+      <p id="fuehrenHint" class="note" hidden></p>
+      <div id="fuehrenList" class="fuehren-list" aria-live="polite"></div>
+    </section>
+
+    <!-- ============ LIVE-FÜHRUNG (Welle 31): Führungs-Ansicht ============ -->
+    <section id="guideRun" hidden>
+      <div class="run-top">
+        <button id="runExit" class="link-back" type="button">&larr; Beenden</button>
+        <span id="runProgress" class="run-progress"></span>
+      </div>
+      <div id="runBar" class="run-bar"><span></span></div>
+
+      <div id="runImageWrap" class="run-image-wrap" hidden>
+        <img id="runImage" class="run-image" alt="" />
+      </div>
+      <p id="runFallbackHint" class="run-fallback-hint" hidden></p>
+
+      <h2 id="runTitle" class="run-title"></h2>
+      <div id="runBody" class="run-body"></div>
+
+      <div id="runDecision" class="run-decision" hidden></div>
+      <div id="runNav" class="run-nav">
+        <button id="runBack" class="btn" type="button">Zur&uuml;ck</button>
+        <button id="runNext" class="btn btn-primary" type="button">Weiter</button>
+      </div>
+
+      <div id="runDone" class="run-done" hidden>
+        <div class="done-check">&#10003;</div>
+        <h2>Fertig &#127881;</h2>
+        <p class="lead">Sie haben die Anleitung durchlaufen.</p>
+        <button id="runDoneList" class="btn" type="button">Andere Anleitung f&uuml;hren</button>
+      </div>
     </section>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
