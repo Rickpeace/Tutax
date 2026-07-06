@@ -120,7 +120,12 @@ export function NewTutorialButton({
               <DialogHeader>
                 <DialogTitle>Neue Anleitung</DialogTitle>
               </DialogHeader>
-              <div className="grid gap-3 sm:grid-cols-2">
+              {/* STANDARD-Methode zuerst (Richard, 06.07.): Die Sofort-Anleitung ist der
+                  empfohlene Normalfall — „Selbst bauen" und „Aus Video" sind die Alternativen.
+                  Kein Navigations-Ziel bei installierter Extension: die Aufnahme laeuft in
+                  der Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek. */}
+              <SofortAnleitungCard installed={extInstalled} version={extVersion} />
+              <div className="mt-1 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setMode("manual")}
@@ -151,11 +156,6 @@ export function NewTutorialButton({
                   </span>
                 </button>
               </div>
-
-              {/* Dritte Option: Sofort-Anleitung (Recorder-Extension, Tango-Stil). Kein
-                  Navigations-Ziel bei installierter Extension — die Aufnahme laeuft in der
-                  Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek. */}
-              <SofortAnleitungCard installed={extInstalled} version={extVersion} />
             </>
           ) : (
             <>
@@ -244,6 +244,9 @@ function SofortAnleitungCard({
             <Zap className="size-5" />
           </span>
           <span className="font-bold text-ink">Sofort-Anleitung</span>
+          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
+            Empfohlen
+          </span>
           <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-bold text-ink">
             <CheckCircle2 className="size-3 text-primary" /> Installiert
             {version ? " (v" + version + ")" : ""}
@@ -272,7 +275,12 @@ function SofortAnleitungCard({
         <Zap className="size-5" />
       </span>
       <span className="flex-1">
-        <span className="block font-bold text-ink">Sofort-Anleitung</span>
+        <span className="flex items-center gap-2">
+          <span className="font-bold text-ink">Sofort-Anleitung</span>
+          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
+            Empfohlen
+          </span>
+        </span>
         <span className="block text-xs text-muted-foreground">
           Klicken statt filmen: Extension installieren, dann entsteht bei jedem Klick ein
           Schritt.
