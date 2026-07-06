@@ -5,7 +5,21 @@
 > Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md`
 > **Design-Referenz NEU: `desing claude/` (README + SPEC-*.md, gitignored) — ersetzt prototyp-v4.jsx/§13-Farben.**
 
-Letztes Update: 2026-07-05 (WARM-REDESIGN nach Claude-Design-Handoff, s. §7g — COMMITTET + LIVE deployt, Commit 172717b; davor Wellen 1–15 + Tarif-System — Details: REVIEW.md, offene Punkte: TODO.md)
+Letztes Update: 2026-07-06 (LIVE-FÜHRUNG + Seiten-Erkennung, s. §7h; davor Warm-Redesign §7g — Details: REVIEW.md, offene Punkte: TODO.md)
+
+## 7h. Live-Führung + Seiten-Erkennung (06.07.2026, Wellen 31a–d) — LIVE, Extension v2.5.1
+> Tango-Prinzip: Die Extension führt Tutorials DIREKT auf der echten Website — Panel
+> „Anleitung führen" + pulsierendes Koralle-Overlay (`extension/guide-resolve.js`,
+> 3-stufige Selektor-Auflösung), Klick = weiter, Verzweigungen als Frage, Screenshot-
+> Fallback + `selector_miss`-Drift-Event. Seiten-Kontext: Migration 0029
+> (`steps.page_url`, `tutorials.site_domains`, `events.type='guide'`), Sofort-Aufnahme
+> sät Domains, Builder-Feld „Gilt für Website", Panel-Sektion „📍 Für diese Seite"
+> (Matching NUR lokal im Browser). Titel + Kategorie beim Aufnehmen im Panel (31d).
+> APIs: `/api/recorder/tutorials(+/[id])`, `/api/recorder/categories`,
+> `/api/recorder/guide-event`. Tests: `test-guide-api-live`, `test-guide-resolve`,
+> `test-site-context-live`, `test-site-match`, `test-guide-category-live`.
+> **Welle 32 läuft** (Feedback: Eingabe-Schritte, Overlay-Intensität, gefilterte
+> Liste, Icon-Badge, „Bring mich hin") — Stand danach in REVIEW.md.
 
 ## 7g. Warm-Redesign (05.07.2026, Design-Handoff „desing claude/") — LIVE (Commit 172717b)
 > Komplettes visuelles Redesign nach dem High-Fidelity-Handoff (Nunito, Creme #FDF9F3,

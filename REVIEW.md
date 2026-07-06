@@ -256,6 +256,31 @@ Browser-Sprach-Vorschlag auf /h (dezente schließbare Leiste in Zielsprache,
 nur wenn Sprache aktiviert; localStorage je Slug; NIE Auto-Redirect; Shell
 bleibt statisch). Beweis scripts/test-lang-suggest.mjs 18/18 (Playwright-Locale,
 echter Onboarding-Login, Screenshots gesichtet).
+**Opus Wellen 31a–d + Fable (06.07.):** 🧭 **LIVE-FÜHRUNG (Tango-Prinzip) +
+Seiten-Erkennung** — Extension v2.5.0/2.5.1. Migration 0029 (steps.page_url,
+tutorials.site_domains + GIN, events.type='guide'; von Richard live angewandt).
+**31a/b Live-Führung**: Panel-Bereich „Anleitung führen" (Liste published+intern,
+„Live"-Badge bei Selektoren) → Führungs-Ansicht (Titel/Text/Screenshot,
+Verzweigungs-Fragen, Zustand in storage.session, Navigation überlebt via
+tabs.onUpdated); content.js-Overlay: guide-resolve.js (3-stufig css→role+Text→
+Fuzzy, pures UMD-Modul), pulsierender Koralle-Rahmen + Schritt-Badge, Klick aufs
+Ziel = weiter; Fallback „Stelle nicht zu finden → Screenshot" + guide-event
+selector_miss (Drift-Signal in events). APIs: GET /api/recorder/tutorials
+(+Liste), GET /api/recorder/tutorials/[id] (Detail inkl. Tiptap→Whitelist-HTML,
+signierte Bilder 1h), POST /api/recorder/guide-event (nie störend).
+**31c Seiten-Erkennung**: guide-complete persistiert page_url je Schritt + sät
+site_domains (lib/site-domains.ts, Basis-Domain-Heuristik); Builder-Feld „Gilt
+für Website" (Globe-Popover, tutorial-header) + setTutorialSiteDomains; Panel-
+Sektion „📍 Für diese Seite" — Matching LOKAL (site-match.js), besuchte URLs
+verlassen NIE den Browser. **31d**: Titel-Feld + Kategorie-Auswahl (bestehende/
+neue; GET /api/recorder/categories, guide-complete `category` additiv,
+case-insensitive Wiederverwendung) direkt im Sofort-Panel; beim Anker-Modus
+ausgeblendet. Tests (alle grün auf gemergtem Stand): test-guide-api-live,
+test-guide-resolve (11), test-site-context-live, test-site-match (41),
+test-guide-category-live (18), test-recorder-live-Regression + Build/Lint.
+Richards Live-Test-Feedback → **Welle 32** (Eingabe-Schritt-Selektoren,
+Overlay-Intensität, gefilterte Führen-Liste m. Kategorien, Banner nur im
+Anker-Modus, Icon-Badge, „Bring mich hin").
 **Opus Welle 11 (reviewt+gemerged):** 🤖 **Chatbot-Zentrale — Tab „Assistent"**
 (alle Chatbot-Themen an einem Ort statt verstreut): Unternavigation
 Wissensdatenbank (umgezogen von /app/knowledge) · **Offene Fragen** (NEU: alle

@@ -28,7 +28,14 @@
      Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
   4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
      End-zu-End; Absender muss „Steply" heißen).
-- [ ] **Extension v2.4.0 in Chrome testen** (NEU LADEN → v2.4.0). NEU seit v2.2:
+- [ ] **Extension v2.5.1 in Chrome testen** (NEU LADEN; nach Welle-32-Merge → v2.6.0).
+  NEU in v2.5.x (Wellen 31a–d): „Anleitung führen" (Live-Overlay auf der echten
+  Seite, Klick = weiter, Verzweigungen, Fallback bei totem Selektor) · „📍 Für
+  diese Seite" (Panel zeigt passende Tutorials zur offenen Website; Bestand:
+  Builder-Globus „Gilt für Website" pflegen) · Titel + Kategorie beim Sofort-
+  Aufnehmen im Panel. Manuelle Checklisten: siehe Wellen-Berichte in REVIEW.md
+  (Kern: Führung mit Selektor-Tutorial, Eingabe-Schritt [bekannt wackelig →
+  Welle 32], Verzweigung, Panel zu/auf, Beenden räumt Overlay). Alt-Punkte v2.4:
   Sofort-Anleitung-Karte + Builder-„Ab hier aufnehmen" öffnen die Seitenleiste
   DIREKT · Aufnahme-Anker: Schritte landen an der gewählten Stelle/im Ast,
   Fallback nie verlustig · Auto-Schwärzung: Passwort-/Key-/IBAN-Felder werden
@@ -107,14 +114,22 @@
   neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
   → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft klientseitig via
   RLS — braucht Policy/Trigger, kommt mit der LemonSqueezy-Welle); Team-bis-5 ebenso.
-- [ ] **Live-Führung auf der echten Website** (Richard/Tango, 05.07.): Tutorial öffnen
-  → die Extension (oder das Embed-Script) hebt die Buttons DIREKT auf der echten
-  Website hervor und blättert beim Klicken weiter (WalkMe/Tango-Guidance-Prinzip).
-  Technische Brücke: robuster ELEMENT-SELEKTOR je Schritt. ✅ **Selektor-Vorbau
-  GEBAUT (05.07., Welle 24):** jede Sofort-Aufnahme speichert seither {css,text,
-  role} in `steps.selector` (Migration 0027) — gelesen wird er noch nirgends;
-  die Live-Führung selbst (Overlay auf der Kundenwebsite, Embed/Extension) ist
-  der offene Teil.
+- [x] ~~Live-Führung auf der echten Website~~ **GEBAUT (06.07., Wellen 31a–d,
+  Extension v2.5.1):** Panel „Anleitung führen" + Koralle-Overlay auf dem echten
+  Element (guide-resolve 3-stufig), Klick = weiter, Verzweigungen, Screenshot-
+  Fallback + selector_miss-Drift-Signal; „📍 Für diese Seite" (lokales Domain-
+  Matching, URLs verlassen nie den Browser) + Builder-Feld „Gilt für Website";
+  Titel + Kategorie direkt im Sofort-Panel. Migration 0029 ist live.
+  → **Welle 32 LÄUFT** (Richards Test-Feedback): Eingabe-Schritt-Selektoren +
+  Weiter-bei-Eingabe, Overlay auffälliger, Führen-Liste gefiltert (Diese Seite/
+  Live-Default, Kategorien-Gruppen), Banner nur im Anker-Modus, Icon-Badge,
+  „Bring mich hin" (Tab zur Start-URL öffnen).
+- [ ] **Steply Desktop-Recorder** (Idee 06.07., Richard): Sofort-Anleitung für
+  WINDOWS-Programme (DATEV Arbeitsplatz & Co.) — kleine Tauri/Electron-App mit
+  globalem Maus-Hook: Screenshot je Klick + Windows-UI-Automation-Label, Upload
+  über die BESTEHENDE Recorder-API (Token/handshake/complete, client-agnostisch).
+  Groß (eigene Welle), erst nach stabiler Browser-Führung. Live-Führung auf dem
+  Desktop bewusst NICHT (Overlay über fremden Apps = deutlich härter).
 - [ ] **Autopilot v2: Anleitungs-TÜV per Agent** (05.07., aus Tango-Beobachtung
   abgeleitet): Statt nur KI-Recherche klickt ein Sandbox-Browser-Agent die
   Anleitung bei öffentlich erreichbaren Abläufen real nach und meldet den
