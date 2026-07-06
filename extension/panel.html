@@ -57,6 +57,14 @@
 
     <!-- ============ (b) START: zwei Karten ============ -->
     <section id="start" hidden>
+      <!-- „Fuer diese Seite" (Welle 31c): passende Tutorials zur gerade offenen Seite.
+           Sichtbarkeit + Inhalt steuert panel.js (refreshSiteMatch); Matching rein LOKAL,
+           die besuchte URL verlaesst NIE den Browser. -->
+      <div id="siteMatch" class="site-match" hidden>
+        <p class="site-match-title">&#128205; F&uuml;r diese Seite</p>
+        <div id="siteMatchList" class="site-match-list" aria-live="polite"></div>
+      </div>
+
       <p class="lead">Wie moechten Sie den Ablauf festhalten?</p>
 
       <button id="cardGuide" class="card-choice" type="button">
@@ -236,6 +244,8 @@
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
+    <!-- site-match.js (Welle 31c) VOR panel.js: stellt das globale SteplySiteMatch bereit. -->
+    <script src="site-match.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>

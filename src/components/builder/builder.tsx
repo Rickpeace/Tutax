@@ -62,6 +62,7 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     image_width: null,
     image_height: null,
     highlights: [],
+    page_url: null,
     position,
     is_decision: false,
     video_time: null,

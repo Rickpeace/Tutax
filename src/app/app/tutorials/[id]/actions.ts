@@ -18,6 +18,7 @@ import {
 } from "@/app/app/actions-translate";
 import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
+import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -371,6 +372,31 @@ export async function countUnreviewedBlurSteps(tutorialId: string): Promise<numb
     }
   }
   return n;
+}
+
+/**
+ * Basis-Domains setzen, für die dieses Tutorial gilt (Welle 31c: „Gilt für Website").
+ * Der Client schickt die VOLLSTÄNDIGE gewünschte Liste (optimistische UI); wir normalisieren
+ * jede Angabe via normalizeDomain (ungültige fallen weg), deduplizieren/sortieren/begrenzen
+ * via mergeDomains und schreiben das Ergebnis. Eigentum erzwingt RLS (createClient = Session-
+ * scoped, `my_account_ids()`): ein Fremd-Tutorial trifft 0 Zeilen. Muster wie
+ * setTutorialCategory (persistiert nur, invalidiert den Cache).
+ */
+export async function setTutorialSiteDomains(tutorialId: string, domains: string[]) {
+  const normalized: string[] = [];
+  for (const d of Array.isArray(domains) ? domains : []) {
+    const n = typeof d === "string" ? normalizeDomain(d) : null;
+    if (n) normalized.push(n);
+  }
+  const clean = mergeDomains(normalized, []); // dedup + sort + max 10
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tutorials")
+    .update({ site_domains: clean })
+    .eq("id", tutorialId);
+  if (error) throw new Error(error.message);
+  await invalidateTutorialTags(tutorialId);
+  return clean; // normalisierte Endliste → Client kann seinen optimistischen State abgleichen
 }
 
 /** Tutorial einer Kategorie zuordnen (oder lösen mit null). */

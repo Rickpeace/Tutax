@@ -38,6 +38,9 @@ export type Tutorial = {
   /** Öffentliche Anleitung zusätzlich im Team-Lernbereich (mit Nachweis) zeigen (Welle 20). */
   in_lernen: boolean;
   freshness: Freshness;
+  /** Basis-Domains (lowercase, ohne www.), für die dieses Tutorial gilt (Welle 31c) —
+   *  auto-gesät aus der Sofort-Aufnahme, im Builder editierbar, Extension-Matching. */
+  site_domains: string[];
   slug: string | null;
   public_token: string | null;
   root_step_id: string | null;
@@ -73,6 +76,8 @@ export type Step = {
   image_width: number | null;
   image_height: number | null;
   highlights: Highlight[];
+  /** URL der Seite zum Aufnahme-Zeitpunkt (Sofort-Anleitung, Welle 31c) — sonst null. */
+  page_url: string | null;
   position: number;
   is_decision: boolean;
   video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker

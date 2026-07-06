@@ -79,6 +79,7 @@ export default async function EditorPage({
         isBusiness={isBusiness(account)}
         categories={categories ?? []}
         categoryId={tutorial.category_id}
+        siteDomains={tutorial.site_domains ?? []}
         languages={languages}
         translationsStale={translationsStale}
       />
