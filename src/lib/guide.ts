@@ -88,6 +88,28 @@ export function parseGuideTarget(raw: unknown): GuideTarget | null {
   return { tutorialId, anchor: { branchId: (ar.branchId as string).trim() } };
 }
 
+// ── Kategorie (Welle 31d) ────────────────────────────────────────────────────
+// Optionale Kategorie für die NEUE Sofort-Anleitung: ENTWEDER eine bestehende Kategorie
+// ({ id }) ODER eine neu anzulegende ({ name }). Tolerant geparst wie parseGuideTarget:
+// kaputte/mehrdeutige Eingaben -> null (die Route ignoriert sie dann still, die Aufnahme
+// geht NIE verloren). Wirft NIE. Nur die FORM wird geprüft; ob die id dem Konto gehört
+// bzw. der Name schon existiert, klärt die Route gegen die DB (Admin-Client).
+export type GuideCategory = { id: string } | { name: string };
+export const CATEGORY_NAME_MAX = 60;
+
+export function parseGuideCategory(raw: unknown): GuideCategory | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  // Bestehende Kategorie per id hat Vorrang, wenn eine gültige UUID vorliegt.
+  if (isUuid(r.id)) return { id: (r.id as string).trim() };
+  // Neue Kategorie per name: trim, Steuerzeichen raus, Whitespace kollabieren, ≤60.
+  if (typeof r.name === "string") {
+    const name = r.name.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim().slice(0, CATEGORY_NAME_MAX);
+    if (name) return { name };
+  }
+  return null;
+}
+
 // Einen Selektor-String säubern: nur Strings, Steuerzeichen (\p{Cc}) raus, Whitespace
 // kollabieren, auf max kappen. Ungültig/leer -> undefined (Feld wird verworfen).
 function cleanSelectorString(v: unknown, max: number): string | undefined {

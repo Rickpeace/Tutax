@@ -176,6 +176,26 @@
         <span class="rec-badge"><span class="rec-pulse"></span> Sofort-Anleitung laeuft</span>
         <span id="guideTimer" class="timer">00:00</span>
       </div>
+
+      <!-- ===== Welle 31d: Titel + Kategorie fuer die neue Sofort-Anleitung =====
+           Nur im Neu-Aufnahme-Modus sichtbar; bei aktivem Aufnahme-Anker
+           (pendingTarget) blendet panel.js den ganzen Block aus (das Ziel-Tutorial
+           hat Titel + Kategorie bereits). Werte werden in chrome.storage.session
+           gehalten und beim Fertigstellen an guide-complete mitgeschickt. -->
+      <div id="guideMeta" class="guide-meta" hidden>
+        <label class="field field-compact">
+          <span>Titel (optional)</span>
+          <input id="guideTitle" type="text" autocomplete="off" spellcheck="false"
+            maxlength="120" placeholder="z. B. Beleg in DATEV hochladen" />
+        </label>
+        <div id="guideCatWrap" class="field field-compact" hidden>
+          <span>Kategorie (optional)</span>
+          <select id="guideCategory" class="guide-cat-select"></select>
+          <input id="guideCategoryNew" type="text" autocomplete="off" spellcheck="false"
+            maxlength="60" placeholder="Name der neuen Kategorie" hidden />
+        </div>
+      </div>
+
       <p class="clicks-count">
         <strong id="guideCount">0</strong> Schritte aufgenommen
       </p>
