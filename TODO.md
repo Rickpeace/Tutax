@@ -11,6 +11,23 @@
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
+- [ ] **E-Mail-Audit (06.07.) — 4 Richard-Handgriffe:**
+  1. **Supabase-SMTP auf Resend stellen** (WICHTIGSTER Punkt): Ohne Custom-SMTP
+     verschickt Supabase Magic-Link/Passwort-vergessen nur an Projekt-Teammitglieder
+     (~2/h) — für KUNDEN kämen keine Auth-Mails an. Supabase-Dashboard → Project
+     Settings → Auth → SMTP: Host `smtp.resend.com`, Port 465, User `resend`,
+     Passwort = RESEND_API_KEY, Absender `noreply@dentdoc.de` (Domain ist bei
+     Resend verifiziert).
+  2. **Vercel-Env prüfen/setzen**: `RESEND_API_KEY` + `INVITE_FROM_EMAIL` müssen
+     AUCH in Vercel stehen (sonst verschickt Prod keine Einladungs-Mails, nur
+     Link-Fallback). `INVITE_FROM_EMAIL` dabei auf `"Steply" <noreply@dentdoc.de>`
+     umbenennen (stand auf „Taxtut"; lokal schon umbenannt).
+  3. **Klick-Test (2 Min)**: Auf tutax-ivory „Passwort vergessen" mit deiner
+     Adresse → Mail kommt? Link führt auf tutax-ivory (NICHT localhost) zu /reset?
+     Falls Link falsch: Supabase → Auth → URL Configuration → Site URL +
+     Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
+  4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
+     End-zu-End; Absender muss „Steply" heißen).
 - [ ] **Extension v2.2.0 (Onboarding) in Chrome testen**: NEU LADEN → v2.2.0.
   Onboarding-Checks: Einstellungen → Einbetten → „Extension verbinden" → Karte
   UND Seitenleiste zeigen „Verbunden mit <Konto>" (Leiste offen lassen: aktualisiert
