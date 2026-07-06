@@ -13,6 +13,10 @@ node_modules/
 # testing
 /coverage
 
+# Screenshots/Artefakte aus lokalen Beweis-Skripten (z. B. test-wizard-hostile.mjs)
+/.tmp/
+/scratch/
+
 # next.js
 /.next/
 /out/

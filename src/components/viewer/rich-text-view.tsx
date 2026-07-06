@@ -28,7 +28,12 @@ export function RichTextView({ doc }: { doc: unknown }) {
   if (!doc || typeof doc !== "object") return null;
   const content = (doc as Node).content ?? [];
   if (!content.length) return null;
-  return <div className="space-y-2 leading-relaxed">{renderList(content)}</div>;
+  // break-words: lange, ungebrochene Ketten (URLs/Dateinamen aus echten Aufnahmen)
+  // dürfen umbrechen statt horizontal aus dem Wizard/Druck zu laufen. Normaler Text
+  // bleibt unberührt (bricht nur, wenn ein Wort sonst überliefe).
+  return (
+    <div className="space-y-2 break-words leading-relaxed">{renderList(content)}</div>
+  );
 }
 
 function renderList(nodes: Node[]): ReactNode {

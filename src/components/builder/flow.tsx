@@ -99,9 +99,9 @@ function StepCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-ink">
           {hasTitle ? (
-            <span className="truncate">{node.step.title}</span>
+            <span className="min-w-0 truncate">{node.step.title}</span>
           ) : bodyLabel ? (
-            <span className="truncate font-normal italic text-muted-foreground">{bodyLabel}</span>
+            <span className="min-w-0 truncate font-normal italic text-muted-foreground">{bodyLabel}</span>
           ) : (
             <span className="italic text-muted-foreground">Schritt {node.step.position}</span>
           )}
