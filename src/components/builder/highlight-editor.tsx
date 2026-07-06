@@ -20,6 +20,11 @@ const MIN = 0.01;
 const ZOOM = 2;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
+// Werkzeug + Farbe überleben den Schrittwechsel (Modul-Gedächtnis für die Sitzung):
+// wer zehn Schritte hintereinander markiert, will nicht jedes Mal neu wählen.
+let lastTool: Tool = "rect";
+let lastColor = COLORS[0];
+
 // Auto-Schwärzung (Welle 28): Sobald der Autor die Markierungen eines Schritts speichert
 // (= irgendeine Änderung), gelten die automatisch vorgeschlagenen Blurs als GEPRÜFT — der
 // `suggested`-Marker fällt weg (Feld ganz entfernen, damit die DB kein `suggested:false` hält).
@@ -36,13 +41,24 @@ export function HighlightEditor({
   url,
   highlights,
   onChange,
+  stickyToolbar = false,
 }: {
   url: string;
   highlights: Highlight[];
   onChange: (h: Highlight[]) => void;
+  /** Werkzeugleiste beim Scrollen oben festhalten (für den Großmodus). */
+  stickyToolbar?: boolean;
 }) {
-  const [tool, setTool] = useState<Tool>("rect");
-  const [color, setColor] = useState(COLORS[0]);
+  const [tool, setToolState] = useState<Tool>(lastTool);
+  const [color, setColorState] = useState(lastColor);
+  const setTool = (t: Tool) => {
+    lastTool = t;
+    setToolState(t);
+  };
+  const setColor = (c: string) => {
+    lastColor = c;
+    setColorState(c);
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Highlight | null>(null);
   const [live, setLive] = useState<Highlight | null>(null);
@@ -230,7 +246,11 @@ export function HighlightEditor({
   return (
     <div className="space-y-2">
       {/* Werkzeugleiste */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-1.5">
+      <div
+        className={`flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-1.5 ${
+          stickyToolbar ? "sticky top-0 z-20 shadow-sm" : ""
+        }`}
+      >
         <div className="flex gap-0.5">
           <ToolBtn active={tool === "select"} onClick={() => setTool("select")} title="Auswählen">
             <MousePointer2 className="size-4" />

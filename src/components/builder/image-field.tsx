@@ -286,6 +286,7 @@ export function ImageField({
                       url={url}
                       highlights={highlights}
                       onChange={(h) => onSetHighlights(stepId, h)}
+                      stickyToolbar
                     />
                   </div>
                 </div>
