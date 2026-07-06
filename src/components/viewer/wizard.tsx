@@ -411,7 +411,7 @@ export function Wizard({
           }}
         >
           <div className="px-4 pb-1 pt-4 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
-            Schritte
+            {L.stepsHeading}
           </div>
           <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-3 pt-1">
             {linearPath.map((id, i) => {
@@ -469,7 +469,7 @@ export function Wizard({
                           : undefined,
                     }}
                   >
-                    {s?.title?.trim() || `Schritt ${i + 1}`}
+                    {s?.title?.trim() || `${L.stepNoun} ${i + 1}`}
                   </span>
                 </button>
               );
@@ -551,7 +551,7 @@ export function Wizard({
                   image_height: step.image_height,
                 })
               }
-              aria-label="Bild vergrößern"
+              aria-label={L.enlargeImage}
               className="mb-4 block w-full cursor-zoom-in overflow-hidden rounded-2xl border-2"
               style={{
                 borderColor: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
@@ -569,7 +569,7 @@ export function Wizard({
             </button>
           ) : placeholders ? (
             <div className="mb-4">
-              <StepPlaceholder title={step.title} />
+              <StepPlaceholder title={step.title} label={L.screenshotComing} />
             </div>
           ) : null}
           {(step.title || audioUrls[step.id]) && (
@@ -794,7 +794,7 @@ export function Wizard({
           onClick={() => setLightbox(null)}
           role="dialog"
           aria-modal="true"
-          aria-label="Bildvorschau"
+          aria-label={L.imagePreview}
         >
           {/* Gleiche Darstellung wie im Schritt — inkl. Markierungen (nicht nur das
               rohe Bild). Breite so, dass Bild samt Seitenverhältnis in 92vh/95vw passt. */}
@@ -818,7 +818,7 @@ export function Wizard({
           <button
             type="button"
             onClick={() => setLightbox(null)}
-            aria-label="Schließen"
+            aria-label={L.close}
             className="fixed right-4 top-4 flex size-10 items-center justify-center rounded-full bg-white/90 text-ink shadow-lg transition-transform hover:scale-105"
           >
             <X className="size-5" />
@@ -831,7 +831,7 @@ export function Wizard({
 }
 
 /** Platzhalter-Grafik für Standard-Templates ohne echten Screenshot. */
-function StepPlaceholder({ title }: { title: string | null }) {
+function StepPlaceholder({ title, label }: { title: string | null; label: string }) {
   return (
     <div
       className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 border border-dashed text-center"
@@ -843,7 +843,7 @@ function StepPlaceholder({ title }: { title: string | null }) {
     >
       <ImageIcon className="size-8" style={{ color: "var(--brand-accent)" }} />
       <span className="max-w-[80%] text-xs font-medium text-muted-foreground">
-        {title?.trim() || "Screenshot folgt"}
+        {title?.trim() || label}
       </span>
     </div>
   );

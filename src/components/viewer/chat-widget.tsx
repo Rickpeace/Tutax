@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
+import { labelsFor, t as translate, type HubLabels, type HubLang } from "@/lib/i18n-hub";
 
 type Source = { title: string; slug: string };
 type EscMethod = { type: string; label: string; value: string };
@@ -29,15 +30,22 @@ export function ChatWidget({
   accountSlug,
   accountName,
   embedded = false,
+  lang = "de",
+  labels,
 }: {
   accountSlug: string;
   accountName: string;
   /** Läuft im Script-Bubble-iFrame (Feature H4): Größe an das Eltern-Fenster melden. */
   embedded?: boolean;
+  /** Aktive Hilfe-Seiten-Sprache (Welle 29). Default DE. */
+  lang?: HubLang;
+  /** UI-Strings; Default = deutsche Strings (Chat-Bubble-Embed bleibt unverändert). */
+  labels?: HubLabels;
 }) {
+  const L = labels ?? labelsFor(lang);
   const greeting: Msg = {
     role: "bot",
-    text: `Hallo! Ich bin der Hilfe-Assistent von ${accountName}. Stellen Sie mir eine Frage – ich finde die passende Anleitung.`,
+    text: translate(lang, "chatGreeting", { name: accountName }),
   };
   const storageKey = `tutax-chat-${accountSlug}`;
 
@@ -98,7 +106,7 @@ export function ChatWidget({
   }, [embedded, hydrated, open]);
 
   function resetChat() {
-    if (!window.confirm("Gespräch wirklich löschen?")) return;
+    if (!window.confirm(L.chatResetConfirm)) return;
     setMsgs([greeting]);
     try {
       localStorage.removeItem(storageKey);
@@ -130,7 +138,7 @@ export function ChatWidget({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountSlug, question: q, history }),
+        body: JSON.stringify({ accountSlug, question: q, history, lang }),
       });
 
       const ct = res.headers.get("content-type") || "";
@@ -138,7 +146,7 @@ export function ChatWidget({
         // Fehler / „nicht konfiguriert" / Rate-Limit -> einfache JSON-Antwort.
         const data = await res.json().catch(() => ({}));
         patchBot({
-          text: data.answer || "Es ist ein Fehler aufgetreten.",
+          text: data.answer || L.chatError,
           sources: data.sources,
           escalation: data.escalation ?? null,
         });
@@ -175,11 +183,11 @@ export function ChatWidget({
         }
       }
     } catch {
-      patchBot({ text: "Es ist ein Fehler aufgetreten." });
+      patchBot({ text: L.chatError });
     } finally {
       setBusy(false);
       // Screenreader-Ansage NACH Abschluss (nicht beim Streamen -> nicht spammy).
-      setStatus("Antwort erhalten");
+      setStatus(L.chatDone);
     }
   }
 
@@ -190,7 +198,7 @@ export function ChatWidget({
       {!(embedded && open) && (
         <button
           onClick={() => setOpen((o) => !o)}
-          aria-label="Hilfe-Assistent"
+          aria-label={L.chatLauncher}
           aria-expanded={open}
           className={
             embedded
@@ -208,7 +216,7 @@ export function ChatWidget({
         <div
           role="dialog"
           aria-modal="false"
-          aria-label="Hilfe-Assistent"
+          aria-label={L.chatTitle}
           className={
             embedded
               ? // Im iFrame gibt das Fenster die Größe vor -> Panel füllt es komplett.
@@ -224,22 +232,22 @@ export function ChatWidget({
             style={{ background: "var(--brand-bg)" }}
           >
             <Sparkles className="size-4" style={{ color: "var(--brand-accent-strong, var(--brand-accent))" }} />
-            <span className="text-sm font-bold text-[var(--brand-ink)]">Hilfe-Assistent</span>
+            <span className="text-sm font-bold text-[var(--brand-ink)]">{L.chatTitle}</span>
             {msgs.length > 1 && (
               <button
                 onClick={resetChat}
-                title="Gespräch zurücksetzen"
-                aria-label="Gespräch zurücksetzen"
+                title={L.chatResetTitle}
+                aria-label={L.chatResetTitle}
                 className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:text-[var(--brand-ink)]"
               >
-                <RotateCcw className="size-3.5" /> Neu
+                <RotateCcw className="size-3.5" /> {L.chatReset}
               </button>
             )}
             {embedded && (
               <button
                 onClick={() => setOpen(false)}
-                title="Schließen"
-                aria-label="Hilfe-Assistent schließen"
+                title={L.close}
+                aria-label={L.chatClose}
                 className={`${msgs.length > 1 ? "" : "ml-auto"} flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-[var(--brand-ink)]`}
               >
                 <X className="size-4" />
@@ -248,21 +256,20 @@ export function ChatWidget({
           </div>
 
           <p className="border-b border-black/5 bg-white px-4 py-1.5 text-[11px] leading-snug text-muted-foreground">
-            Antworten werden automatisiert per KI erstellt – bitte keine
-            personenbezogenen Daten eingeben.{" "}
+            {L.chatDisclaimer}{" "}
             <Link
               href="/datenschutz"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-[var(--brand-ink)]"
             >
-              Datenschutz
+              {L.privacy}
             </Link>
           </p>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
             {msgs.map((m, i) => (
-              <Bubble key={i} m={m} accountSlug={accountSlug} />
+              <Bubble key={i} m={m} accountSlug={accountSlug} typingLabel={L.chatTyping} />
             ))}
           </div>
 
@@ -279,13 +286,13 @@ export function ChatWidget({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
               }}
-              placeholder="Frage stellen …"
+              placeholder={L.chatPlaceholder}
               className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)]"
             />
             <button
               onClick={send}
               disabled={busy}
-              aria-label="Senden"
+              aria-label={L.chatSend}
               className="flex items-center rounded-lg px-3 disabled:opacity-50"
               style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
             >
@@ -307,7 +314,15 @@ function Dot({ delay }: { delay: string }) {
   );
 }
 
-function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
+function Bubble({
+  m,
+  accountSlug,
+  typingLabel,
+}: {
+  m: Msg;
+  accountSlug: string;
+  typingLabel: string;
+}) {
   const bot = m.role === "bot";
   return (
     <div className={bot ? "" : "flex justify-end"}>
@@ -320,7 +335,7 @@ function Bubble({ m, accountSlug }: { m: Msg; accountSlug: string }) {
         }
       >
         {bot && !m.text ? (
-          <span className="flex gap-1 py-1" aria-label="tippt">
+          <span className="flex gap-1 py-1" aria-label={typingLabel}>
             <Dot delay="0ms" />
             <Dot delay="150ms" />
             <Dot delay="300ms" />
