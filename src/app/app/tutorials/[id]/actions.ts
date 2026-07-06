@@ -297,7 +297,9 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
  * Kurzbeschreibung des Tutorials (Untertitel auf der Hilfe-Seiten-Karte + Suchtreffer).
  * Leer = entfernen (Karte zeigt dann nur den Titel). Richards Fund 06.07.: Das Feld
  * wurde auf /h angezeigt, war aber im Builder nirgends editierbar (nur Seeds setzten es).
- * v1 bewusst unübersetzt (EN/PL/TR-Hubs zeigen die deutsche Beschreibung).
+ * Auto-Sync (Welle 29): wie setTutorialTitle stößt die Beschreibung jetzt die Delta-
+ * Übersetzung an (translateTitleDelta übersetzt Titel + Beschreibung zusammen), damit die
+ * EN/PL/TR-Hub-Karten die übersetzte Beschreibung zeigen statt der deutschen.
  */
 export async function setTutorialDescription(tutorialId: string, description: string) {
   const clean = description.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -308,6 +310,8 @@ export async function setTutorialDescription(tutorialId: string, description: st
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
   await invalidateTutorialTags(tutorialId);
+  await markTranslationsStale(tutorialId);
+  after(() => translateTitleDelta(tutorialId)); // Delta „tutorial-description" (Titel + Beschreibung)
 }
 
 /**
