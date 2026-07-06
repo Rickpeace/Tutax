@@ -1189,6 +1189,27 @@
     }
   }
 
+  // Zombie-Overlays ENTFERNEN (Hotfix 06.07.): Ein Extension-Reload laesst alte content-
+  // Script-Instanzen verwaist in offenen Tabs zurueck — deren Overlay-DOM (Rahmen + Badge)
+  // klebt sonst fuer immer auf der Seite (Richards „Duplikat, das beim Scrollen wandert").
+  // Wir raeumen deshalb ALLE Elemente mit unserer Overlay-ID ab, nicht nur das eigene.
+  // (querySelectorAll findet auch mehrfach vergebene IDs.)
+  function guideRemoveStrays() {
+    try {
+      document.querySelectorAll('[id="' + GUIDE_OVERLAY_ID + '"]').forEach((n) => {
+        if (n !== guideOverlayEl) {
+          try {
+            n.remove();
+          } catch (err) {
+            /* egal */
+          }
+        }
+      });
+    } catch (err) {
+      /* egal */
+    }
+  }
+
   function guideCleanup() {
     guideStopSearch();
     guideStopWatchdog();
@@ -1218,6 +1239,7 @@
     guideFrameEl = null;
     guideBadgeEl = null;
     guideTargetEl = null;
+    guideRemoveStrays();
   }
 
   // pointerdown auf dem Ziel (oder einem Kind) -> „weiter" — NUR fuer Klick-Ziele. Textfelder/
@@ -1535,6 +1557,10 @@
       return;
     }
   });
+
+  // Beim Laden dieser Script-Instanz sofort Zombie-Overlays verwaister Vorgaenger entsorgen
+  // (die Nachimpfung offener Tabs raeumt so nach jedem Extension-Reload automatisch auf).
+  guideRemoveStrays();
 
   // Aufnahmezustand aus einem storage-Wert uebernehmen.
   function applyRecState(rec) {
