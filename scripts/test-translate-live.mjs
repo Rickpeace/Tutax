@@ -10,6 +10,7 @@
 // translateStepLangCore 1:1; die stale-SQL entspricht markStaleCore/clearStaleCore.
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { spawn } from "node:child_process";
 import {
   buildSegmentPlan,
   assembleTranslationRows,
@@ -19,6 +20,10 @@ import {
   targetLanguageName,
   bodySegments,
 } from "../src/lib/translate.ts";
+
+// Welle 29: Kategorien/Beschreibung/Druckansicht mehrsprachig -> HTML-Beweis vom Server.
+const PORT = 3021;
+const BASE = `http://localhost:${PORT}`;
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const pub = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -96,6 +101,74 @@ const markStale = (db, id) =>
 const clearStale = (db, id) =>
   db.from("tutorial_translations").update({ stale: false, updated_at: new Date().toISOString() }).eq("tutorial_id", id);
 
+// translateAccountCategoriesCore (spiegelt src/lib/translate-core.ts, Welle 29). Nur
+// account-eigene Kategorien; _src merkt sich den deutschen Namen (Veraltungserkennung).
+async function translateCategories(db, accountId, languages) {
+  const { data: cats } = await db
+    .from("categories")
+    .select("id, name, name_i18n")
+    .eq("account_id", accountId);
+  const rows = (cats ?? []).filter((c) => typeof c.name === "string" && c.name.trim());
+  const srcOf = (c) =>
+    c.name_i18n && typeof c.name_i18n === "object" ? c.name_i18n._src : undefined;
+  const needs = (c, l) => srcOf(c) !== c.name || !(typeof c.name_i18n?.[l] === "string" && c.name_i18n[l].trim());
+  const work = rows.filter((c) => languages.some((l) => needs(c, l)));
+  const fresh = new Map();
+  for (const lang of languages) {
+    const subset = work.filter((c) => needs(c, lang));
+    if (!subset.length) continue;
+    const tr = await translateSegments(subset.map((c) => c.name), lang);
+    subset.forEach((c, i) => {
+      if (tr[i]) {
+        const m = fresh.get(c.id) ?? {};
+        m[lang] = tr[i];
+        fresh.set(c.id, m);
+      }
+    });
+  }
+  let updated = 0;
+  for (const c of work) {
+    const keep = srcOf(c) === c.name && c.name_i18n && typeof c.name_i18n === "object" ? c.name_i18n : {};
+    const next = { _src: c.name };
+    for (const lang of languages) next[lang] = fresh.get(c.id)?.[lang] || keep[lang] || c.name;
+    await db.from("categories").update({ name_i18n: next }).eq("id", c.id);
+    updated++;
+  }
+  return updated;
+}
+
+// Next-Dev-Server hochfahren + auf Bereitschaft warten (statische Route, ohne Hub-Cache).
+async function waitForServer(timeoutMs = 120_000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await fetch(`${BASE}/robots.txt`);
+      if (r.status === 200) return true;
+    } catch {
+      /* noch nicht bereit */
+    }
+    await new Promise((res) => setTimeout(res, 1000));
+  }
+  return false;
+}
+
+// HTML einer Seite holen; auf den ersten Turbopack-Compile der Route warten (Retry).
+// Der erste Treffer einer Route kann in der Dev-Kompilierung 30–60 s dauern -> großzügig.
+async function getHtml(path, tries = 40) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(`${BASE}${path}`);
+      const html = r.status === 200 ? await r.text() : "";
+      // „Fertig“ = enthält das <main>-Gerüst (nicht nur eine Zwischen-/Fehlerantwort).
+      if (r.status === 200 && html.includes("<main")) return html;
+    } catch {
+      /* Route kompiliert noch */
+    }
+    await new Promise((res) => setTimeout(res, 2500));
+  }
+  return "";
+}
+
 const bodyDoc = (text) => ({
   type: "doc",
   content: [{ type: "paragraph", content: [{ type: "text", text }] }],
@@ -104,7 +177,7 @@ const bodyDoc = (text) => ({
 // --------------------------------------------------------------------------
 const email = `tutax-tr-${Date.now()}@example.com`;
 const pw = "Test12345!";
-let accountId, userId, tutId, s1, s2, b1, internalTutId;
+let accountId, userId, tutId, s1, s2, b1, internalTutId, server, catId, accSlug, tutSlug;
 
 try {
   if (!openaiKey) throw new Error("OPENAI_API_KEY fehlt in .env.local");
@@ -115,15 +188,17 @@ try {
 
   // languages=['en']
   await admin.from("accounts").update({ languages: ["en"] }).eq("id", accountId);
+  accSlug = (await admin.from("accounts").select("slug").eq("id", accountId).single()).data.slug;
 
   const db = createClient(url, pub, { auth: { persistSession: false } });
   await db.auth.signInWithPassword({ email, password: pw });
 
   // Mini-Tutorial: 2 Steps, 1 Branch. Öffentlich + veröffentlicht.
+  tutSlug = `tr-test-${Date.now()}`;
   tutId = (
     await db
       .from("tutorials")
-      .insert({ account_id: accountId, title: "Steuernummer beantragen", description: "So beantragen Sie Ihre Steuernummer.", status: "published", visibility: "public", slug: `tr-test-${Date.now()}` })
+      .insert({ account_id: accountId, title: "Steuernummer beantragen", description: "So beantragen Sie Ihre Steuernummer.", status: "published", visibility: "public", slug: tutSlug })
       .select("id")
       .single()
   ).data.id;
@@ -194,12 +269,110 @@ try {
   ok(anonInt?.length === 0, "RLS: anon sieht Übersetzung interner Tutorials NICHT");
   const anonIntStep = (await anon.from("step_translations").select("title").eq("step_id", is1).eq("lang", "en")).data;
   ok(anonIntStep?.length === 0, "RLS: anon sieht interne Schritt-Übersetzungen NICHT");
+
+  // ===== 6. Kategorie-Übersetzung (Welle 29) =====
+  catId = (
+    await admin.from("categories").insert({ account_id: accountId, name: "Steuer-Grundlagen", position: 0 }).select("id").single()
+  ).data.id;
+  await admin.from("tutorials").update({ category_id: catId }).eq("id", tutId);
+  // s1 zur Entscheidung machen -> Druckansicht zeigt „Wenn … → weiter mit Schritt N".
+  await admin.from("steps").update({ is_decision: true }).eq("id", s1);
+
+  const catUpdated = await translateCategories(admin, accountId, ["en"]);
+  ok(catUpdated === 1, `Kategorie-Übersetzung: 1 Kategorie aktualisiert (${catUpdated})`);
+  const catRow = (await admin.from("categories").select("name, name_i18n").eq("id", catId).single()).data;
+  const catEn = catRow?.name_i18n?.en;
+  ok(catRow?.name_i18n?._src === "Steuer-Grundlagen", `name_i18n._src = deutscher Name ("${catRow?.name_i18n?._src}")`);
+  ok(
+    typeof catEn === "string" && catEn.trim() && catEn !== "Steuer-Grundlagen",
+    `name_i18n.en gefüllt + übersetzt ("${catEn}")`,
+  );
+  // Idempotenz: erneuter Lauf ohne Änderung -> 0 Updates (kein OpenAI-Call).
+  const catAgain = await translateCategories(admin, accountId, ["en"]);
+  ok(catAgain === 0, `Kategorie-Übersetzung idempotent: 0 Updates beim 2. Lauf (${catAgain})`);
+
+  // ===== 7. Beschreibung-Delta (wie setTutorialDescription -> translateTitleDelta) =====
+  const newDesc = "Alles rund um Ihre persönliche Steuernummer.";
+  await admin.from("tutorials").update({ description: newDesc }).eq("id", tutId);
+  await markStale(admin, tutId);
+  const titleNow = (await admin.from("tutorials").select("title").eq("id", tutId).single()).data.title;
+  const descSegs = await translateSegments([titleNow, newDesc], "en"); // Delta: Titel + Beschreibung
+  await admin.from("tutorial_translations").upsert(
+    { tutorial_id: tutId, lang: "en", title: descSegs[0] ?? titleNow, description: descSegs[1] ?? newDesc, stale: false, updated_at: new Date().toISOString() },
+    { onConflict: "tutorial_id,lang" },
+  );
+  const descRow = (await admin.from("tutorial_translations").select("title, description, stale").eq("tutorial_id", tutId).eq("lang", "en").single()).data;
+  ok(descRow?.stale === false, "Beschreibung-Delta: stale=false nach Delta");
+  ok(
+    descRow?.description && descRow.description !== newDesc,
+    `Beschreibung übersetzt ("${descRow?.description}")`,
+  );
+
+  // ===== 8. HTML-Beweis: DE/EN-Hub + Druckansicht (Welle 29) =====
+  console.log("… Next-Server auf Port", PORT, "wird gestartet (kann einen Moment dauern) …");
+  server = spawn("npx", ["next", "dev", "-p", String(PORT)], {
+    env: { ...process.env, PORT: String(PORT) },
+    stdio: "ignore",
+    shell: true,
+  });
+  const up = await waitForServer();
+  ok(up, "Server erreichbar");
+  if (up) {
+    const enTitle = descRow?.title;
+    const hubDe = await getHtml(`/h/${accSlug}`);
+    const hubEn = await getHtml(`/h/${accSlug}?lang=en`);
+    const prDe = await getHtml(`/h/${accSlug}/${tutSlug}/drucken`);
+    const prEn = await getHtml(`/h/${accSlug}/${tutSlug}/drucken?lang=en`);
+    ok(hubEn.length > 0 && prEn.length > 0, "Hub/Druck-HTML abrufbar (200)");
+
+    // Kategorie: DE deutscher Name, EN übersetzter Name (deutscher NICHT auf EN).
+    ok(hubDe.includes("Steuer-Grundlagen"), "Hub DE zeigt deutschen Kategorienamen");
+    ok(
+      !!catEn && hubEn.includes(catEn) && !hubEn.includes("Steuer-Grundlagen"),
+      `Hub EN zeigt übersetzten Kategorienamen ("${catEn}")`,
+    );
+    // Beschreibung: DE deutsche, EN übersetzte (deutsche NICHT auf EN).
+    ok(hubDe.includes(newDesc), "Hub DE zeigt deutsche Beschreibung");
+    ok(
+      hubEn.includes(descRow.description) && !hubEn.includes(newDesc),
+      "Hub EN zeigt übersetzte Beschreibung (nicht die deutsche)",
+    );
+    ok(hubEn.includes(enTitle), `Hub EN zeigt übersetzten Titel ("${enTitle}")`);
+    ok(!hubEn.includes("Sonstiges"), "Hub EN: kein deutsches „Sonstiges“ in der UI");
+
+    // Druckansicht: EN übersetzter Titel + KEIN deutsches „Wenn“; DE zeigt „Wenn … →
+    // weiter mit Schritt N“. (React trennt Textknoten mit <!-- -->, daher ohne festes
+    // Trennzeichen prüfen.)
+    ok(
+      prDe.includes("Wenn") && prDe.includes("weiter mit Schritt"),
+      "Druck DE enthält „Wenn … → weiter mit Schritt N“ (deutsche Verzweigung)",
+    );
+    ok(prEn.includes(enTitle), `Druck EN enthält übersetzten Titel ("${enTitle}")`);
+    ok(!prEn.includes("Wenn"), "Druck EN enthält KEIN deutsches „Wenn“");
+    ok(prEn.includes("continue with step"), "Druck EN nutzt englische Verzweigungs-Beschriftung");
+
+    // Regression: DE-Hub/-Druck unverändert deutsch.
+    ok(hubDe.includes("Steuernummer beantragen"), "Regression: Hub DE zeigt deutschen Titel");
+    ok(!hubDe.includes(catEn), "Regression: Hub DE zeigt NICHT die EN-Kategorie");
+  }
 } catch (e) {
-  ok(false, "Fehler: " + (e?.message ?? e));
+  ok(false, "Fehler: " + (e?.stack ?? e?.message ?? e));
 } finally {
-  if (accountId) await admin.from("accounts").delete().eq("id", accountId); // cascade: Tutorials/Steps/Branches/Translations
+  if (accountId) await admin.from("accounts").delete().eq("id", accountId); // cascade: Tutorials/Steps/Branches/Translations/Kategorien
   if (userId) await admin.auth.admin.deleteUser(userId);
+  if (server && server.pid) {
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", String(server.pid), "/f", "/t"], { stdio: "ignore", shell: true });
+      } else {
+        process.kill(-server.pid, "SIGKILL");
+      }
+    } catch {
+      try { server.kill("SIGKILL"); } catch {}
+    }
+  }
 }
 
 console.log(failed ? "\n✗ Einige Übersetzungs-Checks sind fehlgeschlagen." : "\n✓ Alle Übersetzungs-Checks bestanden.");
 process.exitCode = failed ? 1 : 0;
+setTimeout(() => process.exit(failed ? 1 : 0), 1500);
