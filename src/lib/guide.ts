@@ -45,6 +45,45 @@ const SEL_CSS_MAX = 400;
 const SEL_TEXT_MAX = 80;
 const SEL_ROLE_MAX = 40;
 
+// ── Aufnahme-Anker (Welle 27) ────────────────────────────────────────────────
+// Optionales Ziel: die Aufnahme wird in ein BESTEHENDES Entwurfs-Tutorial an einer
+// genauen Stelle eingehängt (statt ein neues Tutorial anzulegen). ADDITIV — alte
+// Extensions schicken kein `target` und verhalten sich exakt wie bisher.
+//
+//   anchor = { afterStepId }  -> lineare Kette hinter diesem Schritt einhängen
+//   anchor = { branchId }     -> einen Verzweigungs-Ast füllen/verlängern
+//
+// parseGuideTarget prüft NUR die FORM (UUID-Strings, genau EIN Anker-Feld). Ob das
+// Tutorial dem Konto gehört, ein Entwurf ist und der Anker zu ihm gehört, prüft die
+// Route gegen die DB (dort auch der Fallback auf ein neues Tutorial).
+export type GuideAnchor = { afterStepId: string } | { branchId: string };
+export type GuideTarget = { tutorialId: string; anchor: GuideAnchor };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v.trim());
+
+/**
+ * Form-Validierung des optionalen Ziel-Ankers. Gibt ein normalisiertes Ziel zurück oder
+ * `null`, wenn die Form ungültig ist (fehlende/kaputte IDs, kein oder mehrdeutiger Anker).
+ * Wirft NIE — die Route entscheidet bei `null` auf Fallback (neues Tutorial).
+ */
+export function parseGuideTarget(raw: unknown): GuideTarget | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (!isUuid(r.tutorialId)) return null;
+  const tutorialId = (r.tutorialId as string).trim();
+
+  const a = r.anchor;
+  if (!a || typeof a !== "object" || Array.isArray(a)) return null;
+  const ar = a as Record<string, unknown>;
+  const hasAfter = isUuid(ar.afterStepId);
+  const hasBranch = isUuid(ar.branchId);
+  // Genau EIN Anker-Feld (nicht beide, nicht keines) — sonst mehrdeutig.
+  if (hasAfter === hasBranch) return null;
+  if (hasAfter) return { tutorialId, anchor: { afterStepId: (ar.afterStepId as string).trim() } };
+  return { tutorialId, anchor: { branchId: (ar.branchId as string).trim() } };
+}
+
 // Einen Selektor-String säubern: nur Strings, Steuerzeichen (\p{Cc}) raus, Whitespace
 // kollabieren, auf max kappen. Ungültig/leer -> undefined (Feld wird verworfen).
 function cleanSelectorString(v: unknown, max: number): string | undefined {

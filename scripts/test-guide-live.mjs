@@ -11,6 +11,14 @@
 //   (f) Selektor-Vorbau (Welle 24): S1 gueltiger selector -> exakt in steps.selector; S2
 //       kaputter selector (falsche Typen/ueberlang/fremde Keys) -> gesaeubert, KEIN 400;
 //       S3 ohne selector -> null (Abwaertskompatibilitaet)
+// AUFNAHME-ANKER (Welle 27):
+//   (b) afterStepId: Draft mit 3 Schritten -> 2 Schritte nach S1 einfuegen -> Kette exakt
+//       1,N1,N2,2,3 (ueber null-Label-Branches), root unveraendert.
+//   (c) branchId: Weiche seeden -> leeren Ast fuellen (Ast->N1, N1->N2, N2 Blatt) und
+//       Rejoin-Ast fuellen (Ast zeigte auf S9 -> M1->M2->S9).
+//   (d) fremdes Konto / veroeffentlichtes Tutorial / kaputte Anker -> fallback:true, 200,
+//       neues Tutorial, Ziel unveraendert.
+//   (e) >40 Schritte gesamt -> fallback:true, neues Tutorial, Ziel unveraendert.
 // Danach: vollstaendiges Cleanup (Tutorials/Steps/Branches via Cascade, Storage, Konten).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-guide-live.mjs
@@ -28,7 +36,7 @@ let failed = false;
 const ok = (c, m) => { console.log(`${c ? "✓" : "✗"} ${m}`); if (!c) failed = true; };
 const stamp = Date.now();
 
-let accId, userId, accFree, userFree, server;
+let accId, userId, accFree, userFree, accForeign, userForeign, server;
 const tutorialIds = [];
 const storagePaths = [];
 
@@ -69,6 +77,78 @@ function post(path, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+// ── Helfer fuer die Aufnahme-Anker-Tests (Welle 27) ──────────────────────────
+// Synthetische, aber GUELTIGE Schritt-Pfade (Praefix = Konto-Ordner). validateGuideSteps
+// prueft nur das Praefix + kein Traversal, NICHT die Existenz -> kein Storage/Upload noetig.
+function mkSteps(accountId, n, prefix) {
+  const folder = `${accountId}/guide-w27-${crypto.randomUUID()}`;
+  return Array.from({ length: n }, (_, i) => ({
+    path: `${folder}/${i}.webp`,
+    label: `${prefix}${i + 1}`,
+    action: "click",
+    rect: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 },
+    url: "https://app.test/x",
+    title: "Seite X",
+    w: 1200,
+    h: 800,
+  }));
+}
+
+// Linearen Entwurf mit N Schritten seeden (root + null-Label-Kette), direkt via Admin-DB.
+async function seedLinearDraft(accountId, titles) {
+  const { data: tut } = await admin
+    .from("tutorials")
+    .insert({ account_id: accountId, title: "Seed W27", status: "draft" })
+    .select("id")
+    .single();
+  const tutId = tut.id;
+  tutorialIds.push(tutId);
+  const stepRows = titles.map((t, i) => ({
+    id: crypto.randomUUID(),
+    tutorial_id: tutId,
+    title: t,
+    position: i + 1,
+    is_decision: false,
+  }));
+  await admin.from("steps").insert(stepRows);
+  await admin.from("tutorials").update({ root_step_id: stepRows[0].id }).eq("id", tutId);
+  const brs = stepRows.slice(0, -1).map((r, i) => ({
+    id: crypto.randomUUID(),
+    step_id: r.id,
+    label: null,
+    target_step_id: stepRows[i + 1].id,
+    position: 0,
+  }));
+  if (brs.length) await admin.from("step_branches").insert(brs);
+  return { tutId, stepRows };
+}
+
+// Alle Schritte + Branches + root eines Tutorials laden.
+async function loadTut(tutId) {
+  const { data: steps } = await admin.from("steps").select("id, title, is_decision").eq("tutorial_id", tutId);
+  const ids = (steps ?? []).map((s) => s.id);
+  const { data: branches } = ids.length
+    ? await admin.from("step_branches").select("id, step_id, label, target_step_id, position").in("step_id", ids)
+    : { data: [] };
+  const { data: tut } = await admin.from("tutorials").select("root_step_id").eq("id", tutId).single();
+  return { steps: steps ?? [], branches: branches ?? [], rootId: tut?.root_step_id ?? null };
+}
+
+// Lineare Fluss-Reihenfolge ab rootId ueber die null-Label-Kanten (zyklensicher).
+function walkLinear(rootId, branches) {
+  const nextOf = new Map();
+  for (const b of branches) if (b.label === null) nextOf.set(b.step_id, b.target_step_id);
+  const order = [];
+  const seen = new Set();
+  let cur = rootId;
+  while (cur && !seen.has(cur)) {
+    order.push(cur);
+    seen.add(cur);
+    cur = nextOf.get(cur) ?? null;
+  }
+  return order;
 }
 
 try {
@@ -153,6 +233,8 @@ try {
   const compRes = await post("/api/recorder/guide-complete", { token, steps });
   const comp = await compRes.json().catch(() => ({}));
   ok(compRes.status === 200 && !!comp.tutorialId, `complete gueltig -> tutorialId (${compRes.status})`);
+  // (a) Abwaertskompatibilitaet (Welle 27): OHNE target KEIN fallback-Feld (normale Aufnahme).
+  ok(comp.fallback === undefined, "(a) ohne target: kein fallback-Feld (unveraendertes Verhalten)");
 
   if (comp.tutorialId) {
     tutorialIds.push(comp.tutorialId);
@@ -223,7 +305,170 @@ try {
     }
   }
 
-  // ---------- (e) Free-Limit ----------
+  // ═══════════ AUFNAHME-ANKER (Welle 27) ═══════════
+  const seedIdsOf = (s) => s.stepRows.map((r) => r.id);
+
+  // ---------- (b) afterStepId: 2 Schritte NACH Schritt 1 -> Kette 1,N1,N2,2,3 ----------
+  {
+    const seed = await seedLinearDraft(accId, ["S1", "S2", "S3"]);
+    const ids = seedIdsOf(seed);
+    const res = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 2, "N"),
+      target: { tutorialId: seed.tutId, anchor: { afterStepId: ids[0] } },
+    });
+    const j = await res.json().catch(() => ({}));
+    ok(
+      res.status === 200 && j.tutorialId === seed.tutId && j.inserted === true && !j.fallback,
+      `(b) afterStepId eingefuegt in Ziel-Tutorial, kein fallback (${res.status})`,
+    );
+    const { branches, rootId } = await loadTut(seed.tutId);
+    const order = walkLinear(ids[0], branches);
+    ok(order.length === 5, `(b) 5 Schritte in linearer Kette (waren ${order.length})`);
+    ok(order[0] === ids[0] && order[3] === ids[1] && order[4] === ids[2], "(b) Reihenfolge exakt S1, N1, N2, S2, S3");
+    ok(![ids[0], ids[1], ids[2]].includes(order[1]) && ![ids[0], ids[1], ids[2]].includes(order[2]), "(b) Position 2+3 sind die NEUEN Schritte");
+    ok(rootId === ids[0], "(b) root_step_id unveraendert (S1)");
+  }
+
+  // ---------- (c) branchId: leeren Ast fuellen + Rejoin-Ast fuellen ----------
+  {
+    const { data: tut } = await admin
+      .from("tutorials")
+      .insert({ account_id: accId, title: "Weiche W27", status: "draft" })
+      .select("id")
+      .single();
+    const tutId = tut.id;
+    tutorialIds.push(tutId);
+    const s1 = crypto.randomUUID();
+    const s9 = crypto.randomUUID();
+    await admin.from("steps").insert([
+      { id: s1, tutorial_id: tutId, title: "Frage", position: 1, is_decision: true },
+      { id: s9, tutorial_id: tutId, title: "S9 Ziel", position: 2, is_decision: false },
+    ]);
+    await admin.from("tutorials").update({ root_step_id: s1 }).eq("id", tutId);
+    const brJa = crypto.randomUUID();
+    const brNein = crypto.randomUUID();
+    await admin.from("step_branches").insert([
+      { id: brJa, step_id: s1, label: "Ja", color: "#18a999", target_step_id: null, position: 0 },
+      { id: brNein, step_id: s1, label: "Nein", color: "#d3543a", target_step_id: s9, position: 1 },
+    ]);
+
+    // (c1) leerer Ast »Ja« -> Ast zeigt auf N1, Kette N1->N2, N2 ist Blatt (kein Rejoin).
+    const resJa = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 2, "J"),
+      target: { tutorialId: tutId, anchor: { branchId: brJa } },
+    });
+    const jJa = await resJa.json().catch(() => ({}));
+    ok(resJa.status === 200 && jJa.tutorialId === tutId && jJa.inserted && !jJa.fallback, `(c1) leerer Ast gefuellt (${resJa.status})`);
+    {
+      const { branches } = await loadTut(tutId);
+      const ja = branches.find((b) => b.id === brJa);
+      const n1 = ja?.target_step_id;
+      ok(n1 && ![s1, s9].includes(n1), "(c1) Ast »Ja« zeigt auf ersten neuen Schritt N1");
+      const chain = walkLinear(n1, branches);
+      ok(chain.length === 2, `(c1) Kette N1->N2 (2 Schritte) (waren ${chain.length})`);
+      const n2out = branches.filter((b) => b.step_id === chain[1]);
+      ok(n2out.length === 0, "(c1) N2 ist Blatt (leerer Ast: kein Rejoin-Ziel)");
+    }
+
+    // (c2) Rejoin-Ast »Nein« (zeigte auf S9) -> Ast zeigt auf M1, Kette M1->M2->S9.
+    const resNein = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 2, "M"),
+      target: { tutorialId: tutId, anchor: { branchId: brNein } },
+    });
+    const jNein = await resNein.json().catch(() => ({}));
+    ok(resNein.status === 200 && jNein.inserted && !jNein.fallback, `(c2) Rejoin-Ast gefuellt (${resNein.status})`);
+    {
+      const { branches } = await loadTut(tutId);
+      const nein = branches.find((b) => b.id === brNein);
+      const m1 = nein?.target_step_id;
+      ok(m1 && ![s1, s9].includes(m1), "(c2) Ast »Nein« zeigt auf ersten neuen Schritt M1");
+      const chain = walkLinear(m1, branches);
+      ok(chain.length === 3 && chain[2] === s9, `(c2) Rejoin: M1->M2->S9 (letzter neuer Schritt zeigt auf S9) (${chain.length})`);
+    }
+  }
+
+  // ---------- (d) ungueltige Ziele -> fallback:true, neues Tutorial, 200 ----------
+  {
+    // (d1) fremdes Konto (anderes Tutorial-Eigentum).
+    const G = await mkUser(`tutax-guide-foreign-${stamp}@example.com`);
+    accForeign = G.accountId;
+    userForeign = G.userId;
+    const { data: fremd } = await admin
+      .from("tutorials")
+      .insert({ account_id: accForeign, title: "Fremd", status: "draft" })
+      .select("id")
+      .single();
+    const resD1 = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 1, "D"),
+      target: { tutorialId: fremd.id, anchor: { afterStepId: crypto.randomUUID() } },
+    });
+    const jD1 = await resD1.json().catch(() => ({}));
+    ok(resD1.status === 200 && jD1.fallback === true && jD1.tutorialId && jD1.tutorialId !== fremd.id, `(d1) fremdes Konto -> fallback neues Tutorial (${resD1.status})`);
+    ok(typeof jD1.fallbackReason === "string" && jD1.fallbackReason.length > 0, "(d1) fallbackReason vorhanden");
+    if (jD1.tutorialId) tutorialIds.push(jD1.tutorialId);
+
+    // (d2) veroeffentlichtes eigenes Tutorial (kein Entwurf).
+    const { data: pub } = await admin
+      .from("tutorials")
+      .insert({ account_id: accId, title: "Publik", status: "published" })
+      .select("id")
+      .single();
+    tutorialIds.push(pub.id);
+    const resD2 = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 1, "D"),
+      target: { tutorialId: pub.id, anchor: { branchId: crypto.randomUUID() } },
+    });
+    const jD2 = await resD2.json().catch(() => ({}));
+    ok(resD2.status === 200 && jD2.fallback === true && jD2.tutorialId !== pub.id, `(d2) veroeffentlichtes Ziel -> fallback (${resD2.status})`);
+    const { count: pubCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", pub.id);
+    ok((pubCount ?? 0) === 0, "(d2) veroeffentlichtes Ziel unveraendert (0 Schritte eingefuegt)");
+    if (jD2.tutorialId) tutorialIds.push(jD2.tutorialId);
+
+    // (d3) eigener Entwurf, aber Anker-Schritt gehoert NICHT dazu (kaputter Wert).
+    const seedD = await seedLinearDraft(accId, ["A", "B"]);
+    const resD3 = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 1, "D"),
+      target: { tutorialId: seedD.tutId, anchor: { afterStepId: crypto.randomUUID() } },
+    });
+    const jD3 = await resD3.json().catch(() => ({}));
+    ok(resD3.status === 200 && jD3.fallback === true && jD3.tutorialId !== seedD.tutId, `(d3) fremder Anker-Schritt -> fallback (${resD3.status})`);
+    const { count: d3Count } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", seedD.tutId);
+    ok((d3Count ?? 0) === 2, "(d3) Ziel-Draft unveraendert (2 Schritte)");
+    if (jD3.tutorialId) tutorialIds.push(jD3.tutorialId);
+
+    // (d3b) unbrauchbarer Anker-Wert (keine UUID) -> Form-Parse scheitert -> fallback.
+    const resD3b = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 1, "D"),
+      target: { tutorialId: seedD.tutId, anchor: { afterStepId: "not-a-uuid" } },
+    });
+    const jD3b = await resD3b.json().catch(() => ({}));
+    ok(resD3b.status === 200 && jD3b.fallback === true, `(d3b) unbrauchbarer Anker-Wert -> fallback (${resD3b.status})`);
+    if (jD3b.tutorialId) tutorialIds.push(jD3b.tutorialId);
+  }
+
+  // ---------- (e) >40-Grenze beim Einfuegen -> fallback:true, neues Tutorial ----------
+  {
+    const seedBig = await seedLinearDraft(accId, Array.from({ length: 39 }, (_, i) => `B${i + 1}`));
+    const resBig = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 2, "E"),
+      target: { tutorialId: seedBig.tutId, anchor: { afterStepId: seedIdsOf(seedBig)[0] } },
+    });
+    const jBig = await resBig.json().catch(() => ({}));
+    ok(resBig.status === 200 && jBig.fallback === true && jBig.tutorialId !== seedBig.tutId, `(e) >40 Schritte -> fallback neues Tutorial (${resBig.status})`);
+    const { count: bigCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", seedBig.tutId);
+    ok((bigCount ?? 0) === 39, "(e) Ziel-Draft unveraendert bei Ueberschreitung (39 Schritte)");
+    if (jBig.tutorialId) tutorialIds.push(jBig.tutorialId);
+  }
+
+  // ---------- (e-alt) Free-Limit ----------
   const F = await mkUser(`tutax-guide-free-${stamp}@example.com`);
   accFree = F.accountId; userFree = F.userId;
   const tokFree = crypto.randomUUID();
@@ -256,8 +501,10 @@ try {
     // Konten (Cascade -> ihre Tutorials/Steps) + User.
     if (accId) await admin.from("accounts").delete().eq("id", accId);
     if (accFree) await admin.from("accounts").delete().eq("id", accFree);
+    if (accForeign) await admin.from("accounts").delete().eq("id", accForeign);
     if (userId) await admin.auth.admin.deleteUser(userId);
     if (userFree) await admin.auth.admin.deleteUser(userFree);
+    if (userForeign) await admin.auth.admin.deleteUser(userForeign);
   } catch (e) {
     console.warn("Cleanup-Warnung:", e.message);
   }

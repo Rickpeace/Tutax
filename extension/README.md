@@ -1,4 +1,20 @@
-# Steply Recorder (Browser-Extension, v2.2 — Side Panel)
+# Steply Recorder (Browser-Extension, v2.3 — Side Panel)
+
+> **v2.3 — Aufnahme-Anker: in bestehende Anleitungen aufnehmen.** Bisher legte jede
+> Sofort-Anleitung immer ein **neues** Tutorial an. Jetzt kann die Aufnahme **gezielt in
+> ein bestehendes Entwurfs-Tutorial an genau einer Stelle** eingehängt werden — an jedem
+> Einfügepunkt im Builder (+ zwischen Schritten, am Ende einer Kette, an jedem Ast einer
+> Verzweigung, auch einem leeren). Ablauf: im Builder auf „**Ab hier mit Extension
+> aufnehmen**" klicken → die Seitenleiste öffnet sich **und** merkt sich das Ziel
+> (`pendingTarget` in `chrome.storage.local`, origin-gebunden über den Sender, Verfall nach
+> 30 min). Ein Banner „🎯 Aufnahme für: …" zeigt das Ziel; „Ziel verwerfen" räumt es weg.
+> Beim Fertigstellen reist das Ziel im `guide-complete`-Payload mit — **nur**, wenn die
+> Herkunft der konfigurierten App-URL entspricht. Die Verkettung macht der Server (Kette
+> bleibt geschlossen; Rejoin bleibt erhalten). Ist das Ziel nicht nutzbar (kein Entwurf,
+> fremdes Konto, kaputter Anker, >40 Schritte), legt der Server **stattdessen ein neues
+> Tutorial** an (`fallback: true` + Grund) — **eine Aufnahme geht nie verloren**. So füllt
+> man **Verzweigungen** bequem: Weiche im Builder anlegen, dann jeden Ast einzeln per
+> Extension aufnehmen.
 
 > **v2.2 — Ein-Klick-Verbinden & Download-Seite.** Kein Token mehr von Hand kopieren:
 > Auf der öffentlichen **Download-Seite `/extension`** laden Sie die Extension als ZIP

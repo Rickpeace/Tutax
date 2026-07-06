@@ -54,6 +54,7 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
   window.__sent = [];
   window.__pairCalls = []; // Welle 25: zaehlt weitergereichte steply-pair-Nachrichten
   window.__openPanelCalls = 0; // v2.2.1: zaehlt steply-open-panel-Weiterleitungen
+  window.__recordIntoCalls = []; // Welle 27: zaehlt weitergereichte steply-record-into-Nachrichten
   window.chrome = {
     runtime: {
       lastError: undefined,
@@ -61,6 +62,7 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
       sendMessage: function (m) {
         if (m && m.type === "steply-guide-step") { window.__sent.push(m.step); return; }
         if (m && m.type === "steply-open-panel") { window.__openPanelCalls++; return; }
+        if (m && m.type === "steply-record-into") { window.__recordIntoCalls.push(m); return; }
         if (m && m.type === "steply-pair") {
           window.__pairCalls.push(m);
           return Promise.resolve({ ok: true, account: "Testkonto" });
@@ -362,6 +364,81 @@ try {
     (await page.evaluate(() => window.__openPanelCalls)) === 1,
     "steply-open-panel OHNE __steply-Flag -> NICHT weitergereicht"
   );
+
+  // ---------- 18) Aufnahme-Anker-Filter (Welle 27): steply-record-into ----------
+  const recordCount = () => page.evaluate(() => window.__recordIntoCalls.length);
+  const resetRecord = () => page.evaluate(() => { window.__recordIntoCalls.length = 0; });
+  const UUID_A = "11111111-1111-4111-8111-111111111111";
+  const UUID_B = "22222222-2222-4222-8222-222222222222";
+  const UUID_C = "33333333-3333-4333-8333-333333333333";
+
+  // (a) Gueltig (afterStepId): __steply, echte source, gleicher origin -> weitergereicht
+  //     mit sauberem { tutorialId, anchor: { afterStepId } }.
+  await resetRecord();
+  await page.evaluate(({ t, a }) =>
+    window.postMessage(
+      { __steply: true, type: "steply-record-into", target: { tutorialId: t, anchor: { afterStepId: a } }, label: "nach Schritt 3" },
+      "*"
+    ), { t: UUID_A, a: UUID_B });
+  await page.waitForTimeout(80);
+  {
+    const n = await recordCount();
+    ok(n === 1, `gueltiges record-into (afterStepId) -> weitergereicht (${n})`);
+    const last = await page.evaluate(() => window.__recordIntoCalls[0] || null);
+    ok(
+      last && last.type === "steply-record-into" &&
+        last.target && last.target.tutorialId === UUID_A &&
+        last.target.anchor && last.target.anchor.afterStepId === UUID_B &&
+        !("branchId" in last.target.anchor) &&
+        last.label === "nach Schritt 3",
+      `record-into afterStepId sauber weitergereicht (war ${JSON.stringify(last)})`
+    );
+  }
+
+  // (a2) Gueltig (branchId): der andere Anker-Typ kommt ebenfalls durch.
+  await resetRecord();
+  await page.evaluate(({ t, b }) =>
+    window.postMessage(
+      { __steply: true, type: "steply-record-into", target: { tutorialId: t, anchor: { branchId: b } }, label: "Ast Ja" },
+      "*"
+    ), { t: UUID_A, b: UUID_C });
+  await page.waitForTimeout(80);
+  {
+    const last = await page.evaluate(() => window.__recordIntoCalls[0] || null);
+    ok(
+      (await recordCount()) === 1 && last && last.target.anchor.branchId === UUID_C && !("afterStepId" in last.target.anchor),
+      `record-into branchId sauber weitergereicht (war ${JSON.stringify(last)})`
+    );
+  }
+
+  // (b) Fehlendes __steply-Flag -> NICHT weitergereicht.
+  await resetRecord();
+  await page.evaluate(({ t, a }) =>
+    window.postMessage({ type: "steply-record-into", target: { tutorialId: t, anchor: { afterStepId: a } } }, "*"),
+    { t: UUID_A, a: UUID_B });
+  await page.waitForTimeout(80);
+  ok((await recordCount()) === 0, "record-into OHNE __steply-Flag -> NICHT weitergereicht");
+
+  // (c) event.source !== window (synthetisches Event) -> NICHT weitergereicht.
+  await resetRecord();
+  await page.evaluate(({ t, a }) => {
+    const ev = new MessageEvent("message", {
+      data: { __steply: true, type: "steply-record-into", target: { tutorialId: t, anchor: { afterStepId: a } } },
+      origin: location.origin,
+      source: null,
+    });
+    window.dispatchEvent(ev);
+  }, { t: UUID_A, a: UUID_B });
+  await page.waitForTimeout(30);
+  ok((await recordCount()) === 0, "record-into mit source!==window -> NICHT weitergereicht");
+
+  // (d) Kaputtes target (kein anchor) -> NICHT weitergereicht (content.js kehrt frueh zurueck).
+  await resetRecord();
+  await page.evaluate(({ t }) =>
+    window.postMessage({ __steply: true, type: "steply-record-into", target: { tutorialId: t } }, "*"),
+    { t: UUID_A });
+  await page.waitForTimeout(80);
+  ok((await recordCount()) === 0, "record-into ohne anchor -> NICHT weitergereicht");
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {
