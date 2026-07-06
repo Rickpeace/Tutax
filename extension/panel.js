@@ -101,6 +101,12 @@ const els = {
   fuehrenBack: document.getElementById("fuehrenBack"),
   fuehrenHint: document.getElementById("fuehrenHint"),
   fuehrenList: document.getElementById("fuehrenList"),
+  // Filter-Chips (Welle 32, Punkt C)
+  fuehrenFilters: document.getElementById("fuehrenFilters"),
+  chipSite: document.getElementById("chipSite"),
+  chipAll: document.getElementById("chipAll"),
+  chipLive: document.getElementById("chipLive"),
+  chipDrafts: document.getElementById("chipDrafts"),
   guideRun: document.getElementById("guideRun"),
   runExit: document.getElementById("runExit"),
   runProgress: document.getElementById("runProgress"),
@@ -174,9 +180,10 @@ async function loadPendingTarget() {
   renderTargetBanner();
 }
 
-// Ziel-Banner: sagt IMMER, wo die Aufnahme landet (Richards Wunsch) -
-//   mit Ziel:  "Aufnahme fuer: <label>" + "Ziel verwerfen"
-//   ohne Ziel: neutral "Aufnahme wird als neues Tutorial angelegt" (nur wenn verbunden)
+// Ziel-Banner (Welle 32, Punkt D1): erscheint NUR noch im Aufnahme-Anker-Modus
+// (pendingTarget aktiv) als „Aufnahme für: <Ziel-Label>" + „Ziel verwerfen". Im DEFAULT-Fall
+// (neues Tutorial) bleibt das Banner AUS — der frühere neutrale Hinweis „… als neues
+// Tutorial angelegt" ist bewusst entfernt (Richards Wunsch, zu viel Rauschen).
 function renderTargetBanner() {
   if (!els.targetBanner) return;
   if (pendingTarget) {
@@ -186,12 +193,6 @@ function renderTargetBanner() {
     els.targetLabel.textContent = label || "die gewählte Stelle im Tutorial";
     els.targetBanner.classList.remove("target-banner-neutral");
     if (els.targetClear) els.targetClear.hidden = false;
-    els.targetBanner.hidden = false;
-  } else if (hasToken) {
-    if (els.targetPrefix) els.targetPrefix.textContent = "";
-    els.targetLabel.textContent = "Aufnahme wird als neues Tutorial angelegt";
-    els.targetBanner.classList.add("target-banner-neutral");
-    if (els.targetClear) els.targetClear.hidden = true;
     els.targetBanner.hidden = false;
   } else {
     els.targetBanner.hidden = true;
@@ -1544,6 +1545,15 @@ async function loadSiteTutorials() {
     const body = await res.json().catch(() => ({}));
     siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
     siteMatchOk = true;
+    // Icon-Badge (Welle 32, Punkt E): Liste für den Service-Worker in chrome.storage.local
+    // mit auffrischen (TTL lebt im background.js). DATENSCHUTZ: NUR die Tutorial-Liste (inkl.
+    // site_domains) wird gecacht — die besuchte URL wird NIE gespeichert/gesendet; das
+    // Matching gegen die Live-URL läuft rein lokal im Service-Worker.
+    try {
+      chrome.storage.local.set({ badgeCache: { tutorials: siteTutorials, at: Date.now() } });
+    } catch (err) {
+      /* Badge ist reiner Komfort */
+    }
     return siteTutorials;
   } catch (err) {
     siteMatchOk = false;
@@ -1582,6 +1592,51 @@ function openMatchedTutorial(id) {
   chrome.tabs.create({ url: appBase() + "/app/preview/" + id, active: true });
 }
 
+// ── Gemeinsames Karten-Layout (Welle 32, Punkt D2) ──────────────────────────────────────
+// EINE Karte für „Für diese Seite" UND die „Führen"-Liste: zweizeiliger Titel (line-clamp 2),
+// Meta-Zeile (Kategorie-Chip + Schrittzahl) und ein kleiner Status-Punkt rechts (Teal =
+// veröffentlicht, Amber = Entwurf). So sieht man auf einen Blick, WAS man anklickt.
+function buildTutorialCard(t, onClick) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "tut-card";
+
+  const main = document.createElement("span");
+  main.className = "tut-card-main";
+
+  const title = document.createElement("span");
+  title.className = "tut-card-title";
+  title.textContent = t.title || "Ohne Titel";
+  main.appendChild(title);
+
+  const meta = document.createElement("span");
+  meta.className = "tut-card-meta";
+  const cat = t.category && typeof t.category === "object" ? t.category : null;
+  if (cat && cat.name) {
+    const catChip = document.createElement("span");
+    catChip.className = "tut-cat-chip";
+    catChip.textContent = cat.name;
+    meta.appendChild(catChip);
+  }
+  const steps = document.createElement("span");
+  steps.className = "tut-steps";
+  const n = Number(t.stepCount) || 0;
+  steps.textContent = n === 1 ? "1 Schritt" : n + " Schritte";
+  meta.appendChild(steps);
+  main.appendChild(meta);
+  row.appendChild(main);
+
+  const published = t.status === "published";
+  const dot = document.createElement("span");
+  dot.className = "tut-status " + (published ? "tut-status-pub" : "tut-status-draft");
+  dot.title = published ? "Veröffentlicht" : "Entwurf";
+  dot.setAttribute("aria-label", published ? "Veröffentlicht" : "Entwurf");
+  row.appendChild(dot);
+
+  row.addEventListener("click", () => onClick(t));
+  return row;
+}
+
 // Treffer (oder Leer-Zustand) rendern.
 function renderSiteMatch(matches) {
   const listEl = document.getElementById("siteMatchList");
@@ -1612,29 +1667,7 @@ function renderSiteMatch(matches) {
   }
 
   for (const t of matches) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "site-match-item";
-
-    const title = document.createElement("span");
-    title.className = "sm-title";
-    title.textContent = t.title || "Ohne Titel";
-
-    const meta = document.createElement("span");
-    meta.className = "sm-meta";
-    const n = Number(t.stepCount) || 0;
-    meta.textContent = n === 1 ? "1 Schritt" : n + " Schritte";
-
-    const chip = document.createElement("span");
-    const published = t.status === "published";
-    chip.className = "sm-chip " + (published ? "sm-chip-pub" : "sm-chip-draft");
-    chip.textContent = published ? "Veröffentlicht" : "Entwurf";
-
-    row.appendChild(title);
-    row.appendChild(meta);
-    row.appendChild(chip);
-    row.addEventListener("click", () => openMatchedTutorial(t.id));
-    listEl.appendChild(row);
+    listEl.appendChild(buildTutorialCard(t, (tut) => openMatchedTutorial(tut.id)));
   }
 }
 
@@ -2134,6 +2167,77 @@ async function guideExit() {
   showStart();
 }
 
+// ── „Bring mich hin" (Welle 32, Punkt F) ─────────────────────────────────────────────────
+// Registrierbare Basis-Domain (letzte zwei Labels) eines vollen Hostnamens — für den
+// Vergleich Live-Tab ↔ Startseite von Schritt 1.
+function baseDomain(host) {
+  if (typeof host !== "string" || !host) return "";
+  const labels = host.split(".");
+  return labels.length <= 2 ? host : labels.slice(-2).join(".");
+}
+
+// site_domains eines Tutorials aus den bereits geladenen Listen (Führen/„Für diese Seite").
+function cachedSiteDomains(id) {
+  if (!id) return null;
+  const find = (list) => (Array.isArray(list) ? list.find((t) => t && t.id === id) : null);
+  const t = find(fuehrenTutorials) || find(siteTutorials);
+  return t && Array.isArray(t.site_domains) ? t.site_domains : null;
+}
+
+async function tabUrlById(tabId) {
+  if (tabId == null) return "";
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab && typeof tab.url === "string" ? tab.url : "";
+  } catch (err) {
+    return "";
+  }
+}
+
+// Passt der aktive Tab NICHT zum Tutorial (site_domains bzw. Domain von Schritt 1), einen
+// neuen Tab auf der Startseite (Schritt 1 page_url) öffnen und die Führung an DIESEN Tab
+// binden. Ohne page_url an Schritt 1: Verhalten wie bisher (aktueller Tab). chrome://-Tabs
+// u. ä. → ebenfalls neuer Tab, sofern eine page_url existiert.
+// DATENSCHUTZ: Die aktuelle Tab-URL wird NUR lokal für den Domain-Vergleich gelesen.
+async function guideBringToStartIfNeeded() {
+  if (typeof SteplySiteMatch === "undefined") return;
+  const startStep = guide.curId != null ? guide.stepById.get(guide.curId) : guide.steps[0] || null;
+  const pageUrl = startStep && typeof startStep.page_url === "string" ? startStep.page_url : "";
+  const targetHost = SteplySiteMatch.hostnameOf(pageUrl);
+  if (!pageUrl || !targetHost) return; // Schritt 1 ohne (normale) URL -> aktueller Tab
+
+  const curUrl = await tabUrlById(guide.tabId);
+  const curHost = SteplySiteMatch.hostnameOf(curUrl);
+
+  // Passt der aktive Host zur Startseiten-Domain ODER zu einem site_domain? Dann bleiben.
+  let matches = false;
+  if (curHost) {
+    if (baseDomain(curHost) === baseDomain(targetHost)) {
+      matches = true;
+    } else {
+      const domains = cachedSiteDomains(guide.tutorial ? guide.tutorial.id : null);
+      if (Array.isArray(domains)) {
+        for (const d of domains) {
+          if (SteplySiteMatch.matchesDomain(curHost, d)) {
+            matches = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (matches) return; // schon auf der richtigen Seite -> aktueller Tab
+
+  // Sonst: neuen Tab auf der Startseite öffnen + Führung daran binden.
+  try {
+    const tab = await chrome.tabs.create({ url: pageUrl, active: true });
+    if (tab && tab.id != null) guide.tabId = tab.id;
+    setStatus("Sie werden zur Startseite gebracht …", "");
+  } catch (err) {
+    /* Tab ließ sich nicht öffnen -> aktueller Tab (Fallback) */
+  }
+}
+
 // EINSTIEG (auch window.SteplyGuide.start): Tutorial laden und Führung starten.
 async function guideStart(tutorialId) {
   if (!hasToken || !tutorialId) return;
@@ -2158,17 +2262,95 @@ async function guideStart(tutorialId) {
     setStatus("Diese Anleitung hat noch keine Schritte.", "error");
     return;
   }
+  // „Bring mich hin" (Punkt F): passt der Tab nicht, in einem neuen Tab auf der Startseite
+  // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden.
+  await guideBringToStartIfNeeded();
   sendGuideEvent("started", null);
   show("guideRun");
   guideRenderStep();
 }
 
+// ── „Führen"-Liste mit Filtern + Kategorien-Gruppierung (Welle 32, Punkt C) ──────────────
+// Default-Filter: „Diese Seite" + „Live" — nur veröffentlichte Tutorials, deren site_domains
+// zur aktuellen Tab-URL passen (Matching REIN LOKAL via site-match.js; die besuchte URL
+// verlässt NIE den Browser). Zwei Chip-Paare (Diese Seite|Alle, Live|Auch Entwürfe); die
+// Auswahl bleibt in chrome.storage.session. Die Liste wird nach Kategorie gruppiert
+// („Ohne Kategorie" zuletzt).
+let fuehrenTutorials = null; // volle Liste vom Server (oder null)
+const FUEHREN_FILTER_DEFAULT = { site: "page", live: "live" };
+let fuehrenFilter = { ...FUEHREN_FILTER_DEFAULT };
+let fuehrenFilterLoaded = false;
+
+async function loadFuehrenFilter() {
+  try {
+    const r = await chrome.storage.session.get("fuehrenFilter");
+    const f = r && r.fuehrenFilter;
+    if (f && (f.site === "page" || f.site === "all") && (f.live === "live" || f.live === "drafts")) {
+      fuehrenFilter = { site: f.site, live: f.live };
+    }
+  } catch (err) {
+    /* Session-Storage optional -> Defaults */
+  }
+  fuehrenFilterLoaded = true;
+}
+
+function saveFuehrenFilter() {
+  try {
+    chrome.storage.session.set({ fuehrenFilter });
+  } catch (err) {
+    /* egal */
+  }
+}
+
+function renderFuehrenChips() {
+  if (!els.chipSite) return;
+  els.chipSite.classList.toggle("chip-active", fuehrenFilter.site === "page");
+  els.chipAll.classList.toggle("chip-active", fuehrenFilter.site === "all");
+  els.chipLive.classList.toggle("chip-active", fuehrenFilter.live === "live");
+  els.chipDrafts.classList.toggle("chip-active", fuehrenFilter.live === "drafts");
+}
+
+function setFuehrenFilter(patch) {
+  fuehrenFilter = { ...fuehrenFilter, ...patch };
+  renderFuehrenChips();
+  saveFuehrenFilter();
+  applyFuehrenFilters();
+}
+
+// Sortierung innerhalb einer Kategorie-Gruppe: veröffentlicht vor Entwurf, dann Titel A→Z.
+function fuehrenSort(a, b) {
+  const ap = a.status === "published" ? 0 : 1;
+  const bp = b.status === "published" ? 0 : 1;
+  if (ap !== bp) return ap - bp;
+  return String(a.title || "").localeCompare(String(b.title || ""));
+}
+
+// Nach Kategorie gruppieren: benannte Gruppen alphabetisch, „Ohne Kategorie" ganz zuletzt.
+function groupByCategory(list) {
+  const groups = new Map(); // key -> { name|null, items[] }
+  for (const t of list) {
+    const cat = t.category && typeof t.category === "object" ? t.category : null;
+    const key = cat && cat.id ? cat.id : "__none__";
+    if (!groups.has(key)) groups.set(key, { name: cat ? cat.name || "Ohne Namen" : null, items: [] });
+    groups.get(key).items.push(t);
+  }
+  const named = [...groups.entries()].filter(([k]) => k !== "__none__");
+  named.sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")));
+  const result = named.map(([, v]) => v);
+  const none = groups.get("__none__");
+  if (none) result.push({ name: null, items: none.items });
+  return result;
+}
+
 // „Führen"-Liste zeigen + Tutorials laden.
 async function showFuehren() {
   if (!hasToken) return;
+  if (!fuehrenFilterLoaded) await loadFuehrenFilter();
   show("fuehren");
   setStatus("");
   els.fuehrenHint.hidden = true;
+  if (els.fuehrenFilters) els.fuehrenFilters.hidden = false;
+  renderFuehrenChips();
   els.fuehrenList.textContent = "";
   const loading = document.createElement("p");
   loading.className = "note";
@@ -2184,56 +2366,64 @@ async function showFuehren() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     body = await res.json().catch(() => null);
   } catch (err) {
+    fuehrenTutorials = null;
     els.fuehrenList.textContent = "";
     els.fuehrenHint.textContent = "Die Anleitungen konnten nicht geladen werden.";
     els.fuehrenHint.hidden = false;
     return;
   }
-  renderFuehrenList(body && Array.isArray(body.tutorials) ? body.tutorials : []);
+  fuehrenTutorials = body && Array.isArray(body.tutorials) ? body.tutorials : [];
+  await applyFuehrenFilters();
 }
 
-function renderFuehrenList(tutorials) {
+// Filter anwenden (Live-Status + Diese-Seite) und die gefilterte, gruppierte Liste rendern.
+async function applyFuehrenFilters() {
+  if (!Array.isArray(fuehrenTutorials)) return;
+  let list = fuehrenTutorials.slice();
+
+  // „Live": nur veröffentlichte; „Auch Entwürfe": beides.
+  if (fuehrenFilter.live === "live") list = list.filter((t) => t.status === "published");
+
+  // „Diese Seite": nur Tutorials, deren site_domains zur aktuellen Tab-URL passen. Matching
+  // REIN LOKAL (site-match.js) — die besuchte URL verlässt NIE den Browser.
+  let siteRestricted = false;
+  if (fuehrenFilter.site === "page") {
+    siteRestricted = true;
+    const url = await currentActiveUrl();
+    const host = typeof SteplySiteMatch !== "undefined" ? SteplySiteMatch.hostnameOf(url) : null;
+    list = host ? SteplySiteMatch.matchTutorials(url, list) : [];
+  }
+
+  renderFuehrenList(list, siteRestricted);
+}
+
+function renderFuehrenList(list, siteRestricted) {
   els.fuehrenList.textContent = "";
-  if (!tutorials.length) {
-    els.fuehrenHint.textContent = "Noch keine Anleitungen vorhanden.";
+  if (!list.length) {
+    els.fuehrenHint.textContent = siteRestricted
+      ? "Für diese Seite gibt es keine passende Anleitung — „Alle“ zeigt alle."
+      : fuehrenFilter.live === "live"
+        ? "Keine veröffentlichten Anleitungen — „Auch Entwürfe“ zeigt mehr."
+        : "Noch keine Anleitungen vorhanden.";
     els.fuehrenHint.hidden = false;
     return;
   }
   els.fuehrenHint.hidden = true;
-  // Veröffentlichte zuerst, Entwürfe danach (Server sortiert innerhalb schon updated_at desc).
-  const sorted = tutorials.slice().sort((a, b) => (a.status === "draft" ? 1 : 0) - (b.status === "draft" ? 1 : 0));
-  sorted.forEach((t) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "fuehren-item";
 
-    const main = document.createElement("span");
-    main.className = "fuehren-main";
-    const title = document.createElement("strong");
-    title.className = "fuehren-title";
-    title.textContent = t.title || "Ohne Titel";
-    main.appendChild(title);
-
-    const meta = document.createElement("span");
-    meta.className = "fuehren-meta";
-    const steps = Number(t.stepCount) || 0;
-    const canLive = (Number(t.selectorCount) || 0) > 0;
-    let metaText = steps + (steps === 1 ? " Schritt" : " Schritte");
-    if (t.status === "draft") metaText += " · Entwurf";
-    if (!canLive) metaText += " · ohne Bildschirm-Markierung";
-    meta.textContent = metaText;
-    main.appendChild(meta);
-    row.appendChild(main);
-
-    if (canLive) {
-      const badge = document.createElement("span");
-      badge.className = "fuehren-live";
-      badge.textContent = "Live";
-      row.appendChild(badge);
+  const groups = groupByCategory(list);
+  // Überschriften nur zeigen, wenn es mehr als eine Gruppe gibt oder eine echte Kategorie da ist.
+  const showHeadings = groups.length > 1 || (groups.length === 1 && !!groups[0].name);
+  for (const g of groups) {
+    if (showHeadings) {
+      const h = document.createElement("p");
+      h.className = "fuehren-group";
+      h.textContent = g.name || "Ohne Kategorie";
+      els.fuehrenList.appendChild(h);
     }
-    row.addEventListener("click", () => guideStart(t.id));
-    els.fuehrenList.appendChild(row);
-  });
+    g.items.slice().sort(fuehrenSort).forEach((t) => {
+      els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.id)));
+    });
+  }
 }
 
 // Eine laufende Führung nach Panel-Schließen/Öffnen fortsetzen (chrome.storage.session).
@@ -2334,6 +2524,11 @@ els.cardGuideRun.addEventListener("click", () => {
   if (hasToken) showFuehren();
 });
 els.fuehrenBack.addEventListener("click", () => showStart());
+// Filter-Chips (Welle 32, Punkt C): segmentierte Umschalter, Auswahl in der Session.
+if (els.chipSite) els.chipSite.addEventListener("click", () => setFuehrenFilter({ site: "page" }));
+if (els.chipAll) els.chipAll.addEventListener("click", () => setFuehrenFilter({ site: "all" }));
+if (els.chipLive) els.chipLive.addEventListener("click", () => setFuehrenFilter({ live: "live" }));
+if (els.chipDrafts) els.chipDrafts.addEventListener("click", () => setFuehrenFilter({ live: "drafts" }));
 els.runExit.addEventListener("click", guideExit);
 els.runBack.addEventListener("click", guideGoBack);
 els.runNext.addEventListener("click", guideGoNext);
