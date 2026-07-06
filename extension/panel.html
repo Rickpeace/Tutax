@@ -51,7 +51,7 @@
       <button id="saveCfg" class="btn btn-primary" type="button">Speichern</button>
       <p id="cfgStatus" class="status" role="status" aria-live="polite"></p>
       <button id="skipConnect" class="btn" type="button">
-        Ohne Verbindung fortfahren (nur Video)
+        Ohne Verbindung fortfahren
       </button>
     </section>
 
@@ -89,6 +89,16 @@
         <span class="card-body">
           <strong>Anleitung f&uuml;hren</strong>
           <em>Schritt f&uuml;r Schritt auf der echten Website - mit Markierung.</em>
+        </span>
+      </button>
+
+      <!-- „Steply lernen" (Welle 35): IMMER sichtbar - auch ohne Verbindung (Onboarding).
+           Öffnet die öffentlichen Steply-Doku-Touren (kein Token nötig). -->
+      <button id="cardSteplyLearn" class="card-choice" type="button">
+        <span class="card-emoji" aria-hidden="true">&#127891;</span>
+        <span class="card-body">
+          <strong>Steply lernen</strong>
+          <em>Interaktive Touren: So nutzen Sie Steply Schritt f&uuml;r Schritt.</em>
         </span>
       </button>
 
@@ -274,6 +284,19 @@
         <p class="lead">Sie haben die Anleitung durchlaufen.</p>
         <button id="runDoneList" class="btn" type="button">Andere Anleitung f&uuml;hren</button>
       </div>
+    </section>
+
+    <!-- ============ „STEPLY LERNEN" (Welle 35): öffentliche Doku-Touren ============ -->
+    <section id="steplyLearn" hidden>
+      <button id="steplyLearnBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
+      <p class="lead">&#127891; Steply lernen</p>
+      <p class="note">
+        Interaktive Touren, die Steply mit Steply erkl&auml;ren &ndash; Schritt f&uuml;r
+        Schritt. F&uuml;r manche Schritte gibt es eine Live-Markierung, wenn Sie in der
+        Steply-App sind; sonst leiten die Screenshots.
+      </p>
+      <p id="steplyLearnHint" class="note" hidden></p>
+      <div id="steplyLearnList" class="fuehren-list" aria-live="polite"></div>
     </section>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>

@@ -340,6 +340,45 @@ async function getBadgeTutorials() {
   }
 }
 
+const STEPLY_DOC_TTL = 15 * 60 * 1000; // 15 min (mit dem Panel geteilt)
+
+// Steply-Doku-Touren für den Badge (Welle 35): erscheinen für JEDEN Kunden — auch OHNE Token.
+// Aus dem 15-min-Cache (chrome.storage.local.steplyDocCache, den auch das Panel füllt); ist er
+// alt/leer, von GET /api/guide/steply neu holen (KEIN Token; NUR die Liste — es geht KEINE
+// besuchte URL raus). Normalisiert auf status:"published" (Doku ist immer veröffentlicht).
+async function getSteplyDocs() {
+  const now = Date.now();
+  let cache = null;
+  try {
+    cache = (await chrome.storage.local.get("steplyDocCache")).steplyDocCache || null;
+  } catch (err) {
+    cache = null;
+  }
+  if (cache && Array.isArray(cache.tutorials) && now - (cache.at || 0) < STEPLY_DOC_TTL) {
+    return cache.tutorials;
+  }
+  try {
+    const base = await badgeAppBase();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(base + "/api/guide/steply", { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return cache && Array.isArray(cache.tutorials) ? cache.tutorials : null;
+    const body = await res.json().catch(() => ({}));
+    const tutorials = (Array.isArray(body.tutorials) ? body.tutorials : [])
+      .filter((t) => t && t.id && Array.isArray(t.site_domains))
+      .map((t) => ({ ...t, status: "published", source: "steply" }));
+    try {
+      await chrome.storage.local.set({ steplyDocCache: { tutorials, at: now } });
+    } catch (err) {
+      /* egal */
+    }
+    return tutorials;
+  } catch (err) {
+    return cache && Array.isArray(cache.tutorials) ? cache.tutorials : null;
+  }
+}
+
 function clearBadge(tabId) {
   try {
     chrome.action.setBadgeText({ text: "", tabId });
@@ -359,14 +398,21 @@ async function updateBadgeForTab(tabId, url) {
       clearBadge(tabId);
       return;
     }
-    const tutorials = await getBadgeTutorials();
-    if (!tutorials) {
+    // Matching-Pool = Konto-Tutorials (NUR mit Token) + Steply-Doku-Touren (immer, auch OHNE
+    // Token). Dedupe per id (Konto gewinnt, falls der Nutzer mit dem Steply-Konto gepairt ist).
+    const account = await getBadgeTutorials();
+    const docs = await getSteplyDocs();
+    const merged = [];
+    const seen = new Set();
+    for (const t of account || []) if (t && t.id && !seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+    for (const t of docs || []) if (t && t.id && !seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+    if (!merged.length) {
       clearBadge(tabId);
       return;
     }
     // Nur VEROEFFENTLICHTE zaehlen — konsistent mit dem Default der Fuehren-Liste
-    // („Diese Seite + Live"); sonst verspricht das Badge mehr, als die Liste zeigt.
-    const n = SM.matchTutorials(url, tutorials).filter((t) => t.status === "published").length;
+    // („Diese Seite + Live"); Doku ist immer published. Sonst verspraeche das Badge zu viel.
+    const n = SM.matchTutorials(url, merged).filter((t) => t.status === "published").length;
     if (n > 0) {
       try {
         chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });

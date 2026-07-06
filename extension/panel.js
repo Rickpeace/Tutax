@@ -123,6 +123,12 @@ const els = {
   runNext: document.getElementById("runNext"),
   runDone: document.getElementById("runDone"),
   runDoneList: document.getElementById("runDoneList"),
+  // „Steply lernen" (Welle 35): Karte im Start-Screen + eigene Doku-Touren-Ansicht.
+  cardSteplyLearn: document.getElementById("cardSteplyLearn"),
+  steplyLearn: document.getElementById("steplyLearn"),
+  steplyLearnBack: document.getElementById("steplyLearnBack"),
+  steplyLearnHint: document.getElementById("steplyLearnHint"),
+  steplyLearnList: document.getElementById("steplyLearnList"),
 };
 
 // ---- Zustand ----
@@ -411,6 +417,8 @@ function show(section) {
   // Live-Führung (Welle 31): eigene Bereiche.
   els.fuehren.hidden = section !== "fuehren";
   els.guideRun.hidden = section !== "guideRun";
+  // „Steply lernen" (Welle 35): eigene Doku-Touren-Ansicht.
+  if (els.steplyLearn) els.steplyLearn.hidden = section !== "steplyLearn";
 }
 
 function fmtTime(totalSeconds) {
@@ -1592,6 +1600,112 @@ async function loadSiteTutorials() {
   }
 }
 
+// ============================================================================
+// „STEPLY LERNEN" (Welle 35): die ÖFFENTLICHEN Steply-Doku-Touren erscheinen für JEDEN
+// Kunden — auch OHNE Verbindung (Onboarding). Sie kommen von GET /api/guide/steply (kein
+// Token!). App-URL = appBase() (gespeicherte steplyAppUrl bzw. DEFAULT_APP_URL als Fallback
+// — dieselbe Default-Prod-URL, die das Panel schon für Update-Check/Pairing nutzt).
+// ~15 min Cache: in-memory + chrome.storage.local (mit dem Icon-Badge im Service-Worker
+// geteilt). Jeder Eintrag wird auf { ..., status:"published", source:"steply" } normalisiert,
+// damit site-match/Badge (published-Filter) und der Führungs-Flow (Quelle) ihn erkennen.
+// ============================================================================
+const STEPLY_DOC_TTL = 15 * 60 * 1000; // 15 min
+let steplyDocs = null; // normalisierte Liste oder null (nicht verfügbar)
+let steplyDocsFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
+
+// Rohliste -> normalisiert (published + Quelle „steply"); nur brauchbare Einträge.
+function normalizeDocs(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((t) => t && t.id && t.slug)
+    .map((t) => ({ ...t, status: "published", source: "steply" }));
+}
+
+// Doku-Liste holen (kein Token), ~15 min gecacht. Bei Fehler/Offline: zuletzt gecachte Liste
+// (in-memory oder chrome.storage.local); erst danach null. Fail-silent.
+async function loadSteplyDocs() {
+  const now = Date.now();
+  if (steplyDocs && now - steplyDocsFetchedAt < STEPLY_DOC_TTL) return steplyDocs;
+  steplyDocsFetchedAt = now;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(appBase() + "/api/guide/steply", { method: "GET", signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      steplyDocs = normalizeDocs(body.tutorials);
+      // Für den Icon-Badge (Service-Worker) mitcachen. DATENSCHUTZ: nur die Liste (inkl.
+      // site_domains) — die besuchte URL wird NIE gespeichert/gesendet.
+      try {
+        chrome.storage.local.set({ steplyDocCache: { tutorials: steplyDocs, at: now } });
+      } catch (e) {
+        /* Badge ist reiner Komfort */
+      }
+      return steplyDocs;
+    }
+  } catch (err) {
+    /* offline/Fehler: gecachte Liste unten */
+  }
+  if (steplyDocs) return steplyDocs;
+  try {
+    const c = (await chrome.storage.local.get("steplyDocCache")).steplyDocCache;
+    if (c && Array.isArray(c.tutorials)) {
+      steplyDocs = c.tutorials;
+      return steplyDocs;
+    }
+  } catch (e) {
+    /* egal */
+  }
+  return null;
+}
+
+// Zwei Tutorial-Listen per id zusammenführen: `primary` gewinnt bei Duplikaten (so erscheinen
+// Doku-Touren NICHT doppelt, wenn der Nutzer mit dem Steply-Konto gepairt ist).
+function mergeTutorialsById(primary, secondary) {
+  const seen = new Set((primary || []).map((t) => t && t.id).filter(Boolean));
+  const out = (primary || []).slice();
+  for (const t of secondary || []) if (t && t.id && !seen.has(t.id)) out.push(t);
+  return out;
+}
+
+// Doku-Karten rendern (Reihenfolge des Servers = Hub-Reihenfolge beibehalten; Überschrift je
+// Kategorie-Wechsel). Klick startet eine Doku-Tour (Quelle „steply", per slug).
+function renderDocCards(container, list) {
+  let lastKey = null;
+  for (const t of list) {
+    const cat = t.category && typeof t.category === "object" ? t.category : null;
+    const key = cat && cat.id ? cat.id : "__none__";
+    if (key !== lastKey) {
+      lastKey = key;
+      const h = document.createElement("p");
+      h.className = "fuehren-group";
+      h.textContent = cat && cat.name ? cat.name : "Weitere";
+      container.appendChild(h);
+    }
+    container.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.slug, "steply")));
+  }
+}
+
+// Eigene Ansicht „Steply lernen" (vom Start-Screen; auch UNVERBUNDEN erreichbar).
+async function showSteplyLearn() {
+  show("steplyLearn");
+  setStatus("");
+  els.steplyLearnHint.hidden = true;
+  els.steplyLearnList.textContent = "";
+  const loading = document.createElement("p");
+  loading.className = "note";
+  loading.textContent = "Touren werden geladen …";
+  els.steplyLearnList.appendChild(loading);
+  const list = await loadSteplyDocs();
+  els.steplyLearnList.textContent = "";
+  if (!list || !list.length) {
+    els.steplyLearnHint.textContent = "Die Steply-Touren konnten gerade nicht geladen werden.";
+    els.steplyLearnHint.hidden = false;
+    return;
+  }
+  renderDocCards(els.steplyLearnList, list);
+}
+
 // URL des aktiven Tabs im Panel-Fenster (nur LOKAL genutzt, nie gesendet).
 async function currentActiveUrl() {
   try {
@@ -1607,19 +1721,19 @@ async function currentActiveUrl() {
   }
 }
 
-// Ein Tutorial oeffnen: bevorzugt die Live-Fuehrung (Welle 31a, window.SteplyGuide.start),
-// sonst die Vorschau (funktioniert fuer Entwurf UND veroeffentlicht, eingeloggter Autor).
-function openMatchedTutorial(id) {
-  if (!id) return;
-  if (window.SteplyGuide && typeof window.SteplyGuide.start === "function") {
-    try {
-      window.SteplyGuide.start(id);
-      return;
-    } catch (err) {
-      /* Fallback: Link oeffnen */
-    }
+// Ein Treffer öffnen: Doku-Tour (Quelle „steply", per slug) ODER Konto-Tour (per id) — beide
+// über den Führungs-Flow (guideStart). Konto-Fallback: Vorschau-Link (funktioniert für Entwurf
+// UND veröffentlicht, eingeloggter Autor). Doku-Touren haben keine App-Vorschau ohne Login.
+function openMatched(t) {
+  if (!t || !t.id) return;
+  try {
+    if (t.source === "steply") guideStart(t.slug, "steply");
+    else guideStart(t.id, "account");
+    return;
+  } catch (err) {
+    /* Fallback nur für Konto-Touren */
   }
-  chrome.tabs.create({ url: appBase() + "/app/preview/" + id, active: true });
+  if (t.source !== "steply") chrome.tabs.create({ url: appBase() + "/app/preview/" + t.id, active: true });
 }
 
 // ── Gemeinsames Karten-Layout (Welle 32, Punkt D2) ──────────────────────────────────────
@@ -1697,7 +1811,7 @@ function renderSiteMatch(matches) {
   }
 
   for (const t of matches) {
-    listEl.appendChild(buildTutorialCard(t, (tut) => openMatchedTutorial(tut.id)));
+    listEl.appendChild(buildTutorialCard(t, (tut) => openMatched(tut)));
   }
 }
 
@@ -1710,13 +1824,17 @@ async function refreshSiteMatch() {
     box.hidden = true;
     return;
   }
-  if (!hasToken || els.start.hidden) {
+  if (els.start.hidden) {
     box.hidden = true;
     return;
   }
-  const list = await loadSiteTutorials();
-  if (!list) {
-    box.hidden = true; // Route fehlt/Fehler -> kein Kaputt-Zustand
+  // Matching-Pool = Konto-Tutorials (NUR mit Token) + Steply-Doku-Touren (immer, auch
+  // unverbunden — Onboarding). Dedupe per id (Konto gewinnt, falls Steply-Konto gepairt).
+  const account = hasToken ? await loadSiteTutorials() : null;
+  const docs = (await loadSteplyDocs()) || [];
+  const merged = mergeTutorialsById(account || [], docs);
+  if (!merged.length) {
+    box.hidden = true; // nichts verfügbar -> kein Kaputt-Zustand
     return;
   }
   const url = await currentActiveUrl();
@@ -1727,7 +1845,14 @@ async function refreshSiteMatch() {
     box.hidden = true; // keine normale Website (chrome://, about:, PDF-Viewer …)
     return;
   }
-  renderSiteMatch(SteplySiteMatch.matchTutorials(url, list));
+  const matches = SteplySiteMatch.matchTutorials(url, merged);
+  // Keine Treffer + unverbunden -> Box aus (kein Nag mit deaktiviertem „aufnehmen"). Verbunden:
+  // wie bisher den „jetzt aufnehmen?"-Hinweis zeigen (renderSiteMatch behandelt den Leerfall).
+  if (!matches.length && !hasToken) {
+    box.hidden = true;
+    return;
+  }
+  renderSiteMatch(matches);
   box.hidden = false;
 }
 
@@ -1871,6 +1996,7 @@ const guide = {
   curId: null,
   history: [], // Pfad-History (Schritt-IDs)
   tabId: null, // gebundener Tab
+  source: "account", // „account" (Konto-Tour, per id/Token) | „steply" (öffentliche Doku, per slug)
 };
 
 const clamp01 = (n) => (typeof n === "number" && isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
@@ -1993,7 +2119,10 @@ function guideLinkStop() {
 }
 
 // Telemetrie (fire-and-forget, fail-silent): started | completed | selector_miss.
+// Der Endpoint braucht einen Token. Ohne Pairing (z. B. Doku-Tour eines frischen Nutzers)
+// wird still NICHTS gesendet — die Doku-Führung läuft auch ohne Konto.
 function sendGuideEvent(kind, stepTitle) {
+  if (!cfg.token) return;
   try {
     const base = appBase();
     const body = { token: cfg.token, kind: kind };
@@ -2009,11 +2138,18 @@ function sendGuideEvent(kind, stepTitle) {
   }
 }
 
+// Lade-Schlüssel je Quelle: Konto-Touren laden per id, Doku-Touren per slug.
+function guideLoadKey() {
+  if (!guide.tutorial) return null;
+  return guide.source === "steply" ? guide.tutorial.slug || null : guide.tutorial.id || null;
+}
+
 async function guideSaveSession() {
   try {
     await chrome.storage.session.set({
       guideState: {
-        tutorialId: guide.tutorial ? guide.tutorial.id : null,
+        key: guideLoadKey(),
+        source: guide.source,
         curId: guide.curId,
         history: guide.history.slice(),
         tabId: guide.tabId,
@@ -2033,13 +2169,18 @@ async function guideClearSession() {
 }
 
 // Detail eines Tutorials laden und die Graph-Strukturen aufbauen. true bei Erfolg.
-async function guideLoad(tutorialId) {
+// Quelle „steply": öffentliche Doku-Route (kein Token, per slug). Sonst: Konto-Route (Token,
+// per id). Beide liefern DIESELBE Payload-Form (lib/guide-payload.ts) -> Rest identisch.
+async function guideLoad(idOrSlug, source) {
   const base = appBase();
+  const isDoc = source === "steply";
+  const url = isDoc
+    ? base + "/api/guide/steply/" + encodeURIComponent(idOrSlug)
+    : base + "/api/recorder/tutorials/" + encodeURIComponent(idOrSlug);
+  const opts = isDoc ? {} : { headers: { Authorization: "Bearer " + cfg.token } };
   let det;
   try {
-    const res = await fetch(base + "/api/recorder/tutorials/" + encodeURIComponent(tutorialId), {
-      headers: { Authorization: "Bearer " + cfg.token },
-    });
+    const res = await fetch(url, opts);
     if (!res.ok) return false;
     det = await res.json().catch(() => null);
   } catch (err) {
@@ -2272,6 +2413,7 @@ async function guideExit() {
   await guideClearSession();
   guide.curId = null;
   guide.tutorial = null;
+  guide.source = "account";
   showStart();
 }
 
@@ -2284,11 +2426,11 @@ function baseDomain(host) {
   return labels.length <= 2 ? host : labels.slice(-2).join(".");
 }
 
-// site_domains eines Tutorials aus den bereits geladenen Listen (Führen/„Für diese Seite").
+// site_domains eines Tutorials aus den bereits geladenen Listen (Führen/„Für diese Seite"/Doku).
 function cachedSiteDomains(id) {
   if (!id) return null;
   const find = (list) => (Array.isArray(list) ? list.find((t) => t && t.id === id) : null);
-  const t = find(fuehrenTutorials) || find(siteTutorials);
+  const t = find(fuehrenTutorials) || find(siteTutorials) || find(steplyDocs);
   return t && Array.isArray(t.site_domains) ? t.site_domains : null;
 }
 
@@ -2347,8 +2489,14 @@ async function guideBringToStartIfNeeded() {
 }
 
 // EINSTIEG (auch window.SteplyGuide.start): Tutorial laden und Führung starten.
-async function guideStart(tutorialId) {
-  if (!hasToken || !tutorialId) return;
+// source: „steply" = öffentliche Doku-Tour (per slug, KEIN Token nötig); sonst Konto-Tour
+// (per id, Token nötig). So erreichbar auch für frisch installierte, unverbundene Nutzer.
+async function guideStart(idOrSlug, source) {
+  const src = source === "steply" ? "steply" : "account";
+  const isDoc = src === "steply";
+  if (!idOrSlug) return;
+  if (!isDoc && !hasToken) return; // Konto-Touren brauchen eine Verbindung; Doku nicht
+  guide.source = src;
   setStatus("");
   // Content-Scripts (guide-resolve.js + content.js) sicher in alle offenen Tabs impfen -
   // deckt altoffene Tabs ab, die vor dem Extension-Laden geöffnet wurden. Die Injektion
@@ -2359,7 +2507,7 @@ async function guideStart(tutorialId) {
     /* deklarative Injektion deckt frisch geladene Seiten ab */
   }
   guide.tabId = await guideActiveTabId();
-  const okLoad = await guideLoad(tutorialId);
+  const okLoad = await guideLoad(idOrSlug, src);
   if (!okLoad) {
     setStatus("Die Anleitung konnte nicht geladen werden.", "error");
     return;
@@ -2371,8 +2519,10 @@ async function guideStart(tutorialId) {
     return;
   }
   // „Bring mich hin" (Punkt F): passt der Tab nicht, in einem neuen Tab auf der Startseite
-  // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden.
-  await guideBringToStartIfNeeded();
+  // führen (bindet guide.tabId ggf. um) — VOR dem ersten Overlay-Senden. NUR für Konto-Touren:
+  // Doku-Touren würden sonst ungefragt die Steply-App öffnen — sie laufen still im Panel
+  // (Screenshots), und ein Overlay erscheint nur, wenn der Nutzer ohnehin in der App ist.
+  if (!isDoc) await guideBringToStartIfNeeded();
   // Port + Ping an den (final gebundenen) Tab (Welle 33, Fix 2).
   guideLinkStart(guide.tabId);
   sendGuideEvent("started", null);
@@ -2496,20 +2646,27 @@ async function applyFuehrenFilters() {
 
   // „Diese Seite": nur Tutorials, deren site_domains zur aktuellen Tab-URL passen. Matching
   // REIN LOKAL (site-match.js) — die besuchte URL verlässt NIE den Browser.
-  let siteRestricted = false;
-  if (fuehrenFilter.site === "page") {
-    siteRestricted = true;
-    const url = await currentActiveUrl();
-    const host = typeof SteplySiteMatch !== "undefined" ? SteplySiteMatch.hostnameOf(url) : null;
-    list = host ? SteplySiteMatch.matchTutorials(url, list) : [];
-  }
+  const siteRestricted = fuehrenFilter.site === "page";
+  const url = siteRestricted ? await currentActiveUrl() : "";
+  const host =
+    siteRestricted && typeof SteplySiteMatch !== "undefined" ? SteplySiteMatch.hostnameOf(url) : null;
+  if (siteRestricted) list = host ? SteplySiteMatch.matchTutorials(url, list) : [];
 
-  renderFuehrenList(list, siteRestricted);
+  // 🎓 Steply lernen: Doku-Touren als EIGENE Gruppe (unterhalb der Konto-Tutorials). Dedupe per
+  // id (falls mit dem Steply-Konto gepairt). „Diese Seite" filtert auch die Doku lokal; der
+  // „Live"-Filter ist für Doku belanglos (sie ist immer veröffentlicht).
+  let docs = (await loadSteplyDocs()) || [];
+  const accIds = new Set(list.map((t) => t.id));
+  docs = docs.filter((d) => !accIds.has(d.id));
+  if (siteRestricted) docs = host ? SteplySiteMatch.matchTutorials(url, docs) : [];
+
+  renderFuehrenList(list, siteRestricted, docs);
 }
 
-function renderFuehrenList(list, siteRestricted) {
+function renderFuehrenList(list, siteRestricted, docs) {
   els.fuehrenList.textContent = "";
-  if (!list.length) {
+  docs = Array.isArray(docs) ? docs : [];
+  if (!list.length && !docs.length) {
     els.fuehrenHint.textContent = siteRestricted
       ? "Für diese Seite gibt es keine passende Anleitung — „Alle“ zeigt alle."
       : fuehrenFilter.live === "live"
@@ -2520,25 +2677,38 @@ function renderFuehrenList(list, siteRestricted) {
   }
   els.fuehrenHint.hidden = true;
 
-  const groups = groupByCategory(list);
-  // Überschriften nur zeigen, wenn es mehr als eine Gruppe gibt oder eine echte Kategorie da ist.
-  const showHeadings = groups.length > 1 || (groups.length === 1 && !!groups[0].name);
-  for (const g of groups) {
-    if (showHeadings) {
-      const h = document.createElement("p");
-      h.className = "fuehren-group";
-      h.textContent = g.name || "Ohne Kategorie";
-      els.fuehrenList.appendChild(h);
+  if (list.length) {
+    const groups = groupByCategory(list);
+    // Überschriften zeigen bei mehreren Gruppen, echter Kategorie ODER wenn die Doku-Gruppe folgt.
+    const showHeadings =
+      groups.length > 1 || (groups.length === 1 && !!groups[0].name) || docs.length > 0;
+    for (const g of groups) {
+      if (showHeadings) {
+        const h = document.createElement("p");
+        h.className = "fuehren-group";
+        h.textContent = g.name || "Ohne Kategorie";
+        els.fuehrenList.appendChild(h);
+      }
+      g.items.slice().sort(fuehrenSort).forEach((t) => {
+        els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.id, "account")));
+      });
     }
-    g.items.slice().sort(fuehrenSort).forEach((t) => {
-      els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.id)));
-    });
+  }
+
+  // 🎓 Steply lernen: Doku-Touren als eigene Gruppe UNTERHALB der Konto-Tutorials.
+  if (docs.length) {
+    const h = document.createElement("p");
+    h.className = "fuehren-group";
+    h.textContent = "🎓 Steply lernen";
+    els.fuehrenList.appendChild(h);
+    for (const t of docs) {
+      els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.slug, "steply")));
+    }
   }
 }
 
 // Eine laufende Führung nach Panel-Schließen/Öffnen fortsetzen (chrome.storage.session).
 async function guideMaybeResume() {
-  if (!hasToken) return false;
   let st = null;
   try {
     const r = await chrome.storage.session.get("guideState");
@@ -2546,8 +2716,17 @@ async function guideMaybeResume() {
   } catch (err) {
     st = null;
   }
-  if (!st || !st.tutorialId || !st.curId) return false;
-  const okLoad = await guideLoad(st.tutorialId);
+  if (!st || !st.curId) return false;
+  const source = st.source === "steply" ? "steply" : "account";
+  const key = st.key || st.tutorialId; // Abwärtskompat: alte Sessions speicherten tutorialId
+  if (!key) return false;
+  // Konto-Touren brauchen einen Token; Doku-Touren nicht.
+  if (source !== "steply" && !hasToken) {
+    await guideClearSession();
+    return false;
+  }
+  guide.source = source;
+  const okLoad = await guideLoad(key, source);
   if (!okLoad || !guide.stepById.has(st.curId)) {
     await guideClearSession();
     return false;
@@ -2661,6 +2840,9 @@ els.runExit.addEventListener("click", guideExit);
 els.runBack.addEventListener("click", guideGoBack);
 els.runNext.addEventListener("click", guideGoNext);
 els.runDoneList.addEventListener("click", () => showFuehren());
+// „Steply lernen" (Welle 35): Karte im Start-Screen (IMMER, auch unverbunden) + Zurück.
+if (els.cardSteplyLearn) els.cardSteplyLearn.addEventListener("click", () => showSteplyLearn());
+if (els.steplyLearnBack) els.steplyLearnBack.addEventListener("click", () => showStart());
 
 // Panel wird geschlossen (Seitenleiste zu / Fenster zu): laufende Streams sauber
 // stoppen (sonst bleibt der Mikro-/Freigabe-Indikator haengen) und Zustand raeumen,
