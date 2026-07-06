@@ -4,6 +4,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai, embed } from "@/lib/openai";
 import { chatSystem } from "@/lib/ai-prompts";
 import { recordEvent } from "@/lib/events";
+import { isExtraLang, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
 
 export const maxDuration = 30;
 
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const accountSlug = String(body.accountSlug ?? "").trim();
   const question = String(body.question ?? "").trim().slice(0, 500);
+  // Hilfe-Seiten-Sprache (Welle 29): Antwort + Fallback-Texte in der Besuchersprache.
+  const lang: HubLang = isExtraLang(body.lang) ? body.lang : "de";
   if (!accountSlug || !question)
     return NextResponse.json({ error: "accountSlug/question fehlt" }, { status: 400 });
 
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
   if (rateLimited(`ip:${ip}`, 20, 60_000) || rateLimited(`acc:${accountSlug}`, 120, 60_000)) {
     return NextResponse.json(
-      { answer: "Zu viele Anfragen – bitte einen Moment warten und erneut versuchen.", sources: [] },
+      { answer: tr(lang, "chatRateLimit"), sources: [] },
       { status: 429 },
     );
   }
@@ -129,8 +132,7 @@ export async function POST(req: NextRequest) {
 
   if (!aiConfigured()) {
     return NextResponse.json({
-      answer:
-        "Der Hilfe-Assistent ist noch nicht aktiviert. Bitte schauen Sie sich solange die Anleitungen oben an.",
+      answer: tr(lang, "chatNotConfigured"),
       sources: [],
     });
   }
@@ -186,7 +188,10 @@ export async function POST(req: NextRequest) {
       response_format: { type: "json_object" },
       stream: true,
       messages: [
-        { role: "system", content: chatSystem(account.name) },
+        {
+          role: "system",
+          content: chatSystem(account.name, lang === "de" ? "Deutsch" : LANG_TARGET[lang]),
+        },
         ...history.map((h) => ({
           role: h.role === "bot" ? ("assistant" as const) : ("user" as const),
           content: String(h.text).slice(0, 1000),
@@ -240,12 +245,12 @@ export async function POST(req: NextRequest) {
         if (!emitted.trim()) {
           const fb =
             status === "off_topic"
-              ? `Ich bin der Hilfe-Assistent von ${account.name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.`
+              ? tr(lang, "chatOffTopic", { name: account.name })
               : status === "clarify"
-                ? "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?"
+                ? tr(lang, "chatClarify")
                 : status === "no_answer"
-                  ? "Das kann ich Ihnen leider nicht sicher beantworten."
-                  : "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.";
+                  ? tr(lang, "chatNoAnswer")
+                  : tr(lang, "chatErrorRetry");
           send({ delta: fb });
         }
 
@@ -282,7 +287,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("chat error:", e instanceof Error ? e.message : e);
     return NextResponse.json(
-      { answer: "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.", sources: [], error: true },
+      { answer: tr(lang, "chatErrorRetry"), sources: [], error: true },
       { status: 200 },
     );
   }

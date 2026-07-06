@@ -143,6 +143,109 @@ export async function translateStepLangCore(
   if (error) throw new Error(`step_translations delta (${lang}): ${error.message}`);
 }
 
+// ---------------------------------------------------------------------------
+// Kategorienamen (Welle 29). Quelle bleibt categories.name (de); Übersetzungen liegen
+// in categories.name_i18n als jsonb { _src, en, pl, tr }. `_src` merkt sich den deutschen
+// Namen zum Zeitpunkt der Übersetzung -> ändert er sich (Umbenennen/DB-Edit), gilt die
+// Übersetzung als veraltet und wird beim nächsten Voll-Übersetzen automatisch erneuert.
+// ---------------------------------------------------------------------------
+
+type CategoryRow = {
+  id: string;
+  name: string;
+  name_i18n: Record<string, unknown> | null;
+};
+
+/** Merker-Quelle (deutscher Name) aus name_i18n lesen. */
+function categorySrc(row: CategoryRow): string | undefined {
+  const v = row.name_i18n;
+  return v && typeof v === "object" && typeof v._src === "string" ? v._src : undefined;
+}
+
+/** Fehlt für diese Sprache eine gültige, aktuelle Übersetzung? */
+function categoryNeedsLang(row: CategoryRow, lang: Lang): boolean {
+  if (categorySrc(row) !== row.name) return true; // Name geändert -> alles neu
+  const v = row.name_i18n?.[lang];
+  return !(typeof v === "string" && v.trim());
+}
+
+/**
+ * Die EIGENEN Kategorien eines Kontos in die aktiven Zusatzsprachen übersetzen — nur die,
+ * denen eine Sprache fehlt oder deren deutscher Name sich geändert hat. Pro Sprache genau
+ * EIN Batch-Call (kostengünstig). Idempotent: sind alle aktuell, passiert nichts (kein
+ * OpenAI-Call). Gibt die Anzahl aktualisierter Kategorien zurück.
+ *
+ * Bewusst NUR account-eigene Kategorien (account_id = accountId): globale Standard-
+ * Kategorien (account_id IS NULL) sind admin-verwaltet und geteilt — sie hier je Konto-
+ * Publish zu beschreiben wäre ein tenant-übergreifender Schreibzugriff. Der Hub fällt für
+ * unübersetzte (globale) Kategorien sauber auf den deutschen Namen zurück.
+ */
+export async function translateAccountCategoriesCore(
+  db: DbClient,
+  openai: ChatClient,
+  model: string,
+  accountId: string,
+  languages: Lang[],
+): Promise<{ updated: number }> {
+  if (!languages.length) return { updated: 0 };
+  const { data: cats } = await db
+    .from("categories")
+    .select("id, name, name_i18n")
+    .eq("account_id", accountId);
+  const rows: CategoryRow[] = ((cats ?? []) as CategoryRow[]).filter(
+    (c) => typeof c.name === "string" && c.name.trim(),
+  );
+  if (!rows.length) return { updated: 0 };
+
+  // Nur Kategorien, die für IRGENDEINE aktive Sprache Arbeit brauchen.
+  const work = rows.filter((c) => languages.some((l) => categoryNeedsLang(c, l)));
+  if (!work.length) return { updated: 0 };
+
+  // Pro Sprache ein Batch-Call über genau die Kategorien, denen diese Sprache fehlt.
+  const fresh = new Map<string, Record<string, string>>(); // catId -> { lang -> text }
+  for (const lang of languages) {
+    const subset = work.filter((c) => categoryNeedsLang(c, lang));
+    if (!subset.length) continue;
+    const translated = await translateSegmentsCore(
+      openai,
+      model,
+      subset.map((c) => c.name),
+      lang,
+    );
+    subset.forEach((c, i) => {
+      const t = translated[i];
+      if (typeof t === "string" && t.trim()) {
+        const m = fresh.get(c.id) ?? {};
+        m[lang] = t;
+        fresh.set(c.id, m);
+      }
+    });
+  }
+
+  let updated = 0;
+  for (const c of work) {
+    // Bei unverändertem Namen bereits vorhandene Sprachen behalten, sonst neu aufbauen.
+    const keep =
+      categorySrc(c) === c.name && c.name_i18n && typeof c.name_i18n === "object"
+        ? (c.name_i18n as Record<string, unknown>)
+        : {};
+    const next: Record<string, string> = { _src: c.name };
+    for (const lang of languages) {
+      const f = fresh.get(c.id)?.[lang];
+      const kept = keep[lang];
+      next[lang] =
+        typeof f === "string" && f.trim()
+          ? f
+          : typeof kept === "string" && kept.trim()
+            ? kept
+            : c.name; // DE-Fallback
+    }
+    const { error } = await db.from("categories").update({ name_i18n: next }).eq("id", c.id);
+    if (!error) updated++;
+  }
+  return { updated };
+}
+
 /** Übersetzungen eines Tutorials als veraltet markieren (nur frische Zeilen). */
 export async function markStaleCore(db: DbClient, tutorialId: string): Promise<void> {
   const { error } = await db

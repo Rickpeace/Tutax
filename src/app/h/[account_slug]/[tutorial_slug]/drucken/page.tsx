@@ -12,18 +12,21 @@ import { buildRenderTree, type RenderNode } from "@/lib/builder/tree";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
 import { PrintButton } from "@/components/viewer/print-button";
+import { resolveLang, labelsFor, t, isExtraLang, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Druckansicht: gleiche gecachten Daten wie die Tutorial-Seite
 // (Cache Components -> 'use cache' + Hub-/Tutorial-Tags; Mutationen invalidieren).
-async function load(accountSlug: string, tutorialSlug: string) {
+// `lang` ist Teil des Cache-Keys (Funktionsargument) -> DE/EN/PL/TR getrennt gecacht,
+// exakt wie die Hub-/Viewer-Seiten (Welle 29: Druckansicht mehrsprachig).
+async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
   "use cache";
   cacheTag(hubTag(accountSlug), tutTag(accountSlug, tutorialSlug));
   cacheLife("hours");
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug")
+    .select("id, name, slug, languages")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -52,7 +55,66 @@ async function load(accountSlug: string, tutorialSlug: string) {
     .eq("account_id", account.id)
     .single();
 
-  return { account, tutorial, steps: steps ?? [], branches: branches ?? [], theme };
+  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+
+  // Übersetzungen laden + in Titel/Steps/Branches mergen (DE-Fallback pro Feld) —
+  // identisch zur Viewer-Seite, damit Druck & Wizard denselben übersetzten Text zeigen.
+  let mergedTitle = tutorial.title;
+  let mergedSteps = steps ?? [];
+  let mergedBranches = branches ?? [];
+  if (lang !== "de") {
+    const [{ data: tutTr }, { data: stepTr }, { data: branchTr }] = await Promise.all([
+      admin
+        .from("tutorial_translations")
+        .select("title")
+        .eq("tutorial_id", tutorial.id)
+        .eq("lang", lang)
+        .maybeSingle(),
+      stepIds.length
+        ? admin
+            .from("step_translations")
+            .select("step_id, title, body")
+            .eq("lang", lang)
+            .in("step_id", stepIds)
+        : Promise.resolve({ data: [] as { step_id: string; title: string | null; body: unknown }[] }),
+      stepIds.length
+        ? admin
+            .from("branch_translations")
+            .select("branch_id, label")
+            .eq("lang", lang)
+            .in("branch_id", (branches ?? []).map((b) => b.id))
+        : Promise.resolve({ data: [] as { branch_id: string; label: string | null }[] }),
+    ]);
+
+    if (tutTr?.title?.trim()) mergedTitle = tutTr.title;
+
+    const stepTrById = new Map((stepTr ?? []).map((r) => [r.step_id as string, r]));
+    mergedSteps = (steps ?? []).map((s) => {
+      const tr = stepTrById.get(s.id);
+      if (!tr) return s;
+      return {
+        ...s,
+        title: tr.title?.trim() ? tr.title : s.title,
+        body: tr.body ?? s.body,
+      };
+    });
+
+    const branchTrById = new Map((branchTr ?? []).map((r) => [r.branch_id as string, r]));
+    mergedBranches = (branches ?? []).map((b) => {
+      const tr = branchTrById.get(b.id);
+      if (!tr) return b;
+      return { ...b, label: tr.label?.trim() ? tr.label : b.label };
+    });
+  }
+
+  return {
+    account,
+    tutorial: { ...tutorial, title: mergedTitle },
+    steps: mergedSteps,
+    branches: mergedBranches,
+    theme,
+    languages,
+  };
 }
 
 /**
@@ -86,25 +148,40 @@ function flatOrder(steps: Step[], branches: StepBranch[], rootId: string | null)
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string; tutorial_slug: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }): Promise<Metadata> {
   const { account_slug, tutorial_slug } = await params;
-  const data = await load(account_slug, tutorial_slug);
-  if (!data) return { title: "Nicht gefunden" };
-  return { title: `${data.tutorial.title} · Druckansicht`, robots: { index: false } };
+  const { lang: langParam } = await searchParams;
+  const probe = await load(account_slug, tutorial_slug, "de");
+  if (!probe) return { title: "Nicht gefunden" };
+  const lang = resolveLang(langParam, probe.languages);
+  const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
+  return {
+    title: `${data.tutorial.title} · ${labelsFor(lang).printView}`,
+    robots: { index: false },
+  };
 }
 
 export default async function PrintPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ account_slug: string; tutorial_slug: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }) {
   const { account_slug, tutorial_slug } = await params;
-  const data = await load(account_slug, tutorial_slug);
-  if (!data) notFound();
+  const { lang: langParam } = await searchParams;
+  const probe = await load(account_slug, tutorial_slug, "de");
+  if (!probe) notFound();
+  const lang = resolveLang(langParam, probe.languages);
+  const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
 
   const { account, tutorial, steps, branches } = data;
+  const labels = labelsFor(lang);
+  const langQuery = lang === "de" ? "" : `?lang=${lang}`;
   const ordered = flatOrder(steps, branches, tutorial.root_step_id);
   const numberById = new Map(ordered.map((s, i) => [s.id, i + 1]));
   const branchesByStep = new Map<string, StepBranch[]>();
@@ -167,12 +244,12 @@ export default async function PrintPage({
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 print:hidden">
-            <PrintButton />
+            <PrintButton label={labels.printNow} />
             <Link
-              href={`/h/${account.slug}/${tutorial_slug}`}
+              href={`/h/${account.slug}/${tutorial_slug}${langQuery}`}
               className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-[var(--brand-ink)]"
             >
-              <ArrowLeft className="size-3.5" /> Zur Anleitung
+              <ArrowLeft className="size-3.5" /> {labels.backToGuide}
             </Link>
           </div>
         </div>
@@ -200,7 +277,7 @@ export default async function PrintPage({
                     className="min-w-0 break-words text-lg font-bold"
                     style={{ fontFamily: fonts.heading, color: "var(--brand-title, var(--brand-ink))" }}
                   >
-                    {step.title?.trim() || "Schritt"}
+                    {step.title?.trim() || labels.stepNoun}
                   </h2>
                 </div>
 
@@ -220,16 +297,18 @@ export default async function PrintPage({
                   <RichTextView doc={step.body} />
                 </div>
 
-                {/* Verzweigungen als „Wenn X → weiter mit Schritt N"-Zeilen. */}
+                {/* Verzweigungen als „Wenn X → weiter mit Schritt N"-Zeilen (übersetzt). */}
                 {step.is_decision && bs.length > 0 && (
                   <div className="mt-2 space-y-1 break-words border-l-2 border-black/10 pl-3 text-sm">
                     {bs.map((b) => {
                       const targetNo = b.target_step_id ? numberById.get(b.target_step_id) : null;
                       return (
                         <div key={b.id}>
-                          <span className="font-semibold">Wenn „{b.label?.trim() || "Weiter"}“</span>
+                          <span className="font-semibold">
+                            {labels.ifPrefix} „{b.label?.trim() || labels.next}“
+                          </span>
                           {" → "}
-                          {targetNo ? `weiter mit Schritt ${targetNo}` : "Ende"}
+                          {targetNo ? t(lang, "continueWithStep", { n: targetNo }) : labels.end}
                         </div>
                       );
                     })}
@@ -241,7 +320,7 @@ export default async function PrintPage({
         </ol>
 
         <p className="mt-10 border-t border-black/10 pt-4 text-center text-xs text-muted-foreground">
-          Bereitgestellt von {account.name} · powered by Steply
+          {t(lang, "providedBy", { name: account.name })}
         </p>
       </div>
     </main>

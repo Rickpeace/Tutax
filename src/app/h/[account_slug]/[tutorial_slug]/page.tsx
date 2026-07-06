@@ -14,7 +14,7 @@ import { resolveCustomerTutorial } from "@/lib/templates";
 import { Wizard } from "@/components/viewer/wizard";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 import { LangSwitcher } from "@/components/viewer/lang-switcher";
-import { resolveLang, labelsFor, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
+import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
@@ -273,6 +273,7 @@ export default async function ViewerPage({
               current={lang}
               languages={languages}
               basePath={`/h/${account.slug}/${tutorial_slug}`}
+              label={labels.language}
             />
           )}
         </div>
@@ -310,9 +311,9 @@ export default async function ViewerPage({
         />
 
         <div className="mt-4 text-center">
-          {/* Druckansicht bleibt v1 auf Deutsch (kein ?lang durchreichen). */}
+          {/* Druckansicht sprachbewusst (Welle 29): ?lang wird durchgereicht. */}
           <Link
-            href={`/h/${account.slug}/${tutorial_slug}/drucken`}
+            href={`/h/${account.slug}/${tutorial_slug}/drucken${lang === "de" ? "" : `?lang=${lang}`}`}
             target="_blank"
             rel="noopener noreferrer"
             data-tx="print-link"
@@ -323,18 +324,23 @@ export default async function ViewerPage({
         </div>
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
-          Bereitgestellt von {account.name} · powered by Steply
+          {t(lang, "providedBy", { name: account.name })}
           <span className="mx-1.5 opacity-50">·</span>
           <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            Impressum
+            {labels.imprint}
           </a>
           <span className="mx-1.5 opacity-50">·</span>
           <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            Datenschutz
+            {labels.privacy}
           </a>
         </p>
       </div>
-      <ChatWidget accountSlug={account.slug} accountName={account.name} />
+      <ChatWidget
+        accountSlug={account.slug}
+        accountName={account.name}
+        labels={labels}
+        lang={lang}
+      />
     </main>
   );
 }

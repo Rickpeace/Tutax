@@ -13,6 +13,7 @@ import { LangSwitcher } from "@/components/viewer/lang-switcher";
 import {
   resolveLang,
   labelsFor,
+  categoryName,
   isExtraLang,
   LANG_BCP47,
   type HubLang,
@@ -39,7 +40,7 @@ async function load(accountSlug: string, lang: HubLang) {
     // eigene + globale (Standard-)Kategorien
     admin
       .from("categories")
-      .select("id, name, position, account_id")
+      .select("id, name, name_i18n, position, account_id")
       .or(`account_id.eq.${account.id},account_id.is.null`)
       .order("position", { ascending: true }),
     admin
@@ -144,7 +145,8 @@ export default async function HubPage({
   // Vorschau: ein Design erzwingen, OHNE es zu aktivieren (ändert themes.mode nicht).
   const previewMode = ["manual", "ai", "extreme"].includes(preview ?? "") ? preview : null;
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
-  const catName = new Map(categories.map((c) => [c.id, c.name]));
+  // Kategorienamen sprachbewusst (Welle 29): name_i18n[lang] mit DE-Fallback.
+  const catName = new Map(categories.map((c) => [c.id, categoryName(c, lang)]));
 
   const items: HubTutorial[] = catalog
     .filter((e) => e.visible && e.slug)
@@ -154,16 +156,16 @@ export default async function HubPage({
         title: tr?.title || e.title,
         description: tr?.description ?? e.description,
         slug: e.slug as string,
-        category: (e.categoryId && catName.get(e.categoryId)) || "Sonstiges",
+        category: (e.categoryId && catName.get(e.categoryId)) || labels.otherCategory,
       };
     });
 
-  // eigene Kategorien zuerst, dann globale (Standard), Namen dedupliziert
+  // eigene Kategorien zuerst, dann globale (Standard), Namen dedupliziert (übersetzt)
   const ordered = [
     ...categories.filter((c) => c.account_id),
     ...categories.filter((c) => !c.account_id),
   ];
-  const order = [...new Set([...ordered.map((c) => c.name), "Sonstiges"])];
+  const order = [...new Set([...ordered.map((c) => categoryName(c, lang)), labels.otherCategory])];
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
   const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
@@ -234,7 +236,12 @@ export default async function HubPage({
           </div>
         </div>
         {languages.length > 0 && (
-          <LangSwitcher current={lang} languages={languages} basePath={`/h/${account.slug}`} />
+          <LangSwitcher
+            current={lang}
+            languages={languages}
+            basePath={`/h/${account.slug}`}
+            label={labels.language}
+          />
         )}
       </header>
 
@@ -286,17 +293,22 @@ export default async function HubPage({
         >
           S
         </span>
-        Erstellt mit Steply
+        {labels.createdWith}
         <span className="opacity-50">·</span>
         <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
-          Impressum
+          {labels.imprint}
         </a>
         <span className="opacity-50">·</span>
         <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
-          Datenschutz
+          {labels.privacy}
         </a>
       </footer>
-      <ChatWidget accountSlug={account.slug} accountName={account.name} />
+      <ChatWidget
+        accountSlug={account.slug}
+        accountName={account.name}
+        labels={labels}
+        lang={lang}
+      />
     </main>
   );
 }

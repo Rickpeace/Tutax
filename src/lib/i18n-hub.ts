@@ -78,7 +78,46 @@ type Key =
   | "soundOn"
   | "soundOff"
   | "autoOn"
-  | "autoOff";
+  | "autoOff"
+  // Welle 29 — restliche Hilfe-Seiten-Strings (Kategorien-Fallback, Wizard, Druckansicht,
+  // Fußzeilen, Sprachumschalter, Chat-Assistent). Ins bestehende Wörterbuch statt neuer Lib.
+  | "otherCategory"
+  | "stepsHeading"
+  | "stepNoun"
+  | "enlargeImage"
+  | "imagePreview"
+  | "close"
+  | "screenshotComing"
+  | "printNow"
+  | "backToGuide"
+  | "ifPrefix"
+  | "continueWithStep"
+  | "end"
+  | "printView"
+  | "providedBy"
+  | "createdWith"
+  | "imprint"
+  | "privacy"
+  | "language"
+  | "chatGreeting"
+  | "chatTitle"
+  | "chatDisclaimer"
+  | "chatPlaceholder"
+  | "chatReset"
+  | "chatResetConfirm"
+  | "chatResetTitle"
+  | "chatSend"
+  | "chatLauncher"
+  | "chatClose"
+  | "chatTyping"
+  | "chatDone"
+  | "chatError"
+  | "chatErrorRetry"
+  | "chatRateLimit"
+  | "chatNotConfigured"
+  | "chatOffTopic"
+  | "chatClarify"
+  | "chatNoAnswer";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -117,6 +156,47 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     soundOff: "Ton aus",
     autoOn: "Automatisch abspielen",
     autoOff: "Automatik aus",
+    otherCategory: "Sonstiges",
+    stepsHeading: "Schritte",
+    stepNoun: "Schritt",
+    enlargeImage: "Bild vergrößern",
+    imagePreview: "Bildvorschau",
+    close: "Schließen",
+    screenshotComing: "Screenshot folgt",
+    printNow: "Drucken",
+    backToGuide: "Zur Anleitung",
+    ifPrefix: "Wenn",
+    continueWithStep: "weiter mit Schritt {n}",
+    end: "Ende",
+    printView: "Druckansicht",
+    providedBy: "Bereitgestellt von {name} · powered by Steply",
+    createdWith: "Erstellt mit Steply",
+    imprint: "Impressum",
+    privacy: "Datenschutz",
+    language: "Sprache",
+    chatGreeting:
+      "Hallo! Ich bin der Hilfe-Assistent von {name}. Stellen Sie mir eine Frage – ich finde die passende Anleitung.",
+    chatTitle: "Hilfe-Assistent",
+    chatDisclaimer:
+      "Antworten werden automatisiert per KI erstellt – bitte keine personenbezogenen Daten eingeben.",
+    chatPlaceholder: "Frage stellen …",
+    chatReset: "Neu",
+    chatResetConfirm: "Gespräch wirklich löschen?",
+    chatResetTitle: "Gespräch zurücksetzen",
+    chatSend: "Senden",
+    chatLauncher: "Hilfe-Assistent",
+    chatClose: "Hilfe-Assistent schließen",
+    chatTyping: "tippt",
+    chatDone: "Antwort erhalten",
+    chatError: "Es ist ein Fehler aufgetreten.",
+    chatErrorRetry: "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.",
+    chatRateLimit: "Zu viele Anfragen – bitte einen Moment warten und erneut versuchen.",
+    chatNotConfigured:
+      "Der Hilfe-Assistent ist noch nicht aktiviert. Bitte schauen Sie sich solange die Anleitungen oben an.",
+    chatOffTopic:
+      "Ich bin der Hilfe-Assistent von {name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.",
+    chatClarify: "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?",
+    chatNoAnswer: "Das kann ich Ihnen leider nicht sicher beantworten.",
   },
   en: {
     next: "Next",
@@ -153,6 +233,47 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     soundOff: "Sound off",
     autoOn: "Play automatically",
     autoOff: "Autoplay off",
+    otherCategory: "Other",
+    stepsHeading: "Steps",
+    stepNoun: "Step",
+    enlargeImage: "Enlarge image",
+    imagePreview: "Image preview",
+    close: "Close",
+    screenshotComing: "Screenshot coming",
+    printNow: "Print",
+    backToGuide: "Back to guide",
+    ifPrefix: "If",
+    continueWithStep: "continue with step {n}",
+    end: "End",
+    printView: "Print view",
+    providedBy: "Provided by {name} · powered by Steply",
+    createdWith: "Created with Steply",
+    imprint: "Legal notice",
+    privacy: "Privacy",
+    language: "Language",
+    chatGreeting:
+      "Hi! I'm {name}'s help assistant. Ask me a question – I'll find the right guide.",
+    chatTitle: "Help assistant",
+    chatDisclaimer:
+      "Answers are generated automatically by AI – please do not enter any personal data.",
+    chatPlaceholder: "Ask a question …",
+    chatReset: "New",
+    chatResetConfirm: "Really delete this conversation?",
+    chatResetTitle: "Reset conversation",
+    chatSend: "Send",
+    chatLauncher: "Help assistant",
+    chatClose: "Close help assistant",
+    chatTyping: "typing",
+    chatDone: "Answer received",
+    chatError: "An error occurred.",
+    chatErrorRetry: "An error occurred just now – please try again later.",
+    chatRateLimit: "Too many requests – please wait a moment and try again.",
+    chatNotConfigured:
+      "The help assistant isn't active yet. In the meantime, please browse the guides above.",
+    chatOffTopic:
+      "I'm {name}'s help assistant and can only help with questions about the organization and its guides.",
+    chatClarify: "Could you describe your request a bit more precisely?",
+    chatNoAnswer: "I'm afraid I can't answer that reliably.",
   },
   pl: {
     next: "Dalej",
@@ -189,6 +310,47 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     soundOff: "Dźwięk wyłączony",
     autoOn: "Odtwarzaj automatycznie",
     autoOff: "Autoodtwarzanie wyłączone",
+    otherCategory: "Inne",
+    stepsHeading: "Kroki",
+    stepNoun: "Krok",
+    enlargeImage: "Powiększ obraz",
+    imagePreview: "Podgląd obrazu",
+    close: "Zamknij",
+    screenshotComing: "Zrzut ekranu wkrótce",
+    printNow: "Drukuj",
+    backToGuide: "Do instrukcji",
+    ifPrefix: "Jeśli",
+    continueWithStep: "przejdź do kroku {n}",
+    end: "Koniec",
+    printView: "Wersja do druku",
+    providedBy: "Udostępniane przez {name} · powered by Steply",
+    createdWith: "Utworzono w Steply",
+    imprint: "Nota prawna",
+    privacy: "Prywatność",
+    language: "Język",
+    chatGreeting:
+      "Cześć! Jestem asystentem pomocy {name}. Zadaj mi pytanie – znajdę odpowiednią instrukcję.",
+    chatTitle: "Asystent pomocy",
+    chatDisclaimer:
+      "Odpowiedzi są generowane automatycznie przez AI – prosimy nie wprowadzać danych osobowych.",
+    chatPlaceholder: "Zadaj pytanie …",
+    chatReset: "Nowa",
+    chatResetConfirm: "Na pewno usunąć rozmowę?",
+    chatResetTitle: "Zresetuj rozmowę",
+    chatSend: "Wyślij",
+    chatLauncher: "Asystent pomocy",
+    chatClose: "Zamknij asystenta pomocy",
+    chatTyping: "pisze",
+    chatDone: "Otrzymano odpowiedź",
+    chatError: "Wystąpił błąd.",
+    chatErrorRetry: "Właśnie wystąpił błąd – spróbuj ponownie później.",
+    chatRateLimit: "Zbyt wiele zapytań – odczekaj chwilę i spróbuj ponownie.",
+    chatNotConfigured:
+      "Asystent pomocy nie jest jeszcze aktywny. W międzyczasie przejrzyj instrukcje powyżej.",
+    chatOffTopic:
+      "Jestem asystentem pomocy {name} i mogę pomóc tylko w pytaniach dotyczących organizacji i jej instrukcji.",
+    chatClarify: "Czy możesz opisać swoją sprawę nieco dokładniej?",
+    chatNoAnswer: "Niestety nie mogę tego pewnie odpowiedzieć.",
   },
   tr: {
     next: "İleri",
@@ -225,6 +387,47 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     soundOff: "Ses kapalı",
     autoOn: "Otomatik oynat",
     autoOff: "Otomatik oynatma kapalı",
+    otherCategory: "Diğer",
+    stepsHeading: "Adımlar",
+    stepNoun: "Adım",
+    enlargeImage: "Resmi büyüt",
+    imagePreview: "Resim önizleme",
+    close: "Kapat",
+    screenshotComing: "Ekran görüntüsü yakında",
+    printNow: "Yazdır",
+    backToGuide: "Kılavuza dön",
+    ifPrefix: "Eğer",
+    continueWithStep: "adım {n} ile devam edin",
+    end: "Son",
+    printView: "Yazdırma görünümü",
+    providedBy: "{name} tarafından sağlanır · powered by Steply",
+    createdWith: "Steply ile oluşturuldu",
+    imprint: "Künye",
+    privacy: "Gizlilik",
+    language: "Dil",
+    chatGreeting:
+      "Merhaba! Ben {name} yardım asistanıyım. Bana bir soru sorun – doğru kılavuzu bulayım.",
+    chatTitle: "Yardım asistanı",
+    chatDisclaimer:
+      "Yanıtlar yapay zeka tarafından otomatik oluşturulur – lütfen kişisel veri girmeyin.",
+    chatPlaceholder: "Soru sorun …",
+    chatReset: "Yeni",
+    chatResetConfirm: "Sohbet gerçekten silinsin mi?",
+    chatResetTitle: "Sohbeti sıfırla",
+    chatSend: "Gönder",
+    chatLauncher: "Yardım asistanı",
+    chatClose: "Yardım asistanını kapat",
+    chatTyping: "yazıyor",
+    chatDone: "Yanıt alındı",
+    chatError: "Bir hata oluştu.",
+    chatErrorRetry: "Şu anda bir hata oluştu – lütfen daha sonra tekrar deneyin.",
+    chatRateLimit: "Çok fazla istek – lütfen biraz bekleyip tekrar deneyin.",
+    chatNotConfigured:
+      "Yardım asistanı henüz etkin değil. Bu sırada yukarıdaki kılavuzlara göz atın.",
+    chatOffTopic:
+      "Ben {name} yardım asistanıyım ve yalnızca kuruluş ve kılavuzlarıyla ilgili sorularda yardımcı olabilirim.",
+    chatClarify: "Talebinizi biraz daha ayrıntılı açıklayabilir misiniz?",
+    chatNoAnswer: "Maalesef bunu kesin olarak yanıtlayamıyorum.",
   },
 };
 
@@ -262,4 +465,22 @@ export function t(
 /** Komplettes Label-Objekt für eine Sprache (an Client-Komponenten reichen). */
 export function labelsFor(lang: HubLang): HubLabels {
   return { ...DICT.de, ...DICT[lang] };
+}
+
+/**
+ * Übersetzten Kategorienamen holen (Welle 29). Quelle bleibt der deutsche `name`;
+ * `categories.name_i18n` (jsonb {_src, en, pl, tr}) trägt die Übersetzungen. Fehlt
+ * die Zielsprache (oder ist leer), fällt es auf den deutschen Namen zurück.
+ */
+export function categoryName(
+  row: { name: string; name_i18n?: unknown },
+  lang: HubLang,
+): string {
+  if (lang === "de") return row.name;
+  const i18n = row.name_i18n;
+  if (i18n && typeof i18n === "object") {
+    const v = (i18n as Record<string, unknown>)[lang];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return row.name;
 }

@@ -10,14 +10,17 @@ export function LangSwitcher({
   current,
   languages,
   basePath,
+  label = "Sprache",
 }: {
   current: HubLang;
   languages: ExtraLang[];
   basePath: string;
+  /** Lokalisiertes aria-label (Welle 29). Default DE. */
+  label?: string;
 }) {
   const all: HubLang[] = ["de", ...languages];
   return (
-    <nav data-tx="lang" aria-label="Sprache" className="flex shrink-0 items-center gap-1 text-xs">
+    <nav data-tx="lang" aria-label={label} className="flex shrink-0 items-center gap-1 text-xs">
       {all.map((l, i) => {
         const active = l === current;
         const href = l === "de" ? basePath : `${basePath}?lang=${l}`;
