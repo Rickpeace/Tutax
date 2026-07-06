@@ -1723,9 +1723,36 @@
     execFrameEl = null;
   }
 
+  // Buehne nach ERLEDIGTEM Schritt selbst abraeumen (Hotfix 06.07., Richard): im
+  // Halbautomatik-Modus liegt zwischen zwei Schritten beliebig viel Zeit — Marker und
+  // Maus des alten Schritts sollen dann nicht stehen bleiben. Kurze Verzoegerung, damit
+  // der Klick-Puls noch sichtbar ist; startet vorher ein neuer Schritt, wird der Timer
+  // storniert (execRunStep) und die Buehne ohnehin neu aufgebaut. execLastPoint bleibt
+  // erhalten, damit die Maus beim naechsten Schritt von der alten Position weiterfaehrt.
+  let execTidyTimer = null;
+  function execScheduleTidy() {
+    if (execTidyTimer) clearTimeout(execTidyTimer);
+    execTidyTimer = setTimeout(() => {
+      execTidyTimer = null;
+      execRemoveFrame();
+      if (execCursorEl && execCursorEl.parentNode) {
+        try {
+          execCursorEl.parentNode.removeChild(execCursorEl);
+        } catch (err) {
+          /* egal */
+        }
+      }
+      execCursorEl = null;
+    }, 650);
+  }
+
   function execCleanup() {
     execStopSearch();
     execStopWatchdog();
+    if (execTidyTimer) {
+      clearTimeout(execTidyTimer);
+      execTidyTimer = null;
+    }
     execRemoveFrame();
     if (execCursorEl && execCursorEl.parentNode) {
       try {
@@ -2122,12 +2149,17 @@
     // Nachricht ist dann beim Browser, bevor eine Navigation die Seite abbaut (Muster wie
     // steply-guide-advance).
     execSendResult(token, result && result.ok, result && result.reason);
+    execScheduleTidy();
   }
 
   // Einen Ausführ-Schritt bearbeiten: Element auflösen (bis 5s, MutationObserver + Tick),
   // sonst Miss + Grund melden. NIEMALS bei Miss klicken (Sicherheit).
   function execRunStep(step, token) {
     execStopSearch();
+    if (execTidyTimer) {
+      clearTimeout(execTidyTimer); // neuer Schritt baut die Buehne selbst neu auf
+      execTidyTimer = null;
+    }
     execRemoveFrame(); // alten Rahmen weg; die Maus bleibt für die nächste Animation
     if (!step || !step.selector) {
       execSendResult(token, false, "no-selector");

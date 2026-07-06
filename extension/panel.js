@@ -2893,8 +2893,10 @@ const EXEC_NAV_TIMEOUT = 15000; // ms auf „complete" nach einer Navigation war
 // nur „Dokument geladen" — React braucht danach noch einen Moment zum Hydratisieren.
 // Feuert ein Submit VORHER, greift die NATIVE Formular-Submission (Voll-Reload) statt der
 // React-Form-Action — genau der „Login-Seite reloaded einfach"-Hänger. Ein Mensch ist nie
-// so schnell nach dem Seitenladen; unsere Maus war es.
-const EXEC_NAV_SETTLE_MS = 1500;
+// so schnell nach dem Seitenladen; unsere Maus war es. 2000 statt 1500 (06.07. abends):
+// Richards erster Lauf schlug weiterhin fehl, die folgenden nicht — Vercel-KALTSTART
+// macht die Hydration beim allerersten Aufruf spürbar langsamer.
+const EXEC_NAV_SETTLE_MS = 2000;
 
 // ── Werte-Handling (lokal) ────────────────────────────────────────────────────
 // chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
