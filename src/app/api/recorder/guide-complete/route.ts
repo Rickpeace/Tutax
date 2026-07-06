@@ -11,6 +11,7 @@ import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
 import {
   validateGuideSteps,
   highlightFromRect,
+  suggestedBlurHighlights,
   templateTitle,
   templateBodyText,
   mkBody,
@@ -88,7 +89,9 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     image_path: s.path,
     image_width: s.w,
     image_height: s.h,
-    highlights: [highlightFromRect(s.rect)],
+    // Klick-Rechteck + (Welle 28) je ein „blur“-Highlight pro sensiblem Feld (suggested:true).
+    // Ohne `sensitive` bleibt es beim einen Rechteck – exakt das heutige Verhalten.
+    highlights: [highlightFromRect(s.rect), ...suggestedBlurHighlights(s.sensitive)],
     // selector (Welle 24): Vorbau für Live-Führung. Fehlt bei alten Extensions -> null.
     selector: s.selector ?? null,
     position: posBase + i + 1,

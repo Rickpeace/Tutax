@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { updatePassword, type AuthState } from "@/app/(auth)/actions";
 
@@ -21,10 +21,9 @@ export function ResetForm() {
       <form action={action} className="mt-6 space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="password">Neues Passwort</Label>
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={8}

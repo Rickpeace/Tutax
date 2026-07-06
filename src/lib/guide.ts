@@ -27,6 +27,9 @@ export type GuideSelector = {
   role?: string; // implizite/explizite ARIA-Rolle (<=40)
 };
 
+// Ein normalisiertes sensibles Rechteck (Auto-Schwärzung, Welle 28) – wie rect, 0..1.
+export type SensitiveRect = { x: number; y: number; w: number; h: number };
+
 // Ein normalisierter Roh-Schritt aus der Extension (nach Validierung).
 export type GuideStepInput = {
   path: string;
@@ -38,6 +41,7 @@ export type GuideStepInput = {
   w: number; // Bildbreite (px)
   h: number; // Bildhöhe (px)
   selector?: GuideSelector; // optional; fehlt bei alten Extensions (abwärtskompatibel)
+  sensitive?: SensitiveRect[]; // optional; Auto-Schwärzung (Welle 28), abwärtskompatibel
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -118,6 +122,61 @@ function isFinitePositiveInt(n: unknown, max: number): n is number {
   return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= max;
 }
 
+// Auto-Schwärzung (Welle 28): Obergrenzen/Schwellen.
+const MAX_SENSITIVE = 10;
+const SENSITIVE_MIN_AREA = 0.0004; // Mini-Flächen (< ~2% × 2%) verwerfen – kein sinnvoller Blur.
+
+/**
+ * STRENGE, aber tolerante Validierung des optionalen `sensitive`-Feldes (Muster wie
+ * validateSelector): Array ≤10 Einträge, jedes {x,y,w,h} endliche Zahlen, auf 0..1 geklemmt,
+ * Rechteck bleibt im Bild, Mini-Flächen verworfen, unbekannte Keys entfernt. Wirft NIE –
+ * kaputte Werte werden ignoriert, der Request scheitert dadurch nicht.
+ */
+export function validateSensitive(raw: unknown): SensitiveRect[] {
+  if (!Array.isArray(raw)) return [];
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+  const out: SensitiveRect[] = [];
+  for (const item of raw) {
+    if (out.length >= MAX_SENSITIVE) break; // Array ≤10 – Überzahl wird abgeschnitten.
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const r = item as Record<string, unknown>;
+    let x = num(r.x);
+    let y = num(r.y);
+    let w = num(r.w);
+    let h = num(r.h);
+    if ([x, y, w, h].some((n) => Number.isNaN(n))) continue; // NaN/fehlend -> verwerfen
+    x = clamp01(x);
+    y = clamp01(y);
+    w = clamp01(w);
+    h = clamp01(h);
+    if (x + w > 1) w = 1 - x;
+    if (y + h > 1) h = 1 - y;
+    if (w <= 0 || h <= 0) continue;
+    if (w * h < SENSITIVE_MIN_AREA) continue; // Mini-Flächen verwerfen
+    out.push({ x, y, w, h }); // NUR bekannte Keys – fremde Keys fallen weg.
+  }
+  return out;
+}
+
+/**
+ * Aus gültigen sensiblen Rechtecken je Schritt zusätzliche „blur“-Highlights erzeugen,
+ * markiert mit `suggested: true` (Auto-Schwärzung, Welle 28). Der Typ „blur“ sorgt dafür,
+ * dass sie beim Veröffentlichen genau wie manuelle Blurs in die Pixel gebrannt werden.
+ */
+export function suggestedBlurHighlights(sensitive: SensitiveRect[] | undefined): Highlight[] {
+  if (!sensitive || !sensitive.length) return [];
+  return sensitive.map((r) => ({
+    id: crypto.randomUUID(),
+    type: "blur" as const,
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
+    rounded: true,
+    suggested: true,
+  }));
+}
+
 /**
  * Strenge Validierung eines rohen Schritt-Arrays aus der Extension. Gibt bei Erfolg
  * bereinigte Schritte zurück (rect je 0..1 geklemmt, label/title gekappt), sonst wirft
@@ -169,6 +228,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
 
     // selector (Welle 24): optional, tolerant gesäubert (nie werfend). Fehlt/kaputt -> weg.
     const selector = validateSelector(s.selector);
+    // sensitive (Welle 28): optional, streng validiert (nie werfend). Fehlt/kaputt -> weg.
+    const sensitive = validateSensitive(s.sensitive);
 
     out.push({
       path,
@@ -180,6 +241,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       w: Math.round(s.w),
       h: Math.round(s.h),
       ...(selector ? { selector } : {}),
+      ...(sensitive.length ? { sensitive } : {}),
     });
   }
   return out;

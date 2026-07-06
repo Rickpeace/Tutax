@@ -326,6 +326,32 @@ export async function getTutorialVideoUrl(tutorialId: string): Promise<string | 
   return signed?.signedUrl ?? null;
 }
 
+/**
+ * Auto-Schwärzung (Welle 28): Wie viele Schritte tragen noch UNGEPRÜFTE automatische
+ * Schwärzungen (Highlight vom Typ „blur“ mit `suggested:true`)? Dient dem UI-Gate vor
+ * dem Veröffentlichen im Builder-Header — rein informativ, blockiert NICHT. RLS-sicher:
+ * liefert nur Schritte aus eigenen Tutorials.
+ */
+export async function countUnreviewedBlurSteps(tutorialId: string): Promise<number> {
+  const supabase = await createClient();
+  const { data: steps } = await supabase
+    .from("steps")
+    .select("highlights")
+    .eq("tutorial_id", tutorialId);
+  let n = 0;
+  for (const s of steps ?? []) {
+    const hs = Array.isArray(s.highlights) ? s.highlights : [];
+    if (
+      hs.some(
+        (h) => h && typeof h === "object" && (h as { suggested?: unknown }).suggested === true,
+      )
+    ) {
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Tutorial einer Kategorie zuordnen (oder lösen mit null). */
 export async function setTutorialCategory(
   tutorialId: string,

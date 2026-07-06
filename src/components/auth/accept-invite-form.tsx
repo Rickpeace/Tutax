@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { acceptInvite } from "@/app/app/settings/team/actions";
 
@@ -65,9 +66,8 @@ export function AcceptInviteForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="invite-password">{hasAccount ? "Dein Passwort" : "Passwort festlegen"}</Label>
-            <Input
+            <PasswordInput
               id="invite-password"
-              type="password"
               autoComplete={hasAccount ? "current-password" : "new-password"}
               autoFocus
               required

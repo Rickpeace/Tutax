@@ -5,10 +5,17 @@ import { useState } from "react";
 import { Check, ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
-import { setTutorialTitle } from "@/app/app/tutorials/[id]/actions";
+import { setTutorialTitle, countUnreviewedBlurSteps } from "@/app/app/tutorials/[id]/actions";
 import { translateTutorial } from "@/app/app/actions-translate";
 import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/app/actions";
 import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
@@ -50,6 +57,8 @@ export function TutorialHeader({
   const [visBusy, setVisBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
   const [stale, setStale] = useState(translationsStale);
+  // Auto-Schwärzung (Welle 28): Anzahl Schritte mit ungeprüften Blurs (>0 = Gate offen).
+  const [blurGate, setBlurGate] = useState<number | null>(null);
 
   async function translate() {
     if (trBusy) return;
@@ -84,12 +93,11 @@ export function TutorialHeader({
     }
   }
 
-  async function togglePublish() {
-    if (busy) return;
-    const next = !published;
+  // Der eigentliche Publish/Unpublish-Weg (Slug + Bilder in den öffentlichen Bucket bzw.
+  // entfernen). Brennt Blur weiterhin serverseitig über ALLE Blurs (inkl. suggested) ein.
+  async function doPublish(next: boolean) {
     setBusy(true);
     try {
-      // Echte Publish-Logik: Slug + Bilder in den öffentlichen Bucket (bzw. entfernen).
       if (next) await publishTutorial(tutorialId);
       else await unpublishTutorial(tutorialId);
       setPublished(next);
@@ -100,6 +108,30 @@ export function TutorialHeader({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function togglePublish() {
+    if (busy) return;
+    const next = !published;
+    // Auto-Schwärzung (Welle 28): VOR dem Veröffentlichen prüfen, ob noch ungeprüfte
+    // automatische Schwärzungen offen sind. Nur ein UI-Gate — der Server blockiert nie,
+    // und die Prüfung selbst darf das Veröffentlichen niemals verhindern (fail-open).
+    if (next) {
+      setBusy(true);
+      let unreviewed = 0;
+      try {
+        unreviewed = await countUnreviewedBlurSteps(tutorialId);
+      } catch {
+        unreviewed = 0;
+      } finally {
+        setBusy(false);
+      }
+      if (unreviewed > 0) {
+        setBlurGate(unreviewed);
+        return;
+      }
+    }
+    await doPublish(next);
   }
 
   // Zielgruppe umschalten (Häkchen). Regeln:
@@ -294,6 +326,37 @@ export function TutorialHeader({
           </Button>
         </div>
       </div>
+
+      {/* Auto-Schwärzung (Welle 28): Bestätigungs-Gate vor dem Veröffentlichen, wenn noch
+          ungeprüfte automatische Schwärzungen offen sind. Serverseitig NICHT blockierend. */}
+      <Dialog open={blurGate !== null} onOpenChange={(o) => { if (!o) setBlurGate(null); }}>
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ungeprüfte automatische Schwärzungen</DialogTitle>
+            <DialogDescription>
+              {blurGate === 1
+                ? "1 Schritt enthält eine ungeprüfte automatische Schwärzung."
+                : `${blurGate} Schritte enthalten ungeprüfte automatische Schwärzungen.`}{" "}
+              Bitte prüfen Sie die markierten Stellen im Editor (verschieben, anpassen oder
+              löschen), bevor Sie veröffentlichen — oder veröffentlichen Sie trotzdem. Die
+              Schwärzungen werden in jedem Fall in die veröffentlichten Bilder eingebrannt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setBlurGate(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => {
+                setBlurGate(null);
+                doPublish(true);
+              }}
+            >
+              Trotzdem veröffentlichen
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

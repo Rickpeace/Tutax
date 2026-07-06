@@ -57,6 +57,10 @@ export type Highlight = {
   strokeWidth?: number;
   rounded?: boolean;
   zoom?: boolean; // markierten Bereich als vergrößerte Lupe zeigen
+  // Auto-Schwärzung (Welle 28): vom Server aus einem sensiblen Feld VORGESCHLAGENer Blur.
+  // Bleibt gesetzt, bis der Autor die Markierungen des Schritts einmal geprüft/gespeichert
+  // hat. Rein additiv — Viewer/Brenn-Logik ignorieren das Feld (Blur wird normal behandelt).
+  suggested?: boolean;
 };
 
 export type Step = {

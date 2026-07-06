@@ -134,13 +134,17 @@ export function TeamManager({
                   type="button"
                   disabled={pending}
                   onClick={() => {
-                    if (confirm(`${m.email} aus dem Team entfernen?`))
+                    if (
+                      confirm(
+                        `„${m.email}“ wirklich aus dem Team entfernen? Die Person verliert sofort den Zugriff.`,
+                      )
+                    )
                       start(async () => {
                         try {
                           await removeMember(m.userId);
-                          toast.success("Entfernt");
+                          toast.success(`${m.email} wurde aus dem Team entfernt.`);
                         } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Fehler");
+                          toast.error(e instanceof Error ? e.message : "Entfernen fehlgeschlagen");
                         }
                       });
                   }}
