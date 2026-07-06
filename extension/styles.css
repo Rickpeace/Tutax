@@ -17,6 +17,15 @@
   box-sizing: border-box;
 }
 
+/* KRITISCH (Hotfix 06.07.): Das hidden-Attribut muss JEDE display-Klasse schlagen.
+   Ohne diese Regel gewann z. B. `.target-banner { display: flex }` gegen
+   `els.targetBanner.hidden = true` — das „Aufnahme fuer:"-Banner klebte dadurch
+   IMMER sichtbar (leer) und „Ziel verwerfen" wirkte tot. Gilt global, damit die
+   ganze Bug-Klasse (hidden vs. display-Klassen) ein fuer alle Mal erledigt ist. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
