@@ -2576,6 +2576,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-guide-status") return;
   if (els.guideRun.hidden) return;
   if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
+  // Erholung (Hotfix 06.07.): Findet die stille Wiederaufnahme das Element doch noch
+  // (SPA/PPR hat es nur kurz versteckt/ersetzt), verlaesst das Panel den Fallback wieder.
+  if (msg.found === true) {
+    guideSetFallback(false);
+    return;
+  }
   if (msg.found === false) {
     const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
     // Grund dezent in Klammern (Welle 33, Fix 3): hilft beim Debuggen künftiger Fälle.

@@ -1081,6 +1081,11 @@
   let guideFieldListeners = null; // { el, onChange, onBlur, onKeydown } fuer Eingabe-Ziele
   let guideAdvanced = false; // Doppel-„weiter"-Schutz (Enter + blur / mehrere pointerdown)
   let guideTargetLost = false; // Ziel verschwand (SPA/0x0) -> Overlay versteckt, found:false EINMAL
+  // Stille Wiederaufnahme (Hotfix 06.07.): SPAs/PPR ersetzen oder verstecken Knoten waehrend
+  // Hydration/Streaming kurzzeitig. Bei Ziel-Verlust NICHT sofort aufgeben, sondern den
+  // zuletzt gezeigten Schritt einmal komplett neu aufloesen (voller Suchlauf inkl. Ersatz-Knoten).
+  let guideCurrentStep = null;
+  let guideReacquireTimer = null;
   // Selbstschutz (Welle 33, Fix 2b): laeuft ein Overlay, aber kommt >60s kein show/ping mehr
   // (Panel hart geschlossen, Port-Hide verpasst), raeumt das Content-Script SELBST ab.
   let guideLastSignalAt = 0;
@@ -1235,6 +1240,10 @@
     guideStopSearch();
     guideStopWatchdog();
     guideTargetLost = false;
+    if (guideReacquireTimer) {
+      clearTimeout(guideReacquireTimer);
+      guideReacquireTimer = null;
+    }
     document.removeEventListener("pointerdown", onGuidePointerDown, true);
     window.removeEventListener("scroll", guideReposition, true);
     window.removeEventListener("resize", guideReposition, true);
@@ -1304,10 +1313,24 @@
         guideSetOverlayVisible(false);
         if (!guideTargetLost) {
           guideTargetLost = true;
-          try {
-            chrome.runtime.sendMessage({ type: "steply-guide-status", found: false, reason: "target-gone" });
-          } catch (err) {
-            /* Panel evtl. zu - egal */
+          // NICHT sofort aufgeben (Hotfix 06.07.): erst STILL komplett neu aufloesen —
+          // der volle Suchlauf findet auch ERSETZTE Knoten (React/PPR) und meldet erst
+          // nach seinem Timeout found:false. Erfolg -> guideAttach meldet found:true,
+          // das Panel verlaesst den Fallback wieder.
+          if (guideCurrentStep && !guideReacquireTimer) {
+            guideReacquireTimer = setTimeout(() => {
+              guideReacquireTimer = null;
+              if (guideCurrentStep) {
+                showGuideStep(guideCurrentStep);
+                guideStartWatchdog();
+              }
+            }, 300);
+          } else if (!guideCurrentStep) {
+            try {
+              chrome.runtime.sendMessage({ type: "steply-guide-status", found: false, reason: "target-gone" });
+            } catch (err) {
+              /* Panel evtl. zu - egal */
+            }
           }
         }
         return;
@@ -1492,6 +1515,7 @@
     guideCleanup(); // vorherigen Zustand + laufende Suche restlos abbauen
     guideAdvanced = false; // „weiter"-Schutz je Schritt zuruecksetzen
     guideTargetLost = false;
+    guideCurrentStep = step || null; // fuer die stille Wiederaufnahme nach Ziel-Verlust
     const resolver =
       (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
     if (!step || !step.selector || !resolver) {
@@ -1527,6 +1551,20 @@
         res = null;
       }
       if (res && res.el) {
+        // Noch ohne Layout (0×0 — z. B. waehrend Hydration/PPR-Streaming versteckt)?
+        // Dann NICHT andocken: scrollIntoView liefe ins Leere und die erste Reposition
+        // meldete sofort „target-gone". Weiter suchen — der 250ms-Tick faengt auch
+        // reine Layout-Aenderungen ohne DOM-Mutation (Hotfix 06.07.).
+        let rr = null;
+        try {
+          rr = res.el.getBoundingClientRect();
+        } catch (err) {
+          rr = null;
+        }
+        if (!rr || (rr.width <= 0 && rr.height <= 0)) {
+          lastReason = "target-hidden";
+          return false;
+        }
         done = true;
         guideStopSearch();
         guideAttach(res.el, step);
@@ -1576,6 +1614,7 @@
       return;
     }
     if (msg.type === "steply-guide-hide") {
+      guideCurrentStep = null; // keine stille Wiederaufnahme nach explizitem Ende
       guideCleanup();
       return;
     }
