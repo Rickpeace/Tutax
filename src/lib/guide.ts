@@ -30,6 +30,23 @@ export type GuideSelector = {
 // Ein normalisiertes sensibles Rechteck (Auto-Schwärzung, Welle 28) – wie rect, 0..1.
 export type SensitiveRect = { x: number; y: number; w: number; h: number };
 
+// ── Datei-Brücke (Welle 39) ──────────────────────────────────────────────────
+// Die Aufnahme merkt sich an einem Schritt, dass ein Klick einen DOWNLOAD ausgelöst hat
+// bzw. dass ein Datei-Feld einen UPLOAD bekam. Es reisen NUR Metadaten (Rolle + Dateiname/
+// MIME/Größe) — NIEMALS die Datei-Bytes (die bleiben lokal in der Extension). Streng, aber
+// tolerant validiert; kaputt/unbekannt → verworfen (Aufnahme geht nie verloren).
+export type GuideFileRole = "download" | "upload";
+export type GuideFileMeta = {
+  role: GuideFileRole;
+  filename?: string;
+  mime?: string;
+  size?: number;
+};
+
+const FILE_NAME_MAX = 200;
+const FILE_MIME_MAX = 120;
+const FILE_SIZE_MAX = 5 * 1024 * 1024 * 1024; // 5 GB Plausibilitätsdeckel (nur Metadatum)
+
 // Ein normalisierter Roh-Schritt aus der Extension (nach Validierung).
 export type GuideStepInput = {
   path: string;
@@ -42,6 +59,7 @@ export type GuideStepInput = {
   h: number; // Bildhöhe (px)
   selector?: GuideSelector; // optional; fehlt bei alten Extensions (abwärtskompatibel)
   sensitive?: SensitiveRect[]; // optional; Auto-Schwärzung (Welle 28), abwärtskompatibel
+  file_meta?: GuideFileMeta; // optional; Datei-Brücke (Welle 39), abwärtskompatibel
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -136,6 +154,38 @@ export function validateSelector(raw: unknown): GuideSelector | undefined {
   if (text) out.text = text;
   if (role) out.role = role;
   return out.css || out.text || out.role ? out : undefined;
+}
+
+/**
+ * STRENGE, aber tolerante Validierung des optionalen `file_meta` (Datei-Brücke, Welle 39).
+ * role MUSS in der Whitelist liegen; Strings gekappt; size als endliche Nicht-Negativ-Zahl.
+ * Kaputt/unbekannt → undefined (Feld wird verworfen; die Aufnahme scheitert NIE daran).
+ * Wirft NIE. Nur bekannte Keys überleben (fremde Keys fallen weg).
+ */
+export function validateFileMeta(raw: unknown): GuideFileMeta | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const role = r.role;
+  if (role !== "download" && role !== "upload") return undefined;
+  const out: GuideFileMeta = { role };
+  if (typeof r.filename === "string") {
+    // Nur der Basisname (keine Pfade/Traversal), Steuerzeichen raus, gekappt.
+    const name = r.filename
+      .replace(/\p{Cc}/gu, " ")
+      .replace(/[\\/]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, FILE_NAME_MAX);
+    if (name) out.filename = name;
+  }
+  if (typeof r.mime === "string") {
+    const mime = r.mime.replace(/\p{Cc}/gu, "").replace(/\s+/g, "").trim().slice(0, FILE_MIME_MAX);
+    if (mime) out.mime = mime;
+  }
+  if (typeof r.size === "number" && Number.isFinite(r.size) && r.size >= 0 && r.size <= FILE_SIZE_MAX) {
+    out.size = Math.round(r.size);
+  }
+  return out;
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -252,6 +302,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const selector = validateSelector(s.selector);
     // sensitive (Welle 28): optional, streng validiert (nie werfend). Fehlt/kaputt -> weg.
     const sensitive = validateSensitive(s.sensitive);
+    // file_meta (Welle 39): optional Datei-Brücke, tolerant validiert. Fehlt/kaputt -> weg.
+    const fileMeta = validateFileMeta(s.file_meta);
 
     out.push({
       path,
@@ -264,6 +316,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       h: Math.round(s.h),
       ...(selector ? { selector } : {}),
       ...(sensitive.length ? { sensitive } : {}),
+      ...(fileMeta ? { file_meta: fileMeta } : {}),
     });
   }
   return out;
@@ -291,6 +344,12 @@ export function highlightFromRect(rect: GuideStepInput["rect"]): Highlight {
  */
 export function templateTitle(step: GuideStepInput, index: number): string {
   const n = index + 1;
+  // Datei-Brücke (Welle 39): Upload-Schritte tragen einen eigenen, sprechenden Titel — der
+  // davor erfasste „Datei auswählen"-Klick wurde bereits in der Extension hineingefaltet.
+  if (step.file_meta?.role === "upload") {
+    const name = step.file_meta.filename;
+    return name ? `Datei hochladen: „${name.slice(0, TITLE_MAX - 18)}“` : "Datei hochladen";
+  }
   if (!step.label) return `Schritt ${n}`;
   const wrap = (l: string) =>
     step.action === "type" ? `Tragen Sie „${l}“ ein` : `Klicken Sie auf „${l}“`;
@@ -319,6 +378,14 @@ export function templateBodyText(
 ): string {
   const changedPage = !!step.title && step.title !== (prev?.title ?? "");
   const context = changedPage ? `Auf der Seite „${step.title}“: ` : "";
+  // Datei-Brücke (Welle 39): Upload-/Download-Schritte bekommen einen passenden Hinweistext.
+  if (step.file_meta?.role === "upload") {
+    const name = step.file_meta.filename;
+    return `${context}Legen Sie die Datei${name ? ` „${name}“` : ""} in dieses Feld.`;
+  }
+  if (step.file_meta?.role === "download" && step.label) {
+    return `${context}Klicken Sie auf „${step.label}“ — dabei wird eine Datei heruntergeladen.`;
+  }
   if (step.action === "type" && step.label) {
     return `${context}Tragen Sie hier „${step.label}“ ein.`;
   }

@@ -874,6 +874,43 @@
     }
   }
 
+  // SOFORT-ANLEITUNG / Datei-Bruecke (Welle 39): ein Upload-Schritt aus einem file-input.
+  // NUR Metadaten (Rolle/Name/MIME/Groesse) reisen ans Panel — NIE die Datei-Bytes. Der Schritt
+  // traegt den Selektor des INPUTS + foldPrevClick:true, damit das Panel den davor erfassten
+  // „Datei auswaehlen"-Klick in DIESEN Schritt faltet (sonst entstuende beim Lauf ein sinnloser
+  // Klick, der nur den OS-Dialog oeffnet). Screenshot laeuft wie bei jedem anderen Schritt.
+  function emitUploadStep(inputEl, file) {
+    const geo = rectOf(inputEl);
+    lastClickPx = {
+      left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
+      cx: geo.px.cx, cy: geo.px.cy,
+    };
+    const step = {
+      rect: geo.rect,
+      label: file && file.name ? clampLabel(file.name, 60) : "Datei",
+      action: "click",
+      url: (location && location.href ? location.href : "").slice(0, 500),
+      title: truncate(document.title || "", 200),
+      selector: selectorFor(inputEl),
+      ts: Date.now(),
+      // Datei-Bruecke: NUR Metadaten. filename/mime/size lokal ermittelt, gehen NIE an den Server.
+      fileMeta: {
+        role: "upload",
+        filename: file && file.name ? String(file.name).slice(0, 200) : "",
+        mime: file && file.type ? String(file.type).slice(0, 120) : "",
+        size: file && typeof file.size === "number" ? file.size : 0,
+      },
+      foldPrevClick: true,
+    };
+    const sensitive = collectSensitiveRects();
+    if (sensitive.length) step.sensitive = sensitive;
+    try {
+      chrome.runtime.sendMessage({ type: "steply-guide-step", step });
+    } catch (err) {
+      recording = false;
+    }
+  }
+
   // Ist ein editierbares Feld mit GEAENDERTEM Wert fokussiert, ZUERST den Eingabe-Schritt
   // senden und das Feld abrechnen (settled) - damit ein direkt folgender Klick DAHINTER
   // liegt und das nachfolgende blur keinen Doppel-Schritt erzeugt.
@@ -970,6 +1007,12 @@
     if (!el) return;
     const tag = (el.tagName || "").toLowerCase();
     const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+    // Datei-Bruecke (Welle 39): file-input mit gewaehlter Datei → eigener Upload-Schritt.
+    if (tag === "input" && type === "file") {
+      const files = el.files;
+      if (files && files.length) emitUploadStep(el, files[0]);
+      return;
+    }
     const isSelect = tag === "select";
     const isRange = tag === "input" && type === "range";
     if (!isSelect && !isRange) return;
@@ -1646,6 +1689,13 @@
   // Ziel, bevor die Aktion ausgelöst wird. Benannte Konstanten → künftiges Tuning ist trivial.
   const EXEC_CURSOR_TRAVEL_MS = 750; // Reisedauer des Cursors zum Ziel (vorher ~450 ms)
   const EXEC_CURSOR_DWELL_MS = 250; // Verweilpause auf dem Ziel VOR der Aktion (Klick-Puls danach)
+  // Datei-Brücke (Welle 39): Deckel für im Speicher getragene Dateien (Weg 1). Darüber → Weg 2/3.
+  const EXEC_FILE_CAP = 50 * 1024 * 1024;
+
+  // Datei-Brücke: getragene Dateien, die das Panel für einen Upload-Schritt hierher überträgt.
+  // { [fileId]: { name, mime, b64 } | { name, mime, parts:[], got, total } }. SICHERHEIT: leben
+  // NUR während des Laufs, gehen NIE ins DOM/Netz und werden bei execCleanup restlos geleert.
+  let execFiles = {};
 
   let execCursorEl = null; // persistente animierte Maus (überlebt Schritte)
   let execFrameEl = null; // Rahmen ums aktuelle Ziel
@@ -1763,7 +1813,40 @@
     }
     execCursorEl = null;
     execLastPoint = null;
+    // Datei-Brücke (Welle 39): getragene Datei-Bytes bei JEDEM Lauf-Ende restlos vergessen.
+    execFiles = {};
     execRemoveStrays();
+  }
+
+  // ── Datei-Brücke (Welle 39): base64 ⇄ Bytes + Content-Disposition-Dateiname ──────────────
+  function execB64ToBytes(b64) {
+    const bin = atob(String(b64 || ""));
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function execAbToBase64(ab) {
+    let bin = "";
+    const bytes = new Uint8Array(ab);
+    const chunk = 0x8000; // in Stücken, sonst sprengt String.fromCharCode.apply den Stack
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+  function execFilenameFromCD(cd) {
+    if (!cd) return "";
+    let m = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+    if (m) {
+      try {
+        return decodeURIComponent(m[1].replace(/["']/g, "").trim()).replace(/[\\/]+/g, "_");
+      } catch (e) {
+        /* fällt auf die einfache Variante zurück */
+      }
+    }
+    m = /filename="?([^";]+)"?/i.exec(cd);
+    return m ? m[1].trim().replace(/[\\/]+/g, "_") : "";
   }
 
   // Maus-Zeiger (Koralle, weißer Rand, weicher Schatten) — per createElementNS gebaut, damit
@@ -2228,6 +2311,233 @@
     execScheduleTidy();
   }
 
+  // ── Datei-Brücke (Welle 39): Upload ausführen ──────────────────────────────────────────
+  // Ein sichtbares Anker-Element für Rahmen/Maus finden. Der Ziel-INPUT ist oft display:none
+  // (Portale legen einen unsichtbaren file-input hinter ein gestyltes Label/Button) — dann
+  // zielen Rahmen und Maus auf das sichtbare Label/Button, die Injektion trifft aber den INPUT.
+  function execUploadAnchor(el) {
+    const visible = (n) => {
+      try {
+        const r = n.getBoundingClientRect();
+        return r && (r.width > 0 || r.height > 0) ? n : null;
+      } catch (e) {
+        return null;
+      }
+    };
+    if (visible(el)) return el;
+    try {
+      if (el.labels && el.labels.length) {
+        for (const l of el.labels) {
+          const v = visible(l);
+          if (v) return v;
+        }
+      }
+    } catch (e) {
+      /* egal */
+    }
+    try {
+      if (el.id) {
+        const l = document.querySelector('label[for="' + cssEscapeAttr(el.id) + '"]');
+        if (l && visible(l)) return l;
+      }
+    } catch (e) {
+      /* ungueltige id → egal */
+    }
+    try {
+      const w = el.closest && el.closest("label");
+      if (w && visible(w)) return w;
+    } catch (e) {
+      /* egal */
+    }
+    let p = el.parentElement;
+    let guard = 0;
+    while (p && guard < 4) {
+      const v = visible(p);
+      if (v) return v;
+      p = p.parentElement;
+      guard++;
+    }
+    return el; // nichts Sichtbares → execRectOf liefert dann die Bildschirmmitte
+  }
+
+  function execIsFileInput(el) {
+    if (!el || (el.tagName || "").toLowerCase() !== "input") return false;
+    const type = ((el.getAttribute && el.getAttribute("type")) || el.type || "").toLowerCase();
+    return type === "file";
+  }
+
+  // Datei ins Ziel legen. file-input → File über DataTransfer setzen + input/change. Ist das
+  // aufgelöste Ziel KEIN file-input (Drop-Zone), stattdessen dragenter/dragover/drop mit
+  // dataTransfer.files dispatchen. Datei-Bytes bleiben lokal.
+  function execInjectFile(el, f) {
+    let bytes;
+    try {
+      bytes = execB64ToBytes(f.b64);
+    } catch (e) {
+      return { ok: false, reason: "decode-error" };
+    }
+    let file;
+    try {
+      file = new File([bytes], f.name || "datei", { type: f.mime || "application/octet-stream" });
+    } catch (e) {
+      return { ok: false, reason: "file-unsupported" };
+    }
+    let dt;
+    try {
+      dt = new DataTransfer();
+      dt.items.add(file);
+    } catch (e) {
+      return { ok: false, reason: "datatransfer-unsupported" };
+    }
+    if (execIsFileInput(el)) {
+      try {
+        el.files = dt.files;
+      } catch (e) {
+        return { ok: false, reason: "files-readonly" };
+      }
+      try {
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (e) {
+        /* egal — files ist gesetzt */
+      }
+      return { ok: true };
+    }
+    // Drop-Zone: reale Drag-&-Drop-Gestensequenz mit den Datei-Daten.
+    let cx = 0;
+    let cy = 0;
+    try {
+      const r = el.getBoundingClientRect();
+      cx = r.left + r.width / 2;
+      cy = r.top + r.height / 2;
+    } catch (e) {
+      /* egal */
+    }
+    const mk = (type) => {
+      try {
+        return new DragEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: dt,
+          clientX: cx,
+          clientY: cy,
+        });
+      } catch (e) {
+        // DragEvent-Konstruktor ohne dataTransfer-Option → dataTransfer manuell anhängen.
+        const ev = new Event(type, { bubbles: true, cancelable: true });
+        try {
+          Object.defineProperty(ev, "dataTransfer", { value: dt });
+        } catch (e2) {
+          /* egal */
+        }
+        return ev;
+      }
+    };
+    try {
+      el.dispatchEvent(mk("dragenter"));
+      el.dispatchEvent(mk("dragover"));
+      el.dispatchEvent(mk("drop"));
+    } catch (e) {
+      return { ok: false, reason: "drop-error" };
+    }
+    return { ok: true };
+  }
+
+  async function execPerformUpload(el, step, token, f) {
+    execEnsureCursor();
+    const anchor = execUploadAnchor(el);
+    try {
+      anchor.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    } catch (err) {
+      try {
+        anchor.scrollIntoView();
+      } catch (e) {
+        /* egal */
+      }
+    }
+    await execWait(180);
+    const rect = execRectOf(anchor);
+    execShowFrame(rect);
+    await execAnimateCursorTo(rect.cx, rect.cy);
+    await execWait(EXEC_CURSOR_DWELL_MS);
+    execClickPulse(rect.cx, rect.cy);
+    let result;
+    try {
+      result = execInjectFile(el, f);
+    } catch (err) {
+      result = { ok: false, reason: "upload-error" };
+    }
+    execSendResult(token, result && result.ok, result && result.reason, false);
+    execScheduleTidy();
+  }
+
+  // Einen Upload-Schritt bearbeiten: den (evtl. UNSICHTBAREN) Ziel-Input auflösen — hier gilt
+  // der 0×0-Guard NICHT (versteckte file-inputs sind normal). Fehlt die getragene Datei
+  // (Weg-3-Fall im Panel), ehrlicher Miss. NIEMALS raten.
+  function execRunUpload(step, token) {
+    const f = step && step.fileId != null ? execFiles[step.fileId] : null;
+    if (!f || !f.b64) {
+      execSendResult(token, false, "file-missing");
+      return;
+    }
+    if (!step.selector) {
+      execSendResult(token, false, "no-selector");
+      return;
+    }
+    const resolver =
+      (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
+    if (!resolver) {
+      execSendResult(token, false, "no-resolver");
+      return;
+    }
+    const MAX_WAIT = 5000;
+    let lastReason = "timeout";
+    let done = false;
+    const finishMiss = () => {
+      if (done) return;
+      done = true;
+      execStopSearch();
+      execSendResult(token, false, lastReason);
+    };
+    const tryResolve = () => {
+      if (done) return true;
+      let res = null;
+      try {
+        res = resolver(document, step.selector);
+      } catch (err) {
+        res = null;
+      }
+      if (res && res.el) {
+        done = true;
+        execStopSearch();
+        execPerformUpload(res.el, step, token, f); // KEIN 0×0-Guard: hidden file-input ist ok
+        return true;
+      }
+      if (res && res.reason) lastReason = res.reason;
+      return false;
+    };
+    if (tryResolve()) return;
+    let obsPending = false;
+    try {
+      execSearchObserver = new MutationObserver(() => {
+        if (obsPending || done) return;
+        obsPending = true;
+        setTimeout(() => {
+          obsPending = false;
+          tryResolve();
+        }, 60);
+      });
+      execSearchObserver.observe(document.documentElement || document, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (err) {
+      execSearchObserver = null;
+    }
+    execSearchTick = setInterval(tryResolve, 250);
+    execSearchTimeout = setTimeout(finishMiss, MAX_WAIT);
+  }
+
   // Einen Ausführ-Schritt bearbeiten: Element auflösen (bis 5s, MutationObserver + Tick),
   // sonst Miss + Grund melden. NIEMALS bei Miss klicken (Sicherheit).
   function execRunStep(step, token) {
@@ -2237,6 +2547,11 @@
       execTidyTimer = null;
     }
     execRemoveFrame(); // alten Rahmen weg; die Maus bleibt für die nächste Animation
+    // Datei-Brücke (Welle 39): Upload-Schritte haben ihren eigenen Pfad (versteckter Input ok).
+    if (step && step.action === "upload") {
+      execRunUpload(step, token);
+      return;
+    }
     if (!step || !step.selector) {
       execSendResult(token, false, "no-selector");
       return;
@@ -2344,6 +2659,75 @@
       execCleanup();
       return;
     }
+  });
+
+  // ── Datei-Brücke (Welle 39): Refetch (Weg 1) + Datei-Transport ans Content-Script ────────
+  // Eigener Listener MIT sendResponse (async). SICHERHEIT: Datei-Bytes bleiben lokal — dieser
+  // Refetch läuft im ORIGIN der Quellseite (credentials:'include'), damit kurzlebige Session-
+  // Cookies greifen; das Ergebnis geht NUR zurück ins Panel (Extension-Speicher), nie an Steply.
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (!msg) return false;
+    if (msg.type === "steply-exec-refetch") {
+      (async () => {
+        try {
+          const resp = await fetch(msg.url, { credentials: "include" });
+          if (!resp.ok) {
+            sendResponse({ ok: false, reason: "http-" + resp.status });
+            return;
+          }
+          const buf = await resp.arrayBuffer();
+          if (buf.byteLength > EXEC_FILE_CAP) {
+            // Deckel: zu groß für den Speicher-Weg → Panel entscheidet Weg 2/3.
+            sendResponse({ ok: false, reason: "too-large", size: buf.byteLength });
+            return;
+          }
+          sendResponse({
+            ok: true,
+            b64: execAbToBase64(buf),
+            size: buf.byteLength,
+            mime: resp.headers.get("content-type") || "",
+            name: execFilenameFromCD(resp.headers.get("content-disposition") || ""),
+          });
+        } catch (e) {
+          sendResponse({ ok: false, reason: "fetch-error" });
+        }
+      })();
+      return true; // Antwort kommt asynchron
+    }
+    if (msg.type === "steply-exec-file") {
+      // Kleine Datei: ganze base64 in EINER Nachricht.
+      execFiles[msg.fileId] = { name: msg.name, mime: msg.mime, b64: msg.b64 };
+      sendResponse({ ok: true });
+      return true;
+    }
+    if (msg.type === "steply-exec-file-begin") {
+      // Große Datei (>8 MB base64): Chunk-Protokoll — Teile sammeln, dann zusammensetzen.
+      execFiles[msg.fileId] = {
+        name: msg.name,
+        mime: msg.mime,
+        parts: new Array(msg.total || 0),
+        got: 0,
+        total: msg.total || 0,
+      };
+      sendResponse({ ok: true });
+      return true;
+    }
+    if (msg.type === "steply-exec-file-chunk") {
+      const f = execFiles[msg.fileId];
+      if (f && Array.isArray(f.parts)) {
+        if (f.parts[msg.seq] === undefined) f.got++;
+        f.parts[msg.seq] = msg.b64;
+        if (f.got >= f.total) f.b64 = f.parts.join("");
+      }
+      sendResponse({ ok: true, got: f ? f.got : 0, complete: !!(f && f.b64) });
+      return true;
+    }
+    if (msg.type === "steply-exec-file-clear") {
+      execFiles = {};
+      sendResponse({ ok: true });
+      return true;
+    }
+    return false;
   });
 
   // Beim Laden dieser Script-Instanz sofort Zombie-Overlays verwaister Vorgaenger entsorgen

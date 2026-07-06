@@ -84,6 +84,8 @@ async function seedLinear(accountId, title, steps, { decisionAt } = {}) {
     page_url: "https://abrechnung.example/login",
     is_decision: decisionAt === i,
     highlights: s.highlights ?? [],
+    // Datei-Brücke (Welle 39): {role:download|upload,…} — nur wenn der Schritt eine trägt.
+    file_meta: s.file_meta ?? null,
     position: i + 1,
   }));
   await admin.from("steps").insert(rows);
@@ -111,6 +113,16 @@ try {
   if (probeHl.error) {
     console.log("⚠  Spalte automation_steps.highlights fehlt (Migration 0031 noch nicht live angewandt).");
     console.log("   Grund:", probeHl.error.message);
+    console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
+    process.exit(0);
+  }
+
+  // Preflight (Welle 39, Datei-Brücke): Existiert file_meta an steps + automation_steps (0032)?
+  const probeFmA = await admin.from("automation_steps").select("file_meta").limit(1);
+  const probeFmS = await admin.from("steps").select("file_meta").limit(1);
+  if (probeFmA.error || probeFmS.error) {
+    console.log("⚠  Spalte file_meta fehlt (Migration 0032 noch nicht live angewandt).");
+    console.log("   Grund:", (probeFmA.error || probeFmS.error).message);
     console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
     process.exit(0);
   }
@@ -179,6 +191,46 @@ try {
   const { data: sRow } = await admin.from("automations").select("params").eq("id", convS.automationId).single();
   const secretP = (sRow.params || []).find((x) => x.label === "Passwort");
   ok(secretP && secretP.type === "secret", `Passwort-Label → type 'secret' (war ${secretP && secretP.type})`);
+
+  // ── Datei-Brücke (Welle 39): Download → Upload konvertieren ─────────────────────
+  const tutBridge = await seedLinear(A.accountId, "Beleg-Bruecke " + stamp, [
+    {
+      title: "Beleg herunterladen",
+      selector: { role: "link", text: "Beleg herunterladen" },
+      image_path: imgPath,
+      file_meta: { role: "download", filename: "beleg.pdf", mime: "application/pdf", size: 12345 },
+    },
+    {
+      title: "Datei auswaehlen",
+      selector: { css: "#file", role: "textbox", text: "Datei" },
+      file_meta: { role: "upload", filename: "beleg.pdf", mime: "application/pdf", size: 12345 },
+    },
+  ]);
+  const convBr = await convertTutorialToAutomation(admin, A.accountId, tutBridge);
+  automationIds.push(convBr.automationId);
+  const { data: brSteps } = await admin
+    .from("automation_steps").select("position, action, param_key, file_meta")
+    .eq("automation_id", convBr.automationId).order("position", { ascending: true });
+  ok(brSteps.length === 2, `Bruecke: 2 automation_steps (war ${brSteps.length})`);
+  const dlStep = brSteps.find((s) => s.file_meta && s.file_meta.role === "download");
+  const upStep = brSteps.find((s) => s.file_meta && s.file_meta.role === "upload");
+  ok(dlStep && dlStep.action === "click" && dlStep.file_meta.key === "file1",
+    `Download-Schritt: action='click' + file_meta.key='file1' (war ${JSON.stringify(dlStep)})`);
+  ok(upStep && upStep.action === "upload" && upStep.file_meta.source === "file1",
+    `Upload-Schritt: action='upload' + file_meta.source='file1' (war ${JSON.stringify(upStep)})`);
+  ok(upStep && upStep.param_key === null, "Upload-Schritt zieht Wert aus der Datei (kein Parameter)");
+  const { data: brAuto } = await admin.from("automations").select("params").eq("id", convBr.automationId).single();
+  ok(Array.isArray(brAuto.params) && brAuto.params.length === 0,
+    `Bruecke: keine Parameter (war ${brAuto.params && brAuto.params.length})`);
+
+  // Upload OHNE vorherigen Download → sprechender Konvertierungsfehler.
+  const tutUpOnly = await seedLinear(A.accountId, "Upload ohne Download " + stamp, [
+    { title: "Irgendein Klick", selector: { role: "button", text: "Weiter" } },
+    { title: "Datei hochladen", selector: { css: "#f", role: "textbox", text: "Datei" }, file_meta: { role: "upload", filename: "x.pdf" } },
+  ]);
+  let upErr = null;
+  try { await convertTutorialToAutomation(admin, A.accountId, tutUpOnly); } catch (e) { upErr = e.message; }
+  ok(/lädt eine Datei hoch/.test(upErr || ""), `Upload ohne Download → sprechender Fehler (war ${upErr})`);
 
   // Entscheidung → sprechender Fehler.
   const tutDec = await seedLinear(A.accountId, "Mit Entscheidung " + stamp, [
@@ -249,6 +301,17 @@ try {
   ok(detHl && detHl.highlights.some((h) => h.type === "blur"), "Detail: markierter Schritt liefert highlights (inkl. blur)");
   const fillDet = det.steps.find((s) => s.action === "fill");
   ok(fillDet && fillDet.param_key === fill.param_key && fillDet.selector, "Detail: fill-Schritt mit param_key + selector");
+
+  // Datei-Brücke (Welle 39): die API liefert file_meta je Schritt (Download-key / Upload-source).
+  const detBrRes = await getAuth("/api/recorder/automations/" + convBr.automationId, tokenA);
+  const detBr = await detBrRes.json().catch(() => ({}));
+  ok(detBrRes.status === 200 && Array.isArray(detBr.steps), "Detail Bruecke → 200 + Schritte");
+  const detDl = (detBr.steps || []).find((s) => s.file_meta && s.file_meta.role === "download");
+  const detUp = (detBr.steps || []).find((s) => s.file_meta && s.file_meta.role === "upload");
+  ok(detDl && detDl.file_meta.key === "file1", "Detail: Download-Schritt liefert file_meta {role:download,key:file1}");
+  ok(detUp && detUp.action === "upload" && detUp.file_meta.source === "file1",
+    "Detail: Upload-Schritt file_meta {role:upload,source:file1} + action='upload'");
+  ok((detBr.steps || []).every((s) => "file_meta" in s), "Detail: file_meta-Feld je Schritt vorhanden (auch null)");
 
   // ── (B3) POST /api/recorder/automation-runs ───────────────────────────────────
   const runsPre = await fetch(`${BASE}/api/recorder/automation-runs`, { method: "OPTIONS" });

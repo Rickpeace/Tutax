@@ -158,6 +158,7 @@ const els = {
   autoMissImageFrame: document.getElementById("autoMissImageFrame"),
   autoMissImage: document.getElementById("autoMissImage"),
   autoDownloadNote: document.getElementById("autoDownloadNote"),
+  autoFileChip: document.getElementById("autoFileChip"),
   autoCtlSemi: document.getElementById("autoCtlSemi"),
   autoCtlAuto: document.getElementById("autoCtlAuto"),
   autoCtlPaused: document.getElementById("autoCtlPaused"),
@@ -939,11 +940,84 @@ const GUIDE_QUEUE_CAP = 4; // max. wartende Schritte; bei Ueberlauf aeltesten ve
 const COALESCE_WINDOW = 300; // ms: Eingabe + direkt folgender Klick teilen sich EINEN Screenshot
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, ts, blob, width, height, thumbUrl }
+let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, fileMeta, ts, blob, width, height, thumbUrl }
 let guideQueue = []; // FIFO: [{ step, tabId, windowId }] - wartende Schritte (Kappe GUIDE_QUEUE_CAP)
 let guideCapturing = false;
 let guideLastCaptureAt = 0;
 let guideFinishing = false;
+
+// ── Datei-Brücke (Welle 39): Download-Erkennung während der Aufnahme ────────────────────────
+// Beginnt binnen ~3s nach einem erfassten Klick ein Download, ordnen wir dem Klick-Schritt
+// file_meta {role:'download', …} zu. Es reisen NUR Metadaten (Name/MIME/Größe) — die kurzlebige
+// Download-URL wird NICHT persistiert (Session-Tokens). Der Fold für Uploads (den davor
+// erfassten „Datei auswählen"-Klick in den Upload-Schritt falten) läuft ebenfalls hier.
+const GUIDE_DL_MATCH_MS = 3000; // Download binnen ~3s nach dem Klick → diesem Schritt zuordnen
+const GUIDE_DL_TOLERANCE = 800; // kleine Uhr-Toleranz (Download minimal „vor" dem Klick-ts)
+const GUIDE_FOLD_MS = 10000; // Klick + Upload-change binnen ~10s → EIN Schritt
+let guidePendingDownloads = []; // [{ at, filename, mime, size, consumed }]
+let guideDownloadHandler = null;
+
+function guideAddDownloadWatch() {
+  if (!chrome.downloads || !chrome.downloads.onCreated) return;
+  guidePendingDownloads = [];
+  guideDownloadHandler = (item) => {
+    if (!guideActive) return;
+    const now = Date.now();
+    // Alte, nie zugeordnete Einträge verwerfen (kein Stau).
+    guidePendingDownloads = guidePendingDownloads.filter((d) => now - d.at < 8000);
+    guidePendingDownloads.push({
+      at: now,
+      filename: execDownloadName(item),
+      mime: item && item.mime ? String(item.mime).slice(0, 120) : "",
+      size:
+        item && typeof item.fileSize === "number" && item.fileSize > 0
+          ? item.fileSize
+          : item && typeof item.totalBytes === "number" && item.totalBytes > 0
+            ? item.totalBytes
+            : 0,
+      consumed: false,
+    });
+    guideMatchDownloads();
+  };
+  try {
+    chrome.downloads.onCreated.addListener(guideDownloadHandler);
+  } catch (e) {
+    guideDownloadHandler = null;
+  }
+}
+
+function guideRemoveDownloadWatch() {
+  if (guideDownloadHandler && chrome.downloads && chrome.downloads.onCreated) {
+    try {
+      chrome.downloads.onCreated.removeListener(guideDownloadHandler);
+    } catch (e) {
+      /* egal */
+    }
+  }
+  guideDownloadHandler = null;
+  guidePendingDownloads = [];
+}
+
+// Wartende Downloads dem jüngsten passenden Klick-Schritt (ohne file_meta) zuordnen.
+function guideMatchDownloads() {
+  if (!guidePendingDownloads.length) return;
+  let changed = false;
+  for (const dl of guidePendingDownloads) {
+    if (dl.consumed) continue;
+    for (let i = guideSteps.length - 1; i >= 0; i--) {
+      const s = guideSteps[i];
+      if (s.fileMeta || s.action !== "click") continue;
+      const gap = dl.at - (s.ts || 0);
+      if (gap >= -GUIDE_DL_TOLERANCE && gap <= GUIDE_DL_MATCH_MS) {
+        s.fileMeta = { role: "download", filename: dl.filename, mime: dl.mime, size: dl.size };
+        dl.consumed = true;
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (changed) renderGuideSteps();
+}
 
 function guideBusyHint() {
   setStatus("Screenshot wird erfasst ...");
@@ -1023,6 +1097,8 @@ async function startGuide() {
   warnIfActiveTabNotCapturable();
   startEpoch = Date.now();
   startTimer(els.guideTimer);
+  // Datei-Brücke (Welle 39): Downloads während der Aufnahme beobachten (Metadaten-Zuordnung).
+  guideAddDownloadWatch();
   try {
     await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
   } catch (err) {
@@ -1165,18 +1241,44 @@ function addGuideStep(src, img) {
     // sensitive (Welle 28): Rechtecke sensibler Felder (reine Geometrie) fuer die Auto-
     // Schwaerzung. Nur ein Array durchreichen; der Server validiert streng und klemmt.
     sensitive: Array.isArray(src.sensitive) ? src.sensitive : null,
+    // file_meta (Welle 39, Datei-Brücke): {role:'download'|'upload', …} — NUR Metadaten.
+    // Download wird per guideMatchDownloads nachträglich gesetzt; Upload kommt hier mit.
+    fileMeta: src.fileMeta && typeof src.fileMeta === "object" ? src.fileMeta : null,
     ts: src.ts || Date.now(),
     blob: img.blob,
     width: img.width,
     height: img.height,
     thumbUrl: null,
   };
+
+  // Dedupe/Fold (Welle 39): Ein Upload-Schritt faltet den davor erfassten „Datei auswählen"-
+  // Klick in sich hinein (binnen ~10s), sonst entstünde beim Lauf ein sinnloser Klick, der nur
+  // den OS-Dialog öffnet. Den jüngsten Klick-Schritt OHNE file_meta entfernen.
+  if (step.fileMeta && step.fileMeta.role === "upload" && src.foldPrevClick) {
+    for (let i = guideSteps.length - 1; i >= 0; i--) {
+      const prev = guideSteps[i];
+      if (prev.fileMeta || prev.action !== "click") continue;
+      if ((step.ts || 0) - (prev.ts || 0) > GUIDE_FOLD_MS) break; // zu alt → nicht falten
+      if (prev.thumbUrl) {
+        try {
+          URL.revokeObjectURL(prev.thumbUrl);
+        } catch (err) {
+          /* egal */
+        }
+      }
+      guideSteps.splice(i, 1);
+      break;
+    }
+  }
+
   try {
     step.thumbUrl = URL.createObjectURL(step.blob);
   } catch (err) {
     step.thumbUrl = null;
   }
   guideSteps.push(step);
+  // Datei-Brücke: kam ein Download VOR dem Screenshot dieses Klicks, jetzt zuordnen.
+  if (step.action === "click" && !step.fileMeta) guideMatchDownloads();
   renderGuideSteps();
   setStatus("");
 }
@@ -1268,6 +1370,7 @@ async function finishGuide() {
   guideFinishing = true;
   els.guideStop.disabled = true;
   guideActive = false;
+  guideRemoveDownloadWatch();
   stopTimer();
   // Content-Scripts stoppen die Erfassung.
   try {
@@ -1283,6 +1386,7 @@ async function finishGuide() {
     els.guideStop.disabled = false;
     guideFinishing = false;
     guideActive = true;
+    guideAddDownloadWatch();
     startTimer(els.guideTimer);
     try {
       await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
@@ -1354,6 +1458,8 @@ async function uploadGuide() {
     if (s.selector) step.selector = s.selector;
     // sensitive nur mitschicken, wenn vorhanden (additiv; alte Server ignorieren es).
     if (Array.isArray(s.sensitive) && s.sensitive.length) step.sensitive = s.sensitive;
+    // file_meta (Welle 39): Datei-Brücke — NUR Metadaten (Rolle/Name/MIME/Größe), nie Bytes.
+    if (s.fileMeta && typeof s.fileMeta === "object") step.file_meta = s.fileMeta;
     return step;
   });
   // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.
@@ -2003,6 +2109,7 @@ function resetGuide() {
   guideCapturing = false;
   guideFinishing = false;
   guideActive = false;
+  guideRemoveDownloadWatch();
 }
 
 function resetVideo() {
@@ -2883,6 +2990,10 @@ const exec = {
   paused: false,
   phase: "idle", // idle | ready | executing | miss | paused | done | aborted
   lastMissReason: "",
+  lastMissDetail: "", // z. B. Dateiname bei „download-manual" (nur Anzeige, nie Server)
+  // Datei-Brücke (Welle 39): getragene Dateien { [key]: { name, mime, size, b64 } }. SICHERHEIT:
+  // NUR im Panel-Speicher, NIE an den Server/in Logs; bei JEDEM Lauf-Ende geleert (execFinish).
+  files: {},
   finished: false, // Doppel-finish-Schutz
 };
 
@@ -2905,6 +3016,13 @@ const EXEC_NAV_SETTLE_MS = 2000;
 // (der deckt Sonde+Aktion ab). 10s reichen für Reload-Zyklus / React-Client-Navigation.
 const EXEC_VERIFY_TIMEOUT = 10000;
 const EXEC_VERIFY_POLL = 500;
+// Datei-Brücke (Welle 39): Warte-/Transport-Grenzen.
+const EXEC_DL_TIMEOUT = 20000; // auf den durch den Klick ausgelösten Download warten
+const EXEC_DL_COMPLETE_TIMEOUT = 60000; // (Weg 2) auf „complete" der Disk-Datei warten
+const EXEC_FILE_CAP = 50 * 1024 * 1024; // 50 MB Deckel für den Speicher-Weg
+const EXEC_FILE_SINGLE_MAX = 8 * 1024 * 1024; // base64-Länge: darüber wird gechunkt
+const EXEC_FILE_CHUNK = 4 * 1024 * 1024; // base64-Zeichen je Chunk
+let execFileSeq = 0; // eindeutige fileId je Transport
 
 // ── Werte-Handling (lokal) ────────────────────────────────────────────────────
 // chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
@@ -3278,7 +3396,7 @@ function showExecDownloadNote() {
 let execResultSeq = 0;
 let execPending = null; // { token, resolve, timer }
 
-function execSendStep(planStep) {
+function execSendStep(planStep, extra) {
   return new Promise((resolve) => {
     const token = ++execResultSeq;
     let settled = false;
@@ -3301,9 +3419,328 @@ function execSendStep(planStep) {
         value: planStep.value,
         index: planStep.index,
         total: planStep.total,
+        // Datei-Brücke (Welle 39): für Upload-Schritte die zuvor übertragene fileId.
+        fileId: extra && extra.fileId != null ? extra.fileId : undefined,
       },
     });
   });
+}
+
+// ============================================================================
+// DATEI-BRÜCKE (Welle 39): eine Datei von Website A herunterladen und auf Website B
+// hochladen — komplett LOKAL durch den Browser gereicht. SICHERHEIT (nicht verhandelbar):
+// Datei-Bytes leben NUR im Panel-Speicher (exec.files) + transient im Content-Script,
+// gehen NIE an den Steply-Server oder in Logs, und werden bei jedem Lauf-Ende gelöscht.
+// ============================================================================
+
+// base64 aus einem ArrayBuffer (Panel-Kontext; für den file://-Fallback Weg 2).
+function execAbToBase64(ab) {
+  let bin = "";
+  const bytes = new Uint8Array(ab);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+function execBasename(p) {
+  const s = String(p || "").replace(/\\/g, "/");
+  const i = s.lastIndexOf("/");
+  return (i >= 0 ? s.slice(i + 1) : s).trim();
+}
+
+function execNameFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const base = execBasename(u.pathname);
+    return base || "download";
+  } catch (e) {
+    return "download";
+  }
+}
+
+// Lesbarer Datei-Name aus einem DownloadItem (Basisname des Pfads bzw. aus der URL).
+function execDownloadName(item) {
+  const fromFile = item && item.filename ? execBasename(item.filename) : "";
+  if (fromFile) return fromFile;
+  return execNameFromUrl((item && (item.finalUrl || item.url)) || "");
+}
+
+// Kompakte Größenanzeige für den Datei-Chip.
+function fmtBytes(n) {
+  const b = typeof n === "number" && isFinite(n) && n >= 0 ? n : 0;
+  if (b < 1024) return b + " B";
+  if (b < 1024 * 1024) return (b / 1024).toFixed(b < 10 * 1024 ? 1 : 0) + " KB";
+  return (b / (1024 * 1024)).toFixed(b < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+}
+
+// ── Datei-Chip: transparent anzeigen, welche Datei(en) gerade getragen werden ──────────────
+function execRenderFileChip() {
+  if (!els.autoFileChip) return;
+  const keys = Object.keys(exec.files || {});
+  if (!keys.length) {
+    els.autoFileChip.hidden = true;
+    els.autoFileChip.textContent = "";
+    return;
+  }
+  els.autoFileChip.textContent = keys
+    .map((k) => {
+      const f = exec.files[k];
+      return "📄 " + (f.name || "Datei") + " (" + fmtBytes(f.size) + ") ✓";
+    })
+    .join("   ");
+  els.autoFileChip.hidden = false;
+}
+
+// ── Weg 1: Refetch im Content-Script der Quellseite (credentials) ──────────────────────────
+function execRefetchInTab(url) {
+  if (exec.tabId == null) return Promise.resolve({ ok: false });
+  return new Promise((resolve) => {
+    try {
+      const p = chrome.tabs.sendMessage(exec.tabId, { type: "steply-exec-refetch", url });
+      if (p && p.then) p.then((r) => resolve(r || { ok: false }), () => resolve({ ok: false }));
+      else resolve({ ok: false });
+    } catch (e) {
+      resolve({ ok: false });
+    }
+  });
+}
+
+// ── Weg 2: file://-Refetch aus dem Panel (nur mit erlaubtem Datei-Zugriff) ──────────────────
+function execFileSchemeAllowed() {
+  return new Promise((resolve) => {
+    try {
+      if (chrome.extension && typeof chrome.extension.isAllowedFileSchemeAccess === "function") {
+        chrome.extension.isAllowedFileSchemeAccess((allowed) => resolve(!!allowed));
+      } else {
+        resolve(false);
+      }
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
+async function execRefetchFileUrl(diskPath) {
+  try {
+    let p = String(diskPath || "").replace(/\\/g, "/");
+    if (!/^file:/i.test(p)) p = "file:///" + p.replace(/^\/+/, "");
+    const resp = await fetch(p);
+    if (!resp.ok) return { ok: false };
+    const buf = await resp.arrayBuffer();
+    if (buf.byteLength > EXEC_FILE_CAP) return { ok: false, reason: "too-large" };
+    return {
+      ok: true,
+      b64: execAbToBase64(buf),
+      size: buf.byteLength,
+      mime: resp.headers.get("content-type") || "",
+    };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
+function execWaitDownloadComplete(id) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (r) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(r);
+    };
+    const onChanged = (delta) => {
+      if (!delta || delta.id !== id) return;
+      if (delta.state && delta.state.current === "complete") {
+        try {
+          chrome.downloads.search({ id }, (items) => finish(items && items[0] ? items[0] : null));
+        } catch (e) {
+          finish(null);
+        }
+      } else if (delta.state && delta.state.current === "interrupted") {
+        finish(null);
+      }
+    };
+    const cleanup = () => {
+      try {
+        chrome.downloads.onChanged.removeListener(onChanged);
+      } catch (e) {
+        /* egal */
+      }
+      clearTimeout(t);
+    };
+    try {
+      chrome.downloads.onChanged.addListener(onChanged);
+    } catch (e) {
+      resolve(null);
+      return;
+    }
+    const t = setTimeout(() => finish(null), EXEC_DL_COMPLETE_TIMEOUT);
+    // Falls schon fertig, bevor der Listener stand.
+    try {
+      chrome.downloads.search({ id }, (items) => {
+        const it = items && items[0];
+        if (it && it.state === "complete") finish(it);
+      });
+    } catch (e) {
+      /* egal */
+    }
+  });
+}
+
+// Einen ausgelösten Download einfangen: Weg 1 (Speicher-Refetch) → Weg 2 (Disk) → Weg 3 (Mensch).
+async function execCaptureDownloadItem(item) {
+  const name = execDownloadName(item);
+  const url = (item && (item.finalUrl || item.url)) || "";
+
+  // Weg 1: Refetch der Quell-URL im Content-Script (credentials). Erfolg → Download abbrechen
+  // + aus der Historie tilgen (kein Disk-Müll).
+  if (url && !/^blob:/i.test(url)) {
+    const r = await execRefetchInTab(url);
+    if (r && r.ok) {
+      try {
+        await chrome.downloads.cancel(item.id);
+      } catch (e) {
+        /* evtl. schon fertig — dann räumt erase auf */
+      }
+      try {
+        await chrome.downloads.erase({ id: item.id });
+      } catch (e) {
+        /* egal */
+      }
+      return {
+        ok: true,
+        file: {
+          name: r.name || name,
+          mime: r.mime || item.mime || "application/octet-stream",
+          size: typeof r.size === "number" ? r.size : 0,
+          b64: r.b64,
+        },
+      };
+    }
+  }
+
+  // Weg 2: Refetch scheitert → Download zu Ende laufen lassen und NUR mit Datei-Zugriff die
+  // fertige Datei von der Platte lesen.
+  const allowed = await execFileSchemeAllowed();
+  if (allowed) {
+    const done = await execWaitDownloadComplete(item.id);
+    if (done && done.filename) {
+      const r2 = await execRefetchFileUrl(done.filename);
+      if (r2 && r2.ok) {
+        return {
+          ok: true,
+          file: {
+            name: name || execBasename(done.filename),
+            mime: r2.mime || item.mime || "application/octet-stream",
+            size: typeof r2.size === "number" ? r2.size : 0,
+            b64: r2.b64,
+          },
+        };
+      }
+    }
+  }
+
+  // Weg 3: Mensch — die Datei liegt im Downloads-Ordner. Ehrliche Pause.
+  return { ok: false, reason: "download-manual", name };
+}
+
+// Vor dem Download-Klick scharf schalten: den ERSTEN während dieses Schritts erzeugten
+// Download einfangen. Timeout → „Download wurde nicht erkannt".
+let execDownloadArm = null;
+function execArmDownload() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (r) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(r);
+    };
+    const onCreated = (item) => {
+      try {
+        chrome.downloads.onCreated.removeListener(onCreated);
+      } catch (e) {
+        /* egal */
+      }
+      execCaptureDownloadItem(item).then(finish, () =>
+        finish({ ok: false, reason: "download-capture-error" }),
+      );
+    };
+    const cleanup = () => {
+      try {
+        chrome.downloads.onCreated.removeListener(onCreated);
+      } catch (e) {
+        /* egal */
+      }
+      clearTimeout(timer);
+      execDownloadArm = null;
+    };
+    if (!chrome.downloads || !chrome.downloads.onCreated) {
+      resolve({ ok: false, reason: "downloads-unavailable" });
+      return;
+    }
+    try {
+      chrome.downloads.onCreated.addListener(onCreated);
+    } catch (e) {
+      resolve({ ok: false, reason: "downloads-unavailable" });
+      return;
+    }
+    const timer = setTimeout(() => finish({ ok: false, reason: "download-timeout" }), EXEC_DL_TIMEOUT);
+    execDownloadArm = { finish };
+  });
+}
+
+function execDisarmDownload() {
+  if (execDownloadArm) execDownloadArm.finish({ ok: false, reason: "aborted" });
+}
+
+// Eine getragene Datei ans Content-Script übertragen (einteilig oder gechunkt bei >8 MB base64).
+// Gibt die fileId zurück (der Upload-Schritt referenziert sie) oder null bei Fehler.
+async function execTransferFileToTab(file) {
+  if (exec.tabId == null || !file || !file.b64) return null;
+  const fileId = "f" + ++execFileSeq;
+  const b64 = file.b64;
+  const plan =
+    typeof SteplyExecPlan !== "undefined" && SteplyExecPlan.planFileChunks
+      ? SteplyExecPlan.planFileChunks(b64.length, EXEC_FILE_SINGLE_MAX, EXEC_FILE_CHUNK)
+      : { mode: b64.length > EXEC_FILE_SINGLE_MAX ? "chunked" : "single", chunks: 1, chunkSize: EXEC_FILE_CHUNK };
+  try {
+    if (plan.mode === "single") {
+      const r = await chrome.tabs.sendMessage(exec.tabId, {
+        type: "steply-exec-file",
+        fileId,
+        name: file.name,
+        mime: file.mime,
+        b64,
+      });
+      if (!r || !r.ok) return null;
+    } else {
+      const begin = await chrome.tabs.sendMessage(exec.tabId, {
+        type: "steply-exec-file-begin",
+        fileId,
+        name: file.name,
+        mime: file.mime,
+        total: plan.chunks,
+      });
+      if (!begin || !begin.ok) return null;
+      const cs = plan.chunkSize;
+      for (let seq = 0; seq < plan.chunks; seq++) {
+        const part = b64.slice(seq * cs, (seq + 1) * cs);
+        const ack = await chrome.tabs.sendMessage(exec.tabId, {
+          type: "steply-exec-file-chunk",
+          fileId,
+          seq,
+          b64: part,
+        });
+        if (!ack || !ack.ok) return null;
+      }
+    }
+    return fileId;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── Lauf: Navigation zwischen Schritten ────────────────────────────────────────
@@ -3585,11 +4022,14 @@ async function startAutoRun() {
   exec.paused = false;
   exec.finished = false;
   exec.lastMissReason = "";
+  exec.lastMissDetail = "";
+  exec.files = {}; // Datei-Brücke (Welle 39): frischer Lauf trägt keine Alt-Datei
   execLinkStart(exec.tabId);
   execAddDownloadWatch();
 
   show("autoRun");
   if (els.autoDownloadNote) els.autoDownloadNote.hidden = true;
+  execRenderFileChip();
 
   if (exec.autoMode) {
     exec.phase = "running";
@@ -3617,12 +4057,55 @@ async function execExecuteCurrent() {
   await execNavigateIfNeeded(planStep);
   if (!exec.running) return; // mitten in der Navigation abgebrochen
 
+  const fm = planStep.file_meta || null;
+
+  // ── Datei-Brücke (Welle 39): UPLOAD ──────────────────────────────────────────
+  // Die getragene Datei ins Feld/die Drop-Zone legen. Fehlt sie (Weg-3-Fall beim Download),
+  // ehrliche Pause statt blindem Weiterlaufen.
+  if (planStep.action === "upload") {
+    const file = fm && fm.source ? exec.files[fm.source] : null;
+    if (!file) {
+      execEnterMiss("file-missing");
+      return;
+    }
+    const fileId = await execTransferFileToTab(file);
+    if (!exec.running) return;
+    if (!fileId) {
+      execEnterMiss("file-transfer");
+      return;
+    }
+    const res = await execSendStep(planStep, { fileId });
+    if (!exec.running) return;
+    if (res && res.ok) execAdvance();
+    else execEnterMiss(res ? res.reason : "unbekannt");
+    return;
+  }
+
+  // ── Datei-Brücke (Welle 39): DOWNLOAD ────────────────────────────────────────
+  // VOR dem Klick scharf schalten, dann klicken; die dabei ausgelöste Datei einfangen.
+  let dlPromise = null;
+  if (fm && fm.role === "download") dlPromise = execArmDownload();
+
   // Tab-URL VOR dem Submit merken — Grundlage der Ergebnis-Kontrolle (Welle 38).
   const preSubmitUrl = await tabUrlById(exec.tabId);
   const res = await execSendStep(planStep);
-  if (!exec.running) return; // während des Wartens abgebrochen
+  if (!exec.running) {
+    if (dlPromise) execDisarmDownload();
+    return; // während des Wartens abgebrochen
+  }
 
   if (res && res.ok) {
+    // Download-Schritt: auf den ausgelösten Download warten und ihn tragen (oder ehrliche Pause).
+    if (dlPromise) {
+      const cap = await dlPromise;
+      if (!exec.running) return;
+      if (!cap.ok) {
+        execEnterMiss(cap.reason || "download-missing", cap.name || "");
+        return;
+      }
+      exec.files[fm.key] = cap.file;
+      execRenderFileChip();
+    }
     // War die Aktion ein Formular-Submit? Dann VOR dem Weiterschalten verifizieren, dass die
     // Übermittlung wirklich durchkam (nicht nur ein Voll-Reload auf denselben Pfad).
     if (res.submitted) {
@@ -3635,6 +4118,7 @@ async function execExecuteCurrent() {
     }
     execAdvance();
   } else {
+    if (dlPromise) execDisarmDownload();
     execEnterMiss(res ? res.reason : "unbekannt");
   }
 }
@@ -3658,8 +4142,10 @@ function execAdvance() {
 }
 
 // Selektor-Miss/mehrdeutig → PAUSE (kein Fallback-Klick, Sicherheitsregel 1).
-function execEnterMiss(reason) {
+// detail: optionaler Zusatz (z. B. Dateiname bei „download-manual") — nur Anzeige, nie Server.
+function execEnterMiss(reason, detail) {
   exec.lastMissReason = typeof reason === "string" ? reason : "";
+  exec.lastMissDetail = typeof detail === "string" ? detail : "";
   exec.paused = true; // Vollautomatik anhalten
   exec.phase = "miss";
   execRenderRun();
@@ -3705,6 +4191,12 @@ async function execFinish(status, detail) {
   exec.paused = false;
   execLinkStop();
   execRemoveDownloadWatch();
+  execDisarmDownload();
+  // Datei-Brücke (Welle 39): getragene Datei-Bytes bei JEDEM Lauf-Ende (Erfolg/Abbruch)
+  // aus Panel- UND Content-Speicher löschen — sie dürfen nie länger als der Lauf leben.
+  exec.files = {};
+  execRenderFileChip();
+  sendExecToTab({ type: "steply-exec-file-clear" });
   sendExecToTab({ type: "steply-exec-hide" });
   // Server-Event (best effort; detail geht durch redactDetail, nie Werte).
   execPostFinish(status, detail || "");
@@ -3799,13 +4291,32 @@ function execRenderRun() {
 
   // Miss-Box nur im Miss-Zustand.
   if (exec.phase === "miss") {
-    if (exec.lastMissReason === "submit-bounced") {
+    const r = exec.lastMissReason;
+    if (r === "submit-bounced") {
       // Ehrlichkeits-Netz (Welle 38): die Übermittlung kam nicht durch, die Seite lud neu.
       els.autoMissText.textContent =
         "Schritt " + num + ": Die Anmeldung/Übermittlung kam nicht durch — die Seite hat neu" +
         " geladen. Bitte selbst prüfen und „Weiter“ drücken oder abbrechen.";
+    } else if (r === "download-manual") {
+      // Datei-Brücke (Welle 39, Weg 3): Datei liegt im Downloads-Ordner, aber nicht im Speicher.
+      const name = exec.lastMissDetail ? " (" + exec.lastMissDetail + ")" : "";
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Datei liegt im Downloads-Ordner" + name +
+        " — beim Upload-Schritt bitte selbst wählen. „Weiter“ drücken oder abbrechen.";
+    } else if (r === "download-timeout" || r === "download-missing") {
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Download wurde nicht erkannt — bitte selbst herunterladen und" +
+        " „Weiter“ drücken oder abbrechen.";
+    } else if (r === "file-missing") {
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Bitte die Datei von Hand wählen (sie liegt im Downloads-Ordner)." +
+        " Danach „Weiter“ drücken oder abbrechen.";
+    } else if (r === "file-transfer") {
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Die Datei konnte nicht übertragen werden — bitte selbst hochladen" +
+        " und „Weiter“ drücken oder abbrechen.";
     } else {
-      const reason = exec.lastMissReason ? " (" + exec.lastMissReason + ")" : "";
+      const reason = r ? " (" + r + ")" : "";
       els.autoMissText.textContent =
         "Schritt " + num + ": Stelle nicht gefunden" + reason +
         " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
@@ -3978,6 +4489,7 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("pagehide", () => {
   cleanupStreams();
   guideActive = false;
+  guideRemoveDownloadWatch();
   // Ping stoppen (Welle 33, Fix 2). Der Port bricht beim Dokument-Abbau ohnehin ab ->
   // background blendet das Overlay auf dem gebundenen Tab zuverlässig aus (das ist der
   // robuste Weg; das direkte hide unten kann während des Teardowns verpuffen).
@@ -3996,7 +4508,13 @@ window.addEventListener("pagehide", () => {
   // ungefragt von selbst weiter (Sicherheit).
   exec.running = false;
   execPingStop();
-  if (!els.autoRun.hidden) sendExecToTab({ type: "steply-exec-hide" });
+  execDisarmDownload();
+  // Datei-Brücke (Welle 39): getragene Datei-Bytes beim Panel-Schließen vergessen.
+  exec.files = {};
+  if (!els.autoRun.hidden) {
+    sendExecToTab({ type: "steply-exec-file-clear" });
+    sendExecToTab({ type: "steply-exec-hide" });
+  }
 });
 
 // ============================================================================

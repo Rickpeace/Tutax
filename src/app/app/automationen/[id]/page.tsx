@@ -34,7 +34,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key, image_path, highlights")
+      .select("id, position, title, action, param_key, image_path, highlights, file_meta")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -58,6 +58,11 @@ export default async function AutomationDetailPage({
     imagePath: (s.image_path as string | null) ?? null,
     // Markierungen fürs Referenzbild (Welle 37). Bestands-Automationen: highlights=null → [].
     highlights: Array.isArray(s.highlights) ? (s.highlights as Highlight[]) : [],
+    // Datei-Brücke (Welle 39): {role:download,key} | {role:upload,source} | null.
+    fileMeta:
+      s.file_meta && typeof s.file_meta === "object" && !Array.isArray(s.file_meta)
+        ? (s.file_meta as AutomationStepView["fileMeta"])
+        : null,
   }));
 
   const runs: AutomationRunView[] = (runsData ?? []).map((r) => ({
