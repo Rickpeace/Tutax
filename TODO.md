@@ -4,6 +4,19 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
+- [ ] **DATEI-BRÜCKE testen (Extension → v2.10.0):** Der Steuerberater-Kernfall.
+  Sofort-Aufnahme: im Abrechnungsportal Beleg-Download klicken (Schritt bekommt 📥)
+  → zu DATEV Unternehmen online → Datei im Upload-Feld wählen (Schritt wird 📤,
+  der Auswahl-Klick verschwindet) → „Als Automation nutzen" → Lauf: Datei-Chip
+  „📄 … ✓" erscheint nach dem Download, Upload landet ohne OS-Dialog im Ziel.
+  Randfälle: Portal mit Einmal-Download-URL → ehrliche Pause („liegt im
+  Downloads-Ordner"); optional den Schalter „Zugriff auf Datei-URLs zulassen"
+  in den Extension-Details umlegen → dann klappt auch dieser Fall automatisch.
+- [ ] **Welle 40 „Zustands-Intelligenz" (Go erteilt, startet nach 39er-Test):**
+  Vorspulen per Seiten-Abgleich (eingeloggt → Login-Schritte überspringen) +
+  Anmelde-Wache (ausgeloggt → höfliche Pause, automatisches Weiterlaufen nach
+  Login). Aufnahme-Konvention: immer von der Basis-Seite inkl. Login aufnehmen.
+
 - [ ] **KALTSTART-Test morgen früh (Extension → v2.9.7!):** Erster Lauf des Tages =
   der Beweis-Test. Browser frisch starten, Login-Automation vollautomatisch von
   fremder Seite → Sonde wartet sichtbar vorm „Anmelden"-Klick (bis 12 s bei ganz

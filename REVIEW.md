@@ -295,6 +295,28 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 39 + Fable (07.07., v2.10.0):** 🌉 **DATEI-BRÜCKE** — Automationen
+reichen eine Datei von Website A (Download) nach Website B (Upload) durch, komplett
+LOKAL im Browser (Kanzlei-Kernfall: Abrechnungsportal → DATEV Unternehmen online;
+validiert durch Richards Steuerberater; Nische à la GetMyInvoices, aber „selbst
+aufnehmen statt auf Konnektoren warten"). Migration 0032 (steps/automation_steps
+.file_meta + upload-Aktion, Richard angewandt). Aufnahme erkennt Downloads
+(chrome.downloads-Watch, nur Metadaten — nie URLs persistiert) und Uploads (change
+an input[type=file]; „Datei wählen"-Klick wird in den Upload-Schritt GEFALTET, da
+der OS-Dialog beim Lauf übersprungen wird). Konvertierung: linkFileSteps (FIFO
+file1/file2, Upload ohne Download → sprechender Fehler); 📥/📤-Chips im App-Detail.
+Lauf: 3-Wege-Brücke — (1) Speicher-Refetch mit Site-Cookies + downloads.cancel/
+erase, (2) file://-Disk-Fallback nur mit Datei-Zugriffs-Schalter, (3) ehrliche
+Miss-Pause; 50-MB-Deckel, >8-MB-Chunk-Transport, Datei-Chip im Panel, exec.files
+bei JEDEM Lauf-Ende gelöscht — Bytes verlassen NIE den Browser (einziger neuer
+fetch: file:///, geprüft). Injektion: DataTransfer in file-inputs (auch verdeckte:
+Maus zielt aufs sichtbare Label) + Drag-Events für Drop-Zonen. **ONESHOT-Beweis:**
+test-file-bridge-e2e.mjs — echte Extension in Playwright-Chromium, zwei node:http-
+Mini-Sites, 13/13 grün inkl. HASH-Asserts (Byte-Treue file-input UND Drop-Zone),
+Weg-1/2/3-Verhalten, Deckel/Chunks; Randfälle vom Agenten selbst gefunden
+(0×0-Guard vs. verdeckte Inputs, roleFor-Falle file-input→fill). Live-Tests +
+Regressionen grün. Offen (dokumentiert): Cross-Origin-Refetch fällt auf Weg 2/3;
+reine JS-Drop-Zonen ohne input werden bei der AUFNAHME nicht erkannt.
 **Opus Welle 38 + Fable-Hotfixes v2.9.3–v2.9.7 (06.07. abends):** 🐉 **Kaltstart-Login
 erlegt (mit Beweis).** Hotfix-Kette: v2.9.3/4 Settle-Pause nach Navigationen +
 Bühne räumt sich nach erledigtem Schritt selbst (Marker/Maus weg in Halbautomatik-
