@@ -4,10 +4,15 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
-- [ ] **Automationen testen (Extension → v2.9.2; Wellen 36+37 live):** Kern-Check
-  nach Welle 37: Login-Automation nochmal end-to-end (requestSubmit-Fix — landet
-  jetzt auf /app?) · Start von fremder Seite → bringt automatisch hin · Maus
-  ruhiger · Referenzbilder MIT Markierungen (Bestands-Automation dafür einmal neu
+- [ ] **KALTSTART-Test morgen früh (Extension → v2.9.7!):** Erster Lauf des Tages =
+  der Beweis-Test. Browser frisch starten, Login-Automation vollautomatisch von
+  fremder Seite → Sonde wartet sichtbar vorm „Anmelden"-Klick (bis 12 s bei ganz
+  kalter Seite), dann React-Navigation zum Dashboard. Falls doch Reload: Lauf
+  stoppt jetzt EHRLICH am Submit-Schritt („kam nicht durch — selbst prüfen")
+  statt blind weiterzustapfen. Gegenprobe warm: unverändert flüssig.
+- [ ] **Automationen testen (Wellen 36+37 live):** Start von fremder Seite →
+  bringt automatisch hin · Maus ruhiger + räumt nach jedem Schritt auf ·
+  Referenzbilder MIT Markierungen (Bestands-Automation dafür einmal neu
   „Als Automation nutzen"). Ursprünglicher Ablauf: echten Ablauf
   („Login + Belege herunterladen") per Sofort-Anleitung aufnehmen → Bibliothek
   → ⋮ „Als Automation nutzen" → /app/automationen → in der Extension Karte

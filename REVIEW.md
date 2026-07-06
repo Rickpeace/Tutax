@@ -295,7 +295,26 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
-**Opus Welle 37 + Fable (06.07., v2.9.2):** 🔧 **Automations-Feedback-Fixes** nach
+**Opus Welle 38 + Fable-Hotfixes v2.9.3–v2.9.7 (06.07. abends):** 🐉 **Kaltstart-Login
+erlegt (mit Beweis).** Hotfix-Kette: v2.9.3/4 Settle-Pause nach Navigationen +
+Bühne räumt sich nach erledigtem Schritt selbst (Marker/Maus weg in Halbautomatik-
+Pausen) · v2.9.5 Navigations-Warten ohne tabs.get-Frühstart (Schritt lief sonst auf
+der sterbenden Seite ins Timeout) · v2.9.6 Hydration-SONDE (MAIN-World-Probe via
+background: Submit erst, wenn React das Formular übernommen hat). Welle 38 fand
+per Drossel-Repro (CDP: CPU 8–20×, Fast-3G, Cache aus; scripts/repro-login-
+coldstart.mjs, deterministisch: Submit vor Hydration = nativer Voll-Reload) die
+DREI Restlücken: 8s-Deckel < echte Kaltstart-Hydration (bis 14s), isReact-Erkennung
+fragil (data-reactroot existiert in React 19 nicht; window.next kommt ~2,5s spät;
+NEU script[src*="/_next/"] steht nach ~50ms), und kalter MV3-Service-Worker nach
+Browser-NEUSTART → Sonde ok:false → offener Durchfall (Richards Trigger!). Fixes:
+Deckel 12s, /_next/-Signal, kein offener Durchfall auf Framework-Seiten. Dazu
+**Submit-Ehrlichkeits-Kontrolle**: exec-Ergebnis meldet submitted, Panel verifiziert
+(eigenes 10s-Budget) Pfadwechsel vs. Voll-Reload-auf-selben-Pfad → Miss-Pause
+„submit-bounced" statt blindem Weiterstapfen; pure submitOutcome/submitBounced in
+exec-plan.js (+14 Tests). Richards Netzwerk-Mitschnitt lieferte zusätzlich den
+Beweis eines zweiten Fehlmodus (Session gesetzt, Redirect nie angewandt, KEIN
+Reload) — von der gehärteten Sonde mit abgedeckt. Repro 3× stabil grün, Welle-37-
+Repro regressionsfrei, Build/Pure-Tests grün.
 Richards erstem echten Lauf („Steply anmelden" — funktioniert!): (1) Submit-Buttons
 in Formularen werden per `form.requestSubmit(button)` ausgelöst statt roher
 Klick-Sequenz — schließt den Voll-Reload-Pfad aus, der den Login-Hänger erklärt
