@@ -7,7 +7,14 @@ import {
   CornerRightDown,
   Plus,
   ImageOff,
+  Zap,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { signedImageUrl } from "@/lib/upload";
 import type {
   RenderNode,
@@ -20,6 +27,9 @@ type FlowHandlers = {
   onSelect?: (stepId: string) => void;
   onInsertAfter?: (stepId: string) => void;
   onInsertIntoBranch?: (branchId: string) => void;
+  // „Ab hier mit Extension aufnehmen" (Welle 27): dieselben Einfügestellen als Aufnahme-Ziel.
+  onRecordAfter?: (stepId: string) => void;
+  onRecordIntoBranch?: (branchId: string) => void;
   imgBust?: Record<string, number>; // Bild-Neuladen erzwingen (Ersetzen bei gleichem Pfad)
 };
 
@@ -59,7 +69,10 @@ function FlowNode({
         <>
           {/* Linearer Schritt: Einfügepunkt nach dieser Karte */}
           {h.onInsertAfter && (
-            <InsertPoint onClick={() => h.onInsertAfter!(step.step.id)} />
+            <InsertPoint
+              onInsert={() => h.onInsertAfter!(step.step.id)}
+              onRecord={h.onRecordAfter ? () => h.onRecordAfter!(step.step.id) : undefined}
+            />
           )}
           {step.next && <FlowNode node={step.next} depth={depth} {...h} />}
         </>
@@ -192,20 +205,58 @@ function Connector() {
   );
 }
 
-/** Klickbarer Einfügepunkt auf der Verbindungslinie (§7.4). */
-function InsertPoint({ onClick }: { onClick: () => void }) {
+/**
+ * Einfügepunkt auf der Verbindungslinie (§7.4). Ohne Aufnahme-Option bleibt es der
+ * klassische Ein-Klick-Einfügepunkt. Mit `onRecord` (Welle 27) wird daraus ein dezentes
+ * Menü: „Schritt einfügen" (wie bisher) oder „Ab hier mit Extension aufnehmen".
+ */
+function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: () => void }) {
+  const knob = (
+    <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_rgba(61,78,230,0.18)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white">
+      <Plus className="size-4" />
+    </span>
+  );
+
+  if (!onRecord) {
+    return (
+      <button
+        type="button"
+        onClick={onInsert}
+        title="Schritt hier einfügen"
+        className="group/ins relative flex h-9 w-full items-center justify-center"
+      >
+        <span className="absolute h-full w-0.5 bg-line" />
+        {knob}
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Schritt hier einfügen"
-      className="group/ins relative flex h-9 w-full items-center justify-center"
-    >
-      <span className="absolute h-full w-0.5 bg-line" />
-      <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_rgba(61,78,230,0.18)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white">
-        <Plus className="size-4" />
-      </span>
-    </button>
+    <div className="group/ins relative flex h-9 w-full items-center justify-center">
+      <span className="pointer-events-none absolute h-full w-0.5 bg-line" />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              title="Hier einfügen oder aufnehmen"
+              aria-label="Hier einfügen oder aufnehmen"
+              className="flex items-center justify-center"
+            >
+              {knob}
+            </button>
+          }
+        />
+        <DropdownMenuContent align="center" sideOffset={2} className="w-64">
+          <DropdownMenuItem onClick={onInsert}>
+            <Plus className="size-4" /> Schritt einfügen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onRecord}>
+            <Zap className="size-4 text-primary" /> Ab hier mit Extension aufnehmen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -252,9 +303,14 @@ function Branch({
       </button>
       {open && (
         <div className="pb-2.5">
-          {/* Einfügepunkt am Anfang dieses Astes */}
+          {/* Einfügepunkt am Anfang dieses Astes (auch bei leerem Ast) */}
           {h.onInsertIntoBranch && (
-            <InsertPoint onClick={() => h.onInsertIntoBranch!(branch.branchId)} />
+            <InsertPoint
+              onInsert={() => h.onInsertIntoBranch!(branch.branchId)}
+              onRecord={
+                h.onRecordIntoBranch ? () => h.onRecordIntoBranch!(branch.branchId) : undefined
+              }
+            />
           )}
           <FlowNode node={branch.child} depth={depth} {...h} />
         </div>

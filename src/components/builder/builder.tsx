@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Flow } from "@/components/builder/flow";
 import { StepPanel } from "@/components/builder/step-panel";
+import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
 import { buildRenderTree } from "@/lib/builder/tree";
 import type { RenderNode } from "@/lib/builder/tree";
 import type { Step, StepBranch, Highlight } from "@/lib/types";
@@ -95,6 +96,8 @@ export function Builder({
   // "Bild ersetzen" nutzt einen DETERMINISTISCHEN Pfad (image_path bleibt gleich) -> ohne
   // Bust-Zähler bliebe das Flow-Thumbnail (an image_path gebunden) auf dem alten Bild.
   const [imgBust, setImgBust] = useState<Record<string, number>>({});
+  // „Ab hier mit Extension aufnehmen" (Welle 27): offener Aufnahme-Ziel-Dialog (oder null).
+  const [recordTarget, setRecordTarget] = useState<RecordTarget | null>(null);
 
   // Zahl der noch nicht bestätigten Schreibvorgänge. Verhindert, dass ein FREMDER
   // Server-Reload (z. B. DriftCheck-Button) laufende optimistische Änderungen zurücksetzt.
@@ -523,6 +526,33 @@ export function Builder({
     return [...inFlow, ...rest];
   }, [tree, steps]);
   const selIndex = selectedId ? ordered.findIndex((s) => s.id === selectedId) : -1;
+
+  // ── „Ab hier mit Extension aufnehmen" (Welle 27) ─────────────────────────────
+  // Einen Einfügepunkt in ein Aufnahme-Ziel übersetzen (Anker + menschlich lesbare
+  // Beschriftung) und den Aufnahme-Dialog öffnen. Anker-Semantik = exakt das Server-
+  // Einfügen: afterStepId hängt eine lineare Kette an, branchId füllt/verlängert einen Ast.
+  const recordAfter = useCallback(
+    (stepId: string) => {
+      const idx = ordered.findIndex((s) => s.id === stepId);
+      const step = steps.find((s) => s.id === stepId);
+      const n = idx >= 0 ? idx + 1 : step?.position;
+      const title = step?.title?.trim();
+      const label = title ? `nach Schritt ${n} („${title}“)` : `nach Schritt ${n}`;
+      setRecordTarget({ anchor: { afterStepId: stepId }, label });
+    },
+    [ordered, steps],
+  );
+  const recordIntoBranch = useCallback(
+    (branchId: string) => {
+      const branch = branches.find((b) => b.id === branchId);
+      const question = branch ? steps.find((s) => s.id === branch.step_id) : null;
+      const astLabel = branch?.label?.trim() || "Weiter";
+      const qTitle = question?.title?.trim() || "Frage";
+      setRecordTarget({ anchor: { branchId }, label: `Ast „${astLabel}“ in „${qTitle}“` });
+    },
+    [branches, steps],
+  );
+
   const goPrev = useCallback(() => {
     if (selIndex > 0) setSelectedId(ordered[selIndex - 1].id);
   }, [selIndex, ordered]);
@@ -585,6 +615,8 @@ export function Builder({
         }}
         onInsertAfter={insertAfter}
         onInsertIntoBranch={insertIntoBranch}
+        onRecordAfter={recordAfter}
+        onRecordIntoBranch={recordIntoBranch}
       />
     </div>
   ) : (
@@ -601,6 +633,16 @@ export function Builder({
 
   return (
     <>
+      {/* Aufnahme-Ziel-Dialog (Welle 27): immer gemountet, damit die Extension-Erkennung
+          fertig ist, bevor ein Einfügepunkt geöffnet wird. open = recordTarget != null. */}
+      <RecordIntoDialog
+        tutorialId={tutorialId}
+        target={recordTarget}
+        onOpenChange={(o) => {
+          if (!o) setRecordTarget(null);
+        }}
+      />
+
       <p className="mb-2 text-sm text-muted-foreground">
         {steps.length} Schritt{steps.length === 1 ? "" : "e"}
       </p>
