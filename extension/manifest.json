@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Steply Recorder",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Seitenleiste zum Aufnehmen: Sofort-Anleitung (Screenshot je Klick, ohne Video) oder Video mit KI-Texten. Direkt-Upload zu Steply - auch gezielt in bestehende Anleitungen.",
   "permissions": [
     "activeTab",
