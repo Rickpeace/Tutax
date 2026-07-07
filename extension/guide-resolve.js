@@ -7,10 +7,13 @@
 // robuste { css, text, role } (steps.selector). `root` wird injiziert (document oder ein
 // Test-Stub) -> die Funktion ist ohne Browser mit einem Mini-DOM-Stub testbar.
 //
-// Rückgabe: { el: Element|null, confidence: 'exact'|'text'|'fuzzy'|null }.
+// Rückgabe: { el: Element|null, confidence: 'exact'|'healed'|'text'|'fuzzy'|null }.
 // Reihenfolge (erste greifende Stufe gewinnt):
 //   1. css via root.querySelector — Treffer und (falls text vorhanden) grobe Textübereinstimmung
 //      (normalisiert; contains in BEIDE Richtungen) -> exact.
+//      SELBSTHEILUNG Stufe A (Welle 44): traf css eindeutig+stabil+rollengleich, driftete aber
+//      NUR der Text volatil (Version/Datum/Zähler; nearText), so gilt der Treffer als
+//      selbstgeheilt -> healed (reason null, additiv healed:true). Sonst durchfallen.
 //   2. Kandidaten über (implizite/explizite) Rolle + EXAKT normalisierter Text; genau EIN
 //      Treffer -> text.
 //   3. Fuzzy: contains-Textvergleich über klickbare Elemente; nur bei GENAU einem Treffer -> fuzzy.
@@ -158,6 +161,53 @@
     return false;
   }
 
+  // ── Selbstheilung Stufe A (Welle 44) ────────────────────────────────────────────────────
+  // „Volatil-Token" aus einem Text entfernen: Versionsnummern, Datums-/Uhrzeit-Muster und reine
+  // Zahlen (Zähler). Motiv: ein Knopf „Extension herunterladen (v2.13.0)" heißt live
+  // „…(v2.13.1)" — derselbe Knopf, nur die Version driftete. Nach dem Entfernen der Token
+  // bleiben BEIDSEITIG identische Reste („extension herunterladen ()") → als „gleich" erkennbar.
+  // Umschließende Satzzeichen (Klammern) bleiben ERHALTEN (nur der Inhalt fällt weg), damit der
+  // Rest strukturell vergleichbar bleibt. Reihenfolge: Mehr-Token-Muster (Version/Datum/Zeit)
+  // VOR den reinen Zahlen, sonst würde \d+ ein „2.13.0" in Bruchstücke zerlegen.
+  function stripVolatileTokens(s) {
+    return String(s == null ? "" : s)
+      .replace(/v?\d+(?:[.,]\d+)+/gi, "") // Versionen/Dezimal/Punkt-Datum: v2.13.0, 2.13.1, 12.03.2024, 1,5
+      .replace(/\d{1,4}[/-]\d{1,2}[/-]\d{1,4}/g, "") // Datum mit / oder -: 2024-03-12, 01/02/2023
+      .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, "") // Uhrzeit: 14:30, 09:15:00
+      .replace(/\d+/g, ""); // reine Zahlen / Zähler: (3), Jahr 2024
+  }
+
+  // nearText(recorded, live): PUR. true, wenn recorded und live sich AUSSCHLIESSLICH in
+  // volatilen Token (Versionsnummern/Daten/Zählern) unterscheiden — der bereinigte Rest also
+  // BEIDSEITIG exakt gleich (nach norm) UND nicht leer ist. Zusätzlich muss der gemeinsame Rest
+  // ≥3 sichtbare (nicht-Whitespace) Zeichen haben (analog containsEither-Mindestlänge 3), sonst
+  // ist „nah" bedeutungslos (z. B. „(3)" vs „(5)" allein → Rest „()" → 2 Zeichen → false).
+  // Gegenbeispiele: „speichern" vs „löschen" (Reste verschieden) und „weiter" vs
+  // „weiter zu wetransfer" (Rest verschieden — echter Textwechsel) → false.
+  function nearText(recorded, live) {
+    var a = norm(recorded);
+    var b = norm(live);
+    if (!a || !b) return false;
+    if (a === b) return true; // identisch → trivial nah (greift real schon in containsEither)
+    var ca = norm(stripVolatileTokens(a));
+    var cb = norm(stripVolatileTokens(b));
+    if (!ca || ca !== cb) return false; // Reste müssen gleich UND nicht leer sein
+    if (ca.replace(/\s+/g, "").length < 3) return false; // Sicherheits-Untergrenze
+    return true;
+  }
+
+  // Trifft ein css-Selektor im Dokument GENAU EIN Element? Eindeutigkeit ist der
+  // Sicherheitsanker der Selbstheilung — ein mehrdeutiger css-Treffer darf NIE geheilt werden
+  // (man wüsste nicht, welches der Elemente gemeint war).
+  function cssHitIsUnique(scope, css) {
+    try {
+      var all = scope.querySelectorAll(css);
+      return !!all && all.length === 1;
+    } catch (err) {
+      return false;
+    }
+  }
+
   function getAttr(el, name) {
     try {
       return el && el.getAttribute ? el.getAttribute(name) : null;
@@ -271,8 +321,25 @@
         if (containsEither(textOf(hit, scope), wantText)) {
           return { el: hit, confidence: "exact", reason: null };
         }
-        // css traf, aber Text passt nicht (SPA umgebaut / css zeigt woanders hin) ->
-        // NICHT hier verankern, sondern die textbasierten Stufen versuchen.
+        // css traf, aber die strikte Text-Gegenprobe scheiterte. Bevor wir durchfallen:
+        // SELBSTHEILUNG Stufe A (Welle 44) — akzeptiere den css-Treffer als selbstgeheilt
+        // NUR, wenn ALLE strengen Sicherheitsbedingungen erfüllt sind:
+        //   1. css ist NICHT flüchtig (ein flüchtiger Treffer wäre Zufall — nie vertrauen).
+        //   2. css trifft im Dokument GENAU EIN Element (Eindeutigkeit = Sicherheitsanker).
+        //   3. die Rolle stimmt (Button→Link wäre ein echtes „falsches Element"-Signal).
+        //   4. der Text ist NUR volatil gedriftet (nearText: Version/Datum/Zähler) — ein
+        //      echter Textwechsel (anderer Knopf) fällt weiter durch zu Stufe 2/3.
+        // Confidence „healed" (zwischen exact und text); reason bleibt null; healed:true ist
+        // ein rein ADDITIVES Telemetrie-Feld (Aufrufer lesen nur res.el).
+        if (
+          !cssTargetsVolatileId(css) &&
+          cssHitIsUnique(scope, css) &&
+          (!wantRole || roleOf(hit) === wantRole) &&
+          nearText(wantText, textOf(hit, scope))
+        ) {
+          return { el: hit, confidence: "healed", reason: null, healed: true };
+        }
+        // Kein sicheres Heilen möglich -> die textbasierten Stufen versuchen.
       } else {
         // css verfehlt: war es ein flüchtiger-ID-Selektor (alte Aufnahme, Base UI & Co.)?
         // Dann ist der css-Pfad chancenlos -> Stufe 2/3 tragen die Auflösung; als Grund
@@ -327,6 +394,7 @@
     resolveSelector: resolveSelector,
     CLICKABLE_SELECTOR: CLICKABLE_SELECTOR,
     isVolatileId: isVolatileId,
+    nearText: nearText, // pur exportiert für Direkttests (Welle 44)
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic content-script (globaler Namespace).
