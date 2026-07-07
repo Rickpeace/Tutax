@@ -2763,6 +2763,14 @@
             return false;
           }
           if (!res || !res.el) return false;
+          // STRENG bei Bedingungen (Fix 07.07., Richards „Anmelden"-Fall): Eine Bedingung
+          // fragt „ist GENAU DIESES Element da?" — dafür zählt NUR ein exakter Treffer
+          // (confidence 'exact' = css+Text | 'text' = Rolle+exakter Text). Fuzzy (contains)
+          // und 'healed' (volatile Text-Drift) sind fürs ANKLICKEN gedacht (Toleranz gut),
+          // aber für eine Ja/Nein-Präsenzprüfung wären sie FALSCH-POSITIV: eingeloggt fehlt der
+          // echte „Anmelden"-Knopf, ein ähnliches Element würde ihn sonst vortäuschen → der
+          // Login-Schritt liefe fälschlich. Nur exakt/exakter-Text gilt als „vorhanden".
+          if (res.confidence !== "exact" && res.confidence !== "text") return false;
           let r;
           try {
             r = res.el.getBoundingClientRect();
