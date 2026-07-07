@@ -42,6 +42,9 @@ let server;
 const accounts = []; // { userId, accountId }
 const imgPaths = [];
 const automationIds = [];
+// Bedingter Sprung (Welle 47, Migration 0035): erst true, wenn die jump-Spalte live existiert
+// (Preflight unten). seedLinear nimmt jump nur dann in die Insert-Zeilen auf.
+let hasJump = false;
 
 async function mkUser(email) {
   const { data } = await admin.auth.admin.createUser({ email, password: "Test12345!", email_confirm: true });
@@ -88,6 +91,9 @@ async function seedLinear(accountId, title, steps, { decisionAt } = {}) {
     file_meta: s.file_meta ?? null,
     // Bedingte Schritte (Welle 42): {kind:element|url,…} — nur wenn der Schritt eine trägt.
     condition: s.condition ?? null,
+    // Bedingter Sprung (Welle 47): {when,to_position} — nur einfügen, wenn 0035 live ist (sonst
+    // würde der INSERT an einer fehlenden Spalte scheitern und den ganzen Test kippen).
+    ...(hasJump ? { jump: s.jump ?? null } : {}),
     position: i + 1,
   }));
   await admin.from("steps").insert(rows);
@@ -153,6 +159,19 @@ try {
     console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
     process.exit(0);
   }
+
+  // Preflight (Welle 47, bedingter Sprung, Migration 0035): Existiert jump an steps +
+  // automation_steps? Die Konvertierung UND die Detail-API SELEKTIEREN jump (wie condition/file_meta),
+  // scheitern also ohne 0035 → den GANZEN Test überspringen, bis Richard 0035 live angewandt hat.
+  const probeJumpA = await admin.from("automation_steps").select("jump").limit(1);
+  const probeJumpS = await admin.from("steps").select("jump").limit(1);
+  if (probeJumpA.error || probeJumpS.error) {
+    console.log("⚠  Spalte jump fehlt (Migration 0035 noch nicht live angewandt).");
+    console.log("   Grund:", (probeJumpA.error || probeJumpS.error).message);
+    console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
+    process.exit(0);
+  }
+  hasJump = true; // ab hier existiert die Spalte → seedLinear darf jump einfügen
 
   const A = await mkUser(`steply-auto-a-${stamp}@example.com`);
   const B = await mkUser(`steply-auto-b-${stamp}@example.com`);
@@ -375,6 +394,52 @@ try {
   const detCU = (detCond.steps || []).find((s) => s.condition && s.condition.kind === "url");
   ok(detCE && detCE.condition.selector.css === "#accept", "Detail: Element-condition mitgeliefert {kind:element,selector}");
   ok(detCU && detCU.condition.pattern === "/app" && detCU.condition.negate === true, "Detail: URL-condition inkl. negate mitgeliefert");
+
+  // ── Bedingter Sprung (Welle 47): Konvertierung kopiert jump 1:1 + API liefert jump + set/clear ──
+  // Gate: NUR wenn 0035 live ist (sonst würde bereits das seedLinear-INSERT scheitern).
+  if (hasJump) {
+    const jumpWhen = { kind: "element", selector: { css: "#anmelden", text: "Anmelden", role: "link" }, negate: true };
+    const tutJump = await seedLinear(A.accountId, "Login mit Sprung " + stamp, [
+      // Schritt 1 trägt den Sprung „wenn Anmelden NICHT da → to_position 3" (Login überspringen).
+      { title: "Anmelden", selector: { css: "#anmelden", role: "link", text: "Anmelden" }, jump: { when: jumpWhen, to_position: 3 } },
+      { title: "Benutzer", selector: { css: "#user", role: "textbox", text: "Benutzer" } },
+      { title: "Ziel", selector: { role: "button", text: "Ziel" } },
+    ]);
+    const convJ = await convertTutorialToAutomation(admin, A.accountId, tutJump);
+    automationIds.push(convJ.automationId);
+
+    // Konvertierung: jump 1:1 in den Snapshot (Positionen bleiben im linearen Pfad erhalten).
+    const { data: jSteps } = await admin
+      .from("automation_steps").select("id, position, title, selector, jump")
+      .eq("automation_id", convJ.automationId).order("position", { ascending: true });
+    const jStep = jSteps.find((s) => s.jump);
+    ok(jStep && jStep.jump.to_position === 3 && jStep.jump.when.negate === true && jStep.jump.when.selector.text === "Anmelden",
+      `Sprung: jump 1:1 in Snapshot kopiert (war ${JSON.stringify(jStep && jStep.jump)})`);
+    ok(jSteps.filter((s) => !s.jump).length === jSteps.length - 1, "Sprung: Schritte ohne jump bleiben null");
+
+    // Detail-API liefert jump je Schritt (für die Extension-Auswertung im Lauf).
+    const detJRes = await getAuth("/api/recorder/automations/" + convJ.automationId, tokenA);
+    const detJ = await detJRes.json().catch(() => ({}));
+    ok(detJRes.status === 200 && (detJ.steps || []).every((s) => "jump" in s), "Detail: jump-Feld je Schritt vorhanden (auch null)");
+    const detJStep = (detJ.steps || []).find((s) => s.jump);
+    ok(detJStep && detJStep.jump.to_position === 3 && detJStep.jump.when.negate === true,
+      `Detail: jump inkl. when/negate mitgeliefert (war ${JSON.stringify(detJStep && detJStep.jump)})`);
+
+    // setAutomationStepJump-Kern (DB-Effekt): die Server-Action ist auth-gebunden und hier nicht
+    // direkt aufrufbar; ihr DB-Ergebnis (jump am Schritt setzen aus dem EIGENEN Selektor → wieder
+    // entfernen) wird DB-nah gespiegelt und über die API verifiziert (Set + Clear).
+    const step2 = jSteps.find((s) => s.position === 2); // „Benutzer" (hat einen Selektor)
+    const step2Jump = { when: { kind: "element", selector: step2.selector, negate: true }, to_position: 3 };
+    await admin.from("automation_steps").update({ jump: step2Jump }).eq("id", step2.id);
+    const detSet = await (await getAuth("/api/recorder/automations/" + convJ.automationId, tokenA)).json().catch(() => ({}));
+    const s2Set = (detSet.steps || []).find((s) => s.position === 2);
+    ok(s2Set && s2Set.jump && s2Set.jump.to_position === 3 && s2Set.jump.when.selector.css === "#user",
+      `Sprung setzen (DB-Spiegel): jump am Schritt 2 aus eigenem Selektor gesetzt (war ${JSON.stringify(s2Set && s2Set.jump)})`);
+    await admin.from("automation_steps").update({ jump: null }).eq("id", step2.id);
+    const detClr = await (await getAuth("/api/recorder/automations/" + convJ.automationId, tokenA)).json().catch(() => ({}));
+    const s2Clr = (detClr.steps || []).find((s) => s.position === 2);
+    ok(s2Clr && s2Clr.jump === null, "Sprung entfernen (DB-Spiegel): jump am Schritt 2 wieder null");
+  }
 
   // ── (B3) POST /api/recorder/automation-runs ───────────────────────────────────
   const runsPre = await fetch(`${BASE}/api/recorder/automation-runs`, { method: "OPTIONS" });

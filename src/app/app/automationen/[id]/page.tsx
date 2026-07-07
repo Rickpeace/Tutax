@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { readSchedule, type AutomationParam } from "@/lib/automations";
-import type { Highlight, StepCondition } from "@/lib/types";
+import type { Highlight, StepCondition, StepJump } from "@/lib/types";
 import {
   AutomationDetail,
   type AutomationStepView,
@@ -34,7 +34,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition")
+      .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition, jump")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -67,6 +67,11 @@ export default async function AutomationDetailPage({
     condition:
       s.condition && typeof s.condition === "object" && !Array.isArray(s.condition)
         ? (s.condition as StepCondition)
+        : null,
+    // Bedingter Sprung (Welle 47): {when, to_position} | null. Für Chip-Anzeige + „entfernen".
+    jump:
+      s.jump && typeof s.jump === "object" && !Array.isArray(s.jump)
+        ? (s.jump as StepJump)
         : null,
   }));
 

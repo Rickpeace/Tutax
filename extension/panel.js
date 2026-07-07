@@ -4327,15 +4327,90 @@ function execFastForwardTo(to) {
 
 // Text der Vorspul-Notiz (Richards Verzweigungs-Metapher): enthielt die übersprungene Strecke
 // Login-Schritte → „Angemeldet? → Ja ✓", sonst generisch „Bereits erledigt ✓". X–Y sind die
-// 1-basierten übersprungenen Schrittnummern (from+1 … to).
+// 1-basierten übersprungenen Schrittnummern (from+1 … to). Für einen BEDINGTEN SPRUNG (Welle 47,
+// note.jump) eine eigene „↪"-Formulierung mit der 1-basierten Zielschrittnummer (to+1).
 function execSkipNoteText(note) {
   if (!note) return "";
+  if (note.jump) {
+    const target = note.to + 1; // 1-basierte Zielschrittnummer
+    return note.login
+      ? "↪ Login übersprungen — weiter bei Schritt " + target + " (bereits angemeldet)."
+      : "↪ Block übersprungen — weiter bei Schritt " + target + ".";
+  }
   const a = note.from + 1;
   const b = note.to;
   const range = a >= b ? "Schritt " + a : "Schritte " + a + "–" + b;
   return note.login
     ? "Angemeldet? → Ja ✓ — " + range + " übersprungen."
     : "Bereits erledigt ✓ — " + range + " übersprungen (Seite schon erreicht).";
+}
+
+// ============================================================================
+// BEDINGTER SPRUNG / BLOCK-ÜBERSPRINGEN (Welle 47). Richards Kernbedarf: eine Automation soll
+// ein- UND ausgeloggt laufen. Ein Schritt trägt einen jump {when, to_position}; erfüllt when auf
+// der AKTUELLEN Seite (z. B. „Anmelden-Knopf NICHT da" = schon eingeloggt), springt der Lauf
+// VORWÄRTS zu to_position und überspringt den ganzen (Login-)Block — GANZ VOR der Navigation,
+// sodass die Login-/Google-page_urls der übersprungenen Schritte nie angefahren werden.
+// ============================================================================
+
+// when des Sprungs auf dem AKTUELLEN Tab prüfen und ggf. springen. Rückgabe true, wenn der Sprung
+// den Lauf umgeleitet ODER (bei Datei-Konflikt) ehrlich pausiert hat — dann führt execExecuteCurrent
+// den tragenden Schritt NICHT aus. false → normal weitermachen (Tab/Navigation/W40/W42).
+// WICHTIG: NICHT zur page_url des tragenden Schritts navigieren — die Prüfung läuft auf dem Tab,
+// auf dem der Lauf gerade steht (Vorgängerseite), genau wie im echten Login-Fall gefordert.
+async function execTryJump(planStep) {
+  const jump = planStep && planStep.jump;
+  if (!jump || !jump.when) return false;
+  let urlMatch = false;
+  let elementFound = false;
+  if (jump.when.kind === "url") {
+    const curUrl = await tabUrlById(exec.tabId);
+    urlMatch = SteplyExecPlan.evalUrlCondition(curUrl, jump.when);
+  } else if (jump.when.kind === "element") {
+    elementFound = await execEvalElementCondition(exec.tabId, jump.when);
+  }
+  if (!exec.running) return false;
+  // „when erfüllt?" via der GETEILTEN negate-Autorität (W42). Erfüllt → springen.
+  if (!SteplyExecPlan.shouldRunStep(jump.when, { urlMatch: urlMatch, elementFound: elementFound })) {
+    return false;
+  }
+  const target = SteplyExecPlan.jumpTargetIndex(exec.plan, exec.index, jump.to_position);
+  if (target == null || target <= exec.index) return false; // kein Vorwärts-Ziel → normal weiter
+  // Datei-Kohärenz: enthält die übersprungene Strecke einen Download, den ein SPÄTERER (nicht
+  // übersprungener) Upload braucht? Dann NICHT stumm überspringen → ehrliche Pause (wie W40).
+  if (SteplyExecPlan.skipCrossesNeededDownload(exec.plan, exec.index, target)) {
+    exec.skipFileTarget = target;
+    execEnterMiss("skip-needs-file");
+    return true;
+  }
+  execJumpTo(target);
+  return true;
+}
+
+// SPRINGEN: den Index auf das (spätere) Ziel setzen und den übersprungenen Block sichtbar machen.
+// „↪ Login übersprungen …" wenn die Strecke nach Login riecht (skipCrossesLogin), sonst generisch.
+// Endlos-/Doppelsprung-Schutz: NUR VORWÄRTS (target > exec.index, garantiert durch jumpTargetIndex)
+// → der Index wächst strikt, ein Ziel-Schritt darf selbst wieder springen (immer weiter nach vorn).
+function execJumpTo(to) {
+  const from = exec.index;
+  const login = SteplyExecPlan.skipCrossesLogin(exec.plan, from, to, execSecretKeys());
+  exec.index = to;
+  exec.skipNote = { from: from, to: to, login: login, jump: true };
+  if (to >= exec.plan.length) {
+    // Sprung ans Ende → Lauf ist fertig (nichts mehr auszuführen).
+    execFinish("success");
+    return;
+  }
+  if (exec.autoMode && !exec.paused) {
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+    }, EXEC_AUTO_GAP);
+  } else {
+    exec.phase = "ready";
+    execRenderRun();
+  }
 }
 
 // ANMELDE-WACHE: höflich warten, bis der Mensch sich angemeldet hat. KEIN Timeout (er darf
@@ -4740,6 +4815,17 @@ async function execExecuteCurrent() {
   }
   exec.phase = "executing";
   execRenderRun();
+
+  // Bedingter Sprung / Block-Überspringen (Welle 47): GANZ AM ANFANG — VOR Tab-Auswahl UND
+  // Navigation (kritisch!). Trägt der Schritt einen jump, werten wir seine when-Bedingung auf dem
+  // AKTUELLEN Tab aus (NICHT erst zur — evtl. Login-/Google- — page_url navigieren; das ist der
+  // ganze Punkt). Erfüllt → den ganzen Block überspringen, sodass der Lauf gar nicht erst zu
+  // Login/Google navigiert. Nicht erfüllt → normal weiter (Tab-Auswahl, Navigation, W40, W42).
+  if (planStep.jump && typeof SteplyExecPlan !== "undefined") {
+    const jumped = await execTryJump(planStep);
+    if (!exec.running) return;
+    if (jumped) return; // der Sprung hat den Lauf umgeleitet (oder ehrlich pausiert)
+  }
 
   // Tab-/Fenster-Folgen (Welle 43): ZUERST in den Tab wechseln, dessen URL zum Schritt passt
   // (neuer Tab / OAuth-Popup / Rückkehr nach Popup-Schluss) — VOR Navigation, Zustandsprüfung
