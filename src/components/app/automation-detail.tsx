@@ -42,6 +42,7 @@ import {
   deleteAutomation,
   setAutomationSchedule,
   setAutomationStepCondition,
+  markAutomationStepOptional,
 } from "@/app/app/automationen/actions";
 
 export type AutomationStepView = {
@@ -253,6 +254,20 @@ export function AutomationDetail({
       try {
         await setAutomationStepCondition(id, stepId, null);
         toast.success("Bedingung entfernt — der Schritt läuft immer.");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
+
+  // Nachträglich „nur wenn vorhanden" (Welle 42, Nachtrag): Schritt optional machen —
+  // nutzt den eigenen Selektor des Schritts (z. B. Cookie-Banner-Klick), ohne neu aufzunehmen.
+  function markStepOptional(stepId: string) {
+    startTransition(async () => {
+      try {
+        await markAutomationStepOptional(id, stepId);
+        toast.success("Schritt läuft nur noch, wenn das Element da ist.");
         router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
@@ -666,7 +681,7 @@ export function AutomationDetail({
                     />
                   )}
                 </button>
-                {s.condition && (
+                {s.condition ? (
                   <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2">
                     <span
                       className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
@@ -683,6 +698,21 @@ export function AutomationDetail({
                       immer ausführen
                     </button>
                   </div>
+                ) : (
+                  // Nachträglich optional machen — nur sinnvoll bei Schritten mit Element (Klick/Eingabe).
+                  s.action !== "upload" && (
+                    <div className="border-t border-line px-3.5 py-2">
+                      <button
+                        type="button"
+                        onClick={() => markStepOptional(s.id)}
+                        disabled={pending}
+                        title="Diesen Schritt beim automatischen Ausführen überspringen, wenn sein Element gerade nicht da ist (z. B. Cookie-Banner)."
+                        className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+                      >
+                        ⓸ nur ausführen, wenn vorhanden
+                      </button>
+                    </div>
+                  )
                 )}
                 {open && (
                   <div className="border-t-2 border-line bg-line-2/40 p-3">

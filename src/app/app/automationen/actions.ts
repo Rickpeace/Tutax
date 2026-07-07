@@ -108,6 +108,35 @@ export async function setAutomationStepCondition(
   revalidatePath(`/app/automationen/${automationId}`);
 }
 
+/**
+ * Bedingte Schritte (Welle 42, Nachtrag): einen Schritt NACHTRÄGLICH als „nur wenn vorhanden"
+ * markieren — die Bedingung nutzt den EIGENEN Selektor des Schritts (element-present). So kann
+ * man einen bestehenden Automations-Schritt (z. B. Cookie-Banner-Klick) optional machen, ohne
+ * neu aufzunehmen. Der Selektor wird serverseitig gelesen (nie zum Client exponiert). Hat der
+ * Schritt keinen Selektor (reiner Hinweis-Schritt), wirft die Action sprechend. Konto-scoped.
+ */
+export async function markAutomationStepOptional(automationId: string, stepId: string) {
+  const supabase = await createClient();
+  const { data: step, error: readErr } = await supabase
+    .from("automation_steps")
+    .select("selector")
+    .eq("id", stepId)
+    .eq("automation_id", automationId)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  const selector = step?.selector;
+  if (!selector || typeof selector !== "object") {
+    throw new Error("Dieser Schritt hat kein Element, an dem eine Bedingung greifen könnte.");
+  }
+  const { error } = await supabase
+    .from("automation_steps")
+    .update({ condition: { kind: "element", selector } })
+    .eq("id", stepId)
+    .eq("automation_id", automationId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/app/automationen/${automationId}`);
+}
+
 /** Automation löschen (kaskadiert Schritte + Läufe). Konto-scoped via RLS. */
 export async function deleteAutomation(id: string) {
   const supabase = await createClient();
