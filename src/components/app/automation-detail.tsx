@@ -721,7 +721,7 @@ export function AutomationDetail({
                       className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
                       title={conditionChipTitle(s.condition)}
                     >
-                      ⓸ nur wenn: {conditionChipLabel(s.condition)}
+                      ? nur wenn: {conditionChipLabel(s.condition)}
                     </span>
                     <button
                       type="button"
@@ -743,7 +743,7 @@ export function AutomationDetail({
                         title="Diesen Schritt beim automatischen Ausführen überspringen, wenn sein Element gerade nicht da ist (z. B. Cookie-Banner)."
                         className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
                       >
-                        ⓸ nur ausführen, wenn vorhanden
+                        ? nur ausführen, wenn vorhanden
                       </button>
                     </div>
                   )
