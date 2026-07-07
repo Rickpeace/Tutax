@@ -7,7 +7,7 @@
 // Nutzung:  node scripts/test-guide-resolve.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { resolveSelector, isVolatileId } = require("../extension/guide-resolve.js");
+const { resolveSelector, isVolatileId, nearText, CLICKABLE_SELECTOR } = require("../extension/guide-resolve.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -55,9 +55,13 @@ function makeRoot(elements) {
       for (const el of this._els) if (el._css && el._css === sel) return el;
       return null;
     },
-    querySelectorAll() {
-      // Der Test behandelt jedes registrierte Element als klickbaren Kandidaten.
-      return this._els.slice();
+    querySelectorAll(sel) {
+      // Klickbaren-Sammelselektor -> ALLE Elemente (der Test kontrolliert die Kandidatenmenge).
+      if (sel === undefined || sel === CLICKABLE_SELECTOR) return this._els.slice();
+      // Spezifischer css-Selektor -> ECHTE Eindeutigkeits-Semantik (Welle 44): nur Elemente,
+      // deren _css exakt passt. So zählt der Eindeutigkeits-Anker (querySelectorAll(css).length
+      // === 1) im Stub genauso wie im Browser (mehrere gleiche _css -> mehrdeutig -> kein Heilen).
+      return this._els.filter((el) => el._css && el._css === sel);
     },
     getElementById(id) {
       for (const el of this._els) if (el.getAttribute("id") === id) return el;
@@ -343,5 +347,110 @@ function makeRoot(elements) {
     "Welle 43: ohne innerText-Trenner (nur zusammengeklebter textContent) bleibt es zu Recht ein Miss");
 }
 
-console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen verifiziert.");
+// ── Welle 44: SELBSTHEILUNG STUFE A (Text-Drift bei eindeutigem+stabilem css) ───────────────
+// EINE neue Regel in Stufe 1: traf der css eindeutig+stabil+rollengleich, driftete aber NUR der
+// Text volatil (Version/Datum/Zähler), gilt der Treffer als selbstgeheilt -> confidence 'healed'.
+// Motiv (Richards echter Test): Knopf „Extension herunterladen (v2.13.0)" heißt live „(v2.13.1)".
+
+// (a) KERNFALL: Versionsnummer v2.13.0 -> v2.13.1 (css #dl eindeutig+stabil, role=button).
+{
+  const btn = elem({ tag: "button", text: "Extension herunterladen (v2.13.1)", css: "#dl" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#dl", text: "Extension herunterladen (v2.13.0)", role: "button" });
+  ok(r.el === btn && r.confidence === "healed" && r.healed === true && r.reason === null,
+    "Heilung (a) KERN: Version v2.13.0→v2.13.1, css eindeutig+stabil+role -> healed");
+}
+
+// (b) Datum-im-Text analog (01.03.2024 -> 15.09.2025).
+{
+  const btn = elem({ tag: "button", text: "Rechnung vom 15.09.2025 öffnen", css: "#inv" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#inv", text: "Rechnung vom 01.03.2024 öffnen", role: "button" });
+  ok(r.el === btn && r.confidence === "healed", "Heilung (b): Datum 01.03.2024→15.09.2025 -> healed");
+}
+
+// (c) „(3)" -> „(5)"-Zähler (realistisches Label mit tragfähigem Rest „warenkorb ()").
+{
+  const btn = elem({ tag: "button", text: "Warenkorb (5)", css: "#cart" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#cart", text: "Warenkorb (3)", role: "button" });
+  ok(r.el === btn && r.confidence === "healed", "Heilung (c): Zähler (3)→(5) -> healed");
+}
+
+// (d) NEGATIV: generischer css mehrdeutig (2 Treffer) -> Bedingung 2 verhindert Heilung.
+{
+  const b1 = elem({ tag: "button", text: "Postausgang (5)", css: ".tab" });
+  const b2 = elem({ tag: "button", text: "Entwürfe (5)", css: ".tab" });
+  const root = makeRoot([b1, b2]);
+  const r = resolveSelector(root, { css: ".tab", text: "Postausgang (3)", role: "button" });
+  ok(r.el === null && r.confidence !== "healed" && r.reason === "text-mismatch",
+    "Heilung (d) NEG: mehrdeutiger css (2 Treffer) -> KEIN Heilen (Bedingung 2 Eindeutigkeit)");
+}
+
+// (e) NEGATIV: flüchtiger css (base-ui) trifft „zufällig" -> Bedingung 1 verhindert Heilung,
+//     OBWOHL der Text hier nur volatil driftet (nearText würde passen) — dem Zufall nie trauen.
+{
+  const btn = elem({ tag: "button", text: "Herunterladen (v2.13.1)", css: "#base-ui-_r_5_" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#base-ui-_r_5_", text: "Herunterladen (v2.13.0)", role: "button" });
+  ok(r.el === null && r.confidence !== "healed",
+    "Heilung (e) NEG: flüchtiger css (base-ui) -> KEIN Heilen trotz volatiler Text-Drift (Bedingung 1)");
+}
+
+// (f) NEGATIV: Rollenwechsel Button->Link -> Bedingung 3 verhindert Heilung.
+{
+  const link = elem({ tag: "a", attrs: { href: "#" }, text: "Herunterladen (v2.13.1)", css: "#dl2" });
+  const root = makeRoot([link]);
+  const r = resolveSelector(root, { css: "#dl2", text: "Herunterladen (v2.13.0)", role: "button" });
+  ok(r.el === null && r.confidence !== "healed",
+    "Heilung (f) NEG: Rollenwechsel Button→Link -> KEIN Heilen (Bedingung 3 Rolle)");
+}
+
+// (g) NEGATIV: echter Textwechsel „Speichern" -> „Löschen" -> nearText false -> kein Heilen.
+{
+  const btn = elem({ tag: "button", text: "Löschen", css: "#act" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#act", text: "Speichern", role: "button" });
+  ok(r.el === null && r.confidence !== "healed",
+    "Heilung (g) NEG: echter Textwechsel Speichern→Löschen -> KEIN Heilen (nearText false)");
+}
+
+// (h) NEGATIV: „weiter" vs „weiter zu wetransfer" — Rest verschieden (kein reiner Volatil-
+//     Unterschied). Mit Klammern erzwungen, damit der Treffer die Heil-Prüfung überhaupt erreicht
+//     (sonst fängt containsEither „weiter" ⊂ „weiter zu…" schon als exact).
+{
+  const btn = elem({ tag: "button", text: "Weiter zu WeTransfer (2)", css: "#nxt" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#nxt", text: "Weiter (1)", role: "button" });
+  ok(r.el === null && r.confidence !== "healed",
+    "Heilung (h) NEG: 'weiter (1)' vs 'weiter zu wetransfer (2)' -> Rest verschieden -> KEIN Heilen");
+}
+
+// (i) Kein-Text-Selektor: reiner css-Treffer wie bisher exact (Heilen weder nötig noch aktiv).
+{
+  const btn = elem({ tag: "button", text: "Egal", css: "#plain" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#plain" });
+  ok(r.el === btn && r.confidence === "exact", "Heilung (i): ohne recorded text bleibt reiner css-Treffer -> exact (kein healed)");
+}
+
+// ── Pure nearText-Direkttests (Volatil-Token-Regex isoliert) ────────────────────────────────
+{
+  ok(nearText("Extension herunterladen (v2.13.0)", "Extension herunterladen (v2.13.1)") === true,
+    "nearText: Version v2.13.0→v2.13.1 -> nah");
+  ok(nearText("Warenkorb (3)", "Warenkorb (5)") === true, "nearText: Zähler (3)→(5) -> nah");
+  ok(nearText("Rechnung vom 01.03.2024 öffnen", "Rechnung vom 15.09.2025 öffnen") === true,
+    "nearText: Datum mit Punkten -> nah");
+  ok(nearText("Export 2024-03-12", "Export 2025-09-01") === true, "nearText: ISO-Datum mit Bindestrichen -> nah");
+  ok(nearText("Sitzung 14:30 starten", "Sitzung 09:15 starten") === true, "nearText: Uhrzeit -> nah");
+  ok(nearText("Speichern", "Löschen") === false, "nearText: Speichern/Löschen -> NICHT nah");
+  ok(nearText("weiter", "weiter zu wetransfer") === false,
+    "nearText: 'weiter' vs 'weiter zu wetransfer' (Rest verschieden) -> NICHT nah");
+  ok(nearText("(3)", "(5)") === false, "nearText: reiner Zähler '(3)'/'(5)' (Rest <3 sichtbar) -> NICHT nah (Untergrenze)");
+  ok(nearText("2.13.0", "2.13.1") === false, "nearText: reine Versionsnummer (Rest leer) -> NICHT nah");
+  ok(nearText("", "") === false, "nearText: leer/leer -> NICHT nah");
+  ok(nearText("Version 3", "Version 3") === true, "nearText: identisch -> nah");
+}
+
+console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen + Selbstheilung (Welle 44) verifiziert.");
 process.exitCode = failed ? 1 : 0;
