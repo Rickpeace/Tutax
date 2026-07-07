@@ -1552,6 +1552,22 @@
     }, 10000);
   }
 
+  // Sichtbarkeits-Praedikat fuer den Resolver (Welle 45): SICHTBARE ELEMENTE BEVORZUGEN. Wir
+  // injizieren diese Funktion in resolveSelector(document, sel, { isVisible }), damit Stufe 2/3
+  // einen sichtbaren Kandidaten waehlen, statt an einem unsichtbaren 0×0-Duplikat (z. B.
+  // eingeklapptes Mobil-Menue) haengen zu bleiben — Richards „Anmelden"-Fall. Der Resolver bleibt
+  // PUR (er ruft NIE selbst getBoundingClientRect); dieselbe 0×0-Regel wie die 0×0-Nachpruefung im
+  // Aufrufer, die als Guertel-und-Hosentraeger BESTEHEN bleibt.
+  function resolveElIsVisible(el) {
+    try {
+      var r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      return !!(r && r.width > 0 && r.height > 0);
+    } catch (err) {
+      return false;
+    }
+  }
+  var RESOLVE_OPTS = { isVisible: resolveElIsVisible };
+
   // Einen Schritt anzeigen: Element aufloesen, dann bis ~5s SPA-tolerant nachversuchen
   // (MutationObserver + 250ms-Fallback-Tick), sonst found:false + Grund melden (Welle 33, Fix 3).
   function showGuideStep(step) {
@@ -1589,7 +1605,7 @@
       if (done) return true;
       let res = null;
       try {
-        res = resolver(document, step.selector);
+        res = resolver(document, step.selector, RESOLVE_OPTS);
       } catch (err) {
         res = null;
       }
@@ -2503,7 +2519,7 @@
       if (done) return true;
       let res = null;
       try {
-        res = resolver(document, step.selector);
+        res = resolver(document, step.selector, RESOLVE_OPTS);
       } catch (err) {
         res = null;
       }
@@ -2577,7 +2593,7 @@
       if (done) return true;
       let res = null;
       try {
-        res = resolver(document, step.selector);
+        res = resolver(document, step.selector, RESOLVE_OPTS);
       } catch (err) {
         res = null;
       }
@@ -2758,7 +2774,8 @@
           if (!R || typeof R.resolveSelector !== "function") return false;
           let res;
           try {
-            res = R.resolveSelector(document, cond.selector);
+            // Welle 45: sichtbare Kandidaten bevorzugen (kein Haften an unsichtbaren Duplikaten).
+            res = R.resolveSelector(document, cond.selector, RESOLVE_OPTS);
           } catch (e) {
             return false;
           }

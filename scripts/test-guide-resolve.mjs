@@ -452,5 +452,98 @@ function makeRoot(elements) {
   ok(nearText("Version 3", "Version 3") === true, "nearText: identisch -> nah");
 }
 
-console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen + Selbstheilung (Welle 44) verifiziert.");
+// ── Welle 45: SICHTBARE ELEMENTE BEVORZUGEN (injiziertes isVisible-Prädikat) ─────────────────
+// resolveSelector(root, selector, { isVisible }) bevorzugt in Stufe 2/3 SICHTBARE Kandidaten und
+// verankert Stufe 1 NICHT an einem unsichtbaren css-Einzeltreffer (bei vorhandenem Text). OHNE
+// isVisible bleibt alles EXAKT wie zuvor (alle Tests oben laufen ohne opts). „Sichtbarkeit" ist
+// hier ein Stub-Prädikat (Element NICHT in hiddenSet) — das reine Modul ruft NIE
+// getBoundingClientRect; der Aufrufer (content.js) liefert getBoundingClientRect>0.
+// Motiv: Richards echter Test „Anmelden auswählen" auf der „Konto erstellen"-Seite — der Resolver
+// haftete an einem versteckten 0×0-Duplikat (eingeklapptes Mobil-Menü) statt am sichtbaren Link.
+function hiddenPred(...hiddenEls) {
+  const set = new Set(hiddenEls);
+  return { isVisible: (el) => !set.has(el) };
+}
+
+// (a) Zwei exakte „Anmelden"-Treffer, einer unsichtbar -> der SICHTBARE wird gewählt (text).
+{
+  const hidden = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#anm-mobile" });
+  const visible = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#anm-desktop" });
+  const root = makeRoot([hidden, visible]);
+  const r = resolveSelector(root, { text: "Anmelden", role: "link" }, hiddenPred(hidden));
+  ok(r.el === visible && r.confidence === "text",
+    "W45 (a): zwei exakte 'Anmelden', einer unsichtbar -> sichtbarer gewählt (text)");
+  // Gegenprobe OHNE isVisible: zwei exakte Treffer bleiben mehrdeutig -> null (altes Verhalten).
+  const r0 = resolveSelector(root, { text: "Anmelden", role: "link" });
+  ok(r0.el === null && r0.reason === "ambiguous",
+    "W45 (a) Gegenprobe OHNE isVisible: zwei gleiche Treffer -> ambiguous (unverändert)");
+}
+
+// (b) css trifft ein UNSICHTBARES Element, aber ein sichtbarer Text-Zwilling existiert -> sichtbar.
+//     Das ist Richards Kern: der aufgenommene css zeigte auf das versteckte Mobil-Menü-Duplikat.
+{
+  const hiddenHit = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#anm-mobile" });
+  const visibleTwin = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#anm-desktop" });
+  const root = makeRoot([hiddenHit, visibleTwin]);
+  const r = resolveSelector(root, { css: "#anm-mobile", text: "Anmelden", role: "link" }, hiddenPred(hiddenHit));
+  ok(r.el === visibleTwin && r.confidence === "text",
+    "W45 (b): css trifft unsichtbares Element -> Stufe 1 übersprungen, sichtbarer Zwilling gewählt (text)");
+  // Gegenprobe OHNE isVisible: css verankert exakt am unsichtbaren Treffer (der heutige Bug).
+  const r0 = resolveSelector(root, { css: "#anm-mobile", text: "Anmelden", role: "link" });
+  ok(r0.el === hiddenHit && r0.confidence === "exact",
+    "W45 (b) Gegenprobe OHNE isVisible: css verankert am unsichtbaren Treffer (exact) — der alte Bug");
+}
+
+// (c) NUR ein unsichtbarer Treffer -> Element wie bisher zurückgegeben (Aufrufer meldet target-hidden).
+{
+  const onlyHidden = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#anm" });
+  const opts = { isVisible: () => false }; // nichts ist sichtbar
+  // css unsichtbar übersprungen; Stufe 2 findet genau EINEN (unsichtbaren) exakten Treffer ->
+  // Fallback gibt ihn zurück (Element erhalten), damit rein-unsichtbare Fälle nicht schlechter werden.
+  const r = resolveSelector(makeRoot([onlyHidden]), { css: "#anm", text: "Anmelden", role: "link" }, opts);
+  ok(r.el === onlyHidden && r.el !== null,
+    "W45 (c): nur unsichtbarer Treffer -> Element wie bisher zurückgegeben (Aufrufer meldet dann target-hidden)");
+  // Ohne css, nur Text: gleicher Fallback (genau ein exakter Treffer, wenn auch unsichtbar).
+  const r2 = resolveSelector(makeRoot([onlyHidden]), { text: "Anmelden", role: "link" }, opts);
+  ok(r2.el === onlyHidden, "W45 (c2): nur unsichtbarer Text-Treffer -> Fallback gibt den einen zurück");
+}
+
+// (d) OHNE isVisible -> altes Verhalten exakt (auch ein opts-Objekt OHNE isVisible zählt als 'kein Prädikat').
+{
+  const hidden = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#h" });
+  const visible = elem({ tag: "a", attrs: { href: "#" }, text: "Anmelden", css: "#v" });
+  const root = makeRoot([hidden, visible]);
+  const r = resolveSelector(root, { text: "Anmelden", role: "link" });
+  ok(r.el === null && r.reason === "ambiguous",
+    "W45 (d): OHNE isVisible bleibt alles alt (zwei gleiche -> ambiguous)");
+  const r2 = resolveSelector(root, { css: "#h", text: "Anmelden", role: "link" }, {});
+  ok(r2.el === hidden && r2.confidence === "exact",
+    "W45 (d2): opts ohne isVisible -> css verankert wie bisher (exact)");
+}
+
+// (e) Stufe 3 (fuzzy contains): zwei contains-Treffer, einer unsichtbar -> sichtbarer (fuzzy).
+{
+  const hidden = elem({ tag: "button", text: "Zur Kasse gehen", css: "#k1" });
+  const visible = elem({ tag: "button", text: "Zur Kasse gehen", css: "#k2" });
+  const root = makeRoot([hidden, visible]);
+  const r = resolveSelector(root, { text: "Kasse", role: "button" }, hiddenPred(hidden));
+  ok(r.el === visible && r.confidence === "fuzzy",
+    "W45 (e): Stufe 3 fuzzy — zwei contains-Treffer, einer unsichtbar -> sichtbarer (fuzzy)");
+  // Gegenprobe OHNE isVisible: zwei fuzzy-Treffer -> mehrdeutig -> null (unverändert).
+  const r0 = resolveSelector(root, { text: "Kasse", role: "button" });
+  ok(r0.el === null && r0.reason === "ambiguous", "W45 (e) Gegenprobe OHNE isVisible: fuzzy mehrdeutig -> ambiguous");
+}
+
+// (f) Selbstheilung (Welle 44) bleibt intakt, wenn der EINDEUTIGE css-Treffer SICHTBAR ist:
+//     Version driftet, css sichtbar+eindeutig+rollengleich -> weiterhin healed (isVisible ändert
+//     den Heil-Pfad für sichtbare css-Treffer NICHT).
+{
+  const btn = elem({ tag: "button", text: "Extension herunterladen (v2.13.1)", css: "#dl" });
+  const root = makeRoot([btn]);
+  const r = resolveSelector(root, { css: "#dl", text: "Extension herunterladen (v2.13.0)", role: "button" }, hiddenPred());
+  ok(r.el === btn && r.confidence === "healed",
+    "W45 (f): sichtbarer eindeutiger css-Treffer heilt Text-Drift weiter -> healed (Härtung W44 unberührt)");
+}
+
+console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen + Selbstheilung (W44) + Sichtbarkeits-Bevorzugung (W45) verifiziert.");
 process.exitCode = failed ? 1 : 0;
