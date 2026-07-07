@@ -19,6 +19,16 @@
 //   3. Fuzzy: contains-Textvergleich über klickbare Elemente; nur bei GENAU einem Treffer -> fuzzy.
 //   Sonst { el: null, confidence: null }.
 //
+// SICHTBARE ELEMENTE BEVORZUGEN (Welle 45): resolveSelector(root, selector, opts) nimmt ein
+// OPTIONALES `opts.isVisible(el) -> bool`. FEHLT es (alle Alt-Aufrufer/Tests), ist das Verhalten
+// EXAKT wie zuvor — 100 % rückwärtskompatibel. Ist es da, BEVORZUGEN Stufe 2/3 sichtbare
+// Kandidaten (statt an einem unsichtbaren 0×0-Duplikat — z. B. eingeklapptes Mobil-Menü — hängen
+// zu bleiben) und Stufe 1 verankert NICHT an einem unsichtbaren css-Einzeltreffer, wenn ein Text
+// vorhanden ist (Stufe 2/3 dürfen dann den sichtbaren Zwilling wählen). Gibt es NUR unsichtbare
+// Treffer, wird wie bisher der eine zurückgegeben (der Aufrufer meldet über seine 0×0-Nachprüfung
+// weiterhin „target-hidden"). Das Modul bleibt PUR: die Sichtbarkeit wird INJIZIERT, nie selbst
+// (kein getBoundingClientRect) ermittelt.
+//
 // PUR halten: keine Chrome-APIs, keine Seiteneffekte, kein globaler Zustand.
 
 (function (root) {
@@ -298,7 +308,7 @@
   // für die Panel-Anzeige/Telemetrie und ist rein ADDITIV — Aufrufer, die nur el/confidence
   // lesen, bleiben unberührt. Werte: "no-selector" | "css-miss" | "volatile-id" |
   // "text-mismatch" | "ambiguous". Bei Treffer ist reason null.
-  function resolveSelector(scope, selector) {
+  function resolveSelector(scope, selector, opts) {
     if (!scope || !selector || typeof selector !== "object") {
       return { el: null, confidence: null, reason: "no-selector" };
     }
@@ -306,6 +316,22 @@
     var wantText = norm(selector.text || "");
     var wantRole =
       typeof selector.role === "string" ? selector.role.trim().toLowerCase() : "";
+
+    // ── Sichtbarkeits-Prädikat (Welle 45), INJIZIERT & OPTIONAL ────────────────────
+    // hasVis=false (kein opts.isVisible) -> das Modul verhält sich EXAKT wie zuvor. Ist es da,
+    // bevorzugen Stufe 2/3 sichtbare Kandidaten. isVisibleEl kapselt den Aufruf defensiv: wirft
+    // das Prädikat (real nie — der Aufrufer liefert getBoundingClientRect>0), gilt „nicht
+    // bestätigt sichtbar" -> false (konservativ; die reinen-unsichtbar-Fälle fangen die
+    // Fallbacks unten wie bisher ab).
+    var hasVis = !!(opts && typeof opts.isVisible === "function");
+    function isVisibleEl(el) {
+      if (!hasVis) return true;
+      try {
+        return !!opts.isVisible(el);
+      } catch (err) {
+        return false;
+      }
+    }
 
     // ── Stufe 1: css exakt (mit grober Textprüfung, falls text vorhanden) ──────────
     var cssVolatile = false;
@@ -318,28 +344,33 @@
       }
       if (hit) {
         if (!wantText) return { el: hit, confidence: "exact", reason: null };
-        if (containsEither(textOf(hit, scope), wantText)) {
-          return { el: hit, confidence: "exact", reason: null };
+        // Welle 45: Traf der css EIN UNSICHTBARES Element und ist ein Text da, NICHT hier
+        // verankern (weder exakt noch geheilt) — Stufe 2/3 (sichtbarkeits-bevorzugend) dürfen
+        // den sichtbaren Zwilling wählen. Nur bei injiziertem isVisible; ohne bleibt alles alt.
+        if (!(hasVis && !isVisibleEl(hit))) {
+          if (containsEither(textOf(hit, scope), wantText)) {
+            return { el: hit, confidence: "exact", reason: null };
+          }
+          // css traf, aber die strikte Text-Gegenprobe scheiterte. Bevor wir durchfallen:
+          // SELBSTHEILUNG Stufe A (Welle 44) — akzeptiere den css-Treffer als selbstgeheilt
+          // NUR, wenn ALLE strengen Sicherheitsbedingungen erfüllt sind:
+          //   1. css ist NICHT flüchtig (ein flüchtiger Treffer wäre Zufall — nie vertrauen).
+          //   2. css trifft im Dokument GENAU EIN Element (Eindeutigkeit = Sicherheitsanker).
+          //   3. die Rolle stimmt (Button→Link wäre ein echtes „falsches Element"-Signal).
+          //   4. der Text ist NUR volatil gedriftet (nearText: Version/Datum/Zähler) — ein
+          //      echter Textwechsel (anderer Knopf) fällt weiter durch zu Stufe 2/3.
+          // Confidence „healed" (zwischen exact und text); reason bleibt null; healed:true ist
+          // ein rein ADDITIVES Telemetrie-Feld (Aufrufer lesen nur res.el).
+          if (
+            !cssTargetsVolatileId(css) &&
+            cssHitIsUnique(scope, css) &&
+            (!wantRole || roleOf(hit) === wantRole) &&
+            nearText(wantText, textOf(hit, scope))
+          ) {
+            return { el: hit, confidence: "healed", reason: null, healed: true };
+          }
         }
-        // css traf, aber die strikte Text-Gegenprobe scheiterte. Bevor wir durchfallen:
-        // SELBSTHEILUNG Stufe A (Welle 44) — akzeptiere den css-Treffer als selbstgeheilt
-        // NUR, wenn ALLE strengen Sicherheitsbedingungen erfüllt sind:
-        //   1. css ist NICHT flüchtig (ein flüchtiger Treffer wäre Zufall — nie vertrauen).
-        //   2. css trifft im Dokument GENAU EIN Element (Eindeutigkeit = Sicherheitsanker).
-        //   3. die Rolle stimmt (Button→Link wäre ein echtes „falsches Element"-Signal).
-        //   4. der Text ist NUR volatil gedriftet (nearText: Version/Datum/Zähler) — ein
-        //      echter Textwechsel (anderer Knopf) fällt weiter durch zu Stufe 2/3.
-        // Confidence „healed" (zwischen exact und text); reason bleibt null; healed:true ist
-        // ein rein ADDITIVES Telemetrie-Feld (Aufrufer lesen nur res.el).
-        if (
-          !cssTargetsVolatileId(css) &&
-          cssHitIsUnique(scope, css) &&
-          (!wantRole || roleOf(hit) === wantRole) &&
-          nearText(wantText, textOf(hit, scope))
-        ) {
-          return { el: hit, confidence: "healed", reason: null, healed: true };
-        }
-        // Kein sicheres Heilen möglich -> die textbasierten Stufen versuchen.
+        // Kein sicheres Heilen möglich / unsichtbar übersprungen -> textbasierte Stufen versuchen.
       } else {
         // css verfehlt: war es ein flüchtiger-ID-Selektor (alte Aufnahme, Base UI & Co.)?
         // Dann ist der css-Pfad chancenlos -> Stufe 2/3 tragen die Auflösung; als Grund
@@ -362,7 +393,23 @@
       if (wantRole && roleOf(el) !== wantRole) continue;
       if (textOf(el, scope) === wantText) exactMatches.push(el);
     }
-    if (exactMatches.length === 1) return { el: exactMatches[0], confidence: "text", reason: null };
+    if (hasVis) {
+      // Welle 45: unter den exakten Treffern die SICHTBAREN bevorzugen. Genau EIN sichtbarer
+      // -> nimm ihn (auch wenn daneben unsichtbare Duplikate liegen — Richards Fall). Ist KEINER
+      // sichtbar, aber existiert genau einer -> Fallback auf den einen (nicht schlechter als heute;
+      // der Aufrufer meldet dann per 0×0-Nachprüfung target-hidden). Mehrere sichtbare -> wie
+      // bisher mehrdeutig (durchfallen zu Stufe 3, am Ende „ambiguous").
+      var visExact = [];
+      for (var vi = 0; vi < exactMatches.length; vi++) {
+        if (isVisibleEl(exactMatches[vi])) visExact.push(exactMatches[vi]);
+      }
+      if (visExact.length === 1) return { el: visExact[0], confidence: "text", reason: null };
+      if (visExact.length === 0 && exactMatches.length === 1) {
+        return { el: exactMatches[0], confidence: "text", reason: null };
+      }
+    } else if (exactMatches.length === 1) {
+      return { el: exactMatches[0], confidence: "text", reason: null };
+    }
 
     // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
     // Typ-Grenze (Hotfix 06.07.): Ein Eingabefeld-Schritt (textbox/searchbox/combobox) darf
@@ -377,7 +424,21 @@
       var t = textOf(cel, scope);
       if (t && containsEither(t, wantText)) fuzzyMatches.push(cel);
     }
-    if (fuzzyMatches.length === 1) return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
+    if (hasVis) {
+      // Welle 45: analog zu Stufe 2 — sichtbare contains-Treffer bevorzugen. Genau EIN
+      // sichtbarer -> fuzzy; kein sichtbarer, aber genau einer existiert -> Fallback (Aufrufer
+      // meldet target-hidden); mehrere sichtbare -> mehrdeutig (durchfallen zu „ambiguous").
+      var visFuzzy = [];
+      for (var fj = 0; fj < fuzzyMatches.length; fj++) {
+        if (isVisibleEl(fuzzyMatches[fj])) visFuzzy.push(fuzzyMatches[fj]);
+      }
+      if (visFuzzy.length === 1) return { el: visFuzzy[0], confidence: "fuzzy", reason: null };
+      if (visFuzzy.length === 0 && fuzzyMatches.length === 1) {
+        return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
+      }
+    } else if (fuzzyMatches.length === 1) {
+      return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
+    }
 
     // Kein eindeutiger Treffer: mehrere Kandidaten (ambiguous), sonst — bei totem
     // flüchtigen-ID-css — „volatile-id", andernfalls schlicht „text-mismatch".
