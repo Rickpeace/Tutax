@@ -334,9 +334,17 @@ let execPending = null;
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-exec-result") return;
-  if (targetTabId != null && sender && sender.tab && sender.tab.id !== targetTabId) return;
   if (!execPending) return;
-  if (msg.token != null && execPending.token !== msg.token) return;
+  // Zuordnung über den TOKEN (Welle 46, BUGFIX In-Page-Klick): eindeutig pro Schritt und darum
+  // AUTORITATIV — der Tab-ID-Vergleich war ein fragiler Zusatzfilter, der bei Tab-Folgen (Welle 43)
+  // eine gültige, token-passende Antwort aus dem legitim gewechselten Tab verwerfen konnte → Lauf
+  // hängt bis Timeout. Nur ohne Token bleibt der Tab-Vergleich als Sicherheitsnetz. (Spiegelt
+  // exakt den Panel-Handler in panel.js.)
+  if (msg.token != null) {
+    if (execPending.token !== msg.token) return;
+  } else if (targetTabId != null && sender && sender.tab && sender.tab.id !== targetTabId) {
+    return;
+  }
   execPending.resolve({
     ok: !!msg.ok,
     reason: typeof msg.reason === "string" ? msg.reason : "",

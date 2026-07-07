@@ -112,13 +112,17 @@
       if (!P || typeof P.pickTabForStep !== "function" || typeof deps.getRunTabs !== "function") return;
       if (!planStep) return;
       var tabs = await deps.getRunTabs();
-      var pick = P.pickTabForStep(planStep, tabs);
+      // preferTabId = der gebundene Tab (Welle 46): ein reiner In-Page-Schritt bleibt am gebundenen
+      // Tab, wenn dieser selbst passt — statt an eine zweite gleich-URL-Kopie umzubinden (identisch
+      // zur Panel-Logik execSelectTabForStep). Echte Tab-Folgen bleiben unberührt (dann passt der
+      // gebundene Tab nicht mehr und ist kein Kandidat).
+      var pick = P.pickTabForStep(planStep, tabs, tabId);
       if (pick == null && tabWaitWarranted(tabs)) {
         var t0 = Date.now();
         while (Date.now() - t0 < tabWaitMs && running) {
           await delay(200);
           tabs = await deps.getRunTabs();
-          pick = P.pickTabForStep(planStep, tabs);
+          pick = P.pickTabForStep(planStep, tabs, tabId);
           if (pick != null) break;
           if (!tabWaitWarranted(tabs)) break;
         }

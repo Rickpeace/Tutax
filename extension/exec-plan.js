@@ -131,24 +131,37 @@
   //   • kein/unparsebares page_url → null (der Aufrufer bleibt beim aktuellen Tab; Schritte ohne
   //     page_url binden sich an die Seite des Vorgängers, exakt wie needsNavigation).
   //   • kein passender Tab → null (Aufrufer bleibt beim aktuellen Tab / navigiert ihn).
-  //   • mehrere passende Tabs → der ZULETZT FOKUSSIERTE (höchstes lastFocusedMs) gewinnt; bei
-  //     Gleichstand der zuletzt in der Liste stehende (stabil/deterministisch).
+  //   • mehrere passende Tabs → der GEBUNDENE Tab (preferTabId), wenn er passt, gewinnt IMMER;
+  //     sonst der ZULETZT FOKUSSIERTE (höchstes lastFocusedMs), bei Gleichstand der zuletzt in
+  //     der Liste stehende (stabil/deterministisch).
+  // preferTabId (Welle 46, optional): der aktuell gebundene Tab. BUGFIX In-Page-Klick — ein
+  // reiner In-Page-Schritt (Dropdown öffnen, KEINE Navigation, KEIN neuer Tab) darf die Bindung
+  // NIE an einen ANDEREN Tab mit derselben URL abgeben (z. B. eine während des Laufs geöffnete
+  // zweite Kopie derselben Seite): sonst läuft der Klick im falschen Tab (oder hängt, wenn dieser
+  // nicht antworten kann) → der Lauf schaltet nicht weiter. Passt der gebundene Tab selbst zum
+  // Schritt, bleibt er gebunden. Bei einer ECHTEN Tab-Folge (der gebundene Tab passt NICHT mehr,
+  // weil der Vorschritt in einen neuen Tab/ein OAuth-Popup führte) ist preferTabId kein Kandidat
+  // → die bisherige „zuletzt fokussiert"-Wahl greift unverändert (Welle 43 bleibt intakt).
   // Popup-Bevorzugung fällt automatisch heraus: der Popup-Tab steht in tabsInfo, seine URL passt
   // zur nächsten page_url → er gewinnt gegen den (nicht passenden) Ursprungs-Tab.
   // PUR: kein DOM/Chrome/Netz — in Node testbar (scripts/test-exec-plan.mjs).
-  function pickTabForStep(step, tabsInfo) {
+  function pickTabForStep(step, tabsInfo, preferTabId) {
     var target = step && typeof step.page_url === "string" ? step.page_url : "";
     if (!target) return null;
     var targetKey = pathKey(target);
     if (!targetKey) return null;
     var list = Array.isArray(tabsInfo) ? tabsInfo : [];
     var best = null;
+    var preferMatches = false;
     for (var i = 0; i < list.length; i++) {
       var ti = list[i];
       if (!ti || ti.tabId == null) continue;
       if (pathKey(ti.url) !== targetKey) continue;
+      // Der gebundene Tab passt selbst → er gewinnt (kein Wechsel bei reinem In-Page-Schritt).
+      if (preferTabId != null && ti.tabId === preferTabId) preferMatches = true;
       if (best === null || focusMsOf(ti) >= focusMsOf(best)) best = ti;
     }
+    if (preferMatches) return preferTabId;
     return best ? best.tabId : null;
   }
 
