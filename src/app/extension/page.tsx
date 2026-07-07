@@ -60,10 +60,10 @@ export default function ExtensionPage() {
             nativeButton={false}
             render={<a href={ZIP_URL} download />}
           >
-            <Download className="size-4" /> Extension herunterladen (v{VERSION})
+            <Download className="size-4" /> Extension herunterladen
           </Button>
           <span className="text-xs font-semibold text-muted-foreground">
-            ZIP · für Google Chrome ab Version 114
+            ZIP · v{VERSION} · für Google Chrome ab Version 114
           </span>
         </div>
 
