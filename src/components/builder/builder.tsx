@@ -16,7 +16,7 @@ import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
 import { buildRenderTree } from "@/lib/builder/tree";
 import type { RenderNode } from "@/lib/builder/tree";
-import type { Step, StepBranch, Highlight } from "@/lib/types";
+import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 /** Schritt-IDs in tatsächlicher FLUSS-Reihenfolge (Tree-DFS) – für Vor/Zurück im Editor. */
 function flattenFlow(node: RenderNode): string[] {
@@ -36,6 +36,7 @@ import {
   deleteBranch,
   deleteStep,
   setRootStep,
+  setStepCondition,
 } from "@/app/app/tutorials/[id]/actions";
 import { YES, NO } from "@/lib/builder/constants";
 
@@ -63,6 +64,8 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     image_height: null,
     highlights: [],
     page_url: null,
+    selector: null,
+    condition: null,
     position,
     is_decision: false,
     video_time: null,
@@ -508,6 +511,17 @@ export function Builder({
     [persist],
   );
 
+  // Bedingte Schritte (Welle 42): Ausführ-Bedingung optimistisch setzen + still persistieren.
+  const handleSetCondition = useCallback(
+    (stepId: string, condition: StepCondition | null) => {
+      setSteps((prev) =>
+        prev.map((s) => (s.id === stepId ? { ...s, condition } : s)),
+      );
+      persist(() => setStepCondition(stepId, condition));
+    },
+    [persist],
+  );
+
   const tree = useMemo(
     () => buildRenderTree(steps, branches, rootId),
     [steps, branches, rootId],
@@ -593,6 +607,7 @@ export function Builder({
         onSetImage={setStepImage}
         onSetHighlights={setStepHighlights}
         onSetDecision={handleSetDecision}
+        onSetCondition={handleSetCondition}
         onAddBranch={handleAddBranch}
         onUpdateBranch={handleUpdateBranch}
         onDeleteBranch={handleDeleteBranch}

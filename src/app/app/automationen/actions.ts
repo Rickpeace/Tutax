@@ -9,6 +9,7 @@ import {
   sanitizeParams,
   sanitizeSchedule,
 } from "@/lib/automations";
+import { validateStepCondition } from "@/lib/guide";
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -83,6 +84,28 @@ export async function setAutomationSchedule(id: string, schedule: unknown) {
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${id}`);
   revalidatePath("/app/automationen");
+}
+
+/**
+ * Bedingte Schritte (Welle 42): Ausführ-Bedingung an EINEM Automations-Schritt setzen/entfernen.
+ * Im Detail vor allem zum ENTFERNEN gedacht (Toggle „immer ausführen" → condition=null). `condition`
+ * wird tolerant validiert (validateStepCondition): kaputt/leer/null → null. Konto-scoped via RLS
+ * (automation_id-Filter zusätzlich als Gürtel-und-Hosenträger). WERTE gibt es hier nie.
+ */
+export async function setAutomationStepCondition(
+  automationId: string,
+  stepId: string,
+  condition: unknown,
+) {
+  const clean = validateStepCondition(condition) ?? null;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("automation_steps")
+    .update({ condition: clean })
+    .eq("id", stepId)
+    .eq("automation_id", automationId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/app/automationen/${automationId}`);
 }
 
 /** Automation löschen (kaskadiert Schritte + Läufe). Konto-scoped via RLS. */

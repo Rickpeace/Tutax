@@ -102,6 +102,9 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     // file_meta (Welle 39, Datei-Brücke): {role:download|upload, filename, mime, size} — NUR
     // Metadaten, nie Datei-Bytes. Fehlt bei normalen Schritten/alten Extensions -> null.
     file_meta: s.file_meta ?? null,
+    // condition (Welle 42, bedingte Schritte): {kind:element|url, …} — vom Menschen ignoriert,
+    // vom Automations-Lauf ausgewertet. Fehlt bei normalen Schritten/alten Extensions -> null.
+    condition: s.condition ?? null,
     position: posBase + i + 1,
     is_decision: false,
   }));

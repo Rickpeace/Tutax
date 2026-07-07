@@ -7,7 +7,7 @@
 // Vorlagen-Texte, KEINE OpenAI/Storage-Aufrufe (die machen die Routen). So bleibt sie
 // leicht testbar und die Regeln liegen an EINER Stelle.
 import "server-only";
-import type { Highlight } from "@/lib/types";
+import type { Highlight, StepCondition } from "@/lib/types";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -60,6 +60,7 @@ export type GuideStepInput = {
   selector?: GuideSelector; // optional; fehlt bei alten Extensions (abwärtskompatibel)
   sensitive?: SensitiveRect[]; // optional; Auto-Schwärzung (Welle 28), abwärtskompatibel
   file_meta?: GuideFileMeta; // optional; Datei-Brücke (Welle 39), abwärtskompatibel
+  condition?: StepCondition; // optional; bedingte Schritte (Welle 42), abwärtskompatibel
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -154,6 +155,30 @@ export function validateSelector(raw: unknown): GuideSelector | undefined {
   if (text) out.text = text;
   if (role) out.role = role;
   return out.css || out.text || out.role ? out : undefined;
+}
+
+/**
+ * TOLERANTE Validierung der optionalen `condition` (bedingte Schritte, Welle 42). Spiegelt die
+ * pure parseCondition aus extension/exec-plan.js: Element-Form (Selektor via validateSelector)
+ * oder URL-Form (Teilstring/Glob). Kaputt/unbekannt/leer → undefined (Feld verworfen; die
+ * Aufnahme scheitert NIE daran). Wirft NIE. `negate` NUR als echtes true übernehmen.
+ */
+export function validateStepCondition(raw: unknown): StepCondition | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const negate = r.negate === true;
+  if (r.kind === "element") {
+    const selector = validateSelector(r.selector);
+    if (!selector) return undefined; // leerer/kaputter Selektor → unbrauchbar
+    return { kind: "element", selector, ...(negate ? { negate: true } : {}) };
+  }
+  if (r.kind === "url") {
+    const pattern =
+      typeof r.pattern === "string" ? r.pattern.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    if (!pattern) return undefined;
+    return { kind: "url", pattern, ...(negate ? { negate: true } : {}) };
+  }
+  return undefined;
 }
 
 /**
@@ -304,6 +329,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const sensitive = validateSensitive(s.sensitive);
     // file_meta (Welle 39): optional Datei-Brücke, tolerant validiert. Fehlt/kaputt -> weg.
     const fileMeta = validateFileMeta(s.file_meta);
+    // condition (Welle 42): optionale Ausführ-Bedingung, tolerant validiert. Fehlt/kaputt -> weg.
+    const condition = validateStepCondition(s.condition);
 
     out.push({
       path,
@@ -317,6 +344,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       ...(selector ? { selector } : {}),
       ...(sensitive.length ? { sensitive } : {}),
       ...(fileMeta ? { file_meta: fileMeta } : {}),
+      ...(condition ? { condition } : {}),
     });
   }
   return out;

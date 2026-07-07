@@ -321,6 +321,32 @@ function probePassword(tabId) {
   });
 }
 
+// Bedingte Schritte (Welle 42): Element-Bedingung im Ziel-Tab prüfen (Muster probePassword).
+// Liefert das ROHE „gefunden+sichtbar" (met) — negate wendet SteplyExecPlan.shouldRunStep an.
+function evalCondition(tabId, cond) {
+  return new Promise((resolve) => {
+    if (tabId == null || !cond) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v === true);
+    };
+    const timer = setTimeout(() => done(false), 2500);
+    try {
+      const p = chrome.tabs.sendMessage(tabId, { type: "steply-eval-condition", cond: cond });
+      if (p && p.then) p.then((res) => done(!!(res && res.met)), () => done(false));
+      else done(false);
+    } catch (err) {
+      done(false);
+    }
+  });
+}
+
 // Submit-Kontrolle (Welle 38): kam die Übermittlung durch? (Klassifikation via SteplyExecPlan.)
 function verifySubmit(tabId, prevUrl) {
   return new Promise((resolve) => {
@@ -673,6 +699,7 @@ async function runAutomation(automationId) {
       navigateIfNeeded: (t, s) => navigateIfNeeded(t, s),
       sendStep: (t, s, extra) => sendStep(t, s, extra),
       probePassword: (t) => probePassword(t),
+      evalCondition: (t, c) => evalCondition(t, c),
       verifySubmit: (t, prev) => verifySubmit(t, prev),
       armDownload: (t) => armDownload(t),
       disarmDownload: () => disarmDownload(),

@@ -2740,6 +2740,46 @@
       sendResponse({ ok: true, hasPassword: has });
       return true;
     }
+    if (msg.type === "steply-eval-condition") {
+      // Bedingte Schritte (Welle 42): Element-Bedingung im ZIEL-TAB auswerten. Antwort
+      // { ok, met } mit met = ROHES „gefunden UND sichtbar" (getBoundingClientRect > 0) — OHNE
+      // negate (das wendet AUSSCHLIESSLICH der Aufrufer via SteplyExecPlan.shouldRunStep an, EINE
+      // dokumentierte Stelle). URL-Bedingungen kennt der Lauf selbst (Tab-URL) → hier nie met.
+      // SICHERHEIT: reine Momentaufnahme — wir LESEN nur, ob das Element da/sichtbar ist; kein
+      // Klick, kein Wert. ~300 ms Gnadenfrist, weil eine SPA das Banner minimal verzögert rendert.
+      (async () => {
+        const cond = msg.cond;
+        if (!cond || cond.kind !== "element" || !cond.selector) {
+          sendResponse({ ok: true, met: false });
+          return;
+        }
+        const R = globalThis.SteplyGuideResolve;
+        const check = () => {
+          if (!R || typeof R.resolveSelector !== "function") return false;
+          let res;
+          try {
+            res = R.resolveSelector(document, cond.selector);
+          } catch (e) {
+            return false;
+          }
+          if (!res || !res.el) return false;
+          let r;
+          try {
+            r = res.el.getBoundingClientRect();
+          } catch (e) {
+            return false;
+          }
+          return !!(r && r.width > 0 && r.height > 0);
+        };
+        let met = check();
+        if (!met) {
+          await new Promise((r) => setTimeout(r, 300)); // Gnadenfrist für verzögert gerenderte Banner
+          met = check();
+        }
+        sendResponse({ ok: true, met: met });
+      })();
+      return true; // Antwort kommt asynchron
+    }
     return false;
   });
 

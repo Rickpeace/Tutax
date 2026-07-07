@@ -19,6 +19,7 @@ import {
 import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
+import { validateStepCondition } from "@/lib/guide";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -158,6 +159,18 @@ export async function setDecision(stepId: string, isDecision: boolean) {
   // setDecision ändert das Label der ersten Verzweigung („Ja“ bzw. null) -> Label-Delta.
   const firstBranch = existing?.[0]?.id;
   if (firstBranch) after(() => translateBranchDelta(firstBranch));
+}
+
+/**
+ * Bedingte Schritte (Welle 42): Ausführ-Bedingung an einem Schritt setzen/entfernen. Der MENSCH
+ * (Tutorial/Führung) ignoriert sie; NUR der Automations-Lauf wertet sie aus. Tolerant validiert
+ * (validateStepCondition): kaputt/leer → null (immer ausführen). Optimistisch-still wie setDecision.
+ */
+export async function setStepCondition(stepId: string, condition: unknown) {
+  const supabase = await createClient();
+  const clean = validateStepCondition(condition) ?? null;
+  await supabase.from("steps").update({ condition: clean }).eq("id", stepId);
+  await invalidateStepTags(stepId);
 }
 
 /** Antwort-Option anlegen (Client liefert id/color/position). */

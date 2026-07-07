@@ -413,6 +413,30 @@ body {
   color: var(--stop);
 }
 
+/* Bedingte Schritte (Welle 42): „?"-Toggle „nur wenn Element vorhanden" je Aufnahme-Schritt. */
+.guide-item .guide-opt {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.guide-item .guide-opt:hover {
+  background: var(--beige);
+  color: var(--ink);
+}
+.guide-item .guide-opt.on {
+  background: var(--accent, #ef6a4e);
+  border-color: var(--accent, #ef6a4e);
+  color: #fff;
+}
+
 /* Thumbnail je Schritt (Tango-Gefuehl: man sieht jeden Screenshot). */
 .guide-item .thumb {
   flex: 0 0 auto;

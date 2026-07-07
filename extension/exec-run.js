@@ -106,6 +106,25 @@
       return { action: "unexpected" };
     }
 
+    // Bedingte Schritte (Welle 42): SOLL der Schritt i jetzt ausgeführt werden? URL-Bedingung
+    // lokal (Tab-URL), Element-Bedingung via deps.evalCondition (content.js steply-eval-condition);
+    // negate + Entscheidung trägt die pure P.shouldRunStep (EINE Stelle). Ohne condition → true.
+    async function conditionMet(i) {
+      var planStep = plan[i];
+      var cond = planStep && planStep.condition;
+      if (!P || !cond) return true;
+      var urlMatch = false;
+      var elementFound = false;
+      if (cond.kind === "url") {
+        var curUrl = await deps.getTabUrl(tabId);
+        urlMatch = P.evalUrlCondition(curUrl, cond);
+      } else if (cond.kind === "element") {
+        elementFound =
+          typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, cond) : false;
+      }
+      return P.shouldRunStep(cond, { urlMatch: urlMatch, elementFound: elementFound });
+    }
+
     // Einen Schritt ausführen. Rückgabe { ok:true } oder { ok:false, detail }.
     async function executeStep(planStep) {
       var fm = planStep.file_meta || null;
@@ -219,7 +238,22 @@
           return;
         }
 
-        // proceed → Schritt ausführen.
+        // proceed → Bedingte Schritte (Welle 42): erfüllt die condition? Sonst nahtlos überspringen.
+        var condRun = await conditionMet(index);
+        if (!running) return;
+        if (!condRun) {
+          // Datei-Kohärenz: übersprungener DOWNLOAD, dessen Datei ein späterer Upload braucht →
+          // NICHT stumm überspringen (der Upload hätte keine Datei). Autonom = ehrlicher Stopp.
+          if (P.skipCrossesNeededDownload(plan, index, index + 1)) {
+            finish("failed", "bedingung-datei");
+            return;
+          }
+          emit({ type: "cond-skip", index: index });
+          index++;
+          continue;
+        }
+
+        // Schritt ausführen.
         var r = await executeStep(planStep);
         if (!running) return;
         if (!r.ok) {

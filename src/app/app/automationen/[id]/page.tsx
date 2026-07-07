@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { readSchedule, type AutomationParam } from "@/lib/automations";
-import type { Highlight } from "@/lib/types";
+import type { Highlight, StepCondition } from "@/lib/types";
 import {
   AutomationDetail,
   type AutomationStepView,
@@ -34,7 +34,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key, image_path, highlights, file_meta")
+      .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -62,6 +62,11 @@ export default async function AutomationDetailPage({
     fileMeta:
       s.file_meta && typeof s.file_meta === "object" && !Array.isArray(s.file_meta)
         ? (s.file_meta as AutomationStepView["fileMeta"])
+        : null,
+    // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null.
+    condition:
+      s.condition && typeof s.condition === "object" && !Array.isArray(s.condition)
+        ? (s.condition as StepCondition)
         : null,
   }));
 

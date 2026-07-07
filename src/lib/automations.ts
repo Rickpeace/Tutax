@@ -127,6 +127,9 @@ type StepRow = {
   position: number;
   // Datei-Brücke (Welle 39): Rolle des Aufnahme-Schritts (Download-Auslöser / Upload-Feld).
   file_meta: { role?: string; filename?: string; mime?: string; size?: number } | null;
+  // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null. 1:1 in den
+  // Snapshot kopiert (der Lauf wertet sie aus; der Mensch ignoriert sie).
+  condition: unknown;
 };
 
 type BranchRow = {
@@ -274,7 +277,7 @@ export async function convertTutorialToAutomation(
   // 2) Schritte + Branches laden.
   const { data: stepsData } = await admin
     .from("steps")
-    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta")
+    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -355,6 +358,9 @@ export async function convertTutorialToAutomation(
       // Datei-Brücke (Welle 39): {role:download,key} liefert / {role:upload,source} verbraucht.
       // Werte bleiben IMMER lokal im Browser — hier steht nur die Verknüpfung (Spalte per 0032).
       file_meta: fileLink,
+      // Bedingte Schritte (Welle 42): condition 1:1 in den Snapshot (Spalte per 0034). Ein
+      // linearer Schritt MIT condition ist erlaubt; nur Verzweigungen bleiben abgelehnt (s. o.).
+      condition: s.condition ?? null,
     };
   });
 

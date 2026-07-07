@@ -70,6 +70,11 @@
       // Datei-Brücke: {role:'download',key} bzw. {role:'upload',source}. Nur setzen, wenn der
       // Schritt eine Datei trägt (sonst bleibt das Feld weg — bestehende Abläufe unverändert).
       if (linked.links[idx]) action.file_meta = linked.links[idx];
+      // Bedingte Schritte (Welle 42): die (bereits validierte) condition 1:1 in die Aktion
+      // durchreichen. Fehlt sie → Feld bleibt weg (Schritt läuft immer = heutiges Verhalten).
+      // Zur LAUFZEIT ausgewertet (shouldRunStep/evalUrlCondition + content.js), NICHT hier.
+      var pc = parseCondition(s0.condition);
+      if (pc) action.condition = pc;
       // Wert nur setzen, wenn der Schritt einen Parameter referenziert und ein Wert vorliegt.
       if (s0.param_key && Object.prototype.hasOwnProperty.call(vals, s0.param_key)) {
         action.value = vals[s0.param_key];
@@ -195,6 +200,101 @@
       if (s.action === "fill" && s.param_key && Object.prototype.hasOwnProperty.call(secret, s.param_key)) return true;
     }
     return false;
+  }
+
+  // ── Bedingte Schritte (Welle 42) ──────────────────────────────────────────────
+  // Ein Automations-Schritt kann eine condition tragen: „führe NUR aus, wenn …". Damit
+  // überstehen unbeaufsichtigte Läufe Cookie-Banner / optionale Dialoge / „Sitzung abgelaufen"-
+  // Hinweise — die Maschine beantwortet dieselbe Ja/Nein-Frage, die im manuellen Tutorial der
+  // Mensch per Klick beantwortet, per Element-/URL-Check. Formen (Migration 0034):
+  //   { kind:'element', selector:{css,text,role}, negate? }  → nur wenn Element vorhanden+sichtbar
+  //   { kind:'url', pattern:'…', negate? }                   → nur wenn die aktuelle URL passt
+  // Die ELEMENT-Prüfung braucht das DOM → sie läuft im Ziel-Tab (content.js steply-eval-condition)
+  // und liefert ein ROHES elementFound (gefunden+sichtbar, OHNE negate). Die URL-Prüfung ist pur
+  // (evalUrlCondition, ROHER Treffer OHNE negate). Die EINZIGE Stelle, die negate anwendet UND
+  // „ausführen vs. überspringen" entscheidet, ist shouldRunStep — so verhalten sich Element- und
+  // URL-Bedingung garantiert identisch (kein doppeltes negate, eine dokumentierte Autorität).
+
+  // parseCondition(raw) → normalisierte condition | null. TOLERANT (wirft NIE): unbekannte Form,
+  // leerer Selektor/leeres pattern, fremde kind → null (Schritt läuft dann immer). Genutzt beim
+  // Plan-Bau (buildRunPlan) UND — gespiegelt in TS (guide.ts validateStepCondition) — bei der
+  // Aufnahme. negate NUR als echtes true übernehmen.
+  function parseCondition(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    var negate = raw.negate === true;
+    if (raw.kind === "element") {
+      var sel = raw.selector;
+      if (!sel || typeof sel !== "object" || Array.isArray(sel)) return null;
+      var out = {};
+      var css = typeof sel.css === "string" ? sel.css.trim().slice(0, 400) : "";
+      var text = typeof sel.text === "string" ? sel.text.trim().slice(0, 80) : "";
+      var role = typeof sel.role === "string" ? sel.role.trim().toLowerCase().slice(0, 40) : "";
+      if (css) out.css = css;
+      if (text) out.text = text;
+      if (role) out.role = role;
+      if (!out.css && !out.text && !out.role) return null; // leerer Selektor → unbrauchbar
+      var ce = { kind: "element", selector: out };
+      if (negate) ce.negate = true;
+      return ce;
+    }
+    if (raw.kind === "url") {
+      var pat = typeof raw.pattern === "string" ? raw.pattern.trim().slice(0, 400) : "";
+      if (!pat) return null;
+      var cu = { kind: "url", pattern: pat };
+      if (negate) cu.negate = true;
+      return cu;
+    }
+    return null;
+  }
+
+  // evalUrlCondition(currentUrl, cond) → bool: ROHER URL-Treffer (OHNE negate — negate wendet
+  // ausschließlich shouldRunStep an). Vergleichsbasis ist „host + pathname" (Query/Hash zählen
+  // NICHT, wie needsNavigation), klein geschrieben. Zwei Formen:
+  //   • pattern enthält '*' → einfache Glob (nur '*' ist Platzhalter, alles andere literal),
+  //     als Teilstring-Regex (nicht verankert) getestet.
+  //   • sonst → schlichter Teilstring-Vergleich.
+  // Kein url-cond / kaputt / currentUrl unlesbar → false.
+  function evalUrlCondition(currentUrl, cond) {
+    if (!cond || cond.kind !== "url") return false;
+    var pat = typeof cond.pattern === "string" ? cond.pattern.trim().toLowerCase() : "";
+    if (!pat) return false;
+    var hay;
+    try {
+      var u = new URL(currentUrl);
+      hay = (u.host + u.pathname).toLowerCase();
+    } catch (e) {
+      hay = typeof currentUrl === "string" ? currentUrl.toLowerCase() : "";
+    }
+    if (!hay) return false;
+    if (pat.indexOf("*") >= 0) {
+      var re = "";
+      for (var i = 0; i < pat.length; i++) {
+        var ch = pat.charAt(i);
+        re += ch === "*" ? ".*" : ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      try {
+        return new RegExp(re).test(hay);
+      } catch (e2) {
+        return false;
+      }
+    }
+    return hay.indexOf(pat) >= 0;
+  }
+
+  // shouldRunStep(cond, signals) → bool: DIE EINE Entscheidung „Schritt ausführen (true) vs.
+  // nahtlos überspringen (false)" — und die EINZIGE Stelle, die negate anwendet.
+  //   • kein cond / unbekannte kind → true (Schritt läuft immer — bestehendes Verhalten).
+  //   • kind 'element' → base = signals.elementFound (ROH, aus content.js).
+  //   • kind 'url'     → base = signals.urlMatch (ROH, aus evalUrlCondition).
+  //   • negate kehrt base um.
+  function shouldRunStep(cond, signals) {
+    if (!cond || typeof cond !== "object") return true;
+    var s = signals && typeof signals === "object" ? signals : {};
+    var base;
+    if (cond.kind === "element") base = s.elementFound === true;
+    else if (cond.kind === "url") base = s.urlMatch === true;
+    else return true; // unbekannte kind → tolerant ausführen
+    return cond.negate === true ? !base : base;
   }
 
   // ── nextFireTime (Welle 41, ZEITPLAN) ─────────────────────────────────────────
@@ -421,6 +521,10 @@
     skipCrossesLogin: skipCrossesLogin,
     // Zeitplan (Welle 41)
     nextFireTime: nextFireTime,
+    // Bedingte Schritte (Welle 42)
+    parseCondition: parseCondition,
+    evalUrlCondition: evalUrlCondition,
+    shouldRunStep: shouldRunStep,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

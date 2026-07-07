@@ -86,6 +86,8 @@ async function seedLinear(accountId, title, steps, { decisionAt } = {}) {
     highlights: s.highlights ?? [],
     // Datei-Brücke (Welle 39): {role:download|upload,…} — nur wenn der Schritt eine trägt.
     file_meta: s.file_meta ?? null,
+    // Bedingte Schritte (Welle 42): {kind:element|url,…} — nur wenn der Schritt eine trägt.
+    condition: s.condition ?? null,
     position: i + 1,
   }));
   await admin.from("steps").insert(rows);
@@ -136,6 +138,18 @@ try {
   if (probeSched.error || probeTrig.error) {
     console.log("⚠  Spalten schedule/trigger fehlen (Migration 0033 noch nicht live angewandt).");
     console.log("   Grund:", (probeSched.error || probeTrig.error).message);
+    console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
+    process.exit(0);
+  }
+
+  // Preflight (Welle 42, bedingte Schritte, Migration 0034): Existiert condition an steps +
+  // automation_steps? Die Konvertierung UND die Detail-API SELEKTIEREN condition (wie file_meta),
+  // scheitern also ohne 0034 → den GANZEN Test überspringen, bis Richard 0034 live angewandt hat.
+  const probeCondA = await admin.from("automation_steps").select("condition").limit(1);
+  const probeCondS = await admin.from("steps").select("condition").limit(1);
+  if (probeCondA.error || probeCondS.error) {
+    console.log("⚠  Spalte condition fehlt (Migration 0034 noch nicht live angewandt).");
+    console.log("   Grund:", (probeCondA.error || probeCondS.error).message);
     console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
     process.exit(0);
   }
@@ -245,6 +259,32 @@ try {
   try { await convertTutorialToAutomation(admin, A.accountId, tutUpOnly); } catch (e) { upErr = e.message; }
   ok(/lädt eine Datei hoch/.test(upErr || ""), `Upload ohne Download → sprechender Fehler (war ${upErr})`);
 
+  // ── Bedingte Schritte (Welle 42): condition wird 1:1 in den Snapshot kopiert ────
+  const condElem = { kind: "element", selector: { css: "#accept", text: "Alle akzeptieren", role: "button" } };
+  const condUrl = { kind: "url", pattern: "/app", negate: true };
+  const tutCond = await seedLinear(A.accountId, "Cookie-Banner-Ablauf " + stamp, [
+    { title: "Start", selector: { role: "button", text: "Start" } },
+    { title: "Banner akzeptieren", selector: { css: "#accept", role: "button", text: "Alle akzeptieren" }, condition: condElem },
+    { title: "Nur wenn nicht in /app", selector: { role: "button", text: "Weiter" }, condition: condUrl },
+    { title: "Ziel", selector: { role: "button", text: "Ziel" } },
+  ]);
+  const convC = await convertTutorialToAutomation(admin, A.accountId, tutCond);
+  automationIds.push(convC.automationId);
+  const { data: cSteps } = await admin
+    .from("automation_steps").select("position, title, condition")
+    .eq("automation_id", convC.automationId).order("position", { ascending: true });
+  ok(cSteps.length === 4, `Bedingung: 4 automation_steps (linearer Schritt MIT condition erlaubt) (war ${cSteps.length})`);
+  const cElemStep = cSteps.find((s) => s.condition && s.condition.kind === "element");
+  const cUrlStep = cSteps.find((s) => s.condition && s.condition.kind === "url");
+  ok(cElemStep && cElemStep.condition.selector.css === "#accept" && cElemStep.condition.selector.text === "Alle akzeptieren",
+    `Bedingung: Element-condition 1:1 kopiert (war ${JSON.stringify(cElemStep && cElemStep.condition)})`);
+  ok(cUrlStep && cUrlStep.condition.pattern === "/app" && cUrlStep.condition.negate === true,
+    `Bedingung: URL-condition inkl. negate kopiert (war ${JSON.stringify(cUrlStep && cUrlStep.condition)})`);
+  ok(cSteps.filter((s) => !s.condition).length === 2, "Bedingung: Schritte ohne condition bleiben null (immer ausführen)");
+
+  // Detail-API liefert condition je Schritt (für die Extension-Auswertung).
+  const condAutoId = convC.automationId;
+
   // Entscheidung → sprechender Fehler.
   const tutDec = await seedLinear(A.accountId, "Mit Entscheidung " + stamp, [
     { title: "Start", selector: { role: "button", text: "Start" } },
@@ -325,6 +365,16 @@ try {
   ok(detUp && detUp.action === "upload" && detUp.file_meta.source === "file1",
     "Detail: Upload-Schritt file_meta {role:upload,source:file1} + action='upload'");
   ok((detBr.steps || []).every((s) => "file_meta" in s), "Detail: file_meta-Feld je Schritt vorhanden (auch null)");
+
+  // Bedingte Schritte (Welle 42): die API liefert condition je Schritt (Element/URL/null).
+  const detCondRes = await getAuth("/api/recorder/automations/" + condAutoId, tokenA);
+  const detCond = await detCondRes.json().catch(() => ({}));
+  ok(detCondRes.status === 200 && Array.isArray(detCond.steps), "Detail Bedingung → 200 + Schritte");
+  ok((detCond.steps || []).every((s) => "condition" in s), "Detail: condition-Feld je Schritt vorhanden (auch null)");
+  const detCE = (detCond.steps || []).find((s) => s.condition && s.condition.kind === "element");
+  const detCU = (detCond.steps || []).find((s) => s.condition && s.condition.kind === "url");
+  ok(detCE && detCE.condition.selector.css === "#accept", "Detail: Element-condition mitgeliefert {kind:element,selector}");
+  ok(detCU && detCU.condition.pattern === "/app" && detCU.condition.negate === true, "Detail: URL-condition inkl. negate mitgeliefert");
 
   // ── (B3) POST /api/recorder/automation-runs ───────────────────────────────────
   const runsPre = await fetch(`${BASE}/api/recorder/automation-runs`, { method: "OPTIONS" });

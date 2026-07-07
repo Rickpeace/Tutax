@@ -40,6 +40,8 @@ type StepRow = {
   highlights: unknown;
   // Datei-Brücke (Welle 39): {role:download,key} liefert / {role:upload,source} verbraucht.
   file_meta: unknown;
+  // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null.
+  condition: unknown;
 };
 
 export async function OPTIONS() {
@@ -77,7 +79,7 @@ export async function GET(
 
   const { data: stepsData } = await admin
     .from("automation_steps")
-    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta")
+    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -134,6 +136,12 @@ export async function GET(
         file_meta:
           s.file_meta && typeof s.file_meta === "object" && !Array.isArray(s.file_meta)
             ? s.file_meta
+            : null,
+        // Bedingte Schritte (Welle 42): {kind:element|url, …} | null. Die Extension wertet sie
+        // zur Laufzeit aus (SteplyExecPlan.shouldRunStep/evalUrlCondition + content.js).
+        condition:
+          s.condition && typeof s.condition === "object" && !Array.isArray(s.condition)
+            ? s.condition
             : null,
       })),
     },
