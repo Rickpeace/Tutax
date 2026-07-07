@@ -295,6 +295,20 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 46 + Fable (07.07., v2.15.1):** 🔧 **BUGFIX Lauf hängt nach In-Page-Klick**
+— Richards echter Test: Schritt „Konto-Menü öffnen" (Klick öffnet Dropdown IN der Seite,
+keine Navigation/kein neuer Tab) → Klick klappte, aber Lauf schaltete nicht weiter
+(„merkt nicht, dass er ausgeführt hat"). URSACHE (im echten Browser reproduziert, Fables
+Erstverdacht WIDERLEGT): `execSelectTabForStep` (Welle 43) wählte bei einer zweiten
+lauf-zugehörigen Tab-Kopie mit gleichem page_url-Pfad den zuletzt fokussierten — den
+FALSCHEN — Tab statt des gebundenen sichtbaren → Klick lief ins Leere → Timeout/Miss.
+FIX: `pickTabForStep(step, tabs, preferTabId)` — der gebundene Tab gewinnt, wenn er selbst
+passt (reiner In-Page-Klick wechselt die Bindung nie); Ergebnis-Zuordnung im Handler
+token-autoritativ (Tab-ID nur noch Sicherheitsnetz); gespiegelt im autonomen Runner
+(exec-run.js/runner.js). Welle-43-Tab-Folgen (neuer Tab/OAuth-Popup/Rückkehr) intakt —
+bei echtem Wechsel ist der gebundene Tab kein Kandidat, Token trägt die Eindeutigkeit.
+Oneshot: test-inpage-advance-e2e (neu, VORHER rot/NACHHER grün, A/B/C); alle 11 E2E-
+Suiten grün. Agent widerlegte den Fable-Verdacht selbst (prüfen statt übernehmen).
 **Opus Welle 45 + Fable-Hotfix v2.14.1 (07.07., v2.15.0):** 👁️ **SICHTBARE ELEMENTE
 BEVORZUGEN** — aus Richards echtem Test. v2.14.1: Bedingungs-Prüfung (steply-eval-
 condition) streng auf confidence exact/text — Fuzzy/healed täuschten „Element
