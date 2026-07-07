@@ -22,6 +22,17 @@ Wird der Build oder ein relevanter Test nicht grün und du kannst es nicht repar
 NICHT committen/pushen — Änderungen verwerfen und das Problem klar benennen. Lieber kein
 Ergebnis als ein kaputtes. Berichte am Ende, welche Verifikationen mit welchem Ergebnis liefen.
 
+5. **Hintergrund-Prozesse beenden (PFLICHT).** Wenn du für Tests Server, Dev-Prozesse
+   oder Browser (Next `start`, Playwright-Chromium o. Ä.) startest, beende sie am Ende
+   NACHWEISLICH — und liste in deinem Abschlussbericht die verbliebenen `node`-/Browser-
+   Prozesse auf, sodass belegt ist, dass nichts von dir weiterläuft. (Grund: verwaiste
+   Test-Server haben mehrfach im Hintergrund weiter gerechnet.)
+6. **Migrations-Reihenfolge beim Push.** Code, der NEUE DB-Spalten/-Tabellen liest oder
+   schreibt (SELECT/INSERT auf frisch angelegte Felder), darf ERST auf `main` gepusht
+   werden, NACHDEM die zugehörige Migration auf der Live-DB angewandt ist — sonst gibt
+   es 500er in Prod. Wellen-Agenten wenden Migrationen NICHT selbst an (Richard tut das);
+   melde im Abschlussbericht klar, dass der Push bis zur Migration zurückzuhalten ist.
+
 # Stack & Skills (autoritativ)
 
 Für JEDE Frontend-/Next.js-Arbeit gilt zuerst der Skill **`tutax-frontend`**
