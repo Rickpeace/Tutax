@@ -114,6 +114,89 @@
     return s || "/";
   }
 
+  // ── Zustands-Intelligenz (Welle 40) ───────────────────────────────────────────
+  // Läufe/Führungen kommen mit dem Anmelde-Zustand klar: Ist der Nutzer schon angemeldet,
+  // leitet die Website selbst um → die zugehörigen (Login-)Schritte werden ÜBERSPRUNGEN;
+  // landet er auf einer fremden Login-Seite, WARTET der Lauf höflich. Drei PURE Helfer tragen
+  // die Entscheidung (kein DOM/Chrome/Netz → in Node testbar):
+
+  // resyncTarget(currentUrl, plan, fromIndex) → index|null
+  // Erster Schritt mit Index ≥ fromIndex, dessen page_url (Host+Pfad, Query/Hash egal —
+  // pathKey/normPath) zur aktuellen URL passt. NUR VORWÄRTS. Schritte OHNE page_url zählen
+  // beim Matching NICHT (sie binden sich an die Seite des Vorgängers) — sie werden schlicht
+  // übersprungen; passt currentUrl zu Schritt k, gilt der Treffer auch, wenn zwischen fromIndex
+  // und k solche Schritte liegen (die gehören zur übersprungenen Strecke). currentUrl unlesbar
+  // → null (nichts beweisbar).
+  function resyncTarget(currentUrl, plan, fromIndex) {
+    var list = Array.isArray(plan) ? plan : [];
+    var curKey = pathKey(currentUrl);
+    if (!curKey) return null;
+    var start = typeof fromIndex === "number" && fromIndex > 0 ? Math.floor(fromIndex) : 0;
+    for (var i = start; i < list.length; i++) {
+      var s = list[i];
+      var pu = s && typeof s.page_url === "string" ? s.page_url : "";
+      if (!pu) continue;
+      if (pathKey(pu) === curKey) return i;
+    }
+    return null;
+  }
+
+  // looksLikeLoginUrl(url) → bool
+  // Erkennt Anmelde-Seiten am PFAD (nicht an der Query): Muster am Anfang eines Pfad-Segments
+  // (nach „/" oder Pfadanfang): login|log-in|signin|sign-in|anmeld|auth|sso. „account/login"
+  // ist durch „login" bereits abgedeckt. Groß/klein egal. „auth" segmentanfangs deckt
+  // auth/authorize/authenticate ab; bewusst großzügig — im Live-Lauf zusätzlich per
+  // Passwortfeld-Probe abgesichert (die Wache tippt NIE selbst Zugangsdaten).
+  function looksLikeLoginUrl(url) {
+    var p;
+    try {
+      p = new URL(url).pathname.toLowerCase();
+    } catch (e) {
+      return false;
+    }
+    return /(^|\/)(log-?in|sign-?in|anmeld|auth|sso)/.test(p);
+  }
+
+  // skipCrossesNeededDownload(plan, fromIndex, toIndex) → bool
+  // Datei-Brücken-Kohärenz beim Vorspulen: Würde die übersprungene Strecke [from, to) einen
+  // DOWNLOAD-Schritt enthalten, dessen Datei ein SPÄTERER (nicht übersprungener) Upload braucht?
+  // Dann darf NICHT stumm übersprungen werden (der Upload hätte keine Datei) → der Aufrufer
+  // pausiert stattdessen ehrlich. Rein strukturell über file_meta (Welle 39).
+  function skipCrossesNeededDownload(plan, fromIndex, toIndex) {
+    var list = Array.isArray(plan) ? plan : [];
+    var from = Math.max(0, Math.floor(fromIndex || 0));
+    var to = Math.min(list.length, Math.floor(toIndex != null ? toIndex : list.length));
+    var skipped = {};
+    for (var i = from; i < to; i++) {
+      var fm = list[i] && list[i].file_meta;
+      if (fm && fm.role === "download" && fm.key) skipped[fm.key] = true;
+    }
+    for (var j = to; j < list.length; j++) {
+      var fm2 = list[j] && list[j].file_meta;
+      if (fm2 && fm2.role === "upload" && fm2.source && skipped[fm2.source]) return true;
+    }
+    return false;
+  }
+
+  // skipCrossesLogin(plan, fromIndex, toIndex, secretKeys) → bool
+  // Formulierungs-Heuristik fürs Vorspul-Feedback (Richards Verzweigungs-Metapher): Enthält die
+  // übersprungene Strecke [from, to) Login-Schritte? → true, wenn ein Schritt eine Login-page_url
+  // trägt ODER ein fill-Schritt einen als „secret" markierten Parameter füllt (secretKeys: Map
+  // {paramKey:true}). Dann darf die UI „Angemeldet? → Ja ✓" texten statt nur „bereits erledigt".
+  function skipCrossesLogin(plan, fromIndex, toIndex, secretKeys) {
+    var list = Array.isArray(plan) ? plan : [];
+    var secret = secretKeys && typeof secretKeys === "object" ? secretKeys : {};
+    var from = Math.max(0, Math.floor(fromIndex || 0));
+    var to = Math.min(list.length, Math.floor(toIndex != null ? toIndex : list.length));
+    for (var i = from; i < to; i++) {
+      var s = list[i];
+      if (!s) continue;
+      if (typeof s.page_url === "string" && s.page_url && looksLikeLoginUrl(s.page_url)) return true;
+      if (s.action === "fill" && s.param_key && Object.prototype.hasOwnProperty.call(secret, s.param_key)) return true;
+    }
+    return false;
+  }
+
   // ── redactDetail ────────────────────────────────────────────────────────────
   // Sicherheitsnetz für detail-Strings (z. B. ein Fehlergrund), BEVOR sie an den Server
   // gehen. Entfernt, was nach Geheimnis/eingetipptem Wert aussieht. Bewusst großzügig
@@ -256,6 +339,11 @@
     linkFileSteps: linkFileSteps,
     planFileChunks: planFileChunks,
     fileCapDecision: fileCapDecision,
+    // Zustands-Intelligenz (Welle 40)
+    resyncTarget: resyncTarget,
+    looksLikeLoginUrl: looksLikeLoginUrl,
+    skipCrossesNeededDownload: skipCrossesNeededDownload,
+    skipCrossesLogin: skipCrossesLogin,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

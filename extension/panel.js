@@ -115,6 +115,7 @@ const els = {
   runImageFrame: document.getElementById("runImageFrame"),
   runImage: document.getElementById("runImage"),
   runFallbackHint: document.getElementById("runFallbackHint"),
+  runSkipNote: document.getElementById("runSkipNote"),
   runTitle: document.getElementById("runTitle"),
   runBody: document.getElementById("runBody"),
   runDecision: document.getElementById("runDecision"),
@@ -152,6 +153,8 @@ const els = {
   autoStepTitle: document.getElementById("autoStepTitle"),
   autoStepAction: document.getElementById("autoStepAction"),
   autoLiveStatus: document.getElementById("autoLiveStatus"),
+  autoWaitLogin: document.getElementById("autoWaitLogin"),
+  autoSkipNote: document.getElementById("autoSkipNote"),
   autoMissBox: document.getElementById("autoMissBox"),
   autoMissText: document.getElementById("autoMissText"),
   autoMissImageWrap: document.getElementById("autoMissImageWrap"),
@@ -2157,6 +2160,10 @@ const guide = {
   history: [], // Pfad-History (Schritt-IDs)
   tabId: null, // gebundener Tab
   source: "account", // „account" (Konto-Tour, per id/Token) | „steply" (öffentliche Doku, per slug)
+  // Zustands-Intelligenz (Welle 40): Anmelde-Wache-Flag + Vorspul-Notiz {a,b,login} + Re-Entrance.
+  waitingLogin: false,
+  skipNote: null,
+  navBusy: false,
 };
 
 const clamp01 = (n) => (typeof n === "number" && isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
@@ -2366,10 +2373,18 @@ async function guideLoad(idOrSlug, source) {
 // Gesamtschrittzahl für den Fortschritt: nur bei LINEAREN Tutorials ehrlich (kein
 // Entscheidungsschritt, jeder Schritt max. EIN Ausgang) - dann Pfadlänge ab root; sonst
 // die reine Schrittzahl als grobe Orientierung. Spiegelt wizard.tsx.
-function guideTotal() {
-  const linear =
+// Ist das Tutorial LINEAR (kein Entscheidungsschritt, jeder Schritt max. EIN Ausgang)? Nur dann
+// ist Vorspulen semantisch sauber (bei Verzweigungen = Graph wäre Skippen heikel). Spiegelt die
+// Linearitäts-Prüfung im Viewer/Automations-Konverter.
+function guideIsLinear() {
+  return (
     !guide.steps.some((s) => s.is_decision) &&
-    [...guide.branchesByStep.values()].every((b) => b.length <= 1);
+    [...guide.branchesByStep.values()].every((b) => b.length <= 1)
+  );
+}
+
+function guideTotal() {
+  const linear = guideIsLinear();
   if (!linear) return guide.steps.length;
   let count = 0;
   let id = guide.tutorial ? guide.tutorial.root_step_id : null;
@@ -2475,6 +2490,16 @@ function guideRenderStep() {
   }
   els.runDone.hidden = true;
   guideSetFallback(false, "");
+  // Zustands-Intelligenz (Welle 40): einen Schritt zu rendern heißt, wir warten nicht (mehr).
+  guide.waitingLogin = false;
+  if (els.runSkipNote) {
+    if (guide.skipNote) {
+      els.runSkipNote.textContent = guideSkipNoteText(guide.skipNote);
+      els.runSkipNote.hidden = false;
+    } else {
+      els.runSkipNote.hidden = true;
+    }
+  }
 
   const idx = guide.history.length + 1;
   const total = guideTotal();
@@ -2540,6 +2565,7 @@ function guideGoNext() {
     return;
   }
   if (step.is_decision) return; // Entscheidungen nur über Antwort-Buttons
+  guide.skipNote = null; // manueller Schritt → Vorspul-Notiz ist erledigt
   const target = guideLinearNext(step);
   guide.history.push(guide.curId);
   guide.curId = target;
@@ -2552,12 +2578,14 @@ function guideGoNext() {
 
 function guideGoBack() {
   if (!guide.history.length) return;
+  guide.skipNote = null;
   guide.curId = guide.history.pop();
   els.runDone.hidden = true;
   guideRenderStep();
 }
 
 function guideAnswer(targetId) {
+  guide.skipNote = null;
   guide.history.push(guide.curId);
   guide.curId = targetId || null;
   if (guide.curId == null) {
@@ -2574,6 +2602,8 @@ async function guideExit() {
   guide.curId = null;
   guide.tutorial = null;
   guide.source = "account";
+  guide.waitingLogin = false;
+  guide.skipNote = null;
   showStart();
 }
 
@@ -2602,6 +2632,41 @@ async function tabUrlById(tabId) {
   } catch (err) {
     return "";
   }
+}
+
+// Zustands-Intelligenz (Welle 40): Passwortfeld-Probe im Tab (Absicherung der Anmelde-Wache).
+// Promise<bool>: true NUR bei bestätigtem input[type=password]; bei fehlender Antwort/Fehler
+// false (dann greift die Wache NICHT — lieber ehrliche Pause / normaler Fallback als falsches
+// Warten). Isolated World reicht (reines DOM-Merkmal). SICHERHEIT: wir LESEN nur die Existenz —
+// nie einen Wert; die Wache tippt NIEMALS selbst Zugangsdaten.
+function probePasswordField(tabId) {
+  return new Promise((resolve) => {
+    if (tabId == null) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v === true);
+    };
+    const timer = setTimeout(() => done(false), 2500);
+    try {
+      const p = chrome.tabs.sendMessage(tabId, { type: "steply-exec-has-password" });
+      if (p && p.then) {
+        p.then(
+          (res) => done(!!(res && res.hasPassword)),
+          () => done(false),
+        );
+      } else {
+        done(false);
+      }
+    } catch (err) {
+      done(false);
+    }
+  });
 }
 
 // Passt der aktive Tab NICHT zum Tutorial (site_domains bzw. Domain von Schritt 1), einen
@@ -2674,6 +2739,8 @@ async function guideStart(idOrSlug, source) {
   }
   guide.curId = (guide.tutorial && guide.tutorial.root_step_id) || (guide.steps[0] && guide.steps[0].id) || null;
   guide.history = [];
+  guide.waitingLogin = false;
+  guide.skipNote = null;
   if (!guide.curId) {
     setStatus("Diese Anleitung hat noch keine Schritte.", "error");
     return;
@@ -2895,6 +2962,8 @@ async function guideMaybeResume() {
   guide.curId = st.curId;
   guide.history = Array.isArray(st.history) ? st.history.filter((h) => guide.stepById.has(h)) : [];
   guide.tabId = typeof st.tabId === "number" ? st.tabId : null;
+  guide.waitingLogin = false;
+  guide.skipNote = null;
   // Wieder aufgenommene Führung: Port + Ping erneut aufbauen (Welle 33, Fix 2).
   guideLinkStart(guide.tabId);
   show("guideRun");
@@ -2937,20 +3006,132 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
-// Navigation überleben: lädt der gebundene Tab fertig neu, den aktuellen Schritt erneut senden.
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (els.guideRun.hidden) return;
-  if (guide.tabId == null || tabId !== guide.tabId) return;
-  if (changeInfo.status !== "complete") return;
-  const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
-  if (!step || step.is_decision) return;
-  const sel = step.selector;
+// ── Zustands-Intelligenz in der Führung (Welle 40) ─────────────────────────────────────────
+// Kleinerer Scope als im Automations-Lauf: Die Führung folgt der MANUELLEN Navigation des
+// Nutzers. Landet der gebundene Tab auf einer Seite,
+//   • die zu einem SPÄTEREN linearen Schritt passt → VORSPULEN (nur lineare Tutorials; bei
+//     Verzweigungen wäre Skippen semantisch heikel → nur Anmelde-Wache),
+//   • die eine fremde Login-Seite ist (Passwortfeld bestätigt) → ANMELDE-WACHE (höflich warten
+//     statt Screenshot-Fallback-Verwirrung); erreicht die nächste Navigation eine passende
+//     Seite, geht es automatisch weiter,
+//   • sonst → bisheriges Verhalten (Overlay des aktuellen Schritts neu senden).
+
+// Lineare Schrittkette ab dem aktuellen Schritt (curId) als plan-artige Liste {id, page_url} —
+// so trägt die getestete pure SteplyExecPlan.resyncTarget die Vorspul-Entscheidung.
+function guideLinearChain() {
+  const chain = [];
+  let id = guide.curId;
+  const seen = new Set();
+  while (id != null && guide.stepById.has(id) && !seen.has(id)) {
+    seen.add(id);
+    const st = guide.stepById.get(id);
+    chain.push({ id: id, page_url: st && typeof st.page_url === "string" ? st.page_url : "" });
+    id = guideLinearNext(st);
+  }
+  return chain;
+}
+
+// Overlay des aktuellen Schritts neu senden (exakt das bisherige Navigation-Überleben-Verhalten).
+function guideResendOverlay(step) {
+  const sel = step && step.selector;
   if (sel && typeof sel === "object" && (sel.css || sel.text || sel.role)) {
     sendGuideToTab({
       type: "steply-guide-show",
       step: { selector: sel, title: step.title, index: guide.history.length + 1, total: guideTotal() },
     });
   }
+}
+
+// Vorspul-Notiz-Text (Richards Verzweigungs-Metapher, identisch zum Automations-Lauf).
+function guideSkipNoteText(note) {
+  if (!note) return "";
+  const range = note.a >= note.b ? "Schritt " + note.a : "Schritte " + note.a + "–" + note.b;
+  return note.login
+    ? "Angemeldet? → Ja ✓ — " + range + " übersprungen."
+    : "Bereits erledigt ✓ — " + range + " übersprungen (Seite schon erreicht).";
+}
+
+// VORSPULEN in der Führung: chain[0..t-1] als erledigt in die History legen, auf chain[t] setzen.
+function guideFastForwardChain(chain, t, login) {
+  const a = guide.history.length + 1;
+  const b = guide.history.length + t; // t übersprungene Schritte (chain[0..t-1])
+  for (let i = 0; i < t; i++) guide.history.push(chain[i].id);
+  guide.curId = chain[t].id;
+  guide.waitingLogin = false;
+  guide.skipNote = { a: a, b: b, login: !!login };
+  guideRenderStep();
+}
+
+// ANMELDE-WACHE in der Führung: kein Overlay, keinen (verwirrenden) Ziel-Screenshot, sondern die
+// klare Warte-Meldung. Erreicht die nächste Navigation eine passende Seite, setzt guideHandleNav
+// automatisch fort.
+function guideEnterWaitLogin() {
+  guide.waitingLogin = true;
+  sendGuideToTab({ type: "steply-guide-hide" });
+  els.runImageWrap.hidden = true;
+  guideSetFallback(false, "");
+  els.runFallbackHint.textContent =
+    "🔐 Bitte kurz anmelden — die Führung wartet und macht automatisch weiter.";
+  els.runFallbackHint.hidden = false;
+  if (els.runSkipNote) els.runSkipNote.hidden = true;
+  guideSaveSession();
+}
+
+async function guideHandleNav() {
+  if (guide.navBusy) return; // Re-Entrance-Schutz (rasche Doppel-„complete" → kein Doppel-Vorspulen)
+  const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
+  if (!step || step.is_decision) return; // Entscheidungen: kein Vorspulen; Wache greift hier nicht
+  guide.navBusy = true;
+  try {
+    await guideHandleNavInner(step);
+  } finally {
+    guide.navBusy = false;
+  }
+}
+
+async function guideHandleNavInner(step) {
+  const curUrl = await tabUrlById(guide.tabId);
+  if (typeof SteplyExecPlan !== "undefined" && curUrl) {
+    // a) Vorspulen NUR bei linearen Tutorials.
+    if (guideIsLinear()) {
+      const chain = guideLinearChain();
+      const t = SteplyExecPlan.resyncTarget(curUrl, chain, 0);
+      if (t != null && t > 0) {
+        const login = SteplyExecPlan.skipCrossesLogin(chain, 0, t, {});
+        guideFastForwardChain(chain, t, login);
+        return;
+      }
+      if (t === 0) {
+        // Aktuelle Seite passt zum aktuellen Schritt.
+        if (guide.waitingLogin) {
+          guide.waitingLogin = false;
+          guideRenderStep();
+        } else {
+          guideResendOverlay(step);
+        }
+        return;
+      }
+    }
+    // b) Fremde Login-Seite (zu keinem Schritt passend) → Anmelde-Wache (auch bei Verzweigungen).
+    if (SteplyExecPlan.looksLikeLoginUrl(curUrl) && SteplyExecPlan.needsNavigation(curUrl, step)) {
+      const hasPw = await probePasswordField(guide.tabId);
+      if (hasPw) {
+        guideEnterWaitLogin();
+        return;
+      }
+    }
+  }
+  // c) Noch am Warten → geduldig bleiben; sonst Overlay des aktuellen Schritts neu senden.
+  if (guide.waitingLogin) return;
+  guideResendOverlay(step);
+}
+
+// Navigation überleben + Zustands-Intelligenz: lädt der gebundene Tab fertig, den Zustand einordnen.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (els.guideRun.hidden) return;
+  if (guide.tabId == null || tabId !== guide.tabId) return;
+  if (changeInfo.status !== "complete") return;
+  guideHandleNav();
 });
 
 // Welle 31c ruft dies aus ihrer Sektion „Für diese Seite" auf.
@@ -2988,9 +3169,16 @@ const exec = {
   index: 0, // aktueller Schritt (0-basiert) im plan
   running: false,
   paused: false,
-  phase: "idle", // idle | ready | executing | miss | paused | done | aborted
+  phase: "idle", // idle | ready | executing | miss | paused | waiting-login | done | aborted
   lastMissReason: "",
   lastMissDetail: "", // z. B. Dateiname bei „download-manual" (nur Anzeige, nie Server)
+  // Zustands-Intelligenz (Welle 40): Vorspul-Notiz {from,to,login} + Wächter-Flags. verifying =
+  // Welle-38-Submit-Kontrolle läuft gerade (die Zustandsprüfung darf ihr Fenster NICHT kapern);
+  // stateBusy = eine (asynchrone) Zustandsprüfung ist schon unterwegs (Re-Entrance-Schutz).
+  skipNote: null,
+  skipFileTarget: null, // Vorspul-Ziel, das wegen eines gebrauchten Downloads pausiert wurde
+  verifying: false,
+  stateBusy: false,
   // Datei-Brücke (Welle 39): getragene Dateien { [key]: { name, mime, size, b64 } }. SICHERHEIT:
   // NUR im Panel-Speicher, NIE an den Server/in Logs; bei JEDEM Lauf-Ende geleert (execFinish).
   files: {},
@@ -3843,6 +4031,175 @@ function execVerifySubmit(prevUrl) {
   });
 }
 
+// ============================================================================
+// ZUSTANDS-INTELLIGENZ (Welle 40): Der Lauf kommt mit dem Anmelde-Zustand klar.
+// Richards Aufnahme-Konvention: Abläufe starten auf der Basis-Seite und ENTHALTEN die Login-
+// Schritte. Beim Abspielen gilt VOR dem Schritt-Senden (nach jeder Navigation):
+//   • Landet wie erwartet (needsNavigation false)          → normal weiter.
+//   • Passt zu einem SPÄTEREN Schritt (resyncTarget)       → VORSPULEN (schon angemeldet).
+//   • Fremde Login-Seite (looksLikeLoginUrl + Passwortfeld) → ANMELDE-WACHE (höflich warten).
+//   • Passt zu gar nichts, keine Login-Seite               → ehrliche Pause „unexpected-page".
+// SICHERHEIT: Die Wache tippt NIEMALS selbst Zugangsdaten — sie wartet nur und macht nach der
+// (menschlichen) Anmeldung automatisch weiter. Werte fließen nie in Logs/Server.
+// ============================================================================
+
+// Secret-Parameter-Schlüssel der aktuellen Automation (für die Vorspul-Formulierung). Map
+// {paramKey:true}. Führungen haben keine Parameter → leere Map.
+function execSecretKeys() {
+  const out = {};
+  const params = exec.automation && Array.isArray(exec.automation.params) ? exec.automation.params : [];
+  for (const p of params) if (p && p.type === "secret" && p.key) out[p.key] = true;
+  return out;
+}
+
+// Den Anmelde-/Seitenzustand VOR dem aktuellen Schritt bewerten (rein lesend). Rückgabe:
+//   { action: "proceed" }                     → aktuelle Seite passt zum aktuellen Schritt.
+//   { action: "fast-forward", to }            → aktuelle Seite passt zu einem späteren Schritt.
+//   { action: "pause-file", to }              → Vorspulen überspränge einen gebrauchten Download.
+//   { action: "wait-login" }                  → fremde Login-Seite (Passwortfeld bestätigt).
+//   { action: "unexpected" }                  → passt zu nichts und ist keine Login-Seite.
+async function execEvaluateState() {
+  if (typeof SteplyExecPlan === "undefined") return { action: "proceed" };
+  const planStep = exec.plan[exec.index];
+  if (!planStep) return { action: "proceed" };
+  const curUrl = await tabUrlById(exec.tabId);
+  // Auf der erwarteten Seite (oder Schritt ohne page_url)? → normal weiter.
+  if (!SteplyExecPlan.needsNavigation(curUrl, planStep)) return { action: "proceed" };
+  // Passt die aktuelle Seite zu einem SPÄTEREN Schritt? → Vorspulen (schon erreicht/angemeldet).
+  const target = SteplyExecPlan.resyncTarget(curUrl, exec.plan, exec.index);
+  if (target != null && target > exec.index) {
+    if (SteplyExecPlan.skipCrossesNeededDownload(exec.plan, exec.index, target)) {
+      return { action: "pause-file", to: target };
+    }
+    return { action: "fast-forward", to: target };
+  }
+  // Fremde Login-Seite (zu keinem Schritt passend)? Zusätzlich per Passwortfeld-Probe absichern.
+  if (SteplyExecPlan.looksLikeLoginUrl(curUrl)) {
+    const hasPw = await probePasswordField(exec.tabId);
+    if (hasPw) return { action: "wait-login" };
+  }
+  return { action: "unexpected" };
+}
+
+// Entscheidung anwenden. Rückgabe „proceed", wenn execExecuteCurrent den aktuellen Schritt jetzt
+// AUSFÜHREN soll; sonst ein anderes Token (die Entscheidung hat den Lauf bereits umgeleitet).
+async function execApplyState() {
+  const d = await execEvaluateState();
+  if (!exec.running) return "aborted";
+  switch (d.action) {
+    case "fast-forward":
+      execFastForwardTo(d.to);
+      return "fast-forward";
+    case "pause-file":
+      exec.skipFileTarget = d.to;
+      execEnterMiss("skip-needs-file");
+      return "pause-file";
+    case "wait-login":
+      execEnterWaitLogin();
+      return "wait-login";
+    case "unexpected":
+      execEnterMiss("unexpected-page");
+      return "unexpected";
+    default:
+      return "proceed";
+  }
+}
+
+// VORSPULEN: den Index auf einen späteren Schritt setzen (die dazwischen liegende Strecke ist
+// bereits erledigt, z. B. weil der Nutzer schon angemeldet ist) und das im Lauf sichtbar machen.
+function execFastForwardTo(to) {
+  const from = exec.index;
+  const login = SteplyExecPlan.skipCrossesLogin(exec.plan, from, to, execSecretKeys());
+  exec.index = to;
+  exec.skipNote = { from: from, to: to, login: login };
+  if (exec.autoMode && !exec.paused) {
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+    }, EXEC_AUTO_GAP);
+  } else {
+    exec.phase = "ready";
+    execRenderRun();
+  }
+}
+
+// Text der Vorspul-Notiz (Richards Verzweigungs-Metapher): enthielt die übersprungene Strecke
+// Login-Schritte → „Angemeldet? → Ja ✓", sonst generisch „Bereits erledigt ✓". X–Y sind die
+// 1-basierten übersprungenen Schrittnummern (from+1 … to).
+function execSkipNoteText(note) {
+  if (!note) return "";
+  const a = note.from + 1;
+  const b = note.to;
+  const range = a >= b ? "Schritt " + a : "Schritte " + a + "–" + b;
+  return note.login
+    ? "Angemeldet? → Ja ✓ — " + range + " übersprungen."
+    : "Bereits erledigt ✓ — " + range + " übersprungen (Seite schon erreicht).";
+}
+
+// ANMELDE-WACHE: höflich warten, bis der Mensch sich angemeldet hat. KEIN Timeout (er darf
+// trödeln). Kein Overlay ist aktiv (wir haben noch keinen Schritt gesendet) → nichts zu räumen;
+// zur Sicherheit trotzdem ein exec-hide, damit der Tab während der Anmeldung sauber ist.
+function execEnterWaitLogin() {
+  exec.paused = true; // Vollautomatik anhalten, bis die Anmeldung durch ist
+  exec.phase = "waiting-login";
+  sendExecToTab({ type: "steply-exec-hide" });
+  execRenderRun();
+}
+
+// Nach erreichter (erwarteter) Seite aus der Anmelde-Wache heraus fortsetzen — im jeweiligen Modus.
+function execResumeAfterLogin() {
+  if (exec.autoMode) {
+    exec.paused = false;
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
+    }, EXEC_AUTO_GAP);
+  } else {
+    exec.phase = "ready";
+    execRenderRun();
+  }
+}
+
+// UNERWARTETE Navigation während des Laufs (Tab landet woanders): nur ZWISCHEN den Schritten
+// (ready) oder im Warten (waiting-login) auswerten — NIE mitten in einer Aktion (executing) oder
+// während die Welle-38-Submit-Kontrolle ihr Fenster hat (verifying). Re-Entrance-geschützt.
+async function execHandleUnexpectedNav() {
+  if (!exec.running || exec.stateBusy || exec.verifying) return;
+  if (exec.phase !== "waiting-login" && exec.phase !== "ready") return;
+  exec.stateBusy = true;
+  try {
+    const d = await execEvaluateState();
+    if (!exec.running) return;
+    switch (d.action) {
+      case "proceed":
+        // Erwartete Seite (wieder) erreicht: aus dem Warten heraus fortsetzen; im Ready-Idle bleiben.
+        if (exec.phase === "waiting-login") execResumeAfterLogin();
+        break;
+      case "fast-forward":
+        if (exec.phase === "waiting-login" && exec.autoMode) exec.paused = false;
+        execFastForwardTo(d.to);
+        break;
+      case "pause-file":
+        exec.skipFileTarget = d.to;
+        execEnterMiss("skip-needs-file");
+        break;
+      case "wait-login":
+        if (exec.phase !== "waiting-login") execEnterWaitLogin();
+        // schon im Warten → geduldig weiter warten (kein Timeout)
+        break;
+      case "unexpected":
+        // Im Warten geduldig bleiben (Mensch trödelt evtl. auf einer Zwischenseite); im
+        // Ready-Idle ehrliche Pause.
+        if (exec.phase === "ready") execEnterMiss("unexpected-page");
+        break;
+    }
+  } finally {
+    exec.stateBusy = false;
+  }
+}
+
 async function execNavigateIfNeeded(planStep) {
   const curUrl = await tabUrlById(exec.tabId);
   if (typeof SteplyExecPlan === "undefined") return;
@@ -4023,6 +4380,9 @@ async function startAutoRun() {
   exec.finished = false;
   exec.lastMissReason = "";
   exec.lastMissDetail = "";
+  exec.skipNote = null; // Zustands-Intelligenz (Welle 40): frischer Lauf, keine Vorspul-Notiz
+  exec.verifying = false;
+  exec.stateBusy = false;
   exec.files = {}; // Datei-Brücke (Welle 39): frischer Lauf trägt keine Alt-Datei
   execLinkStart(exec.tabId);
   execAddDownloadWatch();
@@ -4034,12 +4394,18 @@ async function startAutoRun() {
   if (exec.autoMode) {
     exec.phase = "running";
     execRenderRun();
+    // execExecuteCurrent führt selbst die Zustandsprüfung durch (nach execNavigateIfNeeded).
     setTimeout(() => {
       if (exec.running && exec.autoMode && !exec.paused) execExecuteCurrent();
     }, EXEC_AUTO_GAP);
   } else {
-    exec.phase = "ready";
-    execRenderRun();
+    // Halbautomatik: proaktive Zustandsprüfung, damit Anmelde-Wache/Vorspulen/Pause sofort
+    // sichtbar sind (statt erst beim ersten „Ausführen"). „proceed" ⇒ bereit für Schritt 1.
+    const decided = await execApplyState();
+    if (exec.running && decided === "proceed") {
+      exec.phase = "ready";
+      execRenderRun();
+    }
   }
 }
 
@@ -4056,6 +4422,12 @@ async function execExecuteCurrent() {
 
   await execNavigateIfNeeded(planStep);
   if (!exec.running) return; // mitten in der Navigation abgebrochen
+
+  // Zustands-Intelligenz (Welle 40): VOR dem Schritt-Senden den Anmelde-/Seitenzustand prüfen.
+  // Nicht „proceed" ⇒ die Entscheidung (Vorspulen/Anmelde-Wache/Pause) hat den Lauf umgeleitet.
+  const decided = await execApplyState();
+  if (!exec.running) return;
+  if (decided !== "proceed") return;
 
   const fm = planStep.file_meta || null;
 
@@ -4109,7 +4481,11 @@ async function execExecuteCurrent() {
     // War die Aktion ein Formular-Submit? Dann VOR dem Weiterschalten verifizieren, dass die
     // Übermittlung wirklich durchkam (nicht nur ein Voll-Reload auf denselben Pfad).
     if (res.submitted) {
+      // Welle-38-Submit-Kontrolle hat VORRANG vor der Welle-40-Zustandsprüfung: verifying sperrt
+      // den unerwartete-Navigation-Wächter, damit er dieses Fenster nicht kapert.
+      exec.verifying = true;
       const outcome = await execVerifySubmit(preSubmitUrl);
+      exec.verifying = false;
       if (!exec.running) return; // während der Verifikation abgebrochen
       if (outcome === "bounced") {
         execEnterMiss("submit-bounced");
@@ -4152,9 +4528,27 @@ function execEnterMiss(reason, detail) {
 }
 
 // „Weiter" nach einem Miss: der Nutzer hat den Schritt selbst erledigt → als erledigt
-// überspringen und weiterlaufen (in der Vollautomatik automatisch fortsetzen).
+// überspringen und weiterlaufen (in der Vollautomatik automatisch fortsetzen). Ausnahmen der
+// Zustands-Intelligenz (Welle 40):
+//   • „unexpected-page": den AKTUELLEN Schritt erneut versuchen (Navigation + Suche), KEIN Skip.
+//   • „skip-needs-file": trotzdem zum Vorspul-Ziel gehen (der spätere Upload pausiert dann selbst,
+//     dort wählt der Nutzer die Datei von Hand — Welle-39-Mechanik).
 function execContinueAfterMiss() {
   if (exec.autoMode) exec.paused = false;
+  if (exec.lastMissReason === "unexpected-page") {
+    exec.phase = "running";
+    execRenderRun();
+    setTimeout(() => {
+      if (exec.running) execExecuteCurrent();
+    }, 0);
+    return;
+  }
+  if (exec.lastMissReason === "skip-needs-file" && exec.skipFileTarget != null) {
+    const to = exec.skipFileTarget;
+    exec.skipFileTarget = null;
+    execFastForwardTo(to);
+    return;
+  }
   execAdvance();
 }
 
@@ -4315,6 +4709,16 @@ function execRenderRun() {
       els.autoMissText.textContent =
         "Schritt " + num + ": Die Datei konnte nicht übertragen werden — bitte selbst hochladen" +
         " und „Weiter“ drücken oder abbrechen.";
+    } else if (r === "unexpected-page") {
+      // Zustands-Intelligenz (Welle 40): Seite passt zu keinem Schritt und ist keine Login-Seite.
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Unerwartete Seite — bitte selbst dorthin navigieren oder „Weiter“" +
+        " für einen erneuten Versuch.";
+    } else if (r === "skip-needs-file") {
+      // Zustands-Intelligenz (Welle 40): Vorspulen überspränge einen später gebrauchten Download.
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Übersprungene Schritte enthalten den Datei-Download — bitte den" +
+        " Ablauf von vorn starten oder die Datei beim Upload selbst wählen.";
     } else {
       const reason = r ? " (" + r + ")" : "";
       els.autoMissText.textContent =
@@ -4325,6 +4729,27 @@ function execRenderRun() {
     els.autoMissBox.hidden = false;
   } else {
     els.autoMissBox.hidden = true;
+  }
+
+  // Vorspul-Notiz (Welle 40): sichtbar machen, dass Schritte übersprungen wurden.
+  if (els.autoSkipNote) {
+    if (exec.skipNote) {
+      els.autoSkipNote.textContent = execSkipNoteText(exec.skipNote);
+      els.autoSkipNote.hidden = false;
+    } else {
+      els.autoSkipNote.hidden = true;
+    }
+  }
+
+  // Anmelde-Wache (Welle 40): höfliche Warte-Meldung, während der Mensch sich anmeldet.
+  if (els.autoWaitLogin) {
+    if (exec.phase === "waiting-login") {
+      els.autoWaitLogin.textContent =
+        "🔐 Bitte kurz anmelden — der Lauf wartet und macht automatisch weiter.";
+      els.autoWaitLogin.hidden = false;
+    } else {
+      els.autoWaitLogin.hidden = true;
+    }
   }
 
   // Live-Status.
@@ -4347,6 +4772,9 @@ function execRenderRun() {
   // Steuer-Knöpfe je Zustand.
   if (exec.phase === "miss") {
     execShowCtl("miss");
+  } else if (exec.phase === "waiting-login") {
+    // Anmelde-Wache: nur Abbrechen (kein Ausführen/Überspringen/Pause) — der Lauf wartet.
+    execShowCtl("none");
   } else if (exec.phase === "paused") {
     execShowCtl("paused");
   } else if (exec.autoMode) {
@@ -4366,6 +4794,8 @@ function execRenderDone(status) {
   els.autoMissBox.hidden = true;
   els.autoLiveStatus.hidden = true;
   els.autoDownloadNote.hidden = true;
+  if (els.autoSkipNote) els.autoSkipNote.hidden = true;
+  if (els.autoWaitLogin) els.autoWaitLogin.hidden = true;
   els.autoStepTitle.textContent = "";
   els.autoStepAction.textContent = "";
   if (els.autoBar.firstElementChild) {
@@ -4396,6 +4826,18 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     reason: typeof msg.reason === "string" ? msg.reason : "",
     submitted: !!msg.submitted,
   });
+});
+
+// Zustands-Intelligenz (Welle 40): UNERWARTETE Navigation während des Laufs. Lädt der gebundene
+// Tab fertig, während wir ZWISCHEN Schritten (ready) oder im Warten (waiting-login) sind, den
+// Zustand neu einordnen — v. a. um nach dem (menschlichen) Anmelden AUTOMATISCH fortzusetzen.
+// SICHERHEIT/Wechselwirkung: execHandleUnexpectedNav greift NIE während „executing" (die Aktion
+// läuft) oder „verifying" (Welle-38-Submit-Kontrolle hat Vorrang).
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (els.autoRun.hidden || !exec.running) return;
+  if (exec.tabId == null || tabId !== exec.tabId) return;
+  if (changeInfo.status !== "complete") return;
+  execHandleUnexpectedNav();
 });
 
 // ============================================================================
