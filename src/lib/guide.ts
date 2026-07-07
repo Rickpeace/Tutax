@@ -7,7 +7,7 @@
 // Vorlagen-Texte, KEINE OpenAI/Storage-Aufrufe (die machen die Routen). So bleibt sie
 // leicht testbar und die Regeln liegen an EINER Stelle.
 import "server-only";
-import type { Highlight, StepCondition } from "@/lib/types";
+import type { Highlight, StepCondition, StepJump } from "@/lib/types";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -61,6 +61,7 @@ export type GuideStepInput = {
   sensitive?: SensitiveRect[]; // optional; Auto-Schwärzung (Welle 28), abwärtskompatibel
   file_meta?: GuideFileMeta; // optional; Datei-Brücke (Welle 39), abwärtskompatibel
   condition?: StepCondition; // optional; bedingte Schritte (Welle 42), abwärtskompatibel
+  jump?: StepJump; // optional; bedingter Sprung/Block-Überspringen (Welle 47), abwärtskompatibel
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -179,6 +180,26 @@ export function validateStepCondition(raw: unknown): StepCondition | undefined {
     return { kind: "url", pattern, ...(negate ? { negate: true } : {}) };
   }
   return undefined;
+}
+
+/**
+ * TOLERANTE Validierung des optionalen `jump` (bedingter Sprung/Block-Überspringen, Welle 47).
+ * Spiegelt die pure parseJump aus extension/exec-plan.js — hier FORM-seitig (die Position des
+ * tragenden Schritts ist bei der Aufnahme noch nicht final, deshalb nur „to_position ist eine
+ * positive Ganzzahl"; die Vorwärts-Garantie „> Position" trägt zur Laufzeit jumpTargetIndex bzw.
+ * beim Setzen die Server-Action). `when` via validateStepCondition. Kaputt/leer → undefined (die
+ * Aufnahme scheitert NIE daran). Wirft NIE.
+ */
+export function validateStepJump(raw: unknown): StepJump | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const when = validateStepCondition(r.when);
+  if (!when) return undefined; // kein/kaputtes when → kein Sprung
+  const to = r.to_position;
+  if (typeof to !== "number" || !Number.isFinite(to)) return undefined;
+  const toInt = Math.trunc(to);
+  if (toInt < 1) return undefined; // positive Zielposition (nur VORWÄRTS)
+  return { when, to_position: toInt };
 }
 
 /**
@@ -331,6 +352,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const fileMeta = validateFileMeta(s.file_meta);
     // condition (Welle 42): optionale Ausführ-Bedingung, tolerant validiert. Fehlt/kaputt -> weg.
     const condition = validateStepCondition(s.condition);
+    // jump (Welle 47): optionaler bedingter Sprung/Block-Überspringen, tolerant. Fehlt/kaputt -> weg.
+    const jump = validateStepJump(s.jump);
 
     out.push({
       path,
@@ -345,6 +368,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       ...(sensitive.length ? { sensitive } : {}),
       ...(fileMeta ? { file_meta: fileMeta } : {}),
       ...(condition ? { condition } : {}),
+      ...(jump ? { jump } : {}),
     });
   }
   return out;

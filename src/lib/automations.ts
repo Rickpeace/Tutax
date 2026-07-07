@@ -130,6 +130,9 @@ type StepRow = {
   // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null. 1:1 in den
   // Snapshot kopiert (der Lauf wertet sie aus; der Mensch ignoriert sie).
   condition: unknown;
+  // Bedingter Sprung (Welle 47): {when, to_position} | null. 1:1 in den Snapshot kopiert. Da der
+  // lineare Pfad die Positionen beibehält, bleibt to_position gültig.
+  jump: unknown;
 };
 
 type BranchRow = {
@@ -277,7 +280,7 @@ export async function convertTutorialToAutomation(
   // 2) Schritte + Branches laden.
   const { data: stepsData } = await admin
     .from("steps")
-    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition")
+    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition, jump")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -361,6 +364,10 @@ export async function convertTutorialToAutomation(
       // Bedingte Schritte (Welle 42): condition 1:1 in den Snapshot (Spalte per 0034). Ein
       // linearer Schritt MIT condition ist erlaubt; nur Verzweigungen bleiben abgelehnt (s. o.).
       condition: s.condition ?? null,
+      // Bedingter Sprung (Welle 47): jump 1:1 in den Snapshot (Spalte per 0035). Der lineare Pfad
+      // behält die Reihenfolge → to_position bleibt sinnvoll (in der Regel wird der Sprung ohnehin
+      // erst NACH der Umwandlung im Automations-Detail gesetzt).
+      jump: s.jump ?? null,
     };
   });
 

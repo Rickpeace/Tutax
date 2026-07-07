@@ -57,6 +57,9 @@
       var s0 = s || {};
       var action = {
         index: idx,
+        // Position des Schritts (Basis der Sprung-Zielsuche, Welle 47 jumpTargetIndex). Fehlt sie
+        // → Index als Fallback. Additiv; alle anderen Verbraucher ignorieren das Feld.
+        position: typeof s0.position === "number" && isFinite(s0.position) ? s0.position : idx,
         total: total,
         title: typeof s0.title === "string" ? s0.title : "",
         action: s0.action,
@@ -75,6 +78,12 @@
       // Zur LAUFZEIT ausgewertet (shouldRunStep/evalUrlCondition + content.js), NICHT hier.
       var pc = parseCondition(s0.condition);
       if (pc) action.condition = pc;
+      // Bedingter Sprung / Block-Überspringen (Welle 47): die (tolerant validierte) jump-Angabe
+      // durchreichen. to_position MUSS hinter DIESEM Schritt liegen (nur VORWÄRTS) — sonst weg.
+      // Zur LAUFZEIT ausgewertet (jumpTargetIndex + shouldRunStep/content.js), GANZ VOR der
+      // Navigation, damit der Lauf einen Login-Block gar nicht erst anfährt.
+      var pj = parseJump(s0.jump, action.position);
+      if (pj) action.jump = pj;
       // Wert nur setzen, wenn der Schritt einen Parameter referenziert und ein Wert vorliegt.
       if (s0.param_key && Object.prototype.hasOwnProperty.call(vals, s0.param_key)) {
         action.value = vals[s0.param_key];
@@ -347,6 +356,65 @@
     return cond.negate === true ? !base : base;
   }
 
+  // ── Bedingter Sprung / Block-Überspringen (Welle 47) ──────────────────────────
+  // Ein Schritt kann einen jump tragen: „wenn ⟨when⟩ zutrifft → springe VORWÄRTS zu Schritt
+  // to_position (der ganze Block dazwischen wird übersprungen); sonst diesen Schritt normal".
+  // KERN-FALL (Richard): eine Automation soll ein- UND ausgeloggt laufen. Das per-Schritt-„?"
+  // (W42) reicht NICHT, weil jeder Login-Schritt seine Login-/Google-Seite als page_url trägt und
+  // der Lauf sich SELBST dorthin navigiert, BEVOR die Bedingung greift. Der Sprung entscheidet
+  // EINMAL, GANZ VORNE (vor der Navigation), und überspringt den ganzen Login-Block, sodass gar
+  // nicht erst zu Login/Google navigiert wird. Die when-Auswertung teilt sich die Element-/URL-
+  // Logik mit W42: „when erfüllt?" ist genau shouldRunStep(jump.when, signals) (EINE negate-Autorität;
+  // Element via content.js steply-eval-condition STRENG exact/text, URL via evalUrlCondition).
+
+  // parseJump(raw, fromPosition) → { when, to_position } | null. TOLERANT (wirft NIE). when via
+  // parseCondition (Element-/URL-Bedingung); to_position MUSS ein ganzzahliger Wert > fromPosition
+  // sein (nur VORWÄRTS — keine Schleife). Ist fromPosition unbekannt, genügt eine positive
+  // Zielposition als Formprüfung; die Vorwärts-Garantie trägt zur Laufzeit jumpTargetIndex.
+  function parseJump(raw, fromPosition) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    var when = parseCondition(raw.when);
+    if (!when) return null; // kein/kaputtes when → kein Sprung
+    var rawTo = raw.to_position;
+    if (typeof rawTo !== "number" || !isFinite(rawTo)) return null;
+    var to = Math.trunc(rawTo);
+    var from = typeof fromPosition === "number" && isFinite(fromPosition) ? Math.trunc(fromPosition) : null;
+    if (from != null) {
+      if (to <= from) return null; // nur VORWÄRTS (rückwärts/gleich → kein Sprung)
+    } else if (to < 1) {
+      return null;
+    }
+    return { when: when, to_position: to };
+  }
+
+  // jumpTargetIndex(plan, fromIndex, toPosition) → index | null. Ziel-Index eines Sprungs: der
+  // Schritt mit position == toPosition (oder der NÄCHSTGRÖSSERE, falls exakt fehlt), STRENG hinter
+  // fromIndex. toPosition ≤ Position des tragenden Schritts → null (rückwärts/gleich, nie). Liegt
+  // toPosition HINTER allen Schritten → plan.length (Sprung ans Ende = Lauf ist danach fertig).
+  function jumpTargetIndex(plan, fromIndex, toPosition) {
+    var list = Array.isArray(plan) ? plan : [];
+    if (typeof toPosition !== "number" || !isFinite(toPosition)) return null;
+    var to = Math.trunc(toPosition);
+    var from = typeof fromIndex === "number" && isFinite(fromIndex) ? Math.trunc(fromIndex) : -1;
+    var fromPos = from >= 0 && from < list.length ? planPosition(list[from], from) : -Infinity;
+    if (to <= fromPos) return null; // rückwärts oder gleich → nie springen
+    var nextGreater = null;
+    for (var i = from + 1; i < list.length; i++) {
+      var pos = planPosition(list[i], i);
+      if (pos === to) return i; // exakter Treffer
+      if (pos > to && nextGreater === null) nextGreater = i; // ersten größeren merken
+    }
+    if (nextGreater !== null) return nextGreater; // Ziel fehlt → nächstgrößerer
+    // Kein Treffer und kein größerer: liegt toPosition HINTER echten Folgeschritten, geht der Sprung
+    // ans Ende (Lauf endet); gibt es GAR keinen Folgeschritt (leerer/erschöpfter Plan) → null.
+    return from + 1 < list.length ? list.length : null;
+  }
+
+  // Position eines Plan-Schritts (buildRunPlan setzt action.position); Fallback = Index.
+  function planPosition(item, idx) {
+    return item && typeof item.position === "number" && isFinite(item.position) ? item.position : idx;
+  }
+
   // ── nextFireTime (Welle 41, ZEITPLAN) ─────────────────────────────────────────
   // Nächste Fälligkeit eines Wiederhol-Zeitplans als UTC-Epoch-ms — die REINE, getestete
   // Grundlage für chrome.alarms im Service-Worker (background.js legt pro aktivem Zeitplan
@@ -577,6 +645,9 @@
     parseCondition: parseCondition,
     evalUrlCondition: evalUrlCondition,
     shouldRunStep: shouldRunStep,
+    // Bedingter Sprung / Block-Überspringen (Welle 47)
+    parseJump: parseJump,
+    jumpTargetIndex: jumpTargetIndex,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

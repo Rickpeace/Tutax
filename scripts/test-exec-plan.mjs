@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep, pickTabForStep } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep, pickTabForStep, parseJump, jumpTargetIndex } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -512,6 +512,71 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(!("condition" in planC[2]), "buildRunPlan: kaputte condition → verworfen (Schritt läuft immer)");
 }
 
+// ══════════ Bedingter Sprung / Block-Überspringen (Welle 47): parseJump / jumpTargetIndex ══════════
+{
+  // ── parseJump: tolerant, wirft nie ──────────────────────────────────────────────
+  ok(parseJump(null, 0) === null, "parseJump: null → null");
+  ok(parseJump("x", 0) === null, "parseJump: String → null");
+  ok(parseJump({ to_position: 3 }, 0) === null, "parseJump: ohne when → null");
+  ok(parseJump({ when: { kind: "kaputt" }, to_position: 3 }, 0) === null, "parseJump: kaputtes when → null");
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } } }, 0) === null, "parseJump: ohne to_position → null");
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: "3" }, 0) === null, "parseJump: to_position kein Number → null");
+  // NUR VORWÄRTS: to_position MUSS > fromPosition sein.
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: 2 }, 2) === null, "parseJump: to == fromPosition → null (nur vorwärts)");
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: 1 }, 3) === null, "parseJump: to < fromPosition → null (rückwärts)");
+  const jv = parseJump({ when: { kind: "element", selector: { css: "#login", text: "Anmelden" }, negate: true }, to_position: 5 }, 1);
+  ok(jv && jv.to_position === 5 && jv.when.kind === "element" && jv.when.negate === true && jv.when.selector.text === "Anmelden",
+    `parseJump: gültig (Login-Fall, negiert) durchgereicht (war ${JSON.stringify(jv)})`);
+  const ju = parseJump({ when: { kind: "url", pattern: "/app" }, to_position: 4 }, 0);
+  ok(ju && ju.when.kind === "url" && ju.to_position === 4, "parseJump: url-when gültig");
+  // Ohne fromPosition: nur Formprüfung (positive Zielposition).
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: 0 }) === null, "parseJump: ohne fromPosition + to<1 → null");
+  ok(parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: 3 }) !== null, "parseJump: ohne fromPosition + positive to → gültig");
+  // Nicht-ganzzahlige to_position wird geschnitten (tolerant).
+  const jf = parseJump({ when: { kind: "element", selector: { css: "#a" } }, to_position: 5.9 }, 1);
+  ok(jf && jf.to_position === 5, "parseJump: nicht-ganzzahlige to_position → getrunkt");
+
+  // ── jumpTargetIndex: Ziel-Index bestimmen ────────────────────────────────────────
+  // Plan mit expliziten Positionen (1..6), Login-Block = Positionen 2..4.
+  const plan = [
+    { position: 1 }, { position: 2 }, { position: 3 }, { position: 4 }, { position: 5 }, { position: 6 },
+  ];
+  ok(jumpTargetIndex(plan, 0, 5) === 4, "jumpTargetIndex: vorwärts zu position 5 → index 4");
+  ok(jumpTargetIndex(plan, 0, 6) === 5, "jumpTargetIndex: Ziel = letzter Schritt → dessen Index");
+  ok(jumpTargetIndex(plan, 2, 2) === null, "jumpTargetIndex: to == Position des tragenden Schritts → null (gleich)");
+  ok(jumpTargetIndex(plan, 3, 2) === null, "jumpTargetIndex: rückwärts (to < fromPos) → null");
+  ok(jumpTargetIndex(plan, 0, 7) === plan.length, "jumpTargetIndex: hinter allen Schritten → plan.length (ans Ende)");
+  ok(jumpTargetIndex(plan, 0, 99) === plan.length, "jumpTargetIndex: weit hinter allen → plan.length");
+  // Lücke: Position 3 fehlt → nächstgrößerer.
+  const planGap = [{ position: 1 }, { position: 2 }, { position: 4 }, { position: 5 }];
+  ok(jumpTargetIndex(planGap, 0, 3) === 2, "jumpTargetIndex: Ziel fehlt (Lücke) → nächstgrößerer (index 2, position 4)");
+  ok(jumpTargetIndex(plan, 0, "x") === null, "jumpTargetIndex: to_position keine Zahl → null");
+  ok(jumpTargetIndex([], 0, 3) === null, "jumpTargetIndex: leerer Plan → null");
+  // Ohne explizite Positionen (Index-Fallback): Ziel-\"Position\" == Index.
+  const planNoPos = [{}, {}, {}, {}];
+  ok(jumpTargetIndex(planNoPos, 0, 3) === 3, "jumpTargetIndex: ohne position-Feld → Index-Fallback (position==index)");
+
+  // ── buildRunPlan: jump durchgereicht (parseJump angewandt; nur vorwärts) ──────────
+  const autoJ = { id: "a", params: [] };
+  const stepsJ = [
+    { id: "j0", position: 1, action: "click", selector: { css: "#login" }, page_url: "https://s.de/",
+      jump: { when: { kind: "element", selector: { css: "#login" }, negate: true }, to_position: 3 } },
+    { id: "j1", position: 2, action: "fill", selector: { css: "#u" }, page_url: "https://s.de/login", param_key: null },
+    { id: "j2", position: 3, action: "click", selector: { css: "#go" }, page_url: "https://s.de/app" },
+    // rückwärts gerichteter Sprung → verworfen.
+    { id: "j3", position: 4, action: "click", selector: { css: "#x" }, page_url: "https://s.de/app",
+      jump: { when: { kind: "element", selector: { css: "#x" } }, to_position: 2 } },
+  ];
+  const planJ = buildRunPlan(autoJ, stepsJ, {});
+  ok(planJ[0].position === 1 && planJ[2].position === 3, "buildRunPlan: position ins Plan-Item übernommen");
+  ok(planJ[0].jump && planJ[0].jump.to_position === 3 && planJ[0].jump.when.negate === true,
+    "buildRunPlan: gültiger Vorwärts-Sprung durchgereicht");
+  ok(!("jump" in planJ[1]), "buildRunPlan: Schritt ohne jump → kein Feld");
+  ok(!("jump" in planJ[3]), "buildRunPlan: rückwärts gerichteter Sprung → verworfen (nur vorwärts)");
+  // End-to-end: Sprung von Schritt 0 (position 1) trifft when → Ziel-Index für to_position 3.
+  ok(jumpTargetIndex(planJ, 0, planJ[0].jump.to_position) === 2, "buildRunPlan+jumpTargetIndex: Sprung landet auf index 2 (position 3)");
+}
+
 // ══════════ pickTabForStep (Welle 43, Tab-/Fenster-Folgen) ══════════
 {
   // Grund-Menge: gebundener Tab (WeTransfer /start) + ein neuer Tab + ein OAuth-Popup.
@@ -576,5 +641,5 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
     "pickTabForStep: ohne preferTabId unverändert (Rückwärtskompatibilität)");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep verifiziert.");
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep/parseJump/jumpTargetIndex verifiziert.");
 process.exitCode = failed ? 1 : 0;

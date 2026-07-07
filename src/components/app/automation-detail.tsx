@@ -23,7 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
-import type { Highlight, StepCondition } from "@/lib/types";
+import type { Highlight, StepCondition, StepJump } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,6 +43,7 @@ import {
   setAutomationSchedule,
   setAutomationStepCondition,
   markAutomationStepOptional,
+  setAutomationStepJump,
 } from "@/app/app/automationen/actions";
 
 export type AutomationStepView = {
@@ -64,6 +65,9 @@ export type AutomationStepView = {
   // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null. Der Lauf
   // führt den Schritt nur aus, wenn sie zutrifft; sonst wird er nahtlos übersprungen.
   condition: StepCondition | null;
+  // Bedingter Sprung / Block-Überspringen (Welle 47): {when, to_position} | null. Trifft `when`
+  // zu (z. B. „Anmelden" fehlt = eingeloggt), springt der Lauf VORWÄRTS und überspringt den Block.
+  jump: StepJump | null;
 };
 
 export type AutomationRunView = {
@@ -268,6 +272,36 @@ export function AutomationDetail({
       try {
         await markAutomationStepOptional(id, stepId);
         toast.success("Schritt läuft nur noch, wenn das Element da ist.");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
+
+  // Bedingter Sprung / Block-Überspringen (Welle 47): an einem Schritt einen Vorwärts-Sprung
+  // setzen. Der Client schickt NUR das Ziel (to_position) + negate:true („wenn Element NICHT da");
+  // den Selektor liest der Server aus DIESEM Schritt (nie zum Client exponiert).
+  function setStepJump(stepId: string, toPosition: number) {
+    startTransition(async () => {
+      try {
+        await setAutomationStepJump(id, stepId, {
+          when: { kind: "element", negate: true },
+          to_position: toPosition,
+        });
+        toast.success("Block-Übersprung gesetzt — wird beim Ausführen genutzt.");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
+
+  function clearStepJump(stepId: string) {
+    startTransition(async () => {
+      try {
+        await setAutomationStepJump(id, stepId, null);
+        toast.success("Sprung entfernt.");
         router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
@@ -714,6 +748,16 @@ export function AutomationDetail({
                     </div>
                   )
                 )}
+                {/* Bedingter Sprung / Block-Überspringen (Welle 47): Häkchen + Ziel-Schritt. */}
+                <StepJumpControl
+                  step={s}
+                  laterSteps={steps
+                    .filter((d) => d.position > s.position)
+                    .map((d) => ({ position: d.position, title: d.title }))}
+                  pending={pending}
+                  onSet={(to) => setStepJump(s.id, to)}
+                  onClear={() => clearStepJump(s.id)}
+                />
                 {open && (
                   <div className="border-t-2 border-line bg-line-2/40 p-3">
                     {imageUrl === undefined ? (
@@ -835,6 +879,111 @@ function conditionChipTitle(c: StepCondition): string {
   }
   const sel = c.selector.text || c.selector.role || c.selector.css || "das Element";
   return `Dieser Schritt läuft nur, wenn „${sel}“ ${not}auf der Seite vorhanden ist — sonst wird er übersprungen.`;
+}
+
+// ── Bedingter Sprung / Block-Überspringen (Welle 47) ──────────────────────────
+// Ein kompakter Schritt-Block: Häkchen „wenn das Element dieses Schritts hier NICHT da ist,
+// überspringen bis:" + Dropdown mit den NACHFOLGENDEN Schritten. Bewusst KEIN vollwertiger
+// Bedingungs-Editor — Default „eigenes Element, negiert" deckt Richards Login-Fall ab. Ein
+// gesetzter Sprung wird als Chip gezeigt (+ „Sprung entfernen"). Für Upload-Schritte (kein
+// sinnvolles Präsenz-Element) und den letzten Schritt (kein späteres Ziel) entfällt der Setz-Block.
+function StepJumpControl({
+  step,
+  laterSteps,
+  pending,
+  onSet,
+  onClear,
+}: {
+  step: AutomationStepView;
+  laterSteps: { position: number; title: string }[];
+  pending: boolean;
+  onSet: (toPosition: number) => void;
+  onClear: () => void;
+}) {
+  const [enabled, setEnabled] = useState(false);
+
+  if (step.jump) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2">
+        <span
+          className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
+          title={jumpChipTitle(step.jump)}
+        >
+          ↪ {jumpChipLabel(step.jump)}
+        </span>
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={pending}
+          className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+        >
+          Sprung entfernen
+        </button>
+      </div>
+    );
+  }
+
+  if (step.action === "upload" || laterSteps.length === 0) return null;
+
+  return (
+    <div className="border-t border-line px-3.5 py-2">
+      <label className="flex cursor-pointer items-start gap-2 text-[12px] font-bold text-ink-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="mt-0.5 size-4 accent-primary"
+        />
+        <span>
+          ↪ Block überspringen: Wenn das Element dieses Schritts hier <strong>nicht</strong> da ist
+          (z.&nbsp;B. schon angemeldet), überspringen bis:
+        </span>
+      </label>
+      {enabled && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+          <select
+            defaultValue=""
+            disabled={pending}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) onSet(v);
+            }}
+            className="h-8 max-w-full rounded-lg border-2 border-line bg-card px-2 text-[12px] font-semibold text-ink outline-none focus-visible:border-ring"
+            aria-label="Ziel-Schritt für den Block-Übersprung"
+          >
+            <option value="">— Ziel-Schritt wählen —</option>
+            {laterSteps.map((d) => (
+              <option key={d.position} value={d.position}>
+                Schritt {d.position}: {d.title || "Schritt"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <p className="mt-1.5 pl-6 text-[11px] font-semibold text-muted-foreground">
+        Ideal für Login: „Anmelden“ nicht da = du bist eingeloggt → überspringt den Login-Block.
+      </p>
+    </div>
+  );
+}
+
+// Kurze Chip-Beschriftung eines gesetzten Sprungs: „wenn „Anmelden“ fehlt → Schritt N".
+function jumpChipLabel(j: StepJump): string {
+  const sel =
+    j.when.kind === "element"
+      ? j.when.selector.text || j.when.selector.role || j.when.selector.css || "Element"
+      : j.when.pattern;
+  const cond = j.when.negate ? `„${sel}“ fehlt` : `„${sel}“ da`;
+  return `wenn ${cond} → Schritt ${j.to_position}`;
+}
+// Ausführlicher Titel (Tooltip).
+function jumpChipTitle(j: StepJump): string {
+  const sel =
+    j.when.kind === "element"
+      ? j.when.selector.text || j.when.selector.role || j.when.selector.css || "das Element"
+      : j.when.pattern;
+  const cond = j.when.negate ? `„${sel}“ NICHT vorhanden ist` : `„${sel}“ vorhanden ist`;
+  return `Beim automatischen Ausführen wird der Block ab hier übersprungen (weiter bei Schritt ${j.to_position}), wenn ${cond} — z. B. weil du schon angemeldet bist.`;
 }
 
 /** 0..1 auf Prozent des Bild-Rahmens abbilden (defensiv gegen Nicht-Zahlen). */

@@ -9,7 +9,7 @@ import {
   sanitizeParams,
   sanitizeSchedule,
 } from "@/lib/automations";
-import { validateStepCondition } from "@/lib/guide";
+import { validateStepCondition, validateStepJump } from "@/lib/guide";
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -131,6 +131,81 @@ export async function markAutomationStepOptional(automationId: string, stepId: s
   const { error } = await supabase
     .from("automation_steps")
     .update({ condition: { kind: "element", selector } })
+    .eq("id", stepId)
+    .eq("automation_id", automationId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/app/automationen/${automationId}`);
+}
+
+/**
+ * Bedingter Sprung / Block-Überspringen (Welle 47): an EINEM Automations-Schritt einen Vorwärts-
+ * Sprung setzen/entfernen. Richards Kernbedarf — eine Automation soll ein- UND ausgeloggt laufen:
+ * „Wenn das Element dieses Schritts (z. B. ‚Anmelden') NICHT da ist → überspringe bis Schritt N".
+ *
+ * BEDIENUNG bleibt EINFACH: Der Client schickt nur `{ to_position }` (+ optional `when.negate`).
+ * Der SELEKTOR kommt IMMER vom Server — er wird aus DIESEM Schritt gelesen (wie
+ * markAutomationStepOptional; nie zum Client exponiert) und als `when.kind:'element'` gesetzt. So
+ * ist der Default „eigenes Element, negiert" ohne vollwertigen Bedingungs-Editor. `jump = null`
+ * entfernt den Sprung. Validiert via validateStepJump; NUR VORWÄRTS (to_position > Position dieses
+ * Schritts). Konto-scoped via RLS (+ automation_id-Filter als Gürtel-und-Hosenträger).
+ */
+export async function setAutomationStepJump(
+  automationId: string,
+  stepId: string,
+  jump: unknown,
+) {
+  const supabase = await createClient();
+
+  // Sprung entfernen.
+  if (jump === null || jump === undefined) {
+    const { error } = await supabase
+      .from("automation_steps")
+      .update({ jump: null })
+      .eq("id", stepId)
+      .eq("automation_id", automationId);
+    if (error) throw new Error(error.message);
+    revalidatePath(`/app/automationen/${automationId}`);
+    return;
+  }
+
+  // Sonst: Selektor + Position DIESES Schritts serverseitig lesen (Selektor nie zum Client).
+  const { data: step, error: readErr } = await supabase
+    .from("automation_steps")
+    .select("selector, position")
+    .eq("id", stepId)
+    .eq("automation_id", automationId)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  const selector = step?.selector;
+  if (!selector || typeof selector !== "object") {
+    throw new Error("Dieser Schritt hat kein Element, an dem ein Sprung greifen könnte.");
+  }
+
+  // when IMMER als „eigenes Element" — der Selektor kommt vom Server; negate (Default true) vom
+  // Client. to_position übernehmen wir aus der Client-Angabe.
+  const raw = jump as Record<string, unknown>;
+  const rawWhen =
+    raw.when && typeof raw.when === "object" && !Array.isArray(raw.when)
+      ? (raw.when as Record<string, unknown>)
+      : {};
+  const completed = {
+    when: {
+      kind: "element",
+      selector,
+      ...(rawWhen.negate === true ? { negate: true } : {}),
+    },
+    to_position: raw.to_position,
+  };
+  const clean = validateStepJump(completed);
+  if (!clean) throw new Error("Ungültiges Sprung-Ziel.");
+  // NUR VORWÄRTS: Ziel muss ein SPÄTERER Schritt sein (keine Schleife).
+  if (typeof step?.position === "number" && clean.to_position <= step.position) {
+    throw new Error("Das Sprung-Ziel muss ein späterer Schritt sein.");
+  }
+
+  const { error } = await supabase
+    .from("automation_steps")
+    .update({ jump: clean })
     .eq("id", stepId)
     .eq("automation_id", automationId);
   if (error) throw new Error(error.message);

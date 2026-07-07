@@ -261,6 +261,38 @@
         }
         emit({ type: "step", index: index });
 
+        // Bedingter Sprung / Block-Überspringen (Welle 47): GANZ AM ANFANG — VOR Tab-Auswahl UND
+        // Navigation. when auf dem AKTUELLEN Tab prüfen (NICHT erst zur — evtl. Login- — page_url
+        // navigieren); erfüllt → den ganzen Block VORWÄRTS überspringen. Spiegelt die Panel-Logik
+        // execTryJump. Datei-Kohärenz: übersprungener Download, den ein späterer Upload braucht →
+        // ehrlicher Stopp (ein autonomer Lauf kann keinen Menschen die Datei wählen lassen).
+        var jump = planStep.jump;
+        if (jump && jump.when) {
+          var jUrlMatch = false;
+          var jElementFound = false;
+          if (jump.when.kind === "url") {
+            var jCurUrl = await deps.getTabUrl(tabId);
+            jUrlMatch = P.evalUrlCondition(jCurUrl, jump.when);
+          } else if (jump.when.kind === "element") {
+            jElementFound =
+              typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, jump.when) : false;
+          }
+          if (!running) return;
+          if (P.shouldRunStep(jump.when, { urlMatch: jUrlMatch, elementFound: jElementFound })) {
+            var jto = P.jumpTargetIndex(plan, index, jump.to_position);
+            if (jto != null && jto > index) {
+              if (P.skipCrossesNeededDownload(plan, index, jto)) {
+                finish("failed", "sprung-datei");
+                return;
+              }
+              var jLogin = P.skipCrossesLogin(plan, index, jto, secretKeys());
+              emit({ type: "jump", index: index, to: jto, detail: jLogin ? "login" : "block" });
+              index = jto;
+              continue;
+            }
+          }
+        }
+
         // Tab-/Fenster-Folgen (Welle 43): ZUERST in den richtigen Tab/das richtige Fenster
         // wechseln (neuer Tab / OAuth-Popup / Rückkehr nach Popup-Schluss) — VOR Navigation,
         // Zustandsprüfung und Bedingung.

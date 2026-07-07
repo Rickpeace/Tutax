@@ -42,6 +42,8 @@ type StepRow = {
   file_meta: unknown;
   // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null.
   condition: unknown;
+  // Bedingter Sprung (Welle 47): {when, to_position} | null. Der Lauf wertet ihn aus.
+  jump: unknown;
 };
 
 export async function OPTIONS() {
@@ -79,7 +81,7 @@ export async function GET(
 
   const { data: stepsData } = await admin
     .from("automation_steps")
-    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition")
+    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition, jump")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -142,6 +144,12 @@ export async function GET(
         condition:
           s.condition && typeof s.condition === "object" && !Array.isArray(s.condition)
             ? s.condition
+            : null,
+        // Bedingter Sprung (Welle 47): {when, to_position} | null. Der Lauf wertet ihn GANZ VOR
+        // der Navigation aus (SteplyExecPlan.parseJump/jumpTargetIndex + shouldRunStep/content.js).
+        jump:
+          s.jump && typeof s.jump === "object" && !Array.isArray(s.jump)
+            ? s.jump
             : null,
       })),
     },

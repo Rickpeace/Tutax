@@ -75,6 +75,18 @@ export type StepCondition =
   | { kind: "element"; selector: { css?: string; text?: string; role?: string }; negate?: boolean }
   | { kind: "url"; pattern: string; negate?: boolean };
 
+// ── Bedingter Sprung / Block-Überspringen (Welle 47) ──────────────────────────
+// Optionaler Vorwärts-Sprung an einem Schritt (Migration 0035). Der MENSCH (Tutorial/Führung)
+// ignoriert ihn; NUR der Automations-Lauf wertet ihn aus: trifft `when` zu (z. B. „Anmelden-Knopf
+// NICHT da" = schon eingeloggt), springt der Lauf VORWÄRTS zu Schritt `to_position` und überspringt
+// den ganzen Block dazwischen — GANZ VOR der Navigation, sodass die (Login-)Seiten der
+// übersprungenen Schritte nie angefahren werden. NUR VORWÄRTS (to_position > Position des tragenden
+// Schritts), damit keine Endlosschleife. Spiegelt exec-plan.js parseJump.
+export type StepJump = {
+  when: StepCondition;
+  to_position: number;
+};
+
 export type Step = {
   id: string;
   tutorial_id: string;
@@ -91,6 +103,8 @@ export type Step = {
   selector: { css?: string; text?: string; role?: string } | null;
   /** Ausführ-Bedingung für Automationen (Welle 42) — vom Menschen ignoriert; sonst null. */
   condition: StepCondition | null;
+  /** Bedingter Vorwärts-Sprung für Automationen (Welle 47) — vom Menschen ignoriert; sonst null. */
+  jump: StepJump | null;
   position: number;
   is_decision: boolean;
   video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker
