@@ -295,6 +295,23 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 47 + Fable (07.07., v2.16.0):** ↪️ **BEDINGTER SPRUNG / Block-Überspringen**
+— Richards Kernbedarf: eine Automation soll ein- UND ausgeloggt laufen. Das per-Schritt-„?"
+(Welle 42) reichte nicht, weil jeder Login-Schritt SEINE Login-/Google-Seite als page_url
+trägt und der Lauf sich selbst dorthin navigiert, BEVOR die Bedingung greift („SOBALD ICH AUF
+DIE SEITE KOMME STEHT DA MEIN NAME"). LÖSUNG: `step.jump = {when:<Bedingung>, to_position:N}` —
+der Sprung wird GANZ VORNE in execExecuteCurrent geprüft, VOR execSelectTabForStep und
+execNavigateIfNeeded. Eingeloggt → „Anmelden"-Element fehlt (negate) → springt sofort über
+den ganzen Login-Block (die Extension navigiert gar nicht erst zur Login-/Google-Seite).
+NUR VORWÄRTS (to_position > position, keine Schleife). BEDIENUNG einfach: Häkchen am Schritt
+„…überspringen bis Schritt N" + Ziel-Dropdown; der Selektor kommt IMMER vom Server (aus dem
+Schritt selbst, nie zum Client exponiert — wie markAutomationStepOptional). Nachträglich an
+bestehenden Automationen editierbar. Migration 0035 (`jump jsonb` an steps + automation_steps),
+gespiegelt im autonomen Runner (exec-run.js/runner.js). Fable-Nachtrag: Schritt-Bedingungs-
+Symbol „?" statt eingekreister „④" (verwirrend) — passt zur Aufnahme-Ansicht. Oneshot:
+test-jump-e2e (neu: ausgeloggt→Login läuft / eingeloggt→Block übersprungen, Server-Log ohne
+/login-Call); test-automations-live grün gegen Prod-DB (jump 1:1 in Snapshot, API-Auslieferung,
+Setzen/Entfernen); alle 11 E2E-Suiten grün.
 **Opus Welle 46 + Fable (07.07., v2.15.1):** 🔧 **BUGFIX Lauf hängt nach In-Page-Klick**
 — Richards echter Test: Schritt „Konto-Menü öffnen" (Klick öffnet Dropdown IN der Seite,
 keine Navigation/kein neuer Tab) → Klick klappte, aber Lauf schaltete nicht weiter

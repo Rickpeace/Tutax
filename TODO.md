@@ -14,10 +14,18 @@
   in den Extension-Details umlegen → dann klappt auch dieser Fall automatisch.
 - [ ] **BEDINGTE SCHRITTE testen (Extension → v2.13.0, Welle 42 LIVE):** Aufnahme
   auf einer Seite mit Cookie-Banner: Banner wegklicken → diesen Schritt mit „?"
-  als „nur wenn Element da" markieren → als Automation nutzen (Chip „⓸ nur wenn"
+  als „nur wenn Element da" markieren → als Automation nutzen (Chip „? nur wenn"
   im Detail) → Lauf einmal MIT sichtbarem Banner (wird geklickt) und einmal OHNE
   (Schritt „⏭ übersprungen", kein Fehler). Damit übersteht ein Zeitplan-Lauf
   Cookie-Banner unbeaufsichtigt.
+- [ ] **BEDINGTER SPRUNG testen (Extension → v2.16.0, Welle 47 LIVE):** Der Login-
+  Block-Überspringer für „ein- UND ausgeloggt". Am „Anmelden"-Schritt das Häkchen
+  „…überspringen bis Schritt N" setzen (Ziel = erster Schritt NACH dem Login) →
+  (a) ausgeloggt starten → Login-Block läuft normal durch; (b) eingeloggt starten →
+  die Extension navigiert gar nicht erst zur Login-/Google-Seite, sondern springt
+  direkt hinter den Block. Genau der Fall, den das per-Schritt-„?" NICHT lösen konnte
+  (Navigation passiert vor der Bedingung). Chip „↪ wenn 'Anmelden' fehlt → Schritt N";
+  nachträglich an einer bestehenden Automation setzbar.
 - [ ] **ZEITPLAN testen (Extension → v2.12.0, Welle 41 LIVE):** In der App an einer
   Automation „⏰ Zeitplan" aktivieren (z. B. „in 2 Minuten" testweise über
   wöchentlich + passende Uhrzeit) · in der Extension alle Pflicht-Werte mit
