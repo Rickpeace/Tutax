@@ -12,6 +12,12 @@
   Randfälle: Portal mit Einmal-Download-URL → ehrliche Pause („liegt im
   Downloads-Ordner"); optional den Schalter „Zugriff auf Datei-URLs zulassen"
   in den Extension-Details umlegen → dann klappt auch dieser Fall automatisch.
+- [ ] **BEDINGTE SCHRITTE testen (Extension → v2.13.0, Welle 42 LIVE):** Aufnahme
+  auf einer Seite mit Cookie-Banner: Banner wegklicken → diesen Schritt mit „?"
+  als „nur wenn Element da" markieren → als Automation nutzen (Chip „⓸ nur wenn"
+  im Detail) → Lauf einmal MIT sichtbarem Banner (wird geklickt) und einmal OHNE
+  (Schritt „⏭ übersprungen", kein Fehler). Damit übersteht ein Zeitplan-Lauf
+  Cookie-Banner unbeaufsichtigt.
 - [ ] **ZEITPLAN testen (Extension → v2.12.0, Welle 41 LIVE):** In der App an einer
   Automation „⏰ Zeitplan" aktivieren (z. B. „in 2 Minuten" testweise über
   wöchentlich + passende Uhrzeit) · in der Extension alle Pflicht-Werte mit
@@ -131,16 +137,14 @@
 
 ## 🧭 Geparkte Features (Entscheidung/Konzept nötig, dann baubar)
 
-- [ ] **Bedingte Verzweigungen für Automationen** (Richards Baum-Idee, 07.07.):
-  Ja/Nein-Knoten mit MASCHINENLESBARER Bedingung (URL-Muster oder
-  „Element vorhanden?") — der Lauf beantwortet die Frage selbst und nimmt den
-  passenden Ast. Verallgemeinert die Welle-40-Anmelde-Logik auf alles:
-  Cookie-Banner wegklicken, „Sitzung abgelaufen"-Dialoge, Mengen-Filter.
-  Passt ins bestehende Verzweigungs-Modell (Äste per „Ab hier aufnehmen"
-  befüllbar); braucht: Bedingungs-Feld an Entscheidungs-Schritten +
-  Automations-Konverter lässt Verzweigungen MIT Bedingung zu + Lauf-Engine
-  wertet aus. UI-Wunsch: Welle-40-Skips als beantworteter Knoten anzeigen
-  („Angemeldet? → Ja ✓").
+- [x] ~~Bedingte SCHRITTE~~ **GEBAUT (Welle 42, v2.13.0):** linearer „nur-wenn"-
+  Fall (Element/URL) deckt Cookie-Banner & optionale Dialoge ab. OFFEN bleibt der
+  **volle Zwei-Wege-Verzweigungsbaum für Automationen** (Ja → kurzer Ast, Nein →
+  langer Alternativpfad): braucht das Automations-Datenmodell von linear auf GRAPH
+  (automation_steps mit Ästen/Rejoin wie step_branches) + Aufnahme/Builder zum
+  zweiten Ast (per „Ab hier aufnehmen") + Konverter lässt Verzweigungen MIT
+  Bedingung zu. Große Welle; erst wenn ein realer Ablauf zwei echte lange Pfade
+  braucht (Cookie-Banner ist mit W42 schon gelöst).
 
 - [ ] **LemonSqueezy-Anbindung** (Checkout + Webhook → plan; Gating existiert schon)
 - [ ] **Custom Domain** `hilfe.firma.de` (Vercel-Domains-Setup zusammen durchgehen)

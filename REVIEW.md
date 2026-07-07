@@ -295,6 +295,26 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 42 + Fable (07.07., v2.13.0):** 🍪 **BEDINGTE SCHRITTE** — Richards
+Vereinheitlichung: Cookie-Banner-Ja/Nein ist dieselbe Logik wie die Tutorial-
+Verzweigungen, nur beantwortet die MASCHINE die Frage (Element da? URL passt?)
+statt der Mensch per Klick. Migration 0034 (steps/automation_steps.condition).
+Ein Schritt mit `condition {kind:element,selector|kind:url,pattern, negate?}` läuft
+NUR bei Erfüllung, sonst nahtloser Skip (keine Pause) — deckt den unbeaufsichtigten
+Fall ab (Cookie-Banner/optionale Dialoge/„Sitzung abgelaufen"). Pure Auswertung in
+exec-plan.js (parseCondition/evalUrlCondition/shouldRunStep = EINZIGE negate-
+Autorität); Element-Check via content.js `steply-eval-condition` (sichtbar +
+300ms-Gnadenfrist). BEIDE Motoren (panel.js manuell + exec-run.js autonom) werten
+aus. Auswert-Reihenfolge Navigation→Zustand(W40)→Bedingung→Ausführung (Bedingung
+nur bei W40-proceed). Aufnahme: „?"-Toggle je Schritt; Builder: Bedingungs-Feld je
+Schritt (Mensch ignoriert, Automation nutzt); App-Detail: Chip „⓸ nur wenn"
++ „immer ausführen"-Toggle. ADDITIV: kein condition → heutiges Verhalten exakt.
+Randfall: bedingter Download übersprungen + später gebraucht → ehrliche Pause
+(skipCrossesNeededDownload). Oneshot: test-conditional-e2e (Testsite mit/ohne
+Banner, geladene Extension) — Banner da → geklickt (Server-Log), Banner weg →
+sauber übersprungen; + autonomer Motor + negate/url pur. Alle Regressions-E2E
+(W38–W41) grün. MVP = linearer „nur-wenn"-Fall; voller Zwei-Wege-Baum für
+Automationen (Graph-Modell) bleibt geparkt.
 **Opus Welle 41 + Fable (07.07., v2.12.0):** ⏰ **ZEITPLAN (Stufe 2)** — Automationen
 laufen wiederkehrend von selbst („jeden Montag 08:00", „am 3. des Monats") via
 chrome.alarms IM Browser des Nutzers (Rechner an + Chrome offen — KEIN Server-Cron,
