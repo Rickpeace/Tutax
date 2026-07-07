@@ -25,7 +25,7 @@ import { register } from "node:module";
 // damit die Kern-Logik direkt importierbar ist.
 const loader = `export async function resolve(s,c,n){if(s==='server-only'||s==='client-only'){return {url:'data:text/javascript,',shortCircuit:true};}return n(s,c);}`;
 register("data:text/javascript," + encodeURIComponent(loader), import.meta.url);
-const { convertTutorialToAutomation } = await import("../src/lib/automations.ts");
+const { convertTutorialToAutomation, sanitizeSchedule } = await import("../src/lib/automations.ts");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -123,6 +123,19 @@ try {
   if (probeFmA.error || probeFmS.error) {
     console.log("⚠  Spalte file_meta fehlt (Migration 0032 noch nicht live angewandt).");
     console.log("   Grund:", (probeFmA.error || probeFmS.error).message);
+    console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
+    process.exit(0);
+  }
+
+  // Preflight (Welle 41, Zeitplan, Migration 0033): Existieren automations.schedule +
+  // automation_runs.trigger? Die Automationen-APIs SELEKTIEREN schedule bereits (wie
+  // file_meta/highlights), scheitern also ohne 0033 — daher den GANZEN Test überspringen
+  // (wie die 0030/0031/0032-Preflights), bis Richard 0033 live angewandt hat.
+  const probeSched = await admin.from("automations").select("schedule").limit(1);
+  const probeTrig = await admin.from("automation_runs").select("trigger").limit(1);
+  if (probeSched.error || probeTrig.error) {
+    console.log("⚠  Spalten schedule/trigger fehlen (Migration 0033 noch nicht live angewandt).");
+    console.log("   Grund:", (probeSched.error || probeTrig.error).message);
     console.log("   Test übersprungen — nach dem Anwenden der Migration erneut ausführen.");
     process.exit(0);
   }
@@ -340,6 +353,51 @@ try {
 
   const finBadStatus = await postJson("/api/recorder/automation-runs", { token: tokenA, runId, event: "finish", status: "quatsch" });
   ok(finBadStatus.status === 400, `runs finish ungültiger Status → 400 (war ${finBadStatus.status})`);
+
+  // ── (C) Zeitplan + Trigger (Welle 41; 0033 ist hier garantiert live — Preflight oben) ──
+  {
+    // sanitizeSchedule (pur): Normalisierung + sprechende Fehler.
+    ok(sanitizeSchedule(null) === null, "sanitizeSchedule: null → null (kein Zeitplan)");
+    const wk = sanitizeSchedule({ enabled: true, freq: "weekly", weekday: 1, hour: 8, minute: 0, day: 99 });
+    ok(wk && wk.freq === "weekly" && wk.weekday === 1 && wk.hour === 8 && wk.minute === 0 && !("day" in wk),
+      `sanitizeSchedule: weekly normalisiert (day verworfen) (war ${JSON.stringify(wk)})`);
+    let schedThrew = false;
+    try { sanitizeSchedule({ enabled: true, freq: "weekly", hour: 8, minute: 0 }); } catch { schedThrew = true; }
+    ok(schedThrew, "sanitizeSchedule: weekly ohne weekday → wirft (sprechend)");
+
+    // Zeitplan in der DB setzen + über BEIDE Token-APIs zurücklesen (normalisiert | null).
+    const sched = sanitizeSchedule({ enabled: true, freq: "monthly", day: 3, hour: 9, minute: 30 });
+    await admin.from("automations").update({ schedule: sched }).eq("id", autoId);
+    const listS = await getAuth("/api/recorder/automations", tokenA);
+    const listSB = await listS.json().catch(() => ({}));
+    const mineS = (listSB.automations || []).find((a) => a.id === autoId);
+    ok(mineS && mineS.schedule && mineS.schedule.freq === "monthly" && mineS.schedule.day === 3 && mineS.schedule.enabled === true,
+      `Liste: schedule mitgeliefert + normalisiert (war ${JSON.stringify(mineS && mineS.schedule)})`);
+    const detS = await getAuth("/api/recorder/automations/" + autoId, tokenA);
+    const detSB = await detS.json().catch(() => ({}));
+    ok(detSB.automation && detSB.automation.schedule && detSB.automation.schedule.day === 3,
+      `Detail: schedule mitgeliefert (war ${JSON.stringify(detSB.automation && detSB.automation.schedule)})`);
+    // Automation OHNE Zeitplan → schedule: null in der API.
+    const detNo = await getAuth("/api/recorder/automations/" + convS.automationId, tokenA);
+    const detNoB = await detNo.json().catch(() => ({}));
+    ok(detNoB.automation && detNoB.automation.schedule === null, "Detail: ohne Zeitplan → schedule null");
+
+    // Trigger: start scheduled → DB.trigger='scheduled'; start ohne trigger → 'manual'.
+    const stSched = await postJson("/api/recorder/automation-runs", { token: tokenA, automationId: autoId, event: "start", mode: "auto", trigger: "scheduled" });
+    const stSchedB = await stSched.json().catch(() => ({}));
+    ok(stSched.status === 200 && !!stSchedB.runId, `runs start trigger=scheduled → runId (${stSched.status})`);
+    const { data: rSched } = await admin.from("automation_runs").select("trigger, mode").eq("id", stSchedB.runId).single();
+    ok(rSched && rSched.trigger === "scheduled" && rSched.mode === "auto", `runs: trigger='scheduled' persistiert (war ${JSON.stringify(rSched)})`);
+    const stMan = await postJson("/api/recorder/automation-runs", { token: tokenA, automationId: autoId, event: "start", mode: "semi" });
+    const stManB = await stMan.json().catch(() => ({}));
+    const { data: rMan } = await admin.from("automation_runs").select("trigger").eq("id", stManB.runId).single();
+    ok(rMan && rMan.trigger === "manual", `runs: ohne trigger → Default 'manual' (war ${rMan && rMan.trigger})`);
+    // Ungültiger trigger-Wert → als 'manual' behandelt (kein 400).
+    const stBadTrig = await postJson("/api/recorder/automation-runs", { token: tokenA, automationId: autoId, event: "start", mode: "semi", trigger: "quatsch" });
+    const stBadTrigB = await stBadTrig.json().catch(() => ({}));
+    const { data: rBadTrig } = await admin.from("automation_runs").select("trigger").eq("id", stBadTrigB.runId).single();
+    ok(rBadTrig && rBadTrig.trigger === "manual", `runs: ungültiger trigger → 'manual' (war ${rBadTrig && rBadTrig.trigger})`);
+  }
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {

@@ -18,6 +18,9 @@ import {
   Globe,
   ChevronDown,
   Upload,
+  Clock,
+  Play,
+  AlertTriangle,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
 import type { Highlight } from "@/lib/types";
@@ -32,11 +35,12 @@ import {
 } from "@/components/ui/dialog";
 import { RunStatusBadge } from "@/components/app/automation-run-status";
 import { relativeDe } from "@/lib/format";
-import type { AutomationParam } from "@/lib/automations";
+import type { AutomationParam, AutomationSchedule, ScheduleFreq } from "@/lib/automations";
 import {
   renameAutomation,
   updateAutomationParams,
   deleteAutomation,
+  setAutomationSchedule,
 } from "@/app/app/automationen/actions";
 
 export type AutomationStepView = {
@@ -61,10 +65,38 @@ export type AutomationRunView = {
   id: string;
   status: string;
   mode: string;
+  // Auslöser (Welle 41): geplant (Wecker) vs. manuell (Panel).
+  trigger: "manual" | "scheduled";
   startedAt: string;
   finishedAt: string | null;
   detail: string | null;
 };
+
+// Wochentag-Auswahl. Werte folgen der JS-Konvention (0=Sonntag) — deckungsgleich mit
+// nextFireTime (getUTCDay) in der Extension.
+const WEEKDAYS: { value: number; label: string }[] = [
+  { value: 1, label: "Montag" },
+  { value: 2, label: "Dienstag" },
+  { value: 3, label: "Mittwoch" },
+  { value: 4, label: "Donnerstag" },
+  { value: 5, label: "Freitag" },
+  { value: 6, label: "Samstag" },
+  { value: 0, label: "Sonntag" },
+];
+const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// Kanonische Signatur zum Erkennen ungespeicherter Änderungen. Ausgeschaltete Zeitpläne
+// (enabled=false oder null) gelten als gleich — dann sind die übrigen Felder irrelevant.
+function scheduleSig(s: AutomationSchedule | null): string {
+  if (!s || !s.enabled) return "off";
+  return s.freq === "weekly"
+    ? `w:${s.weekday}:${s.hour}:${s.minute}`
+    : `m:${s.day}:${s.hour}:${s.minute}`;
+}
 
 const ACTION_META: Record<
   AutomationStepView["action"],
@@ -99,6 +131,7 @@ export function AutomationDetail({
   params,
   steps,
   runs,
+  schedule,
 }: {
   id: string;
   title: string;
@@ -106,9 +139,40 @@ export function AutomationDetail({
   params: AutomationParam[];
   steps: AutomationStepView[];
   runs: AutomationRunView[];
+  schedule: AutomationSchedule | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // ── Zeitplan (Welle 41) ──────────────────────────────────────────────────────
+  const [schedEnabled, setSchedEnabled] = useState(schedule?.enabled ?? false);
+  const [schedFreq, setSchedFreq] = useState<ScheduleFreq>(schedule?.freq ?? "weekly");
+  const [schedWeekday, setSchedWeekday] = useState<number>(schedule?.weekday ?? 1);
+  const [schedDay, setSchedDay] = useState<number>(schedule?.day ?? 1);
+  const [schedHour, setSchedHour] = useState<number>(schedule?.hour ?? 8);
+  const [schedMinute, setSchedMinute] = useState<number>(schedule?.minute ?? 0);
+  const [savedSchedule, setSavedSchedule] = useState<AutomationSchedule | null>(schedule);
+
+  const currentSchedule: AutomationSchedule =
+    schedFreq === "weekly"
+      ? { enabled: schedEnabled, freq: "weekly", weekday: schedWeekday, hour: schedHour, minute: schedMinute }
+      : { enabled: schedEnabled, freq: "monthly", day: schedDay, hour: schedHour, minute: schedMinute };
+  const scheduleDirty = scheduleSig(currentSchedule) !== scheduleSig(savedSchedule);
+  const requiredParams = params.filter((p) => p.required);
+
+  function saveSchedule() {
+    // Ausgeschaltet → Zeitplan aus der DB entfernen (null); sonst das validierte Objekt.
+    const toSave = schedEnabled ? currentSchedule : null;
+    startTransition(async () => {
+      try {
+        await setAutomationSchedule(id, toSave);
+        setSavedSchedule(toSave);
+        toast.success(schedEnabled ? "Zeitplan gespeichert" : "Zeitplan entfernt");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
 
   // Titel inline editierbar.
   const [editingTitle, setEditingTitle] = useState(false);
@@ -349,6 +413,168 @@ export function AutomationDetail({
         )}
       </section>
 
+      {/* Zeitplan (Welle 41) */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-black uppercase tracking-[0.06em] text-faint">
+            <Clock className="size-4" /> Zeitplan
+          </h2>
+          {scheduleDirty && (
+            <Button size="sm" onClick={saveSchedule} disabled={pending}>
+              Speichern
+            </Button>
+          )}
+        </div>
+
+        <label className="mt-3 flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={schedEnabled}
+            onChange={(e) => setSchedEnabled(e.target.checked)}
+            className="size-4 accent-primary"
+          />
+          <span className="text-sm font-bold text-ink">Automatisch ausführen</span>
+        </label>
+
+        {schedEnabled && (
+          <div className="mt-4 space-y-4 rounded-card border-2 border-line bg-card px-4 py-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-extrabold uppercase tracking-wide text-faint">
+                  Frequenz
+                </span>
+                <select
+                  value={schedFreq}
+                  onChange={(e) => setSchedFreq(e.target.value as ScheduleFreq)}
+                  className="h-8 rounded-lg border-2 border-line bg-card px-2 text-[13px] font-semibold text-ink outline-none focus-visible:border-ring"
+                >
+                  <option value="weekly">wöchentlich</option>
+                  <option value="monthly">monatlich</option>
+                </select>
+              </label>
+
+              {schedFreq === "weekly" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wide text-faint">
+                    Wochentag
+                  </span>
+                  <select
+                    value={schedWeekday}
+                    onChange={(e) => setSchedWeekday(Number(e.target.value))}
+                    className="h-8 rounded-lg border-2 border-line bg-card px-2 text-[13px] font-semibold text-ink outline-none focus-visible:border-ring"
+                  >
+                    {WEEKDAYS.map((w) => (
+                      <option key={w.value} value={w.value}>
+                        {w.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wide text-faint">
+                    Tag im Monat
+                  </span>
+                  <select
+                    value={schedDay}
+                    onChange={(e) => setSchedDay(Number(e.target.value))}
+                    className="h-8 rounded-lg border-2 border-line bg-card px-2 text-[13px] font-semibold text-ink outline-none focus-visible:border-ring"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={d}>
+                        {d}.
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-extrabold uppercase tracking-wide text-faint">
+                  Uhrzeit
+                </span>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={schedHour}
+                    onChange={(e) => setSchedHour(Number(e.target.value))}
+                    aria-label="Stunde"
+                    className="h-8 rounded-lg border-2 border-line bg-card px-2 text-[13px] font-semibold text-ink outline-none focus-visible:border-ring"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => i).map((h) => (
+                      <option key={h} value={h}>
+                        {pad2(h)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="font-black text-faint">:</span>
+                  <select
+                    value={schedMinute}
+                    onChange={(e) => setSchedMinute(Number(e.target.value))}
+                    aria-label="Minute"
+                    className="h-8 rounded-lg border-2 border-line bg-card px-2 text-[13px] font-semibold text-ink outline-none focus-visible:border-ring"
+                  >
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={m}>
+                        {pad2(m)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+            </div>
+
+            {/* Klartext-Vorschau */}
+            <p className="text-[13px] font-bold text-ink">
+              {schedFreq === "weekly"
+                ? `Läuft jeden ${
+                    WEEKDAYS.find((w) => w.value === schedWeekday)?.label ?? "Montag"
+                  } um ${pad2(schedHour)}:${pad2(schedMinute)}`
+                : `Läuft am ${schedDay}. jedes Monats um ${pad2(schedHour)}:${pad2(schedMinute)}`}
+              <span className="font-semibold text-muted-foreground">
+                {" "}
+                — im Browser dieses Geräts, wenn Chrome geöffnet ist.
+              </span>
+            </p>
+            {schedFreq === "monthly" && schedDay >= 29 && (
+              <p className="text-xs font-semibold text-muted-foreground">
+                In kürzeren Monaten läuft der Ablauf am letzten Tag des Monats.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Ehrlichkeits-Hinweis (Pflicht): geplante Läufe brauchen ein offenes Chrome + gemerkte Werte. */}
+        <div className="mt-4 flex items-start gap-2.5 rounded-card border-2 border-amber-soft bg-amber-soft/40 px-4 py-3">
+          <Info className="mt-0.5 size-4 shrink-0 text-amber-text" />
+          <div className="text-[13px] font-semibold text-ink-2">
+            <p className="font-black text-ink">Damit ein geplanter Lauf startet, braucht es:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              <li>die Steply-Erweiterung, mit diesem Konto verbunden;</li>
+              <li>einen laufenden Rechner mit geöffnetem Chrome zur geplanten Zeit;</li>
+              <li>
+                alle Pflicht-Werte in der Erweiterung als „Im Browser merken“ gespeichert.
+              </li>
+            </ul>
+            <p className="mt-1.5">
+              Es gibt keinen Server-Automatismus — der Wecker läuft ausschließlich im Browser
+              dieses Geräts.
+            </p>
+          </div>
+        </div>
+
+        {schedEnabled && requiredParams.length > 0 && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-card border-2 border-line bg-secondary/60 px-4 py-3">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-text" />
+            <p className="text-[13px] font-semibold text-ink-2">
+              Dieser Ablauf hat Pflicht-Eingaben ({requiredParams.map((p) => p.label).join(", ")}).
+              Diese müssen in der Erweiterung einmal eingetragen und mit „Im Browser merken“
+              gespeichert sein — die App sieht diese Werte nicht. Fehlt ein Pflicht-Wert, wird der
+              geplante Lauf übersprungen (mit einer Meldung in der Erweiterung).
+            </p>
+          </div>
+        )}
+      </section>
+
       {/* Schritt-Vorschau */}
       <section className="mt-8">
         <h2 className="text-sm font-black uppercase tracking-[0.06em] text-faint">
@@ -464,6 +690,20 @@ export function AutomationDetail({
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border-2 border-line bg-card px-3.5 py-2.5 text-[12.5px]"
               >
                 <RunStatusBadge status={r.status} />
+                <span
+                  className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
+                  title={r.trigger === "scheduled" ? "Vom Zeitplan ausgelöst" : "Von Hand gestartet"}
+                >
+                  {r.trigger === "scheduled" ? (
+                    <>
+                      <Clock className="size-3" /> geplant
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3" /> manuell
+                    </>
+                  )}
+                </span>
                 <span className="font-bold text-ink-2">
                   {MODE_LABEL[r.mode] ?? r.mode}
                 </span>

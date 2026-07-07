@@ -26,6 +26,74 @@ export type StepFileLink =
 export const AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD =
   "Der Ablauf lädt eine Datei hoch, aber vorher wird keine heruntergeladen.";
 
+// ── Zeitplan (Welle 41) ───────────────────────────────────────────────────────
+// Ein Ablauf kann sich wiederholen („jeden Montag 08:00", „am 3. des Monats"). Der Zeitplan
+// lebt in automations.schedule (jsonb, Migration 0033); die App verwaltet ihn, die Extension
+// synct ihn und stellt ihre chrome.alarms danach (kein Server-Cron — nur im Browser des
+// Nutzers, Rechner an + Chrome offen). WERTE für den geplanten Lauf liegen wie immer NUR
+// lokal (chrome.storage) — der Server sieht sie nie.
+export type ScheduleFreq = "weekly" | "monthly";
+export type AutomationSchedule = {
+  enabled: boolean;
+  freq: ScheduleFreq;
+  weekday?: number; // 0-6 (0=So) — nur bei weekly
+  day?: number; // 1-31 — nur bei monthly (Extension klemmt auf Monatsende)
+  hour: number; // 0-23
+  minute: number; // 0-59
+};
+
+// Sprechende Fehlermeldungen (typografische Anführungszeichen).
+export const SCHEDULE_ERR_FREQ =
+  "Bitte „wöchentlich“ oder „monatlich“ als Frequenz wählen.";
+export const SCHEDULE_ERR_TIME = "Bitte eine gültige Uhrzeit (Stunde und Minute) wählen.";
+export const SCHEDULE_ERR_WEEKDAY = "Bitte einen Wochentag wählen.";
+export const SCHEDULE_ERR_DAY = "Bitte einen Tag im Monat wählen (1–31).";
+
+function scheduleInt(v: unknown, lo: number, hi: number): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  const n = Math.trunc(v);
+  return n >= lo && n <= hi ? n : null;
+}
+
+/**
+ * Zeitplan STRENG validieren + normalisieren (für setAutomationSchedule). null → kein
+ * Zeitplan (Feld leeren). Wirft eine sprechende Meldung bei ungültigen Werten. Normalisiert
+ * auf genau die relevanten Felder (weekday NUR bei weekly, day NUR bei monthly). `enabled`
+ * bleibt erhalten (ausgeschaltet = gespeichert, aber die Extension legt keinen Wecker an).
+ */
+export function sanitizeSchedule(raw: unknown): AutomationSchedule | null {
+  if (raw == null) return null;
+  if (typeof raw !== "object") throw new Error(SCHEDULE_ERR_FREQ);
+  const r = raw as Record<string, unknown>;
+  const freq: ScheduleFreq | null =
+    r.freq === "weekly" || r.freq === "monthly" ? r.freq : null;
+  if (!freq) throw new Error(SCHEDULE_ERR_FREQ);
+  const hour = scheduleInt(r.hour, 0, 23);
+  const minute = scheduleInt(r.minute, 0, 59);
+  if (hour == null || minute == null) throw new Error(SCHEDULE_ERR_TIME);
+  const enabled = r.enabled !== false;
+  if (freq === "weekly") {
+    const weekday = scheduleInt(r.weekday, 0, 6);
+    if (weekday == null) throw new Error(SCHEDULE_ERR_WEEKDAY);
+    return { enabled, freq, weekday, hour, minute };
+  }
+  const day = scheduleInt(r.day, 1, 31);
+  if (day == null) throw new Error(SCHEDULE_ERR_DAY);
+  return { enabled, freq, day, hour, minute };
+}
+
+/**
+ * Zeitplan TOLERANT lesen (für API/Extension/RSC) — wirft NIE, gibt bei ungültigem/leerem
+ * Wert null zurück. Gleiche Normalisierung wie sanitizeSchedule.
+ */
+export function readSchedule(raw: unknown): AutomationSchedule | null {
+  try {
+    return sanitizeSchedule(raw);
+  } catch {
+    return null;
+  }
+}
+
 /** Parameter-DEFINITION (WERTE liegen NIE hier — nur die Metadaten). */
 export type AutomationParam = {
   key: string;

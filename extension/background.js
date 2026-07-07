@@ -10,6 +10,15 @@ try {
   /* ohne Matching-Modul: kein Badge, aber Pairing/Capture/Panel laufen weiter */
 }
 
+// exec-plan.js (Welle 41): stellt self.SteplyExecPlan.nextFireTime für den Zeitplan-Wecker
+// bereit. Scheitert der Import, bleibt der Rest des Workers funktionsfähig — der Scheduler
+// prüft self.SteplyExecPlan vor jeder Nutzung.
+try {
+  importScripts("exec-plan.js");
+} catch (err) {
+  /* ohne Plan-Modul: kein Zeitplan-Wecker, aber alles andere läuft weiter */
+}
+
 // Steply Recorder - Hintergrund-Service-Worker (v2).
 //
 // Zwei winzige Aufgaben, mehr nicht:
@@ -85,6 +94,10 @@ chrome.runtime.onMessage.addListener((msg) => {
 // Verwaiste Klick-/Schritt-Nachrichten absorbieren (siehe oben). Nichts zu tun.
 chrome.runtime.onMessage.addListener(() => false);
 
+// Zeitplan (Welle 41): Zähler aktiver Läufe/Führungen (offene steply-exec/steply-guide-Ports).
+// >0 ⇒ ein Lauf ist aktiv ⇒ ein fälliger geplanter Lauf verschiebt sich (kein Doppel-Lauf).
+let steplyActiveRunPorts = 0;
+
 // Führungs-Port (Welle 33, Fix 2a): Das Panel hält während einer laufenden Führung einen
 // Port offen und nennt uns EINMALIG den gebundenen Tab. Bricht der Port ab (Panel geschlossen,
 // neu geladen oder abgestürzt), räumen wir das Overlay auf DIESEM Tab ab — sonst bleibt das
@@ -103,12 +116,17 @@ if (chrome.runtime.onConnect) {
     if (!port || !Object.prototype.hasOwnProperty.call(PORT_HIDE, port.name)) return;
     const hideType = PORT_HIDE[port.name];
     let boundTabId = null;
+    // Zeitplan (Welle 41): Ein offener „steply-exec"/„steply-guide"-Port heißt „ein Lauf/eine
+    // Führung ist aktiv" (Panel-Lauf ODER Runner-Lauf). Der Scheduler zählt mit, damit NIE zwei
+    // Läufe gleichzeitig denselben Tab-Kontext durcheinanderbringen (geplanter Lauf verschiebt sich).
+    steplyActiveRunPorts++;
     port.onMessage.addListener((msg) => {
       if (msg && msg.type === "bind" && typeof msg.tabId === "number") {
         boundTabId = msg.tabId;
       }
     });
     port.onDisconnect.addListener(() => {
+      steplyActiveRunPorts = Math.max(0, steplyActiveRunPorts - 1);
       if (boundTabId == null) return;
       try {
         const p = chrome.tabs.sendMessage(boundTabId, { type: hideType });
@@ -516,3 +534,221 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
     }
   });
 }
+
+// ============================================================================
+// ZEITPLAN-WECKER (Welle 41): geplante Automationen von SELBST ausführen — via
+// chrome.alarms IM BROWSER des Nutzers (kein Server-Cron). Rechner an + Chrome offen.
+//
+// Ablauf:
+//   • syncSchedules() holt periodisch (~30 min) die Automationen-Liste (mit schedule) und
+//     legt pro AKTIVEM Zeitplan einen Alarm „steply-run:<id>" auf die nächste Fälligkeit
+//     (SteplyExecPlan.nextFireTime, PURE + getestet). Verwaiste/deaktivierte Alarme fallen weg.
+//   • onAlarm „steply-run:<id>" ⇒ handleScheduledRun: Doppel-Fire-Schutz + Belegt-Prüfung
+//     (kein zweiter Lauf gleichzeitig) + nächsten Wecker neu setzen + Runner-Tab öffnen.
+//     Der Runner (runner.html) erledigt Werte-Check, Lauf, Server-Meldung, Benachrichtigung.
+//
+// DATENSCHUTZ: Es geht NUR die Automationen-Liste raus (mit Token) — nie eine besuchte URL,
+// nie ein Parameter-Wert (die liegen lokal in chrome.storage.local.autoValues, der Runner
+// reicht sie ausschließlich an den Ziel-Tab).
+// ============================================================================
+const STEPLY_SYNC_ALARM = "steply-sync";
+const STEPLY_RUN_PREFIX = "steply-run:";
+const STEPLY_SYNC_PERIOD_MIN = 30;
+const STEPLY_LOCK_TTL = 10 * 60 * 1000; // 10 min: so lange gilt ein Lauf als „läuft noch"
+const STEPLY_POSTPONE_MS = 5 * 60 * 1000; // belegt ⇒ Wecker um 5 min verschieben
+
+function steplyEnsureSyncAlarm() {
+  try {
+    // periodInMinutes hält den Sync am Leben; when ~1 min gibt nach (Neu-)Start bald einen ersten.
+    chrome.alarms.create(STEPLY_SYNC_ALARM, {
+      periodInMinutes: STEPLY_SYNC_PERIOD_MIN,
+      when: Date.now() + 60 * 1000,
+    });
+  } catch (err) {
+    /* alarms-API nicht verfügbar → kein Zeitplan (Rest läuft weiter) */
+  }
+}
+
+// Die Automationen-Liste holen und die run-Alarme daran ausrichten.
+async function syncSchedules() {
+  if (!self.SteplyExecPlan || typeof self.SteplyExecPlan.nextFireTime !== "function") return;
+  if (!chrome.alarms) return;
+
+  let token = "";
+  try {
+    token = (await chrome.storage.local.get("steplyToken")).steplyToken || "";
+  } catch (err) {
+    token = "";
+  }
+
+  let existing = [];
+  try {
+    existing = await chrome.alarms.getAll();
+  } catch (err) {
+    existing = [];
+  }
+  const runAlarms = (existing || []).filter(
+    (a) => a && a.name && a.name.indexOf(STEPLY_RUN_PREFIX) === 0,
+  );
+
+  // Ohne Token: alle geplanten Läufe entfernen (nichts zu tun ohne Konto).
+  if (!token) {
+    for (const a of runAlarms) {
+      try {
+        await chrome.alarms.clear(a.name);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    return;
+  }
+
+  // Liste holen (NUR die Liste; keine besuchte URL). Netzfehler ⇒ Alarme unangetastet lassen.
+  let list = null;
+  try {
+    const base = await badgeAppBase();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(base + "/api/recorder/automations", {
+      headers: { Authorization: "Bearer " + token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const body = await res.json().catch(() => ({}));
+    list = Array.isArray(body.automations) ? body.automations : [];
+  } catch (err) {
+    return;
+  }
+
+  const now = Date.now();
+  const tz = new Date().getTimezoneOffset();
+  const wanted = new Set();
+  for (const a of list) {
+    if (!a || !a.id || !a.schedule || a.schedule.enabled === false) continue;
+    const when = self.SteplyExecPlan.nextFireTime(a.schedule, now, tz);
+    if (when == null) continue;
+    const name = STEPLY_RUN_PREFIX + a.id;
+    wanted.add(name);
+    try {
+      chrome.alarms.create(name, { when });
+    } catch (err) {
+      /* egal */
+    }
+  }
+  // Verwaiste Wecker (Automation weg/Zeitplan aus) entfernen.
+  for (const a of runAlarms) {
+    if (!wanted.has(a.name)) {
+      try {
+        await chrome.alarms.clear(a.name);
+      } catch (err) {
+        /* egal */
+      }
+    }
+  }
+}
+
+async function steplyReadRunState() {
+  try {
+    const r = await chrome.storage.local.get("steplyRunState");
+    const s = r && r.steplyRunState && typeof r.steplyRunState === "object" ? r.steplyRunState : {};
+    if (!s.lastDue || typeof s.lastDue !== "object") s.lastDue = {};
+    return s;
+  } catch (err) {
+    return { lastDue: {} };
+  }
+}
+
+// Ein fälliger geplanter Lauf. scheduledTime = die Fälligkeit dieses Alarms (Doppel-Fire-Schlüssel).
+async function handleScheduledRun(automationId, scheduledTime) {
+  if (!automationId) return;
+  const state = await steplyReadRunState();
+  const due = typeof scheduledTime === "number" && isFinite(scheduledTime) ? scheduledTime : Date.now();
+
+  // Doppel-Fire-Schutz: DIESE Fälligkeit schon behandelt (z. B. Worker war aus, Alarm feuert
+  // verspätet, oder ein Postpone-Alarm überlappt)? Dann nur den nächsten Wecker sicherstellen.
+  if (state.lastDue[automationId] === due) {
+    await syncSchedules();
+    return;
+  }
+
+  // Belegt? Ein manueller Lauf/Führung (offener Port) ODER ein anderer geplanter Lauf (frische
+  // Sperre) läuft ⇒ NICHT zwei gleichzeitig. Kurz verschieben und später erneut versuchen.
+  const lockFresh =
+    state.lock && typeof state.lock.at === "number" && Date.now() - state.lock.at < STEPLY_LOCK_TTL;
+  if (steplyActiveRunPorts > 0 || lockFresh) {
+    try {
+      chrome.alarms.create(STEPLY_RUN_PREFIX + automationId, { when: Date.now() + STEPLY_POSTPONE_MS });
+    } catch (err) {
+      /* egal */
+    }
+    return; // lastDue NICHT setzen → beim verschobenen Versuch erneut prüfen
+  }
+
+  // Fälligkeit als behandelt markieren + Sperre setzen (der Runner gibt sie am Ende frei).
+  state.lastDue[automationId] = due;
+  state.lock = { id: automationId, at: Date.now(), due };
+  try {
+    await chrome.storage.local.set({ steplyRunState: state });
+  } catch (err) {
+    /* egal */
+  }
+
+  // Nächste Fälligkeit NEU setzen (auch falls der Runner abstürzt, ist die nächste Periode gesetzt).
+  await syncSchedules();
+
+  // Runner-Tab (inaktiv) öffnen — er erledigt den Lauf autonom.
+  try {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("runner.html") + "?automation=" + encodeURIComponent(automationId),
+      active: false,
+    });
+  } catch (err) {
+    // Konnte nicht öffnen → Sperre gleich wieder freigeben.
+    try {
+      const s = await steplyReadRunState();
+      if (s.lock && s.lock.id === automationId) s.lock = null;
+      await chrome.storage.local.set({ steplyRunState: s });
+    } catch (e) {
+      /* egal */
+    }
+  }
+}
+
+if (chrome.alarms && chrome.alarms.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (!alarm || !alarm.name) return;
+    if (alarm.name === STEPLY_SYNC_ALARM) {
+      syncSchedules();
+      return;
+    }
+    if (alarm.name.indexOf(STEPLY_RUN_PREFIX) === 0) {
+      const id = alarm.name.slice(STEPLY_RUN_PREFIX.length);
+      handleScheduledRun(id, alarm.scheduledTime);
+    }
+  });
+}
+
+// Sync-Wecker sicherstellen + einmal syncen: bei Installation, Browserstart und jedem Worker-
+// Aufwachen (billig, idempotent; ohne Token/Zeitpläne passiert praktisch nichts).
+chrome.runtime.onInstalled.addListener(() => {
+  steplyEnsureSyncAlarm();
+  syncSchedules();
+});
+if (chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    steplyEnsureSyncAlarm();
+    syncSchedules();
+  });
+}
+steplyEnsureSyncAlarm();
+syncSchedules();
+
+// Test-Hook (nur für scripts/test-schedule-e2e.mjs): erlaubt, den REALEN Handler direkt
+// aufzurufen (statt auf Alarm-Timing zu warten) und den Sync anzustoßen. Kein Produktivpfad.
+self.__steplyScheduler = {
+  syncSchedules,
+  handleScheduledRun,
+  ensureSyncAlarm: steplyEnsureSyncAlarm,
+  activePorts: () => steplyActiveRunPorts,
+};

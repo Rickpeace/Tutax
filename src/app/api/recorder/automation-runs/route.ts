@@ -20,6 +20,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const MODES = new Set(["semi", "auto"]);
 const FINISH_STATUS = new Set(["success", "aborted", "failed"]);
+// Auslöser eines Laufs (Welle 41): „manual" (Nutzer im Panel) | „scheduled" (Wecker/Runner).
+const TRIGGERS = new Set(["manual", "scheduled"]);
 const DETAIL_MAX = 300;
 
 export async function OPTIONS() {
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
     automationId?: unknown;
     runId?: unknown;
     mode?: unknown;
+    trigger?: unknown;
     status?: unknown;
     currentStep?: unknown;
     detail?: unknown;
@@ -57,6 +60,9 @@ export async function POST(req: NextRequest) {
       return recorderJson({ error: "Es fehlt die Automation für den Lauf." }, 400);
     }
     const mode = typeof body?.mode === "string" && MODES.has(body.mode) ? body.mode : "semi";
+    // Auslöser (Welle 41): „scheduled" nur, wenn der Wecker/Runner es explizit meldet; sonst manual.
+    const trigger =
+      typeof body?.trigger === "string" && TRIGGERS.has(body.trigger) ? body.trigger : "manual";
 
     // Eigentum: Automation muss dem Token-Konto gehören (404, sonst Existenz-Orakel).
     const { data: auto } = await admin
@@ -75,6 +81,7 @@ export async function POST(req: NextRequest) {
         account_id: account.id,
         status: "running",
         mode,
+        trigger,
         current_step: asInt(body?.currentStep),
       })
       .select("id")
