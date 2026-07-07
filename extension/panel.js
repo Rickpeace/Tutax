@@ -4472,7 +4472,12 @@ async function execSelectTabForStep(planStep) {
   if (typeof SteplyExecPlan === "undefined" || typeof SteplyExecPlan.pickTabForStep !== "function") return false;
   if (!planStep) return false;
   let tabs = await execRunTabs();
-  let pick = SteplyExecPlan.pickTabForStep(planStep, tabs);
+  // preferTabId = der aktuell gebundene Tab (Welle 46): ein reiner In-Page-Schritt (Dropdown/Menü
+  // öffnen, keine Navigation, kein neuer Tab) bleibt am gebundenen Tab, wenn dieser selbst zum
+  // Schritt passt — statt fälschlich an eine zweite, gleich-URL-Kopie umzubinden (dort läuft der
+  // Klick sonst im falschen Tab / hängt). Bei einer ECHTEN Tab-Folge passt der gebundene Tab nicht
+  // mehr → preferTabId ist kein Kandidat, die Welle-43-Wahl greift unverändert.
+  let pick = SteplyExecPlan.pickTabForStep(planStep, tabs, exec.tabId);
   // Reaktives Popup/Neuer Tab: passt (noch) nichts, aber ein Fenster wird gerade geöffnet →
   // kurz warten und erneut prüfen (onCreated → onUpdated complete), analog execWaitTabComplete.
   if (pick == null && execTabWaitWarranted(tabs)) {
@@ -4480,7 +4485,7 @@ async function execSelectTabForStep(planStep) {
     while (Date.now() - t0 < EXEC_TAB_WAIT_MS && exec.running) {
       await new Promise((r) => setTimeout(r, 200));
       tabs = await execRunTabs();
-      pick = SteplyExecPlan.pickTabForStep(planStep, tabs);
+      pick = SteplyExecPlan.pickTabForStep(planStep, tabs, exec.tabId);
       if (pick != null) break;
       if (!execTabWaitWarranted(tabs)) break;
     }
@@ -5188,9 +5193,20 @@ function execRenderDone(status) {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-exec-result") return;
   if (els.autoRun.hidden) return;
-  if (exec.tabId != null && sender && sender.tab && sender.tab.id !== exec.tabId) return;
   if (!execPending) return;
-  if (msg.token != null && execPending.token !== msg.token) return;
+  // Zuordnung über den TOKEN (Welle 46, BUGFIX In-Page-Klick): Der Token ist eindeutig pro Schritt
+  // (execResultSeq zählt hoch; nur das Content-Script, das GENAU diesen Token bekam, antwortet
+  // damit) — er ist die AUTORITATIVE Zuordnung. Der frühere Tab-ID-Vergleich war ein fragiler
+  // ZUSATZfilter: bei Tab-/Fenster-Folgen (Welle 43) kann der antwortende Tab legitim vom zuletzt
+  // gebundenen exec.tabId abweichen; eine token-passende Antwort darf NIE verworfen werden, sonst
+  // löst execPending nie auf → der Lauf hängt bis zum Timeout und meldet fälschlich einen Miss.
+  // Nur wenn KEIN Token mitkommt (Alt-Fall, sollte nicht vorkommen), bleibt der Tab-Vergleich als
+  // Sicherheitsnetz. Der Token trägt die Eindeutigkeit auch über einen echten Tab-Wechsel hinweg.
+  if (msg.token != null) {
+    if (execPending.token !== msg.token) return;
+  } else if (exec.tabId != null && sender && sender.tab && sender.tab.id !== exec.tabId) {
+    return;
+  }
   execPending.resolve({
     ok: !!msg.ok,
     reason: typeof msg.reason === "string" ? msg.reason : "",

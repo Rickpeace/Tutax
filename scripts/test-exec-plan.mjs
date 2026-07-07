@@ -555,6 +555,25 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ];
   ok(pickTabForStep({ page_url: "https://ziel.de/app" }, loading) === 9,
     "pickTabForStep: Tab ohne URL (ladend) ignoriert, geladener Treffer gewählt");
+
+  // ── preferTabId (Welle 46, BUGFIX In-Page-Klick) ──────────────────────────────
+  // Der GEBUNDENE Tab gewinnt IMMER, wenn er selbst zum Schritt passt — auch wenn ein anderer
+  // gleich-URL-Tab zuletzt fokussiert war (z. B. eine während des Laufs geöffnete zweite Kopie).
+  // So bleibt ein reiner In-Page-Klick am gebundenen (sichtbaren) Tab, statt fälschlich umzubinden.
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, multi, 5) === 5,
+    "pickTabForStep: gebundener Tab (preferTabId) passt → gewinnt trotz niedrigerem lastFocusedMs");
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, multi, 7) === 7,
+    "pickTabForStep: preferTabId auf einen anderen passenden Tab wirkt ebenso (kein Wechsel weg)");
+  // preferTabId zeigt auf einen Tab, der NICHT passt (echte Tab-Folge: gebundener Tab auf anderer
+  // Seite) → normale Wahl (zuletzt fokussiert) greift, Welle 43 bleibt intakt.
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, multi, 999) === 6,
+    "pickTabForStep: preferTabId kein Kandidat → normale Wahl (Tab-Folge unberührt)");
+  // preferTabId gesetzt, aber es gibt gar keinen Treffer → null (wie ohne prefer).
+  ok(pickTabForStep({ page_url: "https://app.de/gibtsnicht" }, multi, 5) === null,
+    "pickTabForStep: preferTabId ohne passenden Tab → null");
+  // Rückwärtskompatibel: ohne preferTabId unverändert (zuletzt fokussiert gewinnt).
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, multi) === 6,
+    "pickTabForStep: ohne preferTabId unverändert (Rückwärtskompatibilität)");
 }
 
 console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep verifiziert.");
