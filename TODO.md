@@ -12,6 +12,13 @@
   Randfälle: Portal mit Einmal-Download-URL → ehrliche Pause („liegt im
   Downloads-Ordner"); optional den Schalter „Zugriff auf Datei-URLs zulassen"
   in den Extension-Details umlegen → dann klappt auch dieser Fall automatisch.
+- [ ] **ZEITPLAN testen (Extension → v2.12.0, Welle 41 LIVE):** In der App an einer
+  Automation „⏰ Zeitplan" aktivieren (z. B. „in 2 Minuten" testweise über
+  wöchentlich + passende Uhrzeit) · in der Extension alle Pflicht-Werte mit
+  „Im Browser merken" speichern · Rechner an + Chrome offen lassen → zur Zeit
+  öffnet sich ein Runner-Tab, der Ablauf läuft autonom, danach Desktop-Meldung.
+  Gegenprobe: Werte NICHT gemerkt → „übersprungen: Werte fehlen". Historie zeigt
+  „⏰ geplant". (Reales Kanzlei-Ziel: monatlich Portal→DATEV ohne Handanlegen.)
 - [ ] **Zustands-Intelligenz testen (Extension → v2.11.0, Welle 40 LIVE):**
   Ablauf MIT Login-Schritten (Konvention: ab Basis-Seite aufnehmen!) —
   (a) ausgeloggt starten → läuft normal durch; (b) eingeloggt starten →

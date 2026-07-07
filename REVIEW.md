@@ -295,6 +295,26 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 41 + Fable (07.07., v2.12.0):** ⏰ **ZEITPLAN (Stufe 2)** — Automationen
+laufen wiederkehrend von selbst („jeden Montag 08:00", „am 3. des Monats") via
+chrome.alarms IM Browser des Nutzers (Rechner an + Chrome offen — KEIN Server-Cron,
+das wäre Stufe 3). Migration 0033 (automations.schedule + automation_runs.trigger).
+App: „⏰ Zeitplan"-Abschnitt (Frequenz/Tag/Uhrzeit + Klartext-Vorschau + prominente
+Ehrlichkeits-Hinweise); Historie mit „⏰ geplant"/„▶ manuell"-Chip. Extension
+(permissions += alarms/notifications): Sync-Wecker holt Zeitpläne + setzt
+`steply-run:<id>` auf nextFireTime (pure, getestet: Schaltjahr/Monatsende/tz);
+onAlarm → **Runner-Tab** (`runner.html`/`runner.js` + geteilter DOM-freier Motor
+`exec-run.js`) führt den Lauf AUTONOM aus — `panel.js` NULL angefasst (manuelle
+Läufe unberührt). Zwei Ehrlichkeits-Wächter: geplanter Lauf startet nur mit allen
+required-Werten lokal gemerkt (sonst failed/„werte-fehlen" + Notification), und
+Belegt-Schutz (kein zweiter Lauf im Tab-Chaos). Fertig-Meldung je Lauf. Autonome
+Semantik: Miss/fremde Anmeldung/unerwartete Seite ⇒ ehrlicher Abbruch (kein
+Warten-auf-Menschen). Oneshot: test-schedule-e2e.mjs (geladene Extension, realer
+onAlarm → Runner → content.js im Ziel-Tab → Server-Log; autonomer Login-Lauf
+success/scheduled; werte-fehlen-Skip; Recompute/Doppel-Fire) 3× grün + nextFireTime-
+Unit; alle Regressions-E2E (Datei-Brücke/Zustands-Intelligenz/Login-Repro) grün.
+Grenze (ehrlich): Datei-Brücke autonom nur über Speicher-Weg (Disk/Mensch nachts
+nicht bedienbar → Abbruch). Push erst NACH Migration 0033 (sonst 500 auf Detail).
 **Opus Welle 40 + Fable (07.07., v2.11.0):** 🧠 **ZUSTANDS-INTELLIGENZ** — Läufe
 und Führungen kommen mit dem Anmelde-Zustand klar (Richards Konvention: Aufnahme
 ab Basis-Seite INKL. Login). (1) **Vorspulen**: leitet die Website um (= schon
