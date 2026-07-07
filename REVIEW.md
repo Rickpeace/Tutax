@@ -295,6 +295,21 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 44 + Fable (07.07., v2.14.0):** 🩹 **SELBSTHEILUNG STUFE A (ohne KI)** —
+aus Richards Test (Knopf „…(v2.13.0)" → live „…(v2.13.1)", weil Fable die Version im
+Knopf-Text hatte): Resolver akzeptiert einen css-Treffer bei rein VOLATILER Text-Drift
+(Versionsnummer/Datum/Uhrzeit/Zähler) als `confidence:'healed'` — aber NUR unter 5
+strengen Bedingungen: (1) css nicht flüchtig, (2) css eindeutig (querySelectorAll==1),
+(3) Rolle stimmt, (4) `nearText` (beide Texte nach stripVolatileTokens gleich),
+(5) Rest ≥3 sichtbare Zeichen. Keine frühere Härtung (W32 Mindestlänge, W33 volatile
+IDs, W43 innerText) aufgeweicht; echter Textwechsel (Speichern/Löschen), mehrdeutiger/
+flüchtiger css, Rollenwechsel → NICHT geheilt (fallen zu Stufe 2/3). Kein App-/Server-/
+Migration-Change. Bewiesen: DOM-Stub (62 Assertions, 42 alt grün + 20 neu) + echtes
+Chromium-DOM (test-guide-heal-e2e, ausgelieferte guide-resolve.js verbatim geladen,
+echte querySelectorAll-Eindeutigkeit). Fable-Nebenfix: /extension-Download-Knopf ohne
+Version im Text (driftete pro Release); markAutomationStepOptional (Schritt nachträglich
+„nur wenn vorhanden" im Automations-Detail, ohne Neuaufnahme). Alle 8 E2E-Suiten grün.
+Geplant: Stufe B (KI-Fallback, opt-in) wenn selbst der stabile css bricht.
 **Opus Welle 43 + Fable (07.07., v2.13.1):** 🪟 **TAB-/FENSTER-FOLGEN** — aus
 Richards ERSTEM ECHTEN Test (WeTransfer + „Über Google anmelden"-Popup): zwei reale
 Bugs, dieselbe Wurzel (Lauf starr an EINEN Tab gebunden). Fix: Lauf/Führung
