@@ -12,10 +12,12 @@
   Randfälle: Portal mit Einmal-Download-URL → ehrliche Pause („liegt im
   Downloads-Ordner"); optional den Schalter „Zugriff auf Datei-URLs zulassen"
   in den Extension-Details umlegen → dann klappt auch dieser Fall automatisch.
-- [ ] **Welle 40 „Zustands-Intelligenz" (Go erteilt, startet nach 39er-Test):**
-  Vorspulen per Seiten-Abgleich (eingeloggt → Login-Schritte überspringen) +
-  Anmelde-Wache (ausgeloggt → höfliche Pause, automatisches Weiterlaufen nach
-  Login). Aufnahme-Konvention: immer von der Basis-Seite inkl. Login aufnehmen.
+- [ ] **Zustands-Intelligenz testen (Extension → v2.11.0, Welle 40 LIVE):**
+  Ablauf MIT Login-Schritten (Konvention: ab Basis-Seite aufnehmen!) —
+  (a) ausgeloggt starten → läuft normal durch; (b) eingeloggt starten →
+  grüne Notiz „Angemeldet? → Ja ✓ — Schritte übersprungen"; (c) Session
+  mitten im Lauf ablaufen lassen → „🔐 Bitte kurz anmelden …", nach dem
+  Login geht's von allein weiter. Gleiches in der Live-Führung.
 
 - [ ] **KALTSTART-Test morgen früh (Extension → v2.9.7!):** Erster Lauf des Tages =
   der Beweis-Test. Browser frisch starten, Login-Automation vollautomatisch von

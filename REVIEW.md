@@ -295,6 +295,25 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 40 + Fable (07.07., v2.11.0):** 🧠 **ZUSTANDS-INTELLIGENZ** — Läufe
+und Führungen kommen mit dem Anmelde-Zustand klar (Richards Konvention: Aufnahme
+ab Basis-Seite INKL. Login). (1) **Vorspulen**: leitet die Website um (= schon
+angemeldet), springt der Lauf zum ersten Schritt, dessen page_url zur gelandeten
+Seite passt — Anzeige als beantworteter Knoten „Angemeldet? → Ja ✓ — Schritte
+2–4 übersprungen" (Richards Baum-Metapher); nur vorwärts; Server-Log-Beweis:
+übersprungene Login-Schritte werden NIE ausgeführt (kein POST /login). Datei-
+Kohärenz: Skip über einen gebrauchten Download → ehrliche Pause. (2) **Anmelde-
+Wache**: fremde Login-Seite (URL-Heuristik + Passwortfeld-Probe) → Phase
+waiting-login „🔐 Bitte kurz anmelden — es geht automatisch weiter", ohne
+Timeout, auto-Fortsetzung via tabs-Wächter; tippt NIE selbst Zugangsdaten.
+(3) Führung: Wache identisch; Vorspulen nur bei LINEAREN Tutorials. Pure Helfer
+resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin in
+exec-plan.js (getestet). Wechselwirkungen explizit verifiziert: W38-Submit-
+Kontrolle hat Vorrang (verifying-Sperre), W39-file-bridge-E2E + repro-login
+weiter grün, Hydration-Sonde unangetastet. Oneshot-Beweis: test-state-
+intelligence-e2e.mjs (geladene Extension, node:http-Login-Site mit echten
+Session-Cookies) 5/5 grün. Geparkt (TODO): Bedingte Verzweigungen für
+Automationen = Verallgemeinerung dieses Musters auf beliebige Ja/Nein-Knoten.
 **Opus Welle 39 + Fable (07.07., v2.10.0):** 🌉 **DATEI-BRÜCKE** — Automationen
 reichen eine Datei von Website A (Download) nach Website B (Upload) durch, komplett
 LOKAL im Browser (Kanzlei-Kernfall: Abrechnungsportal → DATEV Unternehmen online;
