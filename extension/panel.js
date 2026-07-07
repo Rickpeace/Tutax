@@ -155,6 +155,7 @@ const els = {
   autoLiveStatus: document.getElementById("autoLiveStatus"),
   autoWaitLogin: document.getElementById("autoWaitLogin"),
   autoSkipNote: document.getElementById("autoSkipNote"),
+  autoCondSkipNote: document.getElementById("autoCondSkipNote"),
   autoMissBox: document.getElementById("autoMissBox"),
   autoMissText: document.getElementById("autoMissText"),
   autoMissImageWrap: document.getElementById("autoMissImageWrap"),
@@ -1360,6 +1361,27 @@ function renderGuideSteps() {
     row.appendChild(idx);
     row.appendChild(thumb);
     row.appendChild(lbl);
+
+    // Bedingte Schritte (Welle 42): „nur wenn dieses Element da ist" — dezenter Toggle je Schritt.
+    // Aktiviert → dem Schritt eine Element-Bedingung mit SEINEM eigenen Selektor geben. Der Mensch
+    // in der Führung ignoriert die Bedingung; NUR die Automation wertet sie aus (überspringt den
+    // Schritt, wenn das Element fehlt — z. B. ein Cookie-Banner-Knopf). Nur sinnvoll mit Selektor.
+    if (s.selector && typeof s.selector === "object") {
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = "guide-opt" + (s.condition ? " on" : "");
+      opt.textContent = "?";
+      opt.setAttribute("aria-pressed", s.condition ? "true" : "false");
+      opt.title = s.condition
+        ? "Optional: läuft in Automationen nur, wenn dieses Element da ist. Zum Ausschalten klicken."
+        : "Als optional markieren: in Automationen nur ausführen, wenn dieses Element vorhanden ist.";
+      opt.addEventListener("click", () => {
+        s.condition = s.condition ? null : { kind: "element", selector: s.selector };
+        renderGuideSteps();
+      });
+      row.appendChild(opt);
+    }
+
     row.appendChild(rm);
     els.guideList.appendChild(row);
   });
@@ -1463,6 +1485,9 @@ async function uploadGuide() {
     if (Array.isArray(s.sensitive) && s.sensitive.length) step.sensitive = s.sensitive;
     // file_meta (Welle 39): Datei-Brücke — NUR Metadaten (Rolle/Name/MIME/Größe), nie Bytes.
     if (s.fileMeta && typeof s.fileMeta === "object") step.file_meta = s.fileMeta;
+    // condition (Welle 42): „nur ausführen, wenn Element vorhanden" — additiv, alte Server
+    // ignorieren es. Der Server (guide.ts) validiert tolerant und persistiert steps.condition.
+    if (s.condition && typeof s.condition === "object") step.condition = s.condition;
     return step;
   });
   // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.
@@ -2669,6 +2694,55 @@ function probePasswordField(tabId) {
   });
 }
 
+// Bedingte Schritte (Welle 42): Element-Bedingung im Ziel-Tab prüfen (Muster probePasswordField).
+// Fragt content.js (steply-eval-condition) und liefert das ROHE „gefunden+sichtbar" (met) —
+// negate wendet der Aufrufer via SteplyExecPlan.shouldRunStep an. content.js baut selbst eine
+// ~300 ms Gnadenfrist ein → hier großzügiger Timeout (2,5 s). Kein Tab / Fehler → false.
+function execEvalElementCondition(tabId, cond) {
+  return new Promise((resolve) => {
+    if (tabId == null || !cond) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v === true);
+    };
+    const timer = setTimeout(() => done(false), 2500);
+    try {
+      const p = chrome.tabs.sendMessage(tabId, { type: "steply-eval-condition", cond: cond });
+      if (p && p.then) {
+        p.then((res) => done(!!(res && res.met)), () => done(false));
+      } else {
+        done(false);
+      }
+    } catch (err) {
+      done(false);
+    }
+  });
+}
+
+// Bedingte Schritte (Welle 42): SOLL der aktuelle Plan-Schritt jetzt ausgeführt werden? URL-
+// Bedingung lokal (Tab-URL) prüfen, Element-Bedingung via content.js; negate + Entscheidung
+// trägt die pure SteplyExecPlan.shouldRunStep (EINE Stelle). Ohne condition → true (heutiges
+// Verhalten). Wird VOR dem Schritt-Senden aufgerufen, NACH Navigation/Settle + Zustandsprüfung.
+async function execStepConditionMet(planStep) {
+  const cond = planStep && planStep.condition;
+  if (typeof SteplyExecPlan === "undefined" || !cond) return true;
+  let urlMatch = false;
+  let elementFound = false;
+  if (cond.kind === "url") {
+    const curUrl = await tabUrlById(exec.tabId);
+    urlMatch = SteplyExecPlan.evalUrlCondition(curUrl, cond);
+  } else if (cond.kind === "element") {
+    elementFound = await execEvalElementCondition(exec.tabId, cond);
+  }
+  return SteplyExecPlan.shouldRunStep(cond, { urlMatch: urlMatch, elementFound: elementFound });
+}
+
 // Passt der aktive Tab NICHT zum Tutorial (site_domains bzw. Domain von Schritt 1), einen
 // neuen Tab auf der Startseite (Schritt 1 page_url) öffnen und die Führung an DIESEN Tab
 // binden. Ohne page_url an Schritt 1: Verhalten wie bisher (aktueller Tab). chrome://-Tabs
@@ -3176,6 +3250,9 @@ const exec = {
   // Welle-38-Submit-Kontrolle läuft gerade (die Zustandsprüfung darf ihr Fenster NICHT kapern);
   // stateBusy = eine (asynchrone) Zustandsprüfung ist schon unterwegs (Re-Entrance-Schutz).
   skipNote: null,
+  // Bedingte Schritte (Welle 42): letzter übersprungener Schritt {index,title} für die dezente
+  // Protokoll-Notiz „⏭ Schritt X übersprungen (Bedingung nicht erfüllt)". null = nichts skippt.
+  condSkip: null,
   skipFileTarget: null, // Vorspul-Ziel, das wegen eines gebrauchten Downloads pausiert wurde
   verifying: false,
   stateBusy: false,
@@ -4381,6 +4458,7 @@ async function startAutoRun() {
   exec.lastMissReason = "";
   exec.lastMissDetail = "";
   exec.skipNote = null; // Zustands-Intelligenz (Welle 40): frischer Lauf, keine Vorspul-Notiz
+  exec.condSkip = null; // Bedingte Schritte (Welle 42): frischer Lauf, kein übersprungener Schritt
   exec.verifying = false;
   exec.stateBusy = false;
   exec.files = {}; // Datei-Brücke (Welle 39): frischer Lauf trägt keine Alt-Datei
@@ -4428,6 +4506,17 @@ async function execExecuteCurrent() {
   const decided = await execApplyState();
   if (!exec.running) return;
   if (decided !== "proceed") return;
+
+  // Bedingte Schritte (Welle 42): NACH Navigation/Settle + Zustandsprüfung die condition des NUN
+  // aktuellen Schritts auswerten. Nicht erfüllt ⇒ Schritt nahtlos überspringen (keine Pause).
+  if (planStep.condition) {
+    const runIt = await execStepConditionMet(planStep);
+    if (!exec.running) return;
+    if (!runIt) {
+      execSkipConditional(planStep);
+      return;
+    }
+  }
 
   const fm = planStep.file_meta || null;
 
@@ -4515,6 +4604,25 @@ function execAdvance() {
     exec.phase = "ready";
     execRenderRun();
   }
+}
+
+// Bedingte Schritte (Welle 42): der aktuelle Schritt wird ÜBERSPRUNGEN, weil seine condition
+// nicht erfüllt ist (Cookie-Banner nicht da / URL passt nicht). Nahtlos weiter (KEINE Pause),
+// dezente Protokoll-Notiz „⏭ Schritt X übersprungen (Bedingung nicht erfüllt)".
+// DATEI-KOHÄRENZ: Trägt der übersprungene Schritt einen DOWNLOAD, dessen Datei ein SPÄTERER
+// (nicht übersprungener) Upload braucht (skipCrossesNeededDownload über die Ein-Schritt-Strecke
+// [i, i+1)), dann NICHT stumm überspringen — sonst hätte der Upload keine Datei. Ehrliche Pause
+// (Muster Welle-40 „skip-needs-file"): der Mensch startet neu oder wählt die Datei beim Upload.
+function execSkipConditional(planStep) {
+  if (
+    typeof SteplyExecPlan !== "undefined" &&
+    SteplyExecPlan.skipCrossesNeededDownload(exec.plan, exec.index, exec.index + 1)
+  ) {
+    execEnterMiss("cond-skip-needs-file");
+    return;
+  }
+  exec.condSkip = { index: exec.index, title: planStep ? planStep.title || "" : "" };
+  execAdvance();
 }
 
 // Selektor-Miss/mehrdeutig → PAUSE (kein Fallback-Klick, Sicherheitsregel 1).
@@ -4719,6 +4827,12 @@ function execRenderRun() {
       els.autoMissText.textContent =
         "Schritt " + num + ": Übersprungene Schritte enthalten den Datei-Download — bitte den" +
         " Ablauf von vorn starten oder die Datei beim Upload selbst wählen.";
+    } else if (r === "cond-skip-needs-file") {
+      // Bedingte Schritte (Welle 42): der bedingte Schritt (ein Download) sollte übersprungen
+      // werden, aber ein späterer Upload braucht dessen Datei → ehrliche Pause statt stumm.
+      els.autoMissText.textContent =
+        "Schritt " + num + ": Dieser (bedingte) Schritt lädt eine Datei, die später gebraucht" +
+        " wird — bitte selbst herunterladen und „Weiter“ drücken oder abbrechen.";
     } else {
       const reason = r ? " (" + r + ")" : "";
       els.autoMissText.textContent =
@@ -4738,6 +4852,17 @@ function execRenderRun() {
       els.autoSkipNote.hidden = false;
     } else {
       els.autoSkipNote.hidden = true;
+    }
+  }
+
+  // Bedingte Schritte (Welle 42): dezente Notiz zum zuletzt übersprungenen Schritt.
+  if (els.autoCondSkipNote) {
+    if (exec.condSkip) {
+      els.autoCondSkipNote.textContent =
+        "⏭ Schritt " + (exec.condSkip.index + 1) + " übersprungen (Bedingung nicht erfüllt).";
+      els.autoCondSkipNote.hidden = false;
+    } else {
+      els.autoCondSkipNote.hidden = true;
     }
   }
 
@@ -4795,6 +4920,7 @@ function execRenderDone(status) {
   els.autoLiveStatus.hidden = true;
   els.autoDownloadNote.hidden = true;
   if (els.autoSkipNote) els.autoSkipNote.hidden = true;
+  if (els.autoCondSkipNote) els.autoCondSkipNote.hidden = true;
   if (els.autoWaitLogin) els.autoWaitLogin.hidden = true;
   els.autoStepTitle.textContent = "";
   els.autoStepAction.textContent = "";

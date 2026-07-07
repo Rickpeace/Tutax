@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { RichText } from "@/components/builder/rich-text";
 import { ImageField } from "@/components/builder/image-field";
-import type { Step, StepBranch, Highlight } from "@/lib/types";
+import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 export function StepPanel({
   step,
@@ -37,6 +37,7 @@ export function StepPanel({
   onSetImage,
   onSetHighlights,
   onSetDecision,
+  onSetCondition,
   onAddBranch,
   onUpdateBranch,
   onDeleteBranch,
@@ -71,6 +72,7 @@ export function StepPanel({
   ) => void;
   onSetHighlights: (id: string, highlights: Highlight[]) => void;
   onSetDecision: (id: string, isDecision: boolean) => void;
+  onSetCondition: (id: string, condition: StepCondition | null) => void;
   onAddBranch: (stepId: string) => void;
   onUpdateBranch: (
     branchId: string,
@@ -235,6 +237,9 @@ export function StepPanel({
         <Switch on={step.is_decision} />
       </button>
 
+      {/* Bedingte Schritte (Welle 42): nur für Automationen relevant; der Mensch ignoriert es. */}
+      <ConditionField step={step} onSetCondition={onSetCondition} />
+
       <div className="space-y-1.5">
         <Label>Erklärtext</Label>
         <RichText
@@ -322,6 +327,131 @@ export function StepPanel({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * Bedingte Schritte (Welle 42): kompaktes Feld „nur ausführen, wenn …" je Schritt. RELEVANT NUR
+ * für Automationen (der Mensch in der Führung ignoriert es). MVP: Element vorhanden (nutzt den
+ * Selektor des Schritts, nur wenn vorhanden) ODER URL enthält (Teilstring/Glob), plus „umkehren".
+ * KEIN vollwertiger Editor — die Aufnahme ist der Hauptweg. is_decision-Schritte lassen wir aus
+ * (das ist der volle Verzweigungsbaum, später).
+ */
+function ConditionField({
+  step,
+  onSetCondition,
+}: {
+  step: Step;
+  onSetCondition: (id: string, condition: StepCondition | null) => void;
+}) {
+  const cond = step.condition;
+  const enabled = !!cond;
+  const kind: "element" | "url" = cond?.kind ?? (step.selector ? "element" : "url");
+  const hasSelector = !!step.selector;
+  const negate = cond?.negate === true;
+  const pattern = cond?.kind === "url" ? cond.pattern : "";
+
+  if (step.is_decision) return null; // Verzweigungs-Schritte: nicht im MVP
+
+  function setKind(next: "element" | "url") {
+    if (next === "element") {
+      if (!step.selector) return;
+      onSetCondition(step.id, { kind: "element", selector: step.selector, ...(negate ? { negate: true } : {}) });
+    } else {
+      onSetCondition(step.id, { kind: "url", pattern, ...(negate ? { negate: true } : {}) });
+    }
+  }
+  function setNegate(next: boolean) {
+    if (!cond) return;
+    if (cond.kind === "element") {
+      onSetCondition(step.id, { kind: "element", selector: cond.selector, ...(next ? { negate: true } : {}) });
+    } else {
+      onSetCondition(step.id, { kind: "url", pattern: cond.pattern, ...(next ? { negate: true } : {}) });
+    }
+  }
+  function setPattern(next: string) {
+    onSetCondition(step.id, { kind: "url", pattern: next, ...(negate ? { negate: true } : {}) });
+  }
+  function toggleEnabled() {
+    if (enabled) {
+      onSetCondition(step.id, null);
+    } else if (step.selector) {
+      onSetCondition(step.id, { kind: "element", selector: step.selector });
+    } else {
+      onSetCondition(step.id, { kind: "url", pattern: "" });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={toggleEnabled}
+          className="mt-0.5 size-4 accent-primary"
+        />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-ink">Bedingung (für Automationen)</div>
+          <div className="text-xs text-muted-foreground">
+            Diesen Schritt beim automatischen Ausführen nur ausführen, wenn er zutrifft — sonst
+            überspringen. In der geführten Anleitung wird die Bedingung ignoriert.
+          </div>
+        </div>
+      </label>
+
+      {enabled && (
+        <div className="mt-3 space-y-2 pl-7">
+          <div className="flex flex-wrap items-center gap-3 text-[13px]">
+            <label className={`flex items-center gap-1.5 ${hasSelector ? "" : "opacity-40"}`}>
+              <input
+                type="radio"
+                name={`cond-kind-${step.id}`}
+                checked={kind === "element"}
+                disabled={!hasSelector}
+                onChange={() => setKind("element")}
+                className="size-3.5 accent-primary"
+              />
+              <span className="font-semibold text-ink">Element vorhanden</span>
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name={`cond-kind-${step.id}`}
+                checked={kind === "url"}
+                onChange={() => setKind("url")}
+                className="size-3.5 accent-primary"
+              />
+              <span className="font-semibold text-ink">URL enthält</span>
+            </label>
+          </div>
+
+          {kind === "element" ? (
+            <p className="text-xs text-muted-foreground">
+              Nur ausführen, wenn das Element dieses Schritts auf der Seite sichtbar ist (z. B. ein
+              Cookie-Banner-Knopf).
+            </p>
+          ) : (
+            <Input
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+              placeholder="z. B. /login  oder  beispiel.de/app"
+              className="h-8 text-[13px]"
+            />
+          )}
+
+          <label className="flex items-center gap-1.5 text-[13px]">
+            <input
+              type="checkbox"
+              checked={negate}
+              onChange={(e) => setNegate(e.target.checked)}
+              className="size-3.5 accent-primary"
+            />
+            <span className="font-semibold text-ink">Umkehren (nur wenn NICHT zutrifft)</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 }

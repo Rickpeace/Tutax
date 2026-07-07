@@ -23,7 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
-import type { Highlight } from "@/lib/types";
+import type { Highlight, StepCondition } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +41,7 @@ import {
   updateAutomationParams,
   deleteAutomation,
   setAutomationSchedule,
+  setAutomationStepCondition,
 } from "@/app/app/automationen/actions";
 
 export type AutomationStepView = {
@@ -59,6 +60,9 @@ export type AutomationStepView = {
     | { role: "download"; key: string; filename?: string }
     | { role: "upload"; source: string; filename?: string }
     | null;
+  // Bedingte Schritte (Welle 42): Ausführ-Bedingung {kind:element|url, …} | null. Der Lauf
+  // führt den Schritt nur aus, wenn sie zutrifft; sonst wird er nahtlos übersprungen.
+  condition: StepCondition | null;
 };
 
 export type AutomationRunView = {
@@ -236,6 +240,20 @@ export function AutomationDetail({
         await updateAutomationParams(id, paramState);
         setSavedParams(paramState);
         toast.success("Parameter gespeichert");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
+  }
+
+  // Bedingte Schritte (Welle 42): condition an einem Schritt entfernen („immer ausführen"). Kein
+  // vollwertiger Editor — Aufnahme/Builder sind der Setz-Weg; hier nur das Abschalten.
+  function clearStepCondition(stepId: string) {
+    startTransition(async () => {
+      try {
+        await setAutomationStepCondition(id, stepId, null);
+        toast.success("Bedingung entfernt — der Schritt läuft immer.");
+        router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
       }
@@ -648,6 +666,24 @@ export function AutomationDetail({
                     />
                   )}
                 </button>
+                {s.condition && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2">
+                    <span
+                      className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
+                      title={conditionChipTitle(s.condition)}
+                    >
+                      ⓸ nur wenn: {conditionChipLabel(s.condition)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => clearStepCondition(s.id)}
+                      disabled={pending}
+                      className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+                    >
+                      immer ausführen
+                    </button>
+                  </div>
+                )}
                 {open && (
                   <div className="border-t-2 border-line bg-line-2/40 p-3">
                     {imageUrl === undefined ? (
@@ -752,6 +788,23 @@ export function AutomationDetail({
       </Dialog>
     </main>
   );
+}
+
+// Bedingte Schritte (Welle 42): kurze Chip-Beschriftung „Element „…"" bzw. „URL „…"".
+function conditionChipLabel(c: StepCondition): string {
+  const not = c.negate ? "NICHT " : "";
+  if (c.kind === "url") return `${not}URL „${c.pattern}“`;
+  const sel = c.selector.text || c.selector.role || c.selector.css || "Element";
+  return `${not}Element „${sel}“`;
+}
+// Ausführlicher Titel (Tooltip) — ganze Aussage.
+function conditionChipTitle(c: StepCondition): string {
+  const not = c.negate ? "nicht " : "";
+  if (c.kind === "url") {
+    return `Dieser Schritt läuft nur, wenn die URL ${not}„${c.pattern}“ enthält — sonst wird er übersprungen.`;
+  }
+  const sel = c.selector.text || c.selector.role || c.selector.css || "das Element";
+  return `Dieser Schritt läuft nur, wenn „${sel}“ ${not}auf der Seite vorhanden ist — sonst wird er übersprungen.`;
 }
 
 /** 0..1 auf Prozent des Bild-Rahmens abbilden (defensiv gegen Nicht-Zahlen). */

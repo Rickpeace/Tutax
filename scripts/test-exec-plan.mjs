@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -450,5 +450,67 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(typeof nextFireTime(monday0800, utc(2026, 6, 6, 7, 0)) === "number", "nextFireTime: fehlender tzOffset → 0 angenommen (Zahl)");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime verifiziert.");
+// ══════════ Bedingte Schritte (Welle 42): parseCondition / evalUrlCondition / shouldRunStep ══════════
+{
+  // ── parseCondition: tolerant, wirft nie, unbekannt → null ──────────────────────
+  ok(parseCondition(null) === null, "parseCondition: null → null");
+  ok(parseCondition("x") === null, "parseCondition: String → null");
+  ok(parseCondition({ kind: "was-anderes" }) === null, "parseCondition: fremde kind → null");
+  ok(parseCondition({ kind: "element" }) === null, "parseCondition: element ohne selector → null");
+  ok(parseCondition({ kind: "element", selector: {} }) === null, "parseCondition: element mit leerem selector → null");
+  ok(parseCondition({ kind: "url", pattern: "   " }) === null, "parseCondition: url mit leerem pattern → null");
+
+  const ce = parseCondition({ kind: "element", selector: { css: "#x", text: " Alle akzeptieren ", role: "Button" }, negate: 1 });
+  ok(ce && ce.kind === "element" && ce.selector.css === "#x" && ce.selector.text === "Alle akzeptieren" && ce.selector.role === "button",
+    `parseCondition: element normalisiert (text getrimmt, role lower) (war ${JSON.stringify(ce)})`);
+  ok(ce && !("negate" in ce), "parseCondition: negate NUR bei echtem true (1 zählt nicht)");
+  const cen = parseCondition({ kind: "element", selector: { css: "#x" }, negate: true });
+  ok(cen && cen.negate === true, "parseCondition: negate:true übernommen");
+  const cu = parseCondition({ kind: "url", pattern: "  /login  " });
+  ok(cu && cu.kind === "url" && cu.pattern === "/login", "parseCondition: url pattern getrimmt");
+
+  // ── evalUrlCondition: ROHER Treffer (OHNE negate), Host/Pfad/Glob ───────────────
+  const uc = { kind: "url", pattern: "beispiel.de/app" };
+  ok(evalUrlCondition("https://beispiel.de/app/x?y=1", uc) === true, "evalUrlCondition: Host+Pfad-Teilstring trifft");
+  ok(evalUrlCondition("https://beispiel.de/anders", uc) === false, "evalUrlCondition: anderer Pfad → kein Treffer");
+  ok(evalUrlCondition("https://andere.de/app", { kind: "url", pattern: "andere.de" }) === true, "evalUrlCondition: nur Host trifft");
+  ok(evalUrlCondition("https://x.de/konto/login?next=1", { kind: "url", pattern: "/login" }) === true, "evalUrlCondition: Pfad-Teilstring trifft (Query egal)");
+  ok(evalUrlCondition("https://x.de/a/b/c", { kind: "url", pattern: "x.de/*/c" }) === true, "evalUrlCondition: Glob * trifft");
+  ok(evalUrlCondition("https://x.de/a/b/d", { kind: "url", pattern: "x.de/*/c" }) === false, "evalUrlCondition: Glob ohne Treffer → false");
+  ok(evalUrlCondition("kaputt", uc) === false, "evalUrlCondition: unlesbare URL → false");
+  ok(evalUrlCondition("https://x.de/", { kind: "element", selector: { css: "#x" } }) === false, "evalUrlCondition: nicht-url-cond → false");
+  // ROH: negate wird von evalUrlCondition NICHT angewandt (das macht shouldRunStep).
+  ok(evalUrlCondition("https://beispiel.de/app", { kind: "url", pattern: "beispiel.de/app", negate: true }) === true,
+    "evalUrlCondition: liefert ROHEN Treffer — negate bleibt shouldRunStep überlassen");
+
+  // ── shouldRunStep: EINZIGE negate-Autorität + Entscheidung ─────────────────────
+  ok(shouldRunStep(null, {}) === true, "shouldRunStep: keine condition → immer ausführen");
+  ok(shouldRunStep({ kind: "quatsch" }, {}) === true, "shouldRunStep: unbekannte kind → ausführen (tolerant)");
+  // Element
+  ok(shouldRunStep({ kind: "element", selector: { css: "#b" } }, { elementFound: true }) === true, "shouldRunStep: element vorhanden → ausführen");
+  ok(shouldRunStep({ kind: "element", selector: { css: "#b" } }, { elementFound: false }) === false, "shouldRunStep: element fehlt → überspringen");
+  ok(shouldRunStep({ kind: "element", selector: { css: "#b" }, negate: true }, { elementFound: false }) === true, "shouldRunStep: negate + element fehlt → ausführen");
+  ok(shouldRunStep({ kind: "element", selector: { css: "#b" }, negate: true }, { elementFound: true }) === false, "shouldRunStep: negate + element vorhanden → überspringen");
+  // URL
+  ok(shouldRunStep({ kind: "url", pattern: "/x" }, { urlMatch: true }) === true, "shouldRunStep: url passt → ausführen");
+  ok(shouldRunStep({ kind: "url", pattern: "/x" }, { urlMatch: false }) === false, "shouldRunStep: url passt nicht → überspringen");
+  ok(shouldRunStep({ kind: "url", pattern: "/x", negate: true }, { urlMatch: false }) === true, "shouldRunStep: negate + url passt nicht → ausführen");
+  // Fehlendes Signal → als false gewertet (kein Treffer).
+  ok(shouldRunStep({ kind: "element", selector: { css: "#b" } }, {}) === false, "shouldRunStep: fehlendes Signal → überspringen (sicher)");
+
+  // ── buildRunPlan: condition durchgereicht (parseCondition angewandt, kaputt → weg) ──
+  const auto = { id: "a", params: [] };
+  const stepsC = [
+    { id: "s0", position: 0, action: "click", selector: { css: "#nav" }, page_url: "https://s.de/" },
+    { id: "s1", position: 1, action: "click", selector: { css: "#ok" }, page_url: "https://s.de/", condition: { kind: "element", selector: { css: "#banner" } } },
+    { id: "s2", position: 2, action: "click", selector: { css: "#go" }, page_url: "https://s.de/", condition: { kind: "kaputt" } },
+  ];
+  const planC = buildRunPlan(auto, stepsC, {});
+  ok(!("condition" in planC[0]), "buildRunPlan: Schritt ohne condition → kein Feld (läuft immer)");
+  ok(planC[1].condition && planC[1].condition.kind === "element" && planC[1].condition.selector.css === "#banner",
+    "buildRunPlan: gültige condition durchgereicht + normalisiert");
+  ok(!("condition" in planC[2]), "buildRunPlan: kaputte condition → verworfen (Schritt läuft immer)");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep verifiziert.");
 process.exitCode = failed ? 1 : 0;

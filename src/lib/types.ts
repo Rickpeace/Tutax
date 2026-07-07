@@ -66,6 +66,15 @@ export type Highlight = {
   suggested?: boolean;
 };
 
+// ── Bedingte Schritte (Welle 42) ──────────────────────────────────────────────
+// Optionale, maschinenlesbare Ausführ-Bedingung an einem Schritt (Migration 0034). Der MENSCH
+// (Tutorial/Führung) ignoriert sie; NUR der Automations-Lauf wertet sie aus und überspringt den
+// Schritt sonst nahtlos. Formen: Element vorhanden (nutzt den Selektor des Schritts) oder URL
+// passt (Teilstring/Glob). `negate` kehrt um („nur wenn NICHT …"). Spiegelt exec-plan.js.
+export type StepCondition =
+  | { kind: "element"; selector: { css?: string; text?: string; role?: string }; negate?: boolean }
+  | { kind: "url"; pattern: string; negate?: boolean };
+
 export type Step = {
   id: string;
   tutorial_id: string;
@@ -78,6 +87,10 @@ export type Step = {
   highlights: Highlight[];
   /** URL der Seite zum Aufnahme-Zeitpunkt (Sofort-Anleitung, Welle 31c) — sonst null. */
   page_url: string | null;
+  /** Robuster Selektor des geklickten Elements (Sofort-Anleitung, Welle 24) — sonst null. */
+  selector: { css?: string; text?: string; role?: string } | null;
+  /** Ausführ-Bedingung für Automationen (Welle 42) — vom Menschen ignoriert; sonst null. */
+  condition: StepCondition | null;
   position: number;
   is_decision: boolean;
   video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker
