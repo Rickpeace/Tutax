@@ -2727,6 +2727,19 @@
       sendResponse({ ok: true });
       return true;
     }
+    if (msg.type === "steply-exec-has-password") {
+      // Zustands-Intelligenz (Welle 40): Passwortfeld-Probe für die Anmelde-Wache. Die isolierte
+      // Welt reicht — input[type=password] ist ein reines DOM-Merkmal. SICHERHEIT: Wir LESEN nur,
+      // ob ein solches Feld existiert; wir tippen NIE etwas hinein und lesen keine Werte.
+      let has = false;
+      try {
+        has = !!document.querySelector('input[type="password"]');
+      } catch (e) {
+        has = false;
+      }
+      sendResponse({ ok: true, hasPassword: has });
+      return true;
+    }
     return false;
   });
 

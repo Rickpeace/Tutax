@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -228,5 +228,96 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(fileCapDecision(60 * 1024 * 1024) === "disk-fallback", "fileCapDecision: 60 MB mit Default-Cap → disk-fallback");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision verifiziert.");
+// ══════════ resyncTarget (Welle 40, Vorspulen) ══════════
+{
+  // Ein Login-Ablauf: Basis „/", dann /login (2 fill + submit), dann /app, dann /app/done.
+  const plan = [
+    { index: 0, page_url: "https://x.de/" },              // Basis
+    { index: 1, page_url: "https://x.de/login", action: "fill", param_key: "user" },
+    { index: 2, page_url: "https://x.de/login", action: "fill", param_key: "pass" },
+    { index: 3, page_url: "https://x.de/login", action: "click" }, // submit
+    { index: 4, page_url: "https://x.de/app" },
+    { index: 5, page_url: "https://x.de/app/done" },
+  ];
+  // Schon eingeloggt: /login leitet zu /app um → erster passender Schritt ab 1 ist Index 4.
+  ok(resyncTarget("https://x.de/app", plan, 1) === 4, "resyncTarget: /app passt zu Schritt 4 (Vorspulen)");
+  // Query/Hash egal.
+  ok(resyncTarget("https://x.de/app?x=1#y", plan, 1) === 4, "resyncTarget: Query/Hash ignoriert");
+  // NUR VORWÄRTS: von Index 4 aus wird die frühere /login-Seite NIE gefunden.
+  ok(resyncTarget("https://x.de/login", plan, 4) === null, "resyncTarget: rückwärts nie (fromIndex 4, /login liegt davor)");
+  // Aktuelle Seite passt zu fromIndex selbst (inklusiv).
+  ok(resyncTarget("https://x.de/login", plan, 1) === 1, "resyncTarget: fromIndex inklusiv (erster /login-Schritt)");
+  // Mehrere Kandidaten (drei /login-Schritte) → ERSTER gewinnt.
+  ok(resyncTarget("https://x.de/login", plan, 2) === 2, "resyncTarget: mehrere Kandidaten → erster ab fromIndex");
+  // Zwischenschritte OHNE page_url gehören zur übersprungenen Strecke (werden nicht gematcht).
+  const planGap = [
+    { index: 0, page_url: "https://x.de/" },
+    { index: 1, page_url: "" },                 // ohne page_url (bindet an Vorgängerseite)
+    { index: 2 },                                // ganz ohne page_url
+    { index: 3, page_url: "https://x.de/app" },
+  ];
+  ok(resyncTarget("https://x.de/app", planGap, 0) === 3, "resyncTarget: Schritte ohne page_url übersprungen, Treffer an Index 3");
+  ok(resyncTarget("https://x.de/nirgends", plan, 0) === null, "resyncTarget: passt zu nichts → null");
+  ok(resyncTarget("about:blank", plan, 0) === null, "resyncTarget: unlesbare currentUrl → null");
+  ok(resyncTarget("https://x.de/app", [], 0) === null, "resyncTarget: leerer Plan → null");
+  ok(resyncTarget("https://X.DE/app", plan, 1) === 4, "resyncTarget: Host case-insensitiv (Pfad exakt/casesensitiv)");
+}
+
+// ══════════ looksLikeLoginUrl (Welle 40, Anmelde-Wache) ══════════
+{
+  const T = (u) => looksLikeLoginUrl(u);
+  ok(T("https://x.de/login") === true, "looksLikeLoginUrl: /login");
+  ok(T("https://x.de/log-in") === true, "looksLikeLoginUrl: /log-in");
+  ok(T("https://x.de/signin") === true, "looksLikeLoginUrl: /signin");
+  ok(T("https://x.de/sign-in") === true, "looksLikeLoginUrl: /sign-in");
+  ok(T("https://x.de/anmelden") === true, "looksLikeLoginUrl: /anmelden");
+  ok(T("https://x.de/anmeldung") === true, "looksLikeLoginUrl: /anmeldung (anmeld*)");
+  ok(T("https://x.de/auth/callback") === true, "looksLikeLoginUrl: /auth/*");
+  ok(T("https://x.de/oauth/authorize") === true, "looksLikeLoginUrl: /authorize (Segmentanfang auth)");
+  ok(T("https://x.de/sso") === true, "looksLikeLoginUrl: /sso");
+  ok(T("https://x.de/account/login") === true, "looksLikeLoginUrl: account/login");
+  ok(T("https://x.de/LOGIN") === true, "looksLikeLoginUrl: Groß/klein egal");
+  // Query zählt NICHT.
+  ok(T("https://x.de/app?redirect=/login") === false, "looksLikeLoginUrl: Login nur in Query → false");
+  ok(T("https://x.de/dashboard") === false, "looksLikeLoginUrl: /dashboard → false");
+  ok(T("https://x.de/belege") === false, "looksLikeLoginUrl: /belege → false");
+  ok(T("https://x.de/") === false, "looksLikeLoginUrl: Wurzel → false");
+  ok(T("kein-url") === false, "looksLikeLoginUrl: unparsebar → false");
+}
+
+// ══════════ skipCrossesNeededDownload (Welle 40, Datei-Kohärenz beim Vorspulen) ══════════
+{
+  const dl = (key) => ({ file_meta: { role: "download", key } });
+  const up = (source) => ({ file_meta: { role: "upload", source } });
+  const plain = () => ({});
+  // Beweis 5: Vorspulen [1,3) überspränge einen Download (file1), den ein späterer Upload (Index 3) braucht.
+  const plan = [plain(), dl("file1"), plain(), up("file1"), plain()];
+  ok(skipCrossesNeededDownload(plan, 1, 3) === true, "skipCrossesNeededDownload: übersprungener Download wird später gebraucht → true (Pause)");
+  // Der Upload liegt SELBST in der übersprungenen Strecke → kein Konflikt (beide weg).
+  ok(skipCrossesNeededDownload(plan, 1, 4) === false, "skipCrossesNeededDownload: Download UND Upload übersprungen → false");
+  // Kein Download in der Strecke → false.
+  ok(skipCrossesNeededDownload([plain(), plain(), up("file1")], 0, 1) === false, "skipCrossesNeededDownload: kein Download übersprungen → false");
+  // Download übersprungen, aber kein Upload braucht ihn → false.
+  ok(skipCrossesNeededDownload([dl("file1"), plain(), plain()], 0, 2) === false, "skipCrossesNeededDownload: Download ohne späteren Upload → false");
+  ok(skipCrossesNeededDownload(null, 0, 1) === false, "skipCrossesNeededDownload: null-Plan → false");
+}
+
+// ══════════ skipCrossesLogin (Welle 40, Vorspul-Formulierung: „Angemeldet? → Ja") ══════════
+{
+  const plan = [
+    { page_url: "https://x.de/" },
+    { page_url: "https://x.de/login", action: "fill", param_key: "user" },
+    { page_url: "https://x.de/login", action: "fill", param_key: "pass" },
+    { page_url: "https://x.de/login", action: "click" },
+    { page_url: "https://x.de/app" },
+  ];
+  ok(skipCrossesLogin(plan, 1, 4, {}) === true, "skipCrossesLogin: übersprungene /login-Schritte → true (Login-Flavor)");
+  ok(skipCrossesLogin(plan, 4, 5, {}) === false, "skipCrossesLogin: nur /app übersprungen → false");
+  // Ohne Login-page_url, aber ein fill mit secret-Param → ebenfalls Login-Flavor.
+  const planSecret = [{ page_url: "https://x.de/portal", action: "fill", param_key: "pw" }, { page_url: "https://x.de/app" }];
+  ok(skipCrossesLogin(planSecret, 0, 1, { pw: true }) === true, "skipCrossesLogin: secret-fill-Schritt → true");
+  ok(skipCrossesLogin(planSecret, 0, 1, {}) === false, "skipCrossesLogin: fill ohne secret-Markierung → false");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin verifiziert.");
 process.exitCode = failed ? 1 : 0;

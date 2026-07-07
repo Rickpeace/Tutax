@@ -279,6 +279,8 @@
         </div>
       </div>
       <p id="runFallbackHint" class="run-fallback-hint" hidden></p>
+      <!-- Zustands-Intelligenz (Welle 40): Vorspul-Notiz in der Fuehrung. -->
+      <p id="runSkipNote" class="run-skip" hidden></p>
 
       <h2 id="runTitle" class="run-title"></h2>
       <div id="runBody" class="run-body"></div>
@@ -370,6 +372,10 @@
 
       <!-- Live-Status (Vollautomatik) bzw. „wird ausgefuehrt". -->
       <p id="autoLiveStatus" class="auto-live" hidden></p>
+
+      <!-- Zustands-Intelligenz (Welle 40): Anmelde-Wache (hoefliches Warten) + Vorspul-Notiz. -->
+      <p id="autoWaitLogin" class="auto-wait" hidden></p>
+      <p id="autoSkipNote" class="auto-skip" hidden></p>
 
       <!-- Pausen-/Miss-Box: klare Meldung + Referenz-Screenshot (imageUrl), falls vorhanden. -->
       <div id="autoMissBox" class="auto-miss" hidden>
