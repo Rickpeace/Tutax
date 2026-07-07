@@ -295,6 +295,23 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 43 + Fable (07.07., v2.13.1):** 🪟 **TAB-/FENSTER-FOLGEN** — aus
+Richards ERSTEM ECHTEN Test (WeTransfer + „Über Google anmelden"-Popup): zwei reale
+Bugs, dieselbe Wurzel (Lauf starr an EINEN Tab gebunden). Fix: Lauf/Führung
+verfolgen lauf-zugehörige Tabs (background.js je Port-Session, onCreated-openerTabId-
+Kette fängt target=_blank UND window.open-Popups); vor jedem Schritt wählt
+`pickTabForStep` (pure, getestet) den Tab, dessen URL zur page_url passt →
+**rebind + AKTIVIEREN** (tabs.update active + windows.update focused); frisch
+geöffnete Fenster bekommen Ladezeit; Popup schließt sich → Rückkehr zum Opener
+(onRemoved). Reihenfolge: Tab-Auswahl VOR Navigation/Zustand(W40)/Bedingung(W42),
+konsolidiert mit execHandleUnexpectedNav (ein Pfad). Autonomer Runner + Führung
+gleich. ZUSATZ-Bug gefunden: Google-Kontowähler „text-mismatch", weil Aufnahme
+innerText (Block-Umbrüche) erfasst, Resolver aber textContent verglich (Name+E-Mail
+klebten zusammen) → Resolver bevorzugt jetzt innerText (Fuzzy-Grenzen unverändert).
+Oneshot: test-tab-follow-e2e (geladene Extension, Testsite öffnet echt neuen Tab +
+Popup-Fenster + Selbst-Schluss) 3/3 grün (Tab aktiviert, Popup fokussiert+geklickt,
+Rückkehr zum Opener); alle Regressions-E2E (W38–W42) grün. Additiv: Single-Tab-Läufe
+unverändert. **Erkenntnis: ein echter Test deckte mehr auf als 12 synthetische Wellen.**
 **Opus Welle 42 + Fable (07.07., v2.13.0):** 🍪 **BEDINGTE SCHRITTE** — Richards
 Vereinheitlichung: Cookie-Banner-Ja/Nein ist dieselbe Logik wie die Tutorial-
 Verzweigungen, nur beantwortet die MASCHINE die Frage (Element da? URL passt?)
