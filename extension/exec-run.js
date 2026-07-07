@@ -42,6 +42,10 @@
   //   disarmDownload()                    -> void                                   (optional)
   //   transferFile(tabId, file)           -> Promise<fileId|null>                   (für upload)
   //   hide(tabId)                         -> void                                   (Overlay/Datei im Tab räumen)
+  //   getRunTabs()                        -> Promise<[{tabId,url,windowId,lastFocusedMs,status}]> (Welle 43, optional)
+  //   activateTab(tabId, windowId)        -> Promise<void>|void                     (Welle 43, optional)
+  //   rebind(tabId)                       -> void                                   (Welle 43, optional; Port/Ping umhängen)
+  //   ensureContent()                     -> void                                   (Welle 43, optional; Content-Script im neuen Tab)
   //   onEvent(evt)                        -> void  (optional; { type, index, to?, detail? } für Log/Test)
   function createRunner(opts) {
     var o = opts || {};
@@ -50,6 +54,9 @@
     var automation = o.automation || {};
     var plan = Array.isArray(o.plan) ? o.plan : [];
     var tabId = o.tabId;
+    // Tab-/Fenster-Folgen (Welle 43): so lange auf ein durch den Vorschritt geöffnetes Fenster/
+    // Popup warten (onCreated → complete), bevor der nächste Schritt bewertet wird.
+    var tabWaitMs = typeof o.tabWaitMs === "number" && o.tabWaitMs >= 0 ? o.tabWaitMs : 8000;
 
     var index = 0;
     var running = false;
@@ -84,6 +91,48 @@
         if (p && p.type === "secret" && p.key) out[p.key] = true;
       }
       return out;
+    }
+
+    // Tab-/Fenster-Folgen (Welle 43): VOR jedem Schritt den Tab wählen, dessen URL zur page_url
+    // passt (aus der lauf-zugehörigen Menge; deps.getRunTabs) und den Lauf dorthin umbinden +
+    // aktivieren. Öffnete der Vorschritt ein neues Fenster/Popup, folgt der Lauf dorthin; schloss
+    // sich ein Popup, kehrt er zum Opener zurück. Ohne deps.getRunTabs → No-Op (altes Verhalten).
+    function tabWaitWarranted(tabs) {
+      if (!Array.isArray(tabs) || tabs.length === 0) return false;
+      var boundPresent = false;
+      for (var i = 0; i < tabs.length; i++) if (tabs[i] && tabs[i].tabId === tabId) boundPresent = true;
+      if (!boundPresent) return true;
+      for (var j = 0; j < tabs.length; j++) {
+        var t = tabs[j];
+        if (t && t.tabId !== tabId && (t.status === "loading" || !t.url)) return true;
+      }
+      return false;
+    }
+    async function selectTabForStep(planStep) {
+      if (!P || typeof P.pickTabForStep !== "function" || typeof deps.getRunTabs !== "function") return;
+      if (!planStep) return;
+      var tabs = await deps.getRunTabs();
+      var pick = P.pickTabForStep(planStep, tabs);
+      if (pick == null && tabWaitWarranted(tabs)) {
+        var t0 = Date.now();
+        while (Date.now() - t0 < tabWaitMs && running) {
+          await delay(200);
+          tabs = await deps.getRunTabs();
+          pick = P.pickTabForStep(planStep, tabs);
+          if (pick != null) break;
+          if (!tabWaitWarranted(tabs)) break;
+        }
+      }
+      if (pick == null) return;
+      var info = null;
+      for (var k = 0; k < tabs.length; k++) if (tabs[k] && tabs[k].tabId === pick) { info = tabs[k]; break; }
+      var windowId = info ? info.windowId : null;
+      if (pick !== tabId) {
+        tabId = pick;
+        if (typeof deps.rebind === "function") deps.rebind(tabId);
+        if (typeof deps.ensureContent === "function") deps.ensureContent();
+      }
+      if (typeof deps.activateTab === "function") await deps.activateTab(pick, windowId);
     }
 
     // Zustand VOR dem aktuellen Schritt bewerten (Welle 40; rein lesend) — identisch zur
@@ -207,6 +256,12 @@
           return;
         }
         emit({ type: "step", index: index });
+
+        // Tab-/Fenster-Folgen (Welle 43): ZUERST in den richtigen Tab/das richtige Fenster
+        // wechseln (neuer Tab / OAuth-Popup / Rückkehr nach Popup-Schluss) — VOR Navigation,
+        // Zustandsprüfung und Bedingung.
+        await selectTabForStep(planStep);
+        if (!running) return;
 
         await deps.navigateIfNeeded(tabId, planStep);
         if (!running) return;

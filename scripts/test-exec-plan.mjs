@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep, pickTabForStep } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -512,5 +512,50 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(!("condition" in planC[2]), "buildRunPlan: kaputte condition → verworfen (Schritt läuft immer)");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep verifiziert.");
+// ══════════ pickTabForStep (Welle 43, Tab-/Fenster-Folgen) ══════════
+{
+  // Grund-Menge: gebundener Tab (WeTransfer /start) + ein neuer Tab + ein OAuth-Popup.
+  const tabs = [
+    { tabId: 1, url: "https://wetransfer.com/start", windowId: 10, lastFocusedMs: 100 },
+    { tabId: 2, url: "https://wetransfer.com/second", windowId: 10, lastFocusedMs: 200 },
+    { tabId: 3, url: "https://accounts.google.com/oauth?x=1", windowId: 20, lastFocusedMs: 300 },
+  ];
+
+  // URL passt → der zugehörige Tab wird gewählt (Host+Pfad; Query egal).
+  ok(pickTabForStep({ page_url: "https://wetransfer.com/second" }, tabs) === 2,
+    "pickTabForStep: Tab mit passender URL gewählt (neuer Tab)");
+  // Popup-Tab (separates Fenster) wird bevorzugt, wenn seine URL passt — NICHT der Ursprungs-Tab.
+  ok(pickTabForStep({ page_url: "https://accounts.google.com/oauth" }, tabs) === 3,
+    "pickTabForStep: Popup-Tab (anderes Fenster) gewählt, wenn URL passt (Query egal)");
+  // Kein passender Tab → null (Aufrufer bleibt beim aktuellen Tab / navigiert ihn).
+  ok(pickTabForStep({ page_url: "https://wetransfer.com/gibtsnicht" }, tabs) === null,
+    "pickTabForStep: kein Treffer → null (aktueller Tab bleiben)");
+  // Schritt ohne page_url → null (bindet sich an die Seite des Vorgängers, wie needsNavigation).
+  ok(pickTabForStep({ page_url: "" }, tabs) === null,
+    "pickTabForStep: kein page_url → null");
+  ok(pickTabForStep({}, tabs) === null, "pickTabForStep: fehlendes page_url → null");
+
+  // Mehrere Kandidaten mit gleichem Pfad → der ZULETZT FOKUSSIERTE (höchstes lastFocusedMs).
+  const multi = [
+    { tabId: 5, url: "https://app.de/x", windowId: 1, lastFocusedMs: 50 },
+    { tabId: 6, url: "https://app.de/x?a=1", windowId: 1, lastFocusedMs: 900 },
+    { tabId: 7, url: "https://app.de/x#h", windowId: 2, lastFocusedMs: 400 },
+  ];
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, multi) === 6,
+    "pickTabForStep: mehrere Kandidaten → zuletzt fokussiert gewinnt");
+
+  // Leere/kaputte Eingaben tolerant.
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, []) === null, "pickTabForStep: leere Tab-Menge → null");
+  ok(pickTabForStep({ page_url: "https://app.de/x" }, null) === null, "pickTabForStep: keine Tab-Menge → null");
+  ok(pickTabForStep(null, tabs) === null, "pickTabForStep: kein Schritt → null");
+  // Tab ohne/leere URL zählt nicht (frisch geöffnetes about:blank-Popup, noch nicht geladen).
+  const loading = [
+    { tabId: 8, url: "", windowId: 3, lastFocusedMs: 999 },
+    { tabId: 9, url: "https://ziel.de/app", windowId: 3, lastFocusedMs: 1 },
+  ];
+  ok(pickTabForStep({ page_url: "https://ziel.de/app" }, loading) === 9,
+    "pickTabForStep: Tab ohne URL (ladend) ignoriert, geladener Treffer gewählt");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep verifiziert.");
 process.exitCode = failed ? 1 : 0;

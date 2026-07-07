@@ -203,10 +203,20 @@ async function navigateIfNeeded(tabId, planStep) {
 }
 
 // ── Content-Script-Lebensader (Port + Ping, Muster Welle 33) ───────────────────
+// Tab-/Fenster-Folgen (Welle 43): offene „get-tabs"-Anfragen an den Worker (führt die lauf-
+// zugehörige Tab-Menge je Port). Antwort kommt als Port-Nachricht „run-tabs".
+let execRunTabsSeq = 0;
+const execRunTabsPending = new Map();
+
 function execPortOpen(tabId) {
   try {
     execPort = chrome.runtime.connect({ name: "steply-exec" });
     execPort.postMessage({ type: "bind", tabId });
+    execPort.onMessage.addListener((msg) => {
+      if (!msg || msg.type !== "run-tabs") return;
+      const done = execRunTabsPending.get(msg.reqId);
+      if (done) done(Array.isArray(msg.tabs) ? msg.tabs : []);
+    });
     execPort.onDisconnect.addListener(() => {
       execPort = null;
     });
@@ -224,12 +234,77 @@ function execPortClose() {
     execPort = null;
   }
 }
-function execPingStart(tabId) {
+// Die lauf-zugehörige Tab-Menge vom Worker erfragen (Welle 43). Kurzer Timeout; ohne Port → null.
+function requestRunTabs() {
+  return new Promise((resolve) => {
+    if (!execPort) {
+      resolve(null);
+      return;
+    }
+    const reqId = ++execRunTabsSeq;
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      execRunTabsPending.delete(reqId);
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), 1500);
+    execRunTabsPending.set(reqId, done);
+    try {
+      execPort.postMessage({ type: "get-tabs", reqId });
+    } catch (e) {
+      done(null);
+    }
+  });
+}
+// Fallback ohne Worker/Port: nur der gebundene Tab (kein Folgen — altes Verhalten).
+async function getRunTabs() {
+  const viaPort = await requestRunTabs();
+  if (Array.isArray(viaPort) && viaPort.length) return viaPort;
+  const url = await tabUrlById(targetTabId);
+  let windowId = null;
+  try {
+    const t = targetTabId != null ? await chrome.tabs.get(targetTabId) : null;
+    if (t && t.windowId != null) windowId = t.windowId;
+  } catch (e) {
+    /* egal */
+  }
+  return targetTabId != null
+    ? [{ tabId: targetTabId, url, windowId, lastFocusedMs: 0, active: false, status: "complete" }]
+    : [];
+}
+// Der Lauf folgte in einen neuen Tab/ein Popup (Welle 43): Bindung umhängen — Ergebnis-Filter
+// (targetTabId), Ping-Ziel und die Overlay-Abräum-Bindung des Workers (rebind) ziehen mit.
+function rebindTarget(tabId) {
+  targetTabId = tabId;
+  if (execPort) {
+    try {
+      execPort.postMessage({ type: "rebind", tabId });
+    } catch (e) {
+      /* egal */
+    }
+  }
+}
+// Tab aktivieren (Welle 43). Ein GEPLANTER Lauf soll unaufdringlich bleiben: nur den Tab in
+// seinem Fenster aktiv setzen (damit Overlay/Maus dort sichtbar sind), das Fenster aber NICHT
+// nach vorn zwingen — der Lauf läuft im Hintergrund weiter, das Content-Script findet Elemente
+// auch in nicht fokussierten Tabs.
+async function activateTab(tabId) {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.update(tabId, { active: true });
+  } catch (e) {
+    /* egal */
+  }
+}
+function execPingStart() {
   execPingStop();
   execPingTimer = setInterval(() => {
-    if (tabId != null) {
+    if (targetTabId != null) {
       try {
-        const p = chrome.tabs.sendMessage(tabId, { type: "steply-exec-ping" });
+        const p = chrome.tabs.sendMessage(targetTabId, { type: "steply-exec-ping" });
         if (p && p.catch) p.catch(() => {});
       } catch (e) {
         /* egal */
@@ -686,7 +761,7 @@ async function runAutomation(automationId) {
   // Lauf registrieren + Lebensader.
   const runId = await postStart(automationId);
   execPortOpen(targetTabId);
-  execPingStart(targetTabId);
+  execPingStart();
   setStatus("Ablauf läuft …");
 
   const runner = SteplyExecRun.createRunner({
@@ -705,6 +780,18 @@ async function runAutomation(automationId) {
       disarmDownload: () => disarmDownload(),
       transferFile: (t, f) => transferFile(t, f),
       hide: (t) => hideTab(t),
+      // Tab-/Fenster-Folgen (Welle 43): dem Motor die lauf-zugehörige Tab-Menge liefern,
+      // Umbindung (Port/Ping) durchführen, den neuen Tab aktivieren und Content-Script impfen.
+      getRunTabs: () => getRunTabs(),
+      activateTab: (t) => activateTab(t),
+      rebind: (t) => rebindTarget(t),
+      ensureContent: () => {
+        try {
+          chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+        } catch (e) {
+          /* egal */
+        }
+      },
       onEvent: (evt) => {
         if (evt && evt.type === "step") setStatus("Schritt " + (evt.index + 1) + " von " + plan.length + " …");
       },
