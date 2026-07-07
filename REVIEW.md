@@ -295,6 +295,20 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 45 + Fable-Hotfix v2.14.1 (07.07., v2.15.0):** 👁️ **SICHTBARE ELEMENTE
+BEVORZUGEN** — aus Richards echtem Test. v2.14.1: Bedingungs-Prüfung (steply-eval-
+condition) streng auf confidence exact/text — Fuzzy/healed täuschten „Element
+vorhanden" vor (WeTransfer klickte „Anmelden" trotz eingeloggt). Welle 45: der
+Resolver bekam ein OPTIONALES `opts.isVisible(el)`-Prädikat (content.js liefert
+getBoundingClientRect>0); Stufe 2/3 bevorzugen sichtbare Kandidaten, Stufe 1 lässt
+einen unsichtbaren css-Einzeltreffer los, wenn ein sichtbarer Text-Zwilling
+existiert → löst „target-hidden" bei unsichtbaren Duplikaten (Steply-Signup:
+„Anmelden" im eingeklappten Mobil-Menü statt des sichtbaren Links). Voll
+rückwärtskompatibel (ohne opts byte-identisch); Resolver bleibt PUR (Prädikat
+injiziert). Keine Härtung aufgeweicht (W32/33/43/44 intakt). Bewiesen: DOM-Stub
+(+12 Fälle) + echtes Chromium (test-guide-visible-e2e: display:none-Duplikat real
+0×0, vorher target-hidden → nachher sichtbarer gewählt). Alle 10 E2E-Suiten grün.
+Agent befolgte NEUE AGENTS.md-Regel (finale Prozessliste, nichts verwaist).
 **Opus Welle 44 + Fable (07.07., v2.14.0):** 🩹 **SELBSTHEILUNG STUFE A (ohne KI)** —
 aus Richards Test (Knopf „…(v2.13.0)" → live „…(v2.13.1)", weil Fable die Version im
 Knopf-Text hatte): Resolver akzeptiert einen css-Treffer bei rein VOLATILER Text-Drift
