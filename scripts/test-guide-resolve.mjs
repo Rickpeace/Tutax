@@ -291,5 +291,57 @@ function makeRoot(elements) {
   ok(r4.el === field && r4.confidence === "exact", "Gegenprobe: echtes Feld gewinnt via css+Label wie gehabt");
 }
 
+// ── Welle 43: Google-„Konto auswählen" (mehrzeiliger Name+E-Mail-Text) ────────────────────
+// Bei der Aufnahme erfasst content.js den Text mit innerText (visibleText) → Block-Grenzen
+// werden zu Leerraum: „Richard Petrasch richard.petrasch@googlemail.com". Beim Auflösen muss
+// der Resolver ebenfalls innerText bevorzugen — sonst KLEBT textContent Name+E-Mail zusammen
+// („…Petraschrichard…") und der Resolver meldete fälschlich „text-mismatch". Der Stub liefert
+// hier BEIDES (innerText mit Umbruch, textContent ohne Trenner), um zu beweisen, dass innerText
+// den Ausschlag gibt.
+{
+  // Konto-Zeile: verschachtelt (Name-<div> + E-Mail-<div>) mit role=link (Google-Muster).
+  const row = {
+    tagName: "DIV",
+    _css: "#acct-richard",
+    innerText: "Richard Petrasch\nrichard.petrasch@googlemail.com",
+    // textContent OHNE Trenner (so wie der Browser die Bloecke zusammenklebt).
+    textContent: "Richard Petraschrichard.petrasch@googlemail.com",
+    _attrs: { role: "link", tabindex: "0" },
+    getAttribute(n) { return Object.prototype.hasOwnProperty.call(this._attrs, n) ? this._attrs[n] : null; },
+    hasAttribute(n) { return Object.prototype.hasOwnProperty.call(this._attrs, n); },
+    closest() { return null; },
+  };
+  const root = makeRoot([row]);
+
+  // Stufe 1: css trifft + mehrzeiliger Text passt (dank innerText) -> exact.
+  const r1 = resolveSelector(root, {
+    css: "#acct-richard",
+    text: "Richard Petrasch richard.petrasch@googlemail.com",
+    role: "link",
+  });
+  ok(r1.el === row && r1.confidence === "exact",
+    "Welle 43: Konto-Zeile (Name+E-Mail, mehrzeilig) via css+innerText-Gegenprobe -> exact");
+
+  // Stufe 2 (css veraltet/flüchtig): role=link + exakter innerText-Text -> text.
+  const r2 = resolveSelector(root, {
+    css: "#base-ui-_r_9_",
+    text: "Richard Petrasch richard.petrasch@googlemail.com",
+    role: "link",
+  });
+  ok(r2.el === row && r2.confidence === "text",
+    "Welle 43: Konto-Zeile über role+innerText gefunden, wenn css tot ist -> text");
+
+  // Gegenprobe: OHNE die innerText-Bevorzugung (nur textContent) würde derselbe Selektor
+  // scheitern — der Stub ohne innerText belegt den Regressions-Unterschied.
+  const glued = elem({ tag: "div", attrs: { role: "link" }, text: "Richard Petraschrichard.petrasch@googlemail.com", css: "#g" });
+  const rGlued = resolveSelector(makeRoot([glued]), {
+    css: "#tot",
+    text: "Richard Petrasch richard.petrasch@googlemail.com",
+    role: "link",
+  });
+  ok(rGlued.el === null,
+    "Welle 43: ohne innerText-Trenner (nur zusammengeklebter textContent) bleibt es zu Recht ein Miss");
+}
+
 console.log(failed ? "\n✗ guide-resolve Tests fehlgeschlagen." : "\n✓ guide-resolve: alle Stufen verifiziert.");
 process.exitCode = failed ? 1 : 0;

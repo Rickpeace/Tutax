@@ -2254,6 +2254,10 @@ function sendGuideToTab(msg) {
 // b) Ein Ping (~20s) hält den Selbstschutz-Timer im content.js wach.
 let guidePort = null;
 let guidePingTimer = null;
+// Tab-/Fenster-Folgen (Welle 43): offene „get-tabs"-Anfragen an den Worker (führt die lauf-
+// zugehörige Tab-Menge je Führungs-Port). Antwort kommt als Port-Nachricht „run-tabs".
+let guideRunTabsSeq = 0;
+const guideRunTabsPending = new Map();
 
 function guidePortOpen(tabId) {
   guidePortClose();
@@ -2261,6 +2265,11 @@ function guidePortOpen(tabId) {
   try {
     guidePort = chrome.runtime.connect({ name: "steply-guide" });
     guidePort.postMessage({ type: "bind", tabId });
+    guidePort.onMessage.addListener((msg) => {
+      if (!msg || msg.type !== "run-tabs") return;
+      const done = guideRunTabsPending.get(msg.reqId);
+      if (done) done(Array.isArray(msg.tabs) ? msg.tabs : []);
+    });
     guidePort.onDisconnect.addListener(() => {
       guidePort = null;
       // Worker evtl. neu gestartet: solange die Führung sichtbar läuft, Port neu aufbauen.
@@ -2743,6 +2752,73 @@ async function execStepConditionMet(planStep) {
   return SteplyExecPlan.shouldRunStep(cond, { urlMatch: urlMatch, elementFound: elementFound });
 }
 
+// Tab-/Fenster-Folgen (Welle 43): die lauf-zugehörige Tab-Menge der Führung vom Worker erfragen.
+// Kurzer Timeout; ohne Port → null (dann folgt die Führung wie bisher nur guide.tabId).
+function guideRequestRunTabs() {
+  return new Promise((resolve) => {
+    if (!guidePort) {
+      resolve(null);
+      return;
+    }
+    const reqId = ++guideRunTabsSeq;
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      guideRunTabsPending.delete(reqId);
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), 1500);
+    guideRunTabsPending.set(reqId, done);
+    try {
+      guidePort.postMessage({ type: "get-tabs", reqId });
+    } catch (e) {
+      done(null);
+    }
+  });
+}
+
+// Tab-/Fenster-Folgen (Welle 43) in der Führung: passt ein LAUF-ZUGEHÖRIGER Tab (neues Fenster /
+// OAuth-Popup) zur page_url des aktuellen Schritts, die Führung dorthin umbinden + aktivieren, so
+// dass Overlay/Maus im richtigen Fenster erscheinen. Rückgabe true, wenn umgebunden wurde.
+async function guideSelectTab(step) {
+  if (typeof SteplyExecPlan === "undefined" || typeof SteplyExecPlan.pickTabForStep !== "function") return false;
+  if (!step) return false;
+  const tabs = await guideRequestRunTabs();
+  if (!Array.isArray(tabs) || tabs.length === 0) return false;
+  const pick = SteplyExecPlan.pickTabForStep(step, tabs);
+  if (pick == null || pick === guide.tabId) return false;
+  const info = tabs.find((t) => t.tabId === pick) || null;
+  guide.tabId = pick;
+  if (guidePort) {
+    try {
+      guidePort.postMessage({ type: "rebind", tabId: guide.tabId });
+    } catch (e) {
+      /* egal */
+    }
+  }
+  try {
+    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+  } catch (e) {
+    /* egal */
+  }
+  try {
+    await chrome.tabs.update(pick, { active: true });
+  } catch (e) {
+    /* egal */
+  }
+  if (info && info.windowId != null) {
+    try {
+      await chrome.windows.update(info.windowId, { focused: true });
+    } catch (e) {
+      /* egal */
+    }
+  }
+  guideSaveSession();
+  return true;
+}
+
 // Passt der aktive Tab NICHT zum Tutorial (site_domains bzw. Domain von Schritt 1), einen
 // neuen Tab auf der Startseite (Schritt 1 page_url) öffnen und die Führung an DIESEN Tab
 // binden. Ohne page_url an Schritt 1: Verhalten wie bisher (aktueller Tab). chrome://-Tabs
@@ -3164,6 +3240,10 @@ async function guideHandleNav() {
 }
 
 async function guideHandleNavInner(step) {
+  // Tab-/Fenster-Folgen (Welle 43): folgt die manuelle Navigation in ein neues Fenster / OAuth-
+  // Popup, das zum aktuellen Schritt passt, die Führung dorthin umbinden (curUrl bezieht sich
+  // danach auf den neuen Tab) — so überstehen auch geführte Touren „Über Google anmelden".
+  await guideSelectTab(step);
   const curUrl = await tabUrlById(guide.tabId);
   if (typeof SteplyExecPlan !== "undefined" && curUrl) {
     // a) Vorspulen NUR bei linearen Tutorials.
@@ -3200,10 +3280,13 @@ async function guideHandleNavInner(step) {
   guideResendOverlay(step);
 }
 
-// Navigation überleben + Zustands-Intelligenz: lädt der gebundene Tab fertig, den Zustand einordnen.
+// Navigation überleben + Zustands-Intelligenz: lädt ein Tab fertig, den Zustand einordnen.
+// Welle 43: nicht nur der gebundene Tab — auch ein in einem ANDEREN Fenster fertig geladenes
+// OAuth-Popup / ein neuer Tab; guideSelectTab (in guideHandleNav) entscheidet, ob ein lauf-
+// zugehöriger Tab zum aktuellen Schritt passt und die Führung dorthin folgt. Fremde Ladevorgänge
+// laufen dort ins Leere (kein Rebind, kein Vorspulen).
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (els.guideRun.hidden) return;
-  if (guide.tabId == null || tabId !== guide.tabId) return;
   if (changeInfo.status !== "complete") return;
   guideHandleNav();
 });
@@ -3288,6 +3371,10 @@ const EXEC_FILE_CAP = 50 * 1024 * 1024; // 50 MB Deckel für den Speicher-Weg
 const EXEC_FILE_SINGLE_MAX = 8 * 1024 * 1024; // base64-Länge: darüber wird gechunkt
 const EXEC_FILE_CHUNK = 4 * 1024 * 1024; // base64-Zeichen je Chunk
 let execFileSeq = 0; // eindeutige fileId je Transport
+// Tab-/Fenster-Folgen (Welle 43): so lange auf ein durch den Vorschritt geöffnetes Fenster/Popup
+// warten (onCreated → onUpdated complete), bevor der nächste Schritt bewertet wird — analog
+// EXEC_NAV_TIMEOUT, aber nur wenn wirklich ein neuer Tab lädt (execTabWaitWarranted).
+const EXEC_TAB_WAIT_MS = 8000;
 
 // ── Werte-Handling (lokal) ────────────────────────────────────────────────────
 // chrome.storage.local.autoValues = { [automationId]: { [paramKey]: value } }.
@@ -3554,6 +3641,10 @@ async function onAutoClearValues() {
 // ── Lauf: Port + Ping (Lebensader, Muster Welle 33) ────────────────────────────
 let execPort = null;
 let execPingTimer = null;
+// Tab-/Fenster-Folgen (Welle 43): offene „get-tabs"-Anfragen an den background-Worker (er führt
+// die lauf-zugehörige Tab-Menge je Port). Antwort kommt als Port-Nachricht „run-tabs".
+let execRunTabsSeq = 0;
+const execRunTabsPending = new Map();
 
 function execPortOpen(tabId) {
   execPortClose();
@@ -3561,6 +3652,12 @@ function execPortOpen(tabId) {
   try {
     execPort = chrome.runtime.connect({ name: "steply-exec" });
     execPort.postMessage({ type: "bind", tabId });
+    // Antworten des Workers auf get-tabs (Welle 43) den wartenden Anfragen zuordnen.
+    execPort.onMessage.addListener((msg) => {
+      if (!msg || msg.type !== "run-tabs") return;
+      const done = execRunTabsPending.get(msg.reqId);
+      if (done) done(Array.isArray(msg.tabs) ? msg.tabs : []);
+    });
     execPort.onDisconnect.addListener(() => {
       execPort = null;
       if (!els.autoRun.hidden && exec.tabId != null && exec.running) {
@@ -3572,6 +3669,33 @@ function execPortOpen(tabId) {
   } catch (err) {
     execPort = null;
   }
+}
+
+// Die lauf-zugehörige Tab-Menge vom Worker erfragen (Welle 43). Kurzer Timeout; scheitert der
+// Port, liefert execRunTabs den Fallback „nur der gebundene Tab" (bestehendes Verhalten).
+function execRequestRunTabs() {
+  return new Promise((resolve) => {
+    if (!execPort) {
+      resolve(null);
+      return;
+    }
+    const reqId = ++execRunTabsSeq;
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      execRunTabsPending.delete(reqId);
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), 1500);
+    execRunTabsPending.set(reqId, done);
+    try {
+      execPort.postMessage({ type: "get-tabs", reqId });
+    } catch (e) {
+      done(null);
+    }
+  });
 }
 
 function execPortClose() {
@@ -4247,6 +4371,12 @@ async function execHandleUnexpectedNav() {
   if (exec.phase !== "waiting-login" && exec.phase !== "ready") return;
   exec.stateBusy = true;
   try {
+    // Tab-/Fenster-Folgen (Welle 43): auch zwischen den Schritten / im Warten einem neu
+    // geöffneten Fenster (OAuth-Popup) folgen bzw. nach dessen Schließen zum Opener zurück,
+    // BEVOR wir den Zustand bewerten (der Zustand gilt für den dann gebundenen Tab).
+    const planStep = exec.plan[exec.index];
+    if (planStep) await execSelectTabForStep(planStep);
+    if (!exec.running) return;
     const d = await execEvaluateState();
     if (!exec.running) return;
     switch (d.action) {
@@ -4275,6 +4405,114 @@ async function execHandleUnexpectedNav() {
   } finally {
     exec.stateBusy = false;
   }
+}
+
+// ============================================================================
+// TAB-/FENSTER-FOLGEN (Welle 43): der Lauf folgt automatisch in während des Laufs geöffnete
+// Tabs, Fenster und OAuth-Popups. Statt starr an exec.tabId zu kleben, wählen wir VOR jedem
+// Schritt den Tab, dessen URL zur page_url passt (aus der lauf-zugehörigen Menge des Workers) —
+// und binden den Lauf dorthin um + AKTIVIEREN ihn (Tab in den Vordergrund, Fenster fokussieren).
+// So überstehen Läufe „Über Google anmelden"-Popups (separates Fenster) und neu geöffnete Tabs,
+// die die Engine sonst nicht durchsucht (Richards erster echter Test: WeTransfer + Google-Popup).
+// ============================================================================
+
+// Die lauf-zugehörige Tab-Menge (mit URL/Fenster/Fokus/Status) besorgen. Fallback ohne Worker/
+// Port: nur der aktuell gebundene Tab — dann verhält sich der Lauf wie vor Welle 43.
+async function execRunTabs() {
+  const viaPort = await execRequestRunTabs();
+  if (Array.isArray(viaPort) && viaPort.length) return viaPort;
+  const url = await tabUrlById(exec.tabId);
+  let windowId = null;
+  try {
+    const t = exec.tabId != null ? await chrome.tabs.get(exec.tabId) : null;
+    if (t && t.windowId != null) windowId = t.windowId;
+  } catch (e) {
+    /* egal */
+  }
+  return exec.tabId != null
+    ? [{ tabId: exec.tabId, url, windowId, lastFocusedMs: 0, active: true, status: "complete" }]
+    : [];
+}
+
+// Einen Tab in den Vordergrund holen: Tab aktivieren + sein Fenster fokussieren (Bug 1 aus
+// Richards Test — der neue Tab öffnete zwar, wurde aber nicht aktiviert; der Lauf hing).
+async function execActivateTab(tabId, windowId) {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.update(tabId, { active: true });
+  } catch (e) {
+    /* Tab evtl. weg — egal */
+  }
+  if (windowId != null) {
+    try {
+      await chrome.windows.update(windowId, { focused: true });
+    } catch (e) {
+      /* Fenster evtl. weg — egal */
+    }
+  }
+}
+
+// Lohnt es, auf einen (noch ladenden) neuen Tab/ein Popup zu warten? Ja, wenn der gebundene Tab
+// nicht mehr in der Menge ist (Popup schloss sich → Opener lädt gerade nach) ODER ein ZUSÄTZLICHER
+// lauf-zugehöriger Tab gerade lädt / noch keine URL hat (frisch geöffnetes Fenster/Popup). Ein
+// gewöhnlicher Lauf (nur der gebundene Tab in der Menge) wartet NIE — keine Verzögerung.
+function execTabWaitWarranted(tabs) {
+  if (!Array.isArray(tabs) || tabs.length === 0) return false;
+  const boundPresent = tabs.some((t) => t.tabId === exec.tabId);
+  if (!boundPresent) return true;
+  return tabs.some((t) => t.tabId !== exec.tabId && (t.status === "loading" || !t.url));
+}
+
+// VOR jedem Schritt: den Tab wählen, dessen URL zur page_url passt, und den Lauf dorthin umbinden
+// + aktivieren. Öffnete der Vorschritt ein neues Fenster/Popup, folgt der Lauf dorthin; schloss
+// sich ein Popup, kehrt er zum Opener zurück. Rückgabe true, wenn umgebunden wurde (informativ).
+// Wechselwirkung: läuft VOR execNavigateIfNeeded/execEvaluateState, damit Navigation, Zustands-
+// prüfung (W40) und Bedingung (W42) garantiert im RICHTIGEN Fenster stattfinden.
+async function execSelectTabForStep(planStep) {
+  if (typeof SteplyExecPlan === "undefined" || typeof SteplyExecPlan.pickTabForStep !== "function") return false;
+  if (!planStep) return false;
+  let tabs = await execRunTabs();
+  let pick = SteplyExecPlan.pickTabForStep(planStep, tabs);
+  // Reaktives Popup/Neuer Tab: passt (noch) nichts, aber ein Fenster wird gerade geöffnet →
+  // kurz warten und erneut prüfen (onCreated → onUpdated complete), analog execWaitTabComplete.
+  if (pick == null && execTabWaitWarranted(tabs)) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < EXEC_TAB_WAIT_MS && exec.running) {
+      await new Promise((r) => setTimeout(r, 200));
+      tabs = await execRunTabs();
+      pick = SteplyExecPlan.pickTabForStep(planStep, tabs);
+      if (pick != null) break;
+      if (!execTabWaitWarranted(tabs)) break;
+    }
+  }
+  if (pick == null) return false; // kein passender Lauf-Tab → beim aktuellen bleiben (navigateIfNeeded trägt)
+  const info = tabs.find((t) => t.tabId === pick) || null;
+  const windowId = info ? info.windowId : null;
+  if (pick !== exec.tabId) {
+    // Umbinden: Overlay auf dem ALTEN Tab abräumen, dann exec.tabId umsetzen. Den bestehenden
+    // Port NICHT neu öffnen (das würde die Worker-Session mitsamt Tab-Menge verwerfen) — dem
+    // Worker nur die neue Bindung nennen (rebind), damit sein Overlay-Abräumen den richtigen
+    // Tab trifft. Content-Script im neuen Tab sicherstellen.
+    sendExecToTab({ type: "steply-exec-hide" });
+    exec.tabId = pick;
+    if (execPort) {
+      try {
+        execPort.postMessage({ type: "rebind", tabId: exec.tabId });
+      } catch (e) {
+        /* egal */
+      }
+    }
+    try {
+      chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+    } catch (e) {
+      /* egal */
+    }
+    await execActivateTab(pick, windowId);
+    return true;
+  }
+  // Schon gebunden — sicherstellen, dass er im Vordergrund ist (Overlay/Maus im richtigen Fenster).
+  await execActivateTab(pick, windowId);
+  return false;
 }
 
 async function execNavigateIfNeeded(planStep) {
@@ -4497,6 +4735,12 @@ async function execExecuteCurrent() {
   }
   exec.phase = "executing";
   execRenderRun();
+
+  // Tab-/Fenster-Folgen (Welle 43): ZUERST in den Tab wechseln, dessen URL zum Schritt passt
+  // (neuer Tab / OAuth-Popup / Rückkehr nach Popup-Schluss) — VOR Navigation, Zustandsprüfung
+  // und Bedingung, damit alles Weitere im richtigen Fenster geschieht.
+  await execSelectTabForStep(planStep);
+  if (!exec.running) return;
 
   await execNavigateIfNeeded(planStep);
   if (!exec.running) return; // mitten in der Navigation abgebrochen
@@ -4961,9 +5205,15 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // läuft) oder „verifying" (Welle-38-Submit-Kontrolle hat Vorrang).
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (els.autoRun.hidden || !exec.running) return;
-  if (exec.tabId == null || tabId !== exec.tabId) return;
   if (changeInfo.status !== "complete") return;
-  execHandleUnexpectedNav();
+  // Tab-/Fenster-Folgen (Welle 43): nicht nur der gebundene Tab, sondern JEDES „complete"
+  // während wir zwischen den Schritten (ready) oder im Warten (waiting-login) sind — so fangen
+  // wir ein in einem ANDEREN Fenster fertig geladenes OAuth-Popup / einen neuen Tab. Welche
+  // Tabs zum Lauf gehören, entscheidet execSelectTabForStep (lauf-zugehörige Menge); fremde
+  // Tab-Ladevorgänge laufen dort ins Leere (kein Rebind).
+  if (tabId === exec.tabId || exec.phase === "ready" || exec.phase === "waiting-login") {
+    execHandleUnexpectedNav();
+  }
 });
 
 // ============================================================================

@@ -119,6 +119,43 @@
     return s || "/";
   }
 
+  // ── Tab-/Fenster-Folgen (Welle 43) ────────────────────────────────────────────
+  // pickTabForStep(step, tabsInfo) → tabId | null. Verallgemeinert die W40-Navigation von
+  // EINEM starr gebundenen Tab auf die LAUF-ZUGEHÖRIGE Tab-Menge: wählt den Tab, dessen aktuelle
+  // URL (Host+Pfad, Query/Hash egal — pathKey wie needsNavigation) zur page_url des Schritts
+  // passt. Kern der Verfolgung: ein Klick öffnet einen neuen Tab / ein OAuth-Popup (separates
+  // Fenster) → der nächste Schritt gehört DORTHIN, nicht in den alten (WeTransfer-)Tab; schließt
+  // sich das Popup wieder, passt der Opener-Tab zum Folgeschritt → Rückkehr.
+  //   tabsInfo: [{ tabId, url, windowId?, lastFocusedMs? }] (die lauf-zugehörige Menge; der aktuell
+  //             gebundene Tab ist enthalten, solange er lebt).
+  //   • kein/unparsebares page_url → null (der Aufrufer bleibt beim aktuellen Tab; Schritte ohne
+  //     page_url binden sich an die Seite des Vorgängers, exakt wie needsNavigation).
+  //   • kein passender Tab → null (Aufrufer bleibt beim aktuellen Tab / navigiert ihn).
+  //   • mehrere passende Tabs → der ZULETZT FOKUSSIERTE (höchstes lastFocusedMs) gewinnt; bei
+  //     Gleichstand der zuletzt in der Liste stehende (stabil/deterministisch).
+  // Popup-Bevorzugung fällt automatisch heraus: der Popup-Tab steht in tabsInfo, seine URL passt
+  // zur nächsten page_url → er gewinnt gegen den (nicht passenden) Ursprungs-Tab.
+  // PUR: kein DOM/Chrome/Netz — in Node testbar (scripts/test-exec-plan.mjs).
+  function pickTabForStep(step, tabsInfo) {
+    var target = step && typeof step.page_url === "string" ? step.page_url : "";
+    if (!target) return null;
+    var targetKey = pathKey(target);
+    if (!targetKey) return null;
+    var list = Array.isArray(tabsInfo) ? tabsInfo : [];
+    var best = null;
+    for (var i = 0; i < list.length; i++) {
+      var ti = list[i];
+      if (!ti || ti.tabId == null) continue;
+      if (pathKey(ti.url) !== targetKey) continue;
+      if (best === null || focusMsOf(ti) >= focusMsOf(best)) best = ti;
+    }
+    return best ? best.tabId : null;
+  }
+
+  function focusMsOf(ti) {
+    return ti && typeof ti.lastFocusedMs === "number" && isFinite(ti.lastFocusedMs) ? ti.lastFocusedMs : 0;
+  }
+
   // ── Zustands-Intelligenz (Welle 40) ───────────────────────────────────────────
   // Läufe/Führungen kommen mit dem Anmelde-Zustand klar: Ist der Nutzer schon angemeldet,
   // leitet die Website selbst um → die zugehörigen (Login-)Schritte werden ÜBERSPRUNGEN;
@@ -508,6 +545,8 @@
   var api = {
     buildRunPlan: buildRunPlan,
     needsNavigation: needsNavigation,
+    // Tab-/Fenster-Folgen (Welle 43)
+    pickTabForStep: pickTabForStep,
     redactDetail: redactDetail,
     submitOutcome: submitOutcome,
     submitBounced: submitBounced,

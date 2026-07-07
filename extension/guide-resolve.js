@@ -110,13 +110,37 @@
   }
 
   // Matchbarer (normalisierter) Text eines Elements. Fuer Eingabefelder die BESCHRIFTUNG
-  // (label/placeholder/aria/name) statt des leeren textContent — sonst textContent. `scope`
-  // ist noetig, um label[for]/aria-labelledby aufzuloesen.
+  // (label/placeholder/aria/name) statt des leeren textContent — sonst der sichtbare Text.
+  // `scope` ist noetig, um label[for]/aria-labelledby aufzuloesen.
+  //
+  // Welle 43 (Google-„Konto auswaehlen"): Bei der AUFNAHME erfasst content.js den Text mit
+  // el.innerText (visibleText) — das setzt an BLOCK-Grenzen Zeilenumbrueche/Leerraum. Ein
+  // Konto-Zeilentext „Richard Petrasch \n richard.petrasch@googlemail.com" (Name + E-Mail in
+  // getrennten <div>s) wird so zu „Richard Petrasch richard.petrasch@googlemail.com". textContent
+  // dagegen KLEBT die Bloecke ohne Trenner zusammen („…Petraschrichard…") → norm ergaebe einen
+  // anderen String und der Resolver meldete faelschlich „text-mismatch", obwohl das Element sichtbar
+  // da ist. Deshalb beim Aufloesen ebenfalls innerText bevorzugen (spiegelt die Aufnahme), und nur
+  // wenn es fehlt (Test-Stub / seltene Faelle) auf textContent zurueckfallen. Die Fuzzy-Grenzen
+  // (containsEither, Mindestlaenge 3) bleiben UNVERAENDERT.
+  function visibleTextOf(el) {
+    var it = null;
+    try {
+      it = el.innerText;
+    } catch (err) {
+      it = null;
+    }
+    if (typeof it === "string" && it.replace(/\s+/g, "").length > 0) return norm(it);
+    try {
+      return norm(el.textContent || "");
+    } catch (err2) {
+      return "";
+    }
+  }
   function textOf(el, scope) {
     if (!el) return "";
     try {
       if (isEditableEl(el)) return editableLabelText(el, scope);
-      return norm(el.textContent || "");
+      return visibleTextOf(el);
     } catch (err) {
       return "";
     }

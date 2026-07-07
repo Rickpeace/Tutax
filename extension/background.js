@@ -98,6 +98,67 @@ chrome.runtime.onMessage.addListener(() => false);
 // >0 ⇒ ein Lauf ist aktiv ⇒ ein fälliger geplanter Lauf verschiebt sich (kein Doppel-Lauf).
 let steplyActiveRunPorts = 0;
 
+// ============================================================================
+// TAB-/FENSTER-FOLGEN (Welle 43)
+//
+// Je aktiver „Lauf-Session" (offener steply-exec/steply-guide-Port) führen wir die Menge der
+// LAUF-ZUGEHÖRIGEN Tabs: der gebundene Start-Tab + jeder Tab/jedes Popup, das WÄHREND des Laufs
+// mit einer openerTabId AUS DIESER MENGE geöffnet wird (chrome.tabs.onCreated) — inkl. OAuth-
+// Popups (window.open = neuer Tab in NEUEM Fenster). Der Orchestrator (Panel/Runner) fragt die
+// Menge vor jedem Schritt ab (Port-Nachricht „get-tabs") und bindet den Lauf in den Tab um,
+// dessen URL zum Schritt passt (SteplyExecPlan.pickTabForStep) — statt starr im Ursprungs-Tab
+// hängenzubleiben. Schließt sich ein Popup (onRemoved), fällt sein Tab aus der Menge → der Lauf
+// kehrt zum Opener zurück.
+//
+// DATENSCHUTZ: Wir sammeln nur tabId/url/windowId der ZUM LAUF gehörenden Tabs und liefern sie
+// AUSSCHLIESSLICH an den Orchestrator desselben Laufs (über dessen eigenen Port) — nichts geht
+// ans Netz. Die Tab-URLs sind dank host_permissions <all_urls> ohnehin lokal lesbar.
+const steplyRunSessions = new Set(); // je offenem Lauf-/Führungs-Port ein { tabs:Set<number> }
+
+// Momentaufnahme der lauf-zugehörigen Tabs (mit URL/Fenster/Fokus/Status) für einen Orchestrator.
+async function steplyCollectRunTabs(session) {
+  if (!session || !session.tabs || session.tabs.size === 0) return [];
+  let all = [];
+  try {
+    all = await chrome.tabs.query({});
+  } catch (e) {
+    all = [];
+  }
+  const out = [];
+  for (const t of all || []) {
+    if (!t || t.id == null || !session.tabs.has(t.id)) continue;
+    out.push({
+      tabId: t.id,
+      url: typeof t.url === "string" ? t.url : "",
+      windowId: typeof t.windowId === "number" ? t.windowId : null,
+      // lastAccessed (neuere Chrome-Versionen): „zuletzt fokussiert"-Tiebreak für pickTabForStep.
+      lastFocusedMs: typeof t.lastAccessed === "number" ? t.lastAccessed : 0,
+      active: !!t.active,
+      status: typeof t.status === "string" ? t.status : "",
+    });
+  }
+  return out;
+}
+
+// Neu geöffnete Tabs/Popups der passenden Lauf-Session zuordnen (openerTabId-Kette).
+if (chrome.tabs && chrome.tabs.onCreated) {
+  chrome.tabs.onCreated.addListener((tab) => {
+    if (!tab || tab.id == null) return;
+    const opener = typeof tab.openerTabId === "number" ? tab.openerTabId : null;
+    if (opener == null || steplyRunSessions.size === 0) return;
+    for (const s of steplyRunSessions) {
+      if (s.tabs.has(opener)) s.tabs.add(tab.id);
+    }
+  });
+}
+// Geschlossene Tabs (z. B. OAuth-Popup nach der Kontowahl) aus allen Sessions entfernen.
+if (chrome.tabs && chrome.tabs.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    if (steplyRunSessions.size === 0) return;
+    for (const s of steplyRunSessions) s.tabs.delete(tabId);
+  });
+}
+
 // Führungs-Port (Welle 33, Fix 2a): Das Panel hält während einer laufenden Führung einen
 // Port offen und nennt uns EINMALIG den gebundenen Tab. Bricht der Port ab (Panel geschlossen,
 // neu geladen oder abgestürzt), räumen wir das Overlay auf DIESEM Tab ab — sonst bleibt das
@@ -116,17 +177,38 @@ if (chrome.runtime.onConnect) {
     if (!port || !Object.prototype.hasOwnProperty.call(PORT_HIDE, port.name)) return;
     const hideType = PORT_HIDE[port.name];
     let boundTabId = null;
+    // Tab-/Fenster-Folgen (Welle 43): pro Port eine Lauf-Session mit ihrer Tab-Menge.
+    const session = { tabs: new Set() };
+    steplyRunSessions.add(session);
     // Zeitplan (Welle 41): Ein offener „steply-exec"/„steply-guide"-Port heißt „ein Lauf/eine
     // Führung ist aktiv" (Panel-Lauf ODER Runner-Lauf). Der Scheduler zählt mit, damit NIE zwei
     // Läufe gleichzeitig denselben Tab-Kontext durcheinanderbringen (geplanter Lauf verschiebt sich).
     steplyActiveRunPorts++;
     port.onMessage.addListener((msg) => {
-      if (msg && msg.type === "bind" && typeof msg.tabId === "number") {
+      if (!msg) return;
+      // bind (Start) / rebind (Welle 43: Lauf folgte in neuen Tab/Popup): gebundenen Tab merken
+      // (für das Overlay-Abräumen bei Port-Abbruch) UND der Lauf-Session hinzufügen.
+      if ((msg.type === "bind" || msg.type === "rebind") && typeof msg.tabId === "number") {
         boundTabId = msg.tabId;
+        session.tabs.add(msg.tabId);
+        return;
+      }
+      // get-tabs (Welle 43): die lauf-zugehörige Tab-Menge (mit URL/Fenster) an den Orchestrator.
+      if (msg.type === "get-tabs") {
+        const reqId = msg.reqId;
+        steplyCollectRunTabs(session).then((tabs) => {
+          try {
+            port.postMessage({ type: "run-tabs", reqId, tabs });
+          } catch (e) {
+            /* Port evtl. schon weg — egal */
+          }
+        });
+        return;
       }
     });
     port.onDisconnect.addListener(() => {
       steplyActiveRunPorts = Math.max(0, steplyActiveRunPorts - 1);
+      steplyRunSessions.delete(session);
       if (boundTabId == null) return;
       try {
         const p = chrome.tabs.sendMessage(boundTabId, { type: hideType });
