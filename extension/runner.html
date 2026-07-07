@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steply — geplanter Lauf</title>
+    <style>
+      /* Der Runner ist eine unsichtbare Arbeits-Seite (inaktiver Tab). Nur ein schlichter
+         Status, falls jemand doch draufschaut. Die eigentliche Aktion (Maus/Overlay) läuft im
+         ZIEL-Tab über content.js. */
+      html,
+      body {
+        margin: 0;
+        font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #faf7f2;
+        color: #2a2320;
+      }
+      .wrap {
+        max-width: 420px;
+        margin: 12vh auto;
+        padding: 24px;
+        text-align: center;
+      }
+      .dot {
+        font-size: 34px;
+      }
+      h1 {
+        font-size: 17px;
+        margin: 10px 0 4px;
+      }
+      #status {
+        color: #6b625c;
+        font-weight: 600;
+        min-height: 1.5em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="dot" aria-hidden="true">⏰</div>
+      <h1>Steply führt einen geplanten Ablauf aus</h1>
+      <p id="status">Wird vorbereitet …</p>
+      <p style="color: #9a908a; font-size: 12px; margin-top: 16px">
+        Dieses Fenster schließt sich von selbst. Die Aktionen laufen im geöffneten Ziel-Tab.
+      </p>
+    </div>
+    <!-- exec-plan.js VOR exec-run.js/runner.js: stellt das globale SteplyExecPlan bereit
+         (needsNavigation/resyncTarget/buildRunPlan/redactDetail/…). exec-run.js = der DOM-freie
+         Lauf-Motor; runner.js verdrahtet ihn mit den Chrome-Adaptern. -->
+    <script src="exec-plan.js"></script>
+    <script src="exec-run.js"></script>
+    <script src="runner.js"></script>
+  </body>
+</html>

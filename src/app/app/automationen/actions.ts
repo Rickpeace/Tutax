@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
-import { convertTutorialToAutomation, sanitizeParams } from "@/lib/automations";
+import {
+  convertTutorialToAutomation,
+  sanitizeParams,
+  sanitizeSchedule,
+} from "@/lib/automations";
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -59,6 +63,26 @@ export async function updateAutomationParams(id: string, params: unknown) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${id}`);
+}
+
+/**
+ * Zeitplan einer Automation setzen/entfernen (Welle 41). `schedule = null` entfernt den
+ * Zeitplan; sonst wird streng validiert (sanitizeSchedule wirft sprechend bei falschen
+ * Werten). Konto-scoped via RLS. WICHTIG: Der Zeitplan wird NUR IM BROWSER des Nutzers via
+ * chrome.alarms gelöst (kein Server-Cron) — die Extension synct ihn über
+ * GET /api/recorder/automations. WERTE für geplante Läufe bleiben lokal in der Extension;
+ * die App kann sie nicht sehen (sie warnt nur textlich, dass Pflicht-Werte gemerkt sein müssen).
+ */
+export async function setAutomationSchedule(id: string, schedule: unknown) {
+  const clean = sanitizeSchedule(schedule); // wirft bei ungültigen Werten (sprechend)
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("automations")
+    .update({ schedule: clean, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/app/automationen/${id}`);
+  revalidatePath("/app/automationen");
 }
 
 /** Automation löschen (kaskadiert Schritte + Läufe). Konto-scoped via RLS. */

@@ -5,6 +5,7 @@ import {
   RECORDER_ME_CORS,
 } from "@/lib/recorder";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readSchedule } from "@/lib/automations";
 
 // Automationen-Ausführung (Welle 36), Kontrakt 2: GET /api/recorder/automations/[id].
 //
@@ -24,6 +25,7 @@ type AutomationRow = {
   title: string | null;
   site_domains: string[] | null;
   params: unknown;
+  schedule: unknown;
 };
 
 type StepRow = {
@@ -62,7 +64,7 @@ export async function GET(
 
   const { data: automation } = await admin
     .from("automations")
-    .select("id, account_id, title, site_domains, params")
+    .select("id, account_id, title, site_domains, params, schedule")
     .eq("id", id)
     .maybeSingle<AutomationRow>();
   // 404 auch bei fremdem Konto (kein Existenz-Orakel für fremde Automationen).
@@ -112,6 +114,9 @@ export async function GET(
         title: automation.title ?? "",
         site_domains: Array.isArray(automation.site_domains) ? automation.site_domains : [],
         params: paramDefs,
+        // Zeitplan (Welle 41): normalisiert | null. Der Runner/das Panel braucht ihn nicht zum
+        // Ausführen, aber die Extension zeigt/prüft ihn (Konsistenz mit der Liste).
+        schedule: readSchedule(automation.schedule),
       },
       steps: steps.map((s) => ({
         id: s.id,

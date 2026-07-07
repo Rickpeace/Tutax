@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -319,5 +319,136 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(skipCrossesLogin(planSecret, 0, 1, {}) === false, "skipCrossesLogin: fill ohne secret-Markierung → false");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin verifiziert.");
+// ══════════ nextFireTime (Welle 41, ZEITPLAN) ══════════
+{
+  // Helfer: UTC-Zeit als Epoch-ms (deterministisch, kein lokaler TZ-Einfluss).
+  const utc = (y, mo, d, h, mi) => Date.UTC(y, mo, d, h, mi, 0, 0);
+  // Erwartete Fälligkeit lesbar prüfen: nextFireTime zurück in LOKALE Wanduhr rechnen.
+  const localParts = (ms, tz) => {
+    const d = new Date(ms - tz * 60000);
+    return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), wd: d.getUTCDay() };
+  };
+
+  // ── weekly, tz = 0 (UTC) ──────────────────────────────────────────────────
+  // 2026-07-06 ist ein MONTAG. Zeitplan „jeden Montag 08:00".
+  const monday0800 = { enabled: true, freq: "weekly", weekday: 1, hour: 8, minute: 0 };
+  // Jetzt: Montag 07:00 (vor 08:00) → HEUTE 08:00.
+  {
+    const now = utc(2026, 6, 6, 7, 0);
+    const fire = nextFireTime(monday0800, now, 0);
+    const p = localParts(fire, 0);
+    ok(p.wd === 1 && p.h === 8 && p.mi === 0 && p.d === 6, `nextFireTime weekly: Mo 07:00 → heute Mo 08:00 (war ${new Date(fire).toISOString()})`);
+    ok(fire > now, "nextFireTime weekly: Fälligkeit liegt in der Zukunft");
+  }
+  // Jetzt: Montag 08:00 EXAKT → nicht heute (>, nicht >=), sondern nächste Woche.
+  {
+    const now = utc(2026, 6, 6, 8, 0);
+    const fire = nextFireTime(monday0800, now, 0);
+    const p = localParts(fire, 0);
+    ok(p.wd === 1 && p.d === 13, `nextFireTime weekly: Mo 08:00 exakt → nächster Montag (war ${new Date(fire).toISOString()})`);
+  }
+  // Jetzt: Montag 09:00 (nach 08:00) → nächster Montag (+7).
+  {
+    const now = utc(2026, 6, 6, 9, 0);
+    const fire = nextFireTime(monday0800, now, 0);
+    ok(fire === utc(2026, 6, 13, 8, 0), `nextFireTime weekly: Mo 09:00 → nächster Mo (war ${new Date(fire).toISOString()})`);
+  }
+  // Jetzt: Mittwoch → nächster Montag.
+  {
+    const now = utc(2026, 6, 8, 12, 0); // Mi
+    const fire = nextFireTime(monday0800, now, 0);
+    ok(fire === utc(2026, 6, 13, 8, 0), `nextFireTime weekly: Mi → kommender Mo (war ${new Date(fire).toISOString()})`);
+  }
+  // Sonntag (weekday 0) getestet: 2026-07-05 ist ein Sonntag.
+  {
+    const sunday = { enabled: true, freq: "weekly", weekday: 0, hour: 20, minute: 30 };
+    const now = utc(2026, 6, 6, 9, 0); // Mo
+    const fire = nextFireTime(sunday, now, 0);
+    const p = localParts(fire, 0);
+    ok(p.wd === 0 && p.d === 12 && p.h === 20 && p.mi === 30, `nextFireTime weekly: Sonntag(0) → 12.07. 20:30 (war ${new Date(fire).toISOString()})`);
+  }
+
+  // ── weekly mit Zeitzone (Berlin Sommer, UTC+2 → tzOffset -120) ──────────────
+  {
+    // Lokal Montag 08:00 Berlin = 06:00 UTC. Jetzt lokal Mo 07:00 (=05:00 UTC).
+    const nowUtc = utc(2026, 6, 6, 5, 0); // 07:00 Berlin
+    const fire = nextFireTime(monday0800, nowUtc, -120);
+    ok(fire === utc(2026, 6, 6, 6, 0), `nextFireTime weekly tz: Mo 08:00 Berlin = 06:00 UTC (war ${new Date(fire).toISOString()})`);
+    const p = localParts(fire, -120);
+    ok(p.h === 8 && p.mi === 0 && p.wd === 1, "nextFireTime weekly tz: lokal 08:00 Montag");
+  }
+  {
+    // Grenzfall: lokal kurz vor Mitternacht, Zeitplan früh morgens → nächster Tag/Woche korrekt.
+    // Jetzt lokal So 23:30 Berlin (=21:30 UTC So). „Montag 00:30" → Mo 00:30 Berlin = 22:30 UTC So.
+    const early = { enabled: true, freq: "weekly", weekday: 1, hour: 0, minute: 30 };
+    const nowUtc = utc(2026, 6, 5, 21, 30); // So 23:30 Berlin
+    const fire = nextFireTime(early, nowUtc, -120);
+    const p = localParts(fire, -120);
+    ok(p.wd === 1 && p.h === 0 && p.mi === 30 && p.d === 6, `nextFireTime weekly tz: So 23:30 → Mo 00:30 lokal (war Tag ${p.d} ${p.h}:${p.mi})`);
+  }
+
+  // ── monthly ────────────────────────────────────────────────────────────────
+  // „am 3. um 09:00". Jetzt 1. Juli → 3. Juli.
+  {
+    const third = { enabled: true, freq: "monthly", day: 3, hour: 9, minute: 0 };
+    const fire = nextFireTime(third, utc(2026, 6, 1, 10, 0), 0);
+    ok(fire === utc(2026, 6, 3, 9, 0), `nextFireTime monthly: 1.7. → 3.7. 09:00 (war ${new Date(fire).toISOString()})`);
+  }
+  // Jetzt 3. Juli 10:00 (nach 09:00) → 3. August.
+  {
+    const third = { enabled: true, freq: "monthly", day: 3, hour: 9, minute: 0 };
+    const fire = nextFireTime(third, utc(2026, 6, 3, 10, 0), 0);
+    ok(fire === utc(2026, 7, 3, 9, 0), `nextFireTime monthly: 3.7. 10:00 → 3.8. (war ${new Date(fire).toISOString()})`);
+  }
+  // day=31 im Februar (Nicht-Schaltjahr 2027) → 28.02.
+  {
+    const d31 = { enabled: true, freq: "monthly", day: 31, hour: 12, minute: 0 };
+    const fire = nextFireTime(d31, utc(2027, 1, 1, 0, 0), 0); // 1. Feb 2027
+    ok(fire === utc(2027, 1, 28, 12, 0), `nextFireTime monthly: day=31 Feb 2027 → 28.02. (war ${new Date(fire).toISOString()})`);
+  }
+  // day=31 im Februar (Schaltjahr 2028) → 29.02.
+  {
+    const d31 = { enabled: true, freq: "monthly", day: 31, hour: 12, minute: 0 };
+    const fire = nextFireTime(d31, utc(2028, 1, 1, 0, 0), 0); // 1. Feb 2028 (Schaltjahr)
+    ok(fire === utc(2028, 1, 29, 12, 0), `nextFireTime monthly: day=31 Feb 2028 (Schaltjahr) → 29.02. (war ${new Date(fire).toISOString()})`);
+  }
+  // day=31 im April (30 Tage) → 30.04.
+  {
+    const d31 = { enabled: true, freq: "monthly", day: 31, hour: 6, minute: 15 };
+    const fire = nextFireTime(d31, utc(2026, 3, 15, 0, 0), 0); // 15. April
+    ok(fire === utc(2026, 3, 30, 6, 15), `nextFireTime monthly: day=31 April → 30.04. (war ${new Date(fire).toISOString()})`);
+  }
+  // Jahresübergang: „am 5." und jetzt 20. Dezember → 5. Januar Folgejahr.
+  {
+    const d5 = { enabled: true, freq: "monthly", day: 5, hour: 8, minute: 0 };
+    const fire = nextFireTime(d5, utc(2026, 11, 20, 0, 0), 0); // 20. Dez
+    ok(fire === utc(2027, 0, 5, 8, 0), `nextFireTime monthly: 20.12. → 5.1. Folgejahr (war ${new Date(fire).toISOString()})`);
+  }
+  // monthly mit tz: „am 1. 00:00" Berlin (UTC+2) = 31. des Vormonats 22:00 UTC.
+  {
+    const first = { enabled: true, freq: "monthly", day: 1, hour: 0, minute: 0 };
+    const nowUtc = utc(2026, 6, 15, 12, 0); // 15. Juli
+    const fire = nextFireTime(first, nowUtc, -120);
+    ok(fire === utc(2026, 6, 31, 22, 0), `nextFireTime monthly tz: 1.8. 00:00 Berlin = 31.7. 22:00 UTC (war ${new Date(fire).toISOString()})`);
+    const p = localParts(fire, -120);
+    ok(p.d === 1 && p.mo === 7 && p.h === 0, "nextFireTime monthly tz: lokal 1. August 00:00");
+  }
+
+  // ── Robustheit / ungültige Eingaben → null ─────────────────────────────────
+  ok(nextFireTime(null, 0, 0) === null, "nextFireTime: null-Schedule → null");
+  ok(nextFireTime({ enabled: false, freq: "weekly", weekday: 1, hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: enabled=false → null");
+  ok(nextFireTime({ enabled: true, freq: "daily", hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: unbekannte freq → null");
+  ok(nextFireTime({ enabled: true, freq: "weekly", weekday: 9, hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: weekday außerhalb 0-6 → null");
+  ok(nextFireTime({ enabled: true, freq: "weekly", hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: weekly ohne weekday → null");
+  ok(nextFireTime({ enabled: true, freq: "monthly", hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: monthly ohne day → null");
+  ok(nextFireTime({ enabled: true, freq: "monthly", day: 0, hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: day 0 → null");
+  ok(nextFireTime({ enabled: true, freq: "monthly", day: 32, hour: 8, minute: 0 }, 0, 0) === null, "nextFireTime: day 32 → null");
+  ok(nextFireTime({ enabled: true, freq: "weekly", weekday: 1, hour: 24, minute: 0 }, 0, 0) === null, "nextFireTime: hour 24 → null");
+  ok(nextFireTime({ enabled: true, freq: "weekly", weekday: 1, hour: 8, minute: 60 }, 0, 0) === null, "nextFireTime: minute 60 → null");
+  ok(nextFireTime({ enabled: true, freq: "weekly", weekday: 1, hour: 8, minute: 0 }, NaN, 0) === null, "nextFireTime: nowMs NaN → null");
+  // tzOffset fehlt → als 0 behandelt (kein Absturz).
+  ok(typeof nextFireTime(monday0800, utc(2026, 6, 6, 7, 0)) === "number", "nextFireTime: fehlender tzOffset → 0 angenommen (Zahl)");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime verifiziert.");
 process.exitCode = failed ? 1 : 0;

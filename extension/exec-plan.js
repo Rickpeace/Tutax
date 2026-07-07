@@ -197,6 +197,81 @@
     return false;
   }
 
+  // ── nextFireTime (Welle 41, ZEITPLAN) ─────────────────────────────────────────
+  // Nächste Fälligkeit eines Wiederhol-Zeitplans als UTC-Epoch-ms — die REINE, getestete
+  // Grundlage für chrome.alarms im Service-Worker (background.js legt pro aktivem Zeitplan
+  // einen Alarm auf `when: nextFireTime(...)`). BEWUSST deterministisch: nowMs (UTC-Epoch)
+  // und tzOffsetMin (wie Date.prototype.getTimezoneOffset(): Minuten, die zur LOKALEN Zeit
+  // addiert UTC ergeben — UTC+2 → -120) werden ÜBERGEBEN; kein Date.now()/kein lokaler
+  // Zeitzonen-Zugriff in dieser Funktion (im Test exakt steuerbar).
+  //
+  // schedule: { enabled, freq:'weekly'|'monthly', weekday:0-6, day:1-31, hour:0-23, minute:0-59 }
+  //   • !enabled / ungültig                 → null
+  //   • weekly   → nächster Wochentag `weekday` um hour:minute (heute schon vorbei → +7 Tage)
+  //   • monthly  → nächster Tag `day` um hour:minute; day auf MONATSENDE geklemmt (31 im
+  //                Februar → 28./29.); heute/Tag schon vorbei → nächster Monat.
+  //
+  // Modell: FESTER Offset (kein DST-Sprung INNERHALB einer Berechnung). Das ist bewusst — der
+  // Worker rechnet bei JEDEM Sync (~30 min) mit dem AKTUELLEN tzOffset neu; ein DST-Wechsel
+  // wird also an der Sync-Grenze eingefangen, nicht mitten in einer Fälligkeits-Rechnung.
+  function nextFireTime(schedule, nowMs, tzOffsetMin) {
+    var s = schedule && typeof schedule === "object" ? schedule : null;
+    if (!s || s.enabled === false) return null;
+    if (s.freq !== "weekly" && s.freq !== "monthly") return null;
+    var now = typeof nowMs === "number" && isFinite(nowMs) ? nowMs : NaN;
+    if (!isFinite(now)) return null;
+    var tz = typeof tzOffsetMin === "number" && isFinite(tzOffsetMin) ? tzOffsetMin : 0;
+    var hour = intInRange(s.hour, 0, 23);
+    var minute = intInRange(s.minute, 0, 59);
+    if (hour == null || minute == null) return null;
+
+    // Lokale Wanduhr als „Pseudo-UTC" (getUTC* darauf lesen die LOKALE Zeit).
+    var localNow = new Date(now - tz * 60000);
+    var Y = localNow.getUTCFullYear();
+    var Mo = localNow.getUTCMonth();
+    var Da = localNow.getUTCDate();
+
+    // Pseudo-UTC (lokale Wanduhr) → echte UTC-Epoche.
+    var toUtc = function (pseudoMs) { return pseudoMs + tz * 60000; };
+
+    if (s.freq === "weekly") {
+      var weekday = intInRange(s.weekday, 0, 6);
+      if (weekday == null) return null;
+      // 0..7 Tage voraus: genau ein passender Wochentag; ist er heute schon vorbei, greift +7.
+      for (var off = 0; off <= 7; off++) {
+        var pseudo = Date.UTC(Y, Mo, Da + off, hour, minute, 0, 0); // Überlauf normalisiert Date.UTC
+        if (new Date(pseudo).getUTCDay() !== weekday) continue;
+        var candUtc = toUtc(pseudo);
+        if (candUtc > now) return candUtc;
+      }
+      return null; // unerreichbar (7-Tage-Periode deckt jeden Wochentag ab)
+    }
+
+    // monthly: aktueller Monat, sonst nächster — day auf Monatsende klemmen.
+    var day = intInRange(s.day, 1, 31);
+    if (day == null) return null;
+    for (var k = 0; k <= 1; k++) {
+      var y = Y + Math.floor((Mo + k) / 12);
+      var m = ((Mo + k) % 12 + 12) % 12;
+      var eff = Math.min(day, daysInMonth(y, m));
+      var pseudoM = Date.UTC(y, m, eff, hour, minute, 0, 0);
+      var utcM = toUtc(pseudoM);
+      if (utcM > now) return utcM;
+    }
+    return null; // unerreichbar (nächster Monat liegt immer in der Zukunft)
+  }
+
+  function intInRange(v, lo, hi) {
+    if (typeof v !== "number" || !isFinite(v)) return null;
+    var n = Math.trunc(v);
+    return n >= lo && n <= hi ? n : null;
+  }
+
+  function daysInMonth(year, month0) {
+    // Tag 0 des Folgemonats = letzter Tag dieses Monats.
+    return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+  }
+
   // ── redactDetail ────────────────────────────────────────────────────────────
   // Sicherheitsnetz für detail-Strings (z. B. ein Fehlergrund), BEVOR sie an den Server
   // gehen. Entfernt, was nach Geheimnis/eingetipptem Wert aussieht. Bewusst großzügig
@@ -344,6 +419,8 @@
     looksLikeLoginUrl: looksLikeLoginUrl,
     skipCrossesNeededDownload: skipCrossesNeededDownload,
     skipCrossesLogin: skipCrossesLogin,
+    // Zeitplan (Welle 41)
+    nextFireTime: nextFireTime,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

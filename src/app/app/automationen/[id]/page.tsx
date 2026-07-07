@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
-import type { AutomationParam } from "@/lib/automations";
+import { readSchedule, type AutomationParam } from "@/lib/automations";
 import type { Highlight } from "@/lib/types";
 import {
   AutomationDetail,
@@ -25,7 +25,7 @@ export default async function AutomationDetailPage({
 
   const { data: automation } = await supabase
     .from("automations")
-    .select("id, title, site_domains, params")
+    .select("id, title, site_domains, params, schedule")
     .eq("id", id)
     .eq("account_id", account.id)
     .maybeSingle();
@@ -39,7 +39,7 @@ export default async function AutomationDetailPage({
       .order("position", { ascending: true }),
     supabase
       .from("automation_runs")
-      .select("id, status, mode, started_at, finished_at, detail")
+      .select("id, status, mode, trigger, started_at, finished_at, detail")
       .eq("automation_id", id)
       .order("started_at", { ascending: false })
       .limit(10),
@@ -69,6 +69,8 @@ export default async function AutomationDetailPage({
     id: r.id as string,
     status: r.status as string,
     mode: r.mode as string,
+    // Auslöser (Welle 41): manuell (Panel) vs. geplant (Wecker). Bestandsläufe: default 'manual'.
+    trigger: (r.trigger as string | null) === "scheduled" ? "scheduled" : "manual",
     startedAt: r.started_at as string,
     finishedAt: (r.finished_at as string | null) ?? null,
     detail: (r.detail as string | null) ?? null,
@@ -84,6 +86,7 @@ export default async function AutomationDetailPage({
       params={paramList}
       steps={steps}
       runs={runs}
+      schedule={readSchedule(automation.schedule)}
     />
   );
 }

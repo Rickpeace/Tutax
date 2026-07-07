@@ -5,6 +5,7 @@ import {
   RECORDER_ME_CORS,
 } from "@/lib/recorder";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readSchedule } from "@/lib/automations";
 
 // Automationen-Ausführung (Welle 36), Kontrakt 1: GET /api/recorder/automations.
 //
@@ -12,15 +13,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // /api/recorder/me: „Authorization: Bearer <recorder_token>“ (accountForRecorderToken,
 // Admin-Client/RLS-Bypass, cross-origin ohne Session). KEINE Cookies. CORS: RECORDER_ME_CORS.
 //
-// Antwort: { automations: [{ id, title, site_domains, stepCount, paramCount, updated_at }] }
+// Antwort: { automations: [{ id, title, site_domains, stepCount, paramCount, schedule, updated_at }] }
 //   — NUR das Token-Konto, updated_at desc, max 100. stepCount kommt aus EINER Steps-Query
-//   (kein N+1); paramCount = Länge des params-Arrays.
+//   (kein N+1); paramCount = Länge des params-Arrays. schedule (Welle 41) = normalisierter
+//   Wiederhol-Zeitplan | null — die Extension synct daraus ihre chrome.alarms.
 
 type AutomationRow = {
   id: string;
   title: string | null;
   site_domains: string[] | null;
   params: unknown;
+  schedule: unknown;
   updated_at: string;
 };
 
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   const { data: rows } = await admin
     .from("automations")
-    .select("id, title, site_domains, params, updated_at")
+    .select("id, title, site_domains, params, schedule, updated_at")
     .eq("account_id", account.id)
     .order("updated_at", { ascending: false })
     .limit(100)
@@ -70,6 +73,8 @@ export async function GET(req: NextRequest) {
     site_domains: Array.isArray(a.site_domains) ? a.site_domains : [],
     stepCount: stepCounts.get(a.id) ?? 0,
     paramCount: Array.isArray(a.params) ? a.params.length : 0,
+    // Zeitplan (Welle 41): tolerant normalisiert | null. Die Extension legt daraus Wecker an.
+    schedule: readSchedule(a.schedule),
     updated_at: a.updated_at,
   }));
 
