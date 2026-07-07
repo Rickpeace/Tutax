@@ -122,6 +122,17 @@
 
 ## 🧭 Geparkte Features (Entscheidung/Konzept nötig, dann baubar)
 
+- [ ] **Bedingte Verzweigungen für Automationen** (Richards Baum-Idee, 07.07.):
+  Ja/Nein-Knoten mit MASCHINENLESBARER Bedingung (URL-Muster oder
+  „Element vorhanden?") — der Lauf beantwortet die Frage selbst und nimmt den
+  passenden Ast. Verallgemeinert die Welle-40-Anmelde-Logik auf alles:
+  Cookie-Banner wegklicken, „Sitzung abgelaufen"-Dialoge, Mengen-Filter.
+  Passt ins bestehende Verzweigungs-Modell (Äste per „Ab hier aufnehmen"
+  befüllbar); braucht: Bedingungs-Feld an Entscheidungs-Schritten +
+  Automations-Konverter lässt Verzweigungen MIT Bedingung zu + Lauf-Engine
+  wertet aus. UI-Wunsch: Welle-40-Skips als beantworteter Knoten anzeigen
+  („Angemeldet? → Ja ✓").
+
 - [ ] **LemonSqueezy-Anbindung** (Checkout + Webhook → plan; Gating existiert schon)
 - [ ] **Custom Domain** `hilfe.firma.de` (Vercel-Domains-Setup zusammen durchgehen)
 - [x] ~~Interne Tutorials + Schulungsnachweis~~ **GEBAUT (02.07., Welle 10b):**
