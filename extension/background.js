@@ -548,12 +548,20 @@ async function getSteplyDocs() {
   }
 }
 
-function clearBadge(tabId) {
+// chrome.action.* liefert in MV3 ein Promise: try/catch faengt dessen Ablehnung NICHT. Ist der
+// Tab inzwischen zu (Popup, schnell geschlossener Tab — die Anleitungen werden vorher geladen),
+// kam sonst „Uncaught (in promise) Error: No tab with id" in der Extension-Fehlerliste.
+function quietBadge(fn) {
   try {
-    chrome.action.setBadgeText({ text: "", tabId });
+    const p = fn();
+    if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (err) {
     /* egal */
   }
+}
+
+function clearBadge(tabId) {
+  quietBadge(() => chrome.action.setBadgeText({ text: "", tabId }));
 }
 
 async function updateBadgeForTab(tabId, url) {
@@ -583,16 +591,8 @@ async function updateBadgeForTab(tabId, url) {
     // („Diese Seite + Live"); Doku ist immer published. Sonst verspraeche das Badge zu viel.
     const n = SM.matchTutorials(url, merged).filter((t) => t.status === "published").length;
     if (n > 0) {
-      try {
-        chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
-      } catch (err) {
-        /* egal */
-      }
-      try {
-        chrome.action.setBadgeText({ text: String(n), tabId });
-      } catch (err) {
-        /* egal */
-      }
+      quietBadge(() => chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR }));
+      quietBadge(() => chrome.action.setBadgeText({ text: String(n), tabId }));
     } else {
       clearBadge(tabId);
     }
