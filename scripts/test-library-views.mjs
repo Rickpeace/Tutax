@@ -1,6 +1,6 @@
 // Welle 49 — Bibliothek: Karten (Titel im Kategorie-Farbfeld) + Liste (nach Kategorie gruppiert).
 // Echter Login gegen die echte DB (Wegwerf-Konto, wird am Ende geloescht), Dev-Server lokal.
-// Prueft: Karten zeigen Titel/Website/Kategorie, NUR „Intern" ist markiert (kein „Kunde"-Etikett),
+// Prueft: Karten zeigen Titel/Website/Kategorie, NUR „Nur Team" ist markiert (kein „Kunde"-Etikett),
 // EIN Status-Schalter; Umschalten auf Liste gruppiert nach Kategorie + merkt sich die Wahl
 // (Reload); Schalter veroeffentlicht wirklich (DB); mobil keine horizontale Scrollleiste.
 // Screenshots → SHOT_DIR (Standard: scripts/.shots-library, gitignored ueber .shots*).
@@ -128,7 +128,8 @@ try {
   const grid = main.locator("div.grid", { has: page.getByText("Beleg in DATEV hochladen") }).first();
   ok(await grid.getByText("duo.datev.de").isVisible(), "Karte zeigt die Website");
   ok((await grid.getByText("Kunde", { exact: true }).count()) === 0, "Kein „Kunde“-Etikett mehr");
-  ok((await grid.getByText("Intern", { exact: true }).count()) === 1, "Genau EIN „Intern“-Etikett (nur die Ausnahme)");
+  ok((await grid.getByText("Nur Team", { exact: true }).count()) === 1, "Genau EIN „Nur Team“-Etikett (nur die Ausnahme)");
+  ok((await grid.getByText("Intern", { exact: true }).count()) === 0, "Kein altes „Intern“-Etikett mehr");
   ok((await grid.getByText("Auf Hilfe-Seite").count()) === 0, "Kein doppelter Status (Etikett + Schalter) mehr");
   ok((await grid.getByRole("switch").count()) === 4, "Ein Status-Schalter je Anleitung");
   ok(await grid.getByText("Sonstiges").first().isVisible(), "Anleitung ohne Kategorie: „Sonstiges“");

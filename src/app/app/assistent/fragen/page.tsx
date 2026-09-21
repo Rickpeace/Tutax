@@ -19,7 +19,7 @@ export default async function FragenPage() {
       <div>
         <h2 className="text-lg font-bold text-ink">Offene Fragen</h2>
         <p className="text-sm text-muted-foreground">
-          Das haben Kundinnen und Kunden gefragt, der Assistent konnte es aber nicht
+          Das haben Kundinnen und Kunden gefragt, der KI-Assistent konnte es aber nicht
           beantworten – ein Hinweis, wofür noch eine Anleitung fehlt.
         </p>
       </div>
@@ -30,11 +30,11 @@ export default async function FragenPage() {
             <MessageCircleQuestion className="size-6" />
           </div>
           <h3 className="mt-4 font-bold text-ink">
-            Keine offenen Fragen – Ihr Assistent konnte bisher alles beantworten.
+            Keine offenen Fragen – Ihr KI-Assistent konnte bisher alles beantworten.
           </h3>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Hier erscheinen Chat-Fragen aus Ihrer Hilfe-Seite, auf die der Assistent
-            keine Antwort in Ihren Tutorials und Ihrem Wissen gefunden hat (letzte
+            Hier erscheinen Chat-Fragen aus Ihrer Hilfe-Seite, auf die der KI-Assistent
+            keine Antwort in Ihren Anleitungen und Ihrem Wissen gefunden hat (letzte
             30 Tage). Aus jeder Frage können Sie mit einem Klick einen Anleitungs-Entwurf
             erstellen.
           </p>

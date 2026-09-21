@@ -4,11 +4,12 @@ import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { relativeDe } from "@/lib/format";
 import { RunStatusBadge } from "@/components/app/automation-run-status";
+import { PageHeader } from "@/components/app/page-header";
 
 /**
  * Automationen (Welle 36): dritte Produkt-Ebene. Liste der aufgezeichneten Abläufe,
- * die die Steply-Extension AUSFÜHRT. Jede entsteht als Snapshot aus einer Sofort-
- * Aufnahme (Bibliothek → „Als Automation nutzen“). RSC: liest konto-scoped (RLS).
+ * die die Steply-Erweiterung AUSFÜHRT. Jede entsteht als Snapshot aus einer Sofort-
+ * Aufnahme (Anleitungen → „Als Automation nutzen“). RSC: liest konto-scoped (RLS).
  */
 export default async function AutomationenPage() {
   const { account } = await requireAccount();
@@ -49,17 +50,11 @@ export default async function AutomationenPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[22px] font-black text-ink">Automationen</h1>
-          <p className="mt-1 text-sm font-semibold text-muted-foreground">
-            Aufgezeichnete Abläufe, die die Steply-Extension für Sie ausführt.
-          </p>
-        </div>
-        <span className="text-[13px] font-bold text-faint">
-          {automations.length} Automation{automations.length === 1 ? "" : "en"}
-        </span>
-      </div>
+      <PageHeader
+        title="Automationen"
+        description="Aufgezeichnete Abläufe, die die Steply-Erweiterung für Sie ausführt."
+        meta={`${automations.length} Automation${automations.length === 1 ? "" : "en"}`}
+      />
 
       {automations.length === 0 ? (
         <EmptyState />
@@ -85,7 +80,8 @@ export default async function AutomationenPage() {
                       </h2>
                       <p className="mt-0.5 text-xs font-semibold text-faint">
                         {stepCount.get(a.id as string) ?? 0} Schritt
-                        {(stepCount.get(a.id as string) ?? 0) === 1 ? "" : "e"} · {pCount} Parameter
+                        {(stepCount.get(a.id as string) ?? 0) === 1 ? "" : "e"} · {pCount}{" "}
+                        {pCount === 1 ? "Angabe" : "Angaben"}
                       </p>
                     </div>
                     <ChevronRight className="mt-1 size-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
@@ -137,14 +133,14 @@ function EmptyState() {
       </span>
       <h2 className="text-base font-extrabold text-ink">Noch keine Automationen</h2>
       <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-muted-foreground">
-        Nehmen Sie einen Ablauf mit der Sofort-Anleitung auf und wandeln Sie ihn hier um.
-        In der Bibliothek finden Sie im Menü einer Anleitung „Als Automation nutzen“.
+        Nehmen Sie einen Ablauf mit der Sofort-Anleitung auf und wandeln Sie ihn um: Bei
+        den Anleitungen finden Sie im Menü einer Anleitung „Als Automation nutzen“.
       </p>
       <Link
         href="/app"
-        className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-extrabold text-background transition-transform hover:scale-[1.02]"
+        className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-extrabold text-white transition-transform hover:scale-[1.02]"
       >
-        Zur Bibliothek
+        Zu den Anleitungen
       </Link>
     </div>
   );

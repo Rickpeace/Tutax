@@ -8,6 +8,7 @@ import {
   type TutorialLayout,
 } from "@/components/app/tutorial-card";
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
+import { PageHeader } from "@/components/app/page-header";
 import { BulkCleanupProvider, CleanupControls } from "@/components/app/bulk-cleanup";
 import {
   DropdownMenu,
@@ -21,6 +22,13 @@ import { cn } from "@/lib/utils";
 export type LibraryCategory = { id: string; name: string };
 
 type Bereich = "alle" | "kunden" | "intern";
+
+/** Bereich-Filter: dieselben Wörter auf Desktop und Handy (Begriffsliste). */
+const BEREICH_LABELS: [Bereich, string][] = [
+  ["alle", "Alle"],
+  ["kunden", "Hilfe-Seite"],
+  ["intern", "Nur Team"],
+];
 type StatusFilter = "alle" | "live" | "entwurf";
 
 // Karten/Liste (Welle 49): Wahl je Browser merken (reine Komfort-Einstellung).
@@ -32,7 +40,7 @@ const STATUS_LABEL: Record<StatusFilter, string> = {
   entwurf: "Status: Entwurf",
 };
 
-/** Zählt Kunden-/Intern-Zugehörigkeit (öffentliche „+Team" zählen doppelt). */
+/** Zählt Hilfe-Seite-/Nur-Team-Zugehörigkeit (öffentliche „+Schulungen“ zählen doppelt). */
 function inBereich(t: LibraryTutorial, b: Bereich): boolean {
   if (b === "alle") return true;
   if (b === "kunden") return t.visibility === "public";
@@ -139,13 +147,7 @@ export function LibraryBrowser({
         {/* Kategorien-Sidebar (Desktop) */}
         <aside className="hidden w-[230px] shrink-0 flex-col gap-5 border-r-2 border-line px-4 py-5 lg:flex">
           <SidebarGroup label="Bereich">
-            {(
-              [
-                ["alle", "Alle"],
-                ["kunden", "Für Kunden"],
-                ["intern", "Intern"],
-              ] as [Bereich, string][]
-            ).map(([key, label]) => {
+            {BEREICH_LABELS.map(([key, label]) => {
               const active = bereich === key;
               return (
                 <button
@@ -199,13 +201,7 @@ export function LibraryBrowser({
         <main className="min-w-0 flex-1 px-5 py-5 lg:px-7">
           {/* Mobile: Bereich-/Kategorie-Chips statt Sidebar */}
           <div className="-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 pb-1 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {(
-              [
-                ["alle", "Alle"],
-                ["kunden", "Kunden"],
-                ["intern", "Intern"],
-              ] as [Bereich, string][]
-            ).map(([key, label]) => (
+            {BEREICH_LABELS.map(([key, label]) => (
               <Chip
                 key={key}
                 label={label}
@@ -233,12 +229,12 @@ export function LibraryBrowser({
           {topSlot}
 
           {/* Filterzeile */}
-          <div className="mb-4 flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[22px] font-black">{activeName}</h1>
-            <span className="text-[13px] font-bold text-faint">
-              {visible.length} Anleitung{visible.length === 1 ? "" : "en"}
-            </span>
-            <div className="ml-auto flex items-center gap-2 text-xs font-extrabold">
+          <PageHeader
+            className="mb-4 items-center"
+            title={activeName}
+            meta={`${visible.length} Anleitung${visible.length === 1 ? "" : "en"}`}
+            actions={
+            <div className="flex items-center gap-2 text-xs font-extrabold">
               <CleanupControls />
               <ViewToggle view={view} onChange={chooseView} />
               <DropdownMenu>
@@ -261,7 +257,8 @@ export function LibraryBrowser({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </div>
+            }
+          />
 
           {view === "row" && (
             /* Liste: nach Kategorie gruppiert, Spalten zum Überfliegen */

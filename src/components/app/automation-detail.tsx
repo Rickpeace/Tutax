@@ -173,6 +173,12 @@ export function AutomationDetail({
   const scheduleDirty = scheduleSig(currentSchedule) !== scheduleSig(savedSchedule);
   const requiredParams = params.filter((p) => p.required);
 
+  // Anzeige-Nummer je Schritt: fortlaufend ab 1 in der gespeicherten Reihenfolge — egal,
+  // ob `position` 0- oder 1-basiert gespeichert ist. Sprungziele (to_position) laufen über
+  // dieselbe Tabelle, damit „weiter bei Schritt N“ zur Nummer in der Liste passt.
+  const stepNoByPosition = new Map(steps.map((s, i) => [s.position, i + 1]));
+  const stepNo = (position: number) => stepNoByPosition.get(position) ?? position;
+
   function saveSchedule() {
     // Ausgeschaltet → Zeitplan aus der DB entfernen (null); sonst das validierte Objekt.
     const toSave = schedEnabled ? currentSchedule : null;
@@ -248,7 +254,7 @@ export function AutomationDetail({
       try {
         await updateAutomationParams(id, paramState);
         setSavedParams(paramState);
-        toast.success("Parameter gespeichert");
+        toast.success("Angaben gespeichert");
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
       }
@@ -369,7 +375,7 @@ export function AutomationDetail({
           </div>
         ) : (
           <>
-            <h1 className="flex-1 text-[22px] font-black leading-tight text-ink">
+            <h1 className="flex-1 text-[26px] font-black leading-tight text-ink">
               {currentTitle || "Automation"}
             </h1>
             <Button
@@ -405,16 +411,16 @@ export function AutomationDetail({
       <div className="mt-5 flex items-start gap-2.5 rounded-card border-2 border-line bg-secondary/60 px-4 py-3">
         <Info className="mt-0.5 size-4 shrink-0 text-ink-2" />
         <p className="text-[13px] font-semibold text-ink-2">
-          Ausgeführt wird über die Steply-Extension — Werte und Passwörter bleiben in Ihrem
+          Ausgeführt wird über die Steply-Erweiterung — Werte und Passwörter bleiben in Ihrem
           Browser.
         </p>
       </div>
 
-      {/* Parameter */}
+      {/* Angaben (intern: params) — Werte, die beim Ausführen eingetragen werden. */}
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-black uppercase tracking-[0.06em] text-faint">
-            Parameter
+            Angaben
           </h2>
           {paramsDirty && (
             <Button size="sm" onClick={saveParams} disabled={pending}>
@@ -432,26 +438,28 @@ export function AutomationDetail({
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
                 <tr className="border-b-2 border-line text-left text-[11px] font-extrabold uppercase tracking-wide text-faint">
-                  <th className="pb-2 pr-3 font-extrabold">Schlüssel</th>
                   <th className="pb-2 pr-3 font-extrabold">Bezeichnung</th>
+                  <th className="pb-2 pr-3 font-extrabold">Genutzt in</th>
                   <th className="pb-2 pr-3 font-extrabold">Typ</th>
                   <th className="pb-2 font-extrabold">Pflicht</th>
                 </tr>
               </thead>
               <tbody>
                 {paramState.map((p, i) => (
-                  <tr key={p.key} className="border-b border-line">
-                    <td className="py-2 pr-3 align-middle">
-                      <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-ink-2">
-                        {p.key}
-                      </code>
-                    </td>
+                  <tr key={p.key} className="border-b-2 border-line-2">
                     <td className="py-2 pr-3 align-middle">
                       <Input
                         value={p.label}
                         onChange={(e) => updateParam(i, { label: e.target.value })}
+                        aria-label="Bezeichnung der Angabe"
                         className="h-8 text-[13px]"
                       />
+                    </td>
+                    <td className="py-2 pr-3 align-middle text-xs font-bold text-ink-2">
+                      {steps
+                        .filter((s) => s.paramKey === p.key)
+                        .map((s) => `Schritt ${stepNo(s.position)}`)
+                        .join(", ") || "–"}
                     </td>
                     <td className="py-2 pr-3 align-middle">
                       <select
@@ -623,7 +631,8 @@ export function AutomationDetail({
               <li>die Steply-Erweiterung, mit diesem Konto verbunden;</li>
               <li>einen laufenden Rechner mit geöffnetem Chrome zur geplanten Zeit;</li>
               <li>
-                alle Pflicht-Werte in der Erweiterung als „Im Browser merken“ gespeichert.
+                alle Pflicht-Angaben in der Steply-Erweiterung als „Im Browser merken“
+                gespeichert.
               </li>
             </ul>
             <p className="mt-1.5">
@@ -637,10 +646,10 @@ export function AutomationDetail({
           <div className="mt-3 flex items-start gap-2.5 rounded-card border-2 border-line bg-secondary/60 px-4 py-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-text" />
             <p className="text-[13px] font-semibold text-ink-2">
-              Dieser Ablauf hat Pflicht-Eingaben ({requiredParams.map((p) => p.label).join(", ")}).
-              Diese müssen in der Erweiterung einmal eingetragen und mit „Im Browser merken“
-              gespeichert sein — die App sieht diese Werte nicht. Fehlt ein Pflicht-Wert, wird der
-              geplante Lauf übersprungen (mit einer Meldung in der Erweiterung).
+              Dieser Ablauf hat Pflicht-Angaben ({requiredParams.map((p) => p.label).join(", ")}).
+              Diese müssen in der Steply-Erweiterung einmal eingetragen und mit „Im Browser
+              merken“ gespeichert sein — die App sieht diese Werte nicht. Fehlt eine Pflicht-Angabe,
+              wird der geplante Lauf übersprungen (mit einer Meldung in der Steply-Erweiterung).
             </p>
           </div>
         )}
@@ -662,10 +671,14 @@ export function AutomationDetail({
             // Datei-Brücke (Welle 39): Download liefert eine Datei, Upload verbraucht die
             // Datei aus dem Download-Schritt mit passendem key.
             const uploadSource = s.fileMeta?.role === "upload" ? s.fileMeta.source : null;
-            const uploadSourceNo = uploadSource
+            const uploadSourceStep = uploadSource
               ? steps.find(
                   (d) => d.fileMeta?.role === "download" && d.fileMeta.key === uploadSource,
-                )?.position ?? null
+                )
+              : undefined;
+            const uploadSourceNo = uploadSourceStep ? stepNo(uploadSourceStep.position) : null;
+            const paramLabel = s.paramKey
+              ? (paramState.find((p) => p.key === s.paramKey)?.label?.trim() || "Angabe")
               : null;
             return (
               <li
@@ -681,16 +694,22 @@ export function AutomationDetail({
                     s.imagePath ? "cursor-pointer hover:bg-accent/30" : "cursor-default"
                   } ${open ? "rounded-t-card" : "rounded-card"}`}
                 >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-xs font-black text-ink-2">
-                    {s.position}
+                  <span
+                    data-testid="step-no"
+                    className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-xs font-black text-ink-2"
+                  >
+                    {stepNo(s.position)}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">
                     {s.title || "Schritt"}
                   </span>
-                  {s.paramKey && (
-                    <code className="hidden shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground sm:inline">
-                      {s.paramKey}
-                    </code>
+                  {paramLabel && (
+                    <span
+                      className="hidden shrink-0 rounded-full bg-accent px-2 py-[3px] text-[11px] font-extrabold text-accent-foreground sm:inline"
+                      title="Dieser Schritt trägt diese Angabe ein."
+                    >
+                      {paramLabel}
+                    </span>
                   )}
                   {s.fileMeta?.role === "download" && (
                     <span
@@ -765,6 +784,7 @@ export function AutomationDetail({
                 {/* Bedingter Sprung / Block-Überspringen (Welle 47): Häkchen + Ziel-Schritt. */}
                 <StepJumpControl
                   step={s}
+                  stepNo={stepNo}
                   laterSteps={steps
                     .filter((d) => d.position > s.position)
                     .map((d) => ({ position: d.position, title: d.title }))}
@@ -786,7 +806,7 @@ export function AutomationDetail({
                       <StepScreenshot
                         url={imageUrl}
                         highlights={s.highlights}
-                        alt={`Screenshot zu Schritt ${s.position}: ${s.title || "Schritt"}`}
+                        alt={`Screenshot zu Schritt ${stepNo(s.position)}: ${s.title || "Schritt"}`}
                       />
                     )}
                   </div>
@@ -804,7 +824,7 @@ export function AutomationDetail({
         </h2>
         {runs.length === 0 ? (
           <p className="mt-3 text-sm font-semibold text-muted-foreground">
-            Noch keine Läufe. Starten Sie diesen Ablauf über die Steply-Extension.
+            Noch keine Läufe. Starten Sie diesen Ablauf über die Steply-Erweiterung.
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -903,12 +923,15 @@ function conditionChipTitle(c: StepCondition): string {
 // sinnvolles Präsenz-Element) und den letzten Schritt (kein späteres Ziel) entfällt der Setz-Block.
 function StepJumpControl({
   step,
+  stepNo,
   laterSteps,
   pending,
   onSet,
   onClear,
 }: {
   step: AutomationStepView;
+  /** position → Anzeige-Nummer (ab 1). */
+  stepNo: (position: number) => number;
   laterSteps: { position: number; title: string }[];
   pending: boolean;
   onSet: (toPosition: number) => void;
@@ -921,9 +944,9 @@ function StepJumpControl({
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2">
         <span
           className="flex items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
-          title={jumpChipTitle(step.jump)}
+          title={jumpChipTitle(step.jump, stepNo)}
         >
-          ↪ {jumpChipLabel(step.jump)}
+          ↪ {jumpChipLabel(step.jump, stepNo)}
         </span>
         <button
           type="button"
@@ -948,7 +971,7 @@ function StepJumpControl({
           type="button"
           onClick={() => setExpanded(true)}
           disabled={pending}
-          title="Einen ganzen Block überspringen, wenn das Element dieses Schritts fehlt (z. B. weil du schon angemeldet bist) — ideal für den Login-Block."
+          title="Einen ganzen Block überspringen, wenn das Element dieses Schritts fehlt (z. B. weil Sie schon angemeldet sind) — ideal für den Login-Block."
           className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
         >
           ↪ Block ab hier überspringen …
@@ -973,7 +996,7 @@ function StepJumpControl({
               <option value="">— Ziel-Schritt wählen —</option>
               {laterSteps.map((d) => (
                 <option key={d.position} value={d.position}>
-                  Schritt {d.position}: {d.title || "Schritt"}
+                  Schritt {stepNo(d.position)}: {d.title || "Schritt"}
                 </option>
               ))}
             </select>
@@ -987,7 +1010,7 @@ function StepJumpControl({
             </button>
           </div>
           <p className="text-[11px] font-semibold text-muted-foreground">
-            Ideal für Login: „Anmelden“ fehlt = du bist schon eingeloggt → überspringt den Login-Block.
+            Ideal für Login: „Anmelden“ fehlt = Sie sind schon angemeldet → überspringt den Login-Block.
           </p>
         </div>
       )}
@@ -996,22 +1019,22 @@ function StepJumpControl({
 }
 
 // Kurze Chip-Beschriftung eines gesetzten Sprungs: „wenn „Anmelden“ fehlt → Schritt N".
-function jumpChipLabel(j: StepJump): string {
+function jumpChipLabel(j: StepJump, stepNo: (position: number) => number): string {
   const sel =
     j.when.kind === "element"
       ? j.when.selector.text || j.when.selector.role || j.when.selector.css || "Element"
       : j.when.pattern;
   const cond = j.when.negate ? `„${sel}“ fehlt` : `„${sel}“ da`;
-  return `wenn ${cond} → Schritt ${j.to_position}`;
+  return `wenn ${cond} → Schritt ${stepNo(j.to_position)}`;
 }
 // Ausführlicher Titel (Tooltip).
-function jumpChipTitle(j: StepJump): string {
+function jumpChipTitle(j: StepJump, stepNo: (position: number) => number): string {
   const sel =
     j.when.kind === "element"
       ? j.when.selector.text || j.when.selector.role || j.when.selector.css || "das Element"
       : j.when.pattern;
   const cond = j.when.negate ? `„${sel}“ NICHT vorhanden ist` : `„${sel}“ vorhanden ist`;
-  return `Beim automatischen Ausführen wird der Block ab hier übersprungen (weiter bei Schritt ${j.to_position}), wenn ${cond} — z. B. weil du schon angemeldet bist.`;
+  return `Beim automatischen Ausführen wird der Block ab hier übersprungen (weiter bei Schritt ${stepNo(j.to_position)}), wenn ${cond} — z. B. weil Sie schon angemeldet sind.`;
 }
 
 /** 0..1 auf Prozent des Bild-Rahmens abbilden (defensiv gegen Nicht-Zahlen). */

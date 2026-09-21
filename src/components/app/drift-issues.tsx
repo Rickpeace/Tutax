@@ -37,7 +37,7 @@ export function DriftIssues({ alertId, issues }: { alertId: string; issues: Issu
       try {
         const r = await applyDriftSuggestions(alertId, g.items.map((i) => i.index));
         setApplied((p) => ({ ...p, [g.key]: true }));
-        toast.success(`Übernommen – „${r?.stepTitle ?? "Schritt"}" aktualisiert`);
+        toast.success(`Übernommen – „${r?.stepTitle ?? "Schritt"}“ aktualisiert`);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Fehler");
       } finally {
@@ -49,7 +49,7 @@ export function DriftIssues({ alertId, issues }: { alertId: string; issues: Issu
   return (
     <ul className="mt-3 space-y-2">
       {groups.map((g) => (
-        <li key={g.key} className="rounded-lg border border-line-2 bg-muted/40 p-2.5 text-sm">
+        <li key={g.key} className="rounded-xl border-2 border-line-2 bg-line-2/40 p-2.5 text-sm">
           {g.step && (
             <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{g.step}</div>
           )}

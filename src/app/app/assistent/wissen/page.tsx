@@ -26,14 +26,16 @@ export default async function KnowledgePage() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      {/* Handy: Knöpfe unter den Text (sonst Überbreite, die die untere Leiste aus dem Bild schiebt). */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+        <div className="min-w-0 md:flex-1">
           <h2 className="text-lg font-bold text-ink">Wissensdatenbank</h2>
           <p className="text-sm text-muted-foreground">
-            Freies Organisations-Wissen, das der Chatbot zusätzlich zu den Tutorials nutzt.
+            Freies Organisations-Wissen, das der KI-Assistent zusätzlich zu Ihren Anleitungen
+            nutzt.
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
           {aiOn && <KbImport accountWebsite={accountWebsite} />}
           <form action={createArticle}>
             <Button type="submit">
@@ -46,7 +48,7 @@ export default async function KnowledgePage() {
       <div className="mt-4 flex items-start gap-2 rounded-xl border border-border bg-accent/40 p-3 text-sm text-ink-2">
         <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
         <p>
-          <b>Veröffentlichte</b> Artikel fließen automatisch in das Wissen des Chatbots ein
+          <b>Veröffentlichte</b> Artikel fließen automatisch in das Wissen des KI-Assistenten ein
           (Antworten nur aus Ihren Inhalten).{" "}
           {!aiOn && (
             <span className="text-muted-foreground">
@@ -64,7 +66,7 @@ export default async function KnowledgePage() {
           <h3 className="mt-4 font-bold text-ink">Noch kein Wissen hinterlegt</h3>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             Legen Sie z. B. Öffnungszeiten, Zuständigkeiten, FAQs oder Hinweise an –
-            der Chatbot beantwortet damit Kundenfragen.
+            der KI-Assistent beantwortet damit Kundenfragen.
           </p>
           <form action={createArticle} className="mt-5">
             <Button type="submit">

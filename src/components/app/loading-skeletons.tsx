@@ -2,12 +2,13 @@
 
 export function PageHeaderSkeleton() {
   return (
-    <div className="flex items-center justify-between gap-4">
+    // Maße wie PageHeader (H1 26px + Erklärzeile), damit beim Laden nichts springt.
+    <div className="flex items-end justify-between gap-4">
       <div className="space-y-2">
-        <div className="h-6 w-44 animate-pulse rounded-md bg-line-2" />
-        <div className="h-4 w-64 animate-pulse rounded bg-line-2/70" />
+        <div className="h-8 w-52 animate-pulse rounded-lg bg-line-2" />
+        <div className="h-4 w-72 max-w-full animate-pulse rounded bg-line-2/70" />
       </div>
-      <div className="h-9 w-32 animate-pulse rounded-md bg-line-2" />
+      <div className="h-9 w-32 animate-pulse rounded-full bg-line-2" />
     </div>
   );
 }

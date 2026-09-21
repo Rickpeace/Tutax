@@ -397,14 +397,14 @@ function CategoryLabel({ name, color }: { name: string | null; color: CategoryCo
   );
 }
 
-/** Nur die AUSNAHME wird markiert: „Intern" (Kunden-Anleitungen sind der Normalfall). */
+/** Nur die AUSNAHME wird markiert: „Nur Team“ (Hilfe-Seite ist der Normalfall). */
 function InternBadge() {
   return (
     <span
       className="flex shrink-0 items-center gap-1 rounded-full bg-violet-soft px-2 py-[2px] text-[11px] font-black text-violet-text"
-      title="Interne Anleitung – nur für das Team sichtbar"
+      title="Nur für Ihr Team sichtbar – erscheint nicht auf der Hilfe-Seite"
     >
-      <Lock className="size-2.5" /> Intern
+      <Lock className="size-2.5" /> Nur Team
     </span>
   );
 }

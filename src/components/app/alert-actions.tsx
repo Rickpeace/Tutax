@@ -23,7 +23,7 @@ export function AlertActions({ id }: { id: string }) {
         type="button"
         disabled={pending}
         onClick={() => act("resolved", "Als erledigt markiert")}
-        className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium text-ink-2 hover:bg-muted"
+        className="flex items-center gap-1 rounded-full border-2 border-line bg-card px-3 py-1 text-xs font-extrabold text-ink-2 transition-colors hover:border-[#e3d7c2] hover:text-ink"
       >
         <Check className="size-3.5 text-yes" /> Erledigt
       </button>
@@ -31,7 +31,7 @@ export function AlertActions({ id }: { id: string }) {
         type="button"
         disabled={pending}
         onClick={() => act("dismissed", "Ignoriert")}
-        className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-ink"
+        className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold text-muted-foreground transition-colors hover:bg-line-2 hover:text-ink"
       >
         <X className="size-3.5" /> Ignorieren
       </button>

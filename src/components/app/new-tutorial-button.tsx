@@ -77,6 +77,7 @@ export function NewTutorialButton({
   compact = false,
   label = "Neue Anleitung",
   trigger,
+  openOnEvent,
 }: {
   accountId: string;
   variant?: "default" | "outline";
@@ -85,6 +86,8 @@ export function NewTutorialButton({
   label?: string;
   /** Eigenes Trigger-Element (Base UI render) statt des Standard-Buttons. */
   trigger?: React.ReactElement;
+  /** Öffnet den Dialog auch, wenn dieses window-Ereignis feuert (⌘K-Aktion). */
+  openOnEvent?: string;
 }) {
   const [open, setOpen] = useState(false);
   // "choice" = Weiche, "manual" = Titel-Abfrage. Video läuft im eigenen Dialog.
@@ -96,6 +99,18 @@ export function NewTutorialButton({
     setOpen(o);
     if (o) setMode("choice"); // beim Öffnen immer mit der Weiche starten
   };
+
+  // ⌘K „Neue Anleitung“: genau EIN Knopf (Kopfleiste) hört zu, damit nicht mehrere
+  // Dialoge gleichzeitig aufgehen.
+  useEffect(() => {
+    if (!openOnEvent) return;
+    const onOpen = () => {
+      setMode("choice");
+      setOpen(true);
+    };
+    window.addEventListener(openOnEvent, onOpen);
+    return () => window.removeEventListener(openOnEvent, onOpen);
+  }, [openOnEvent]);
 
   return (
     <>
@@ -255,11 +270,12 @@ function SofortAnleitungCard({
         <span className="mt-2 block text-xs text-ink-2">
           {openRequested
             ? "Seitenleiste geöffnet — Zielseite aufrufen und losklicken; der fertige " +
-              "Entwurf erscheint automatisch hier in der Bibliothek. (Nichts passiert? " +
-              "Extension-Symbol oben rechts anklicken oder Extension aktualisieren.)"
+              "Entwurf erscheint automatisch hier bei den Anleitungen. (Nichts passiert? " +
+              "Symbol der Steply-Erweiterung oben rechts anklicken oder die " +
+              "Steply-Erweiterung aktualisieren.)"
             : "Klicken, um die Aufnahme-Seitenleiste zu öffnen — dann Zielseite aufrufen " +
-              "und losklicken; der fertige Entwurf erscheint automatisch hier in der " +
-              "Bibliothek."}
+              "und losklicken; der fertige Entwurf erscheint automatisch hier bei den " +
+              "Anleitungen."}
         </span>
       </button>
     );
@@ -282,8 +298,8 @@ function SofortAnleitungCard({
           </span>
         </span>
         <span className="block text-xs text-muted-foreground">
-          Klicken statt filmen: Extension installieren, dann entsteht bei jedem Klick ein
-          Schritt.
+          Klicken statt filmen: Steply-Erweiterung installieren, dann entsteht bei jedem
+          Klick ein Schritt.
         </span>
       </span>
       <ArrowRight className="size-4 shrink-0 text-primary" />

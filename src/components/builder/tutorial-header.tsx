@@ -129,7 +129,7 @@ export function TutorialHeader({
       if (next) await publishTutorial(tutorialId);
       else await unpublishTutorial(tutorialId);
       setPublished(next);
-      const liveMsg = !publicOn ? "Für das Team freigegeben" : "Tutorial ist jetzt live";
+      const liveMsg = !publicOn ? "Für das Team freigegeben" : "Anleitung ist jetzt veröffentlicht";
       toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
@@ -183,9 +183,9 @@ export function TutorialHeader({
       toast.success(
         nextPublic
           ? nextLernen
-            ? "Sichtbar: Kunden + Team-Lernbereich"
-            : "Sichtbar: Kunden (Hilfe-Seite)"
-          : "Sichtbar: Team (Lern-Bereich)",
+            ? "Sichtbar: Hilfe-Seite + Schulungen"
+            : "Sichtbar: Hilfe-Seite"
+          : "Sichtbar: Nur Team (Schulungen)",
       );
     } catch (e) {
       setVisibility(prevVis);
@@ -230,7 +230,7 @@ export function TutorialHeader({
                 }
               }}
               placeholder="Titel der Anleitung"
-              aria-label="Tutorial-Titel"
+              aria-label="Titel der Anleitung"
               className="w-full rounded-md border border-ring bg-card px-2 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none"
             />
           ) : (
@@ -334,7 +334,7 @@ export function TutorialHeader({
                 <TooltipTrigger render={<span className="inline-flex" />}>
                   <AudienceCheckbox
                     icon={<Lock className="size-3.5" />}
-                    label="Im Lern-Bereich (Team, mit Nachweis)"
+                    label="In Schulungen (Team, mit Nachweis)"
                     checked={!publicOn ? true : inLernen}
                     // Bei intern implizit an und nicht abwählbar; ohne Business gesperrt.
                     disabled={visBusy || !publicOn || !isBusiness}
@@ -343,10 +343,10 @@ export function TutorialHeader({
                 </TooltipTrigger>
                 <TooltipContent>
                   {!isBusiness
-                    ? "Der Lern-Bereich (Team-Schulung mit Nachweis) ist im Business-Tarif enthalten."
+                    ? "Schulungen (fürs Team, mit Nachweis) sind im Business-Tarif enthalten."
                     : !publicOn
-                      ? "Interne Anleitungen sind immer im Lern-Bereich — nie auf der Hilfe-Seite."
-                      : "Zusätzlich im Team-Lernbereich zeigen (mit Schulungsnachweis)."}
+                      ? "Anleitungen nur fürs Team stehen immer in den Schulungen — nie auf der Hilfe-Seite."
+                      : "Zusätzlich in den Schulungen fürs Team zeigen (mit Schulungsnachweis)."}
                 </TooltipContent>
               </Tooltip>
               {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
