@@ -6,6 +6,7 @@ import { LanguagesForm } from "@/components/app/languages-form";
 import { publicImageUrl } from "@/lib/public-image";
 import { appBaseUrl } from "@/lib/url";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
+import { isBusiness } from "@/lib/plan";
 
 export default async function BrandingPage() {
   const { account } = await requireAccount();
@@ -75,7 +76,7 @@ export default async function BrandingPage() {
         />
       </div>
 
-      <LanguagesForm initial={languages} />
+      <LanguagesForm initial={languages} isBusiness={isBusiness(account)} />
     </div>
   );
 }
