@@ -261,9 +261,9 @@ async function insertIntoTarget(
     .select("id, account_id, status")
     .eq("id", target.tutorialId)
     .maybeSingle();
-  if (!tut) return { ok: false, reason: "Das Ziel-Tutorial wurde nicht gefunden." };
+  if (!tut) return { ok: false, reason: "Die Ziel-Anleitung wurde nicht gefunden." };
   if (tut.account_id !== accountId) {
-    return { ok: false, reason: "Das Ziel-Tutorial gehört zu einem anderen Konto." };
+    return { ok: false, reason: "Die Ziel-Anleitung gehört zu einem anderen Konto." };
   }
   if (tut.status !== "draft") {
     return { ok: false, reason: "Nur Entwürfe können ergänzt werden — das Ziel ist bereits veröffentlicht." };
@@ -279,7 +279,7 @@ async function insertIntoTarget(
   if (stepIds.size + steps.length > MAX_GUIDE_STEPS) {
     return {
       ok: false,
-      reason: `Das Ziel-Tutorial hätte damit mehr als ${MAX_GUIDE_STEPS} Schritte.`,
+      reason: `Die Ziel-Anleitung hätte damit mehr als ${MAX_GUIDE_STEPS} Schritte.`,
     };
   }
   const maxPos = existingSteps.reduce((m, s) => Math.max(m, Number(s.position) || 0), 0);
@@ -300,14 +300,14 @@ async function insertIntoTarget(
     if (!br) return { ok: false, reason: "Der Verzweigungs-Ast wurde nicht gefunden." };
     // Ast gehört zum Ziel-Tutorial? -> sein Quell-Schritt muss einer der Tutorial-Schritte sein.
     if (!stepIds.has(br.step_id as string)) {
-      return { ok: false, reason: "Der Ast gehört nicht zu diesem Tutorial." };
+      return { ok: false, reason: "Der Ast gehört nicht zu dieser Anleitung." };
     }
     anchorBranchId = br.id as string;
     oldTarget = (br.target_step_id as string | null) ?? null;
   } else {
     const afterStepId = target.anchor.afterStepId;
     if (!stepIds.has(afterStepId)) {
-      return { ok: false, reason: "Der Anker-Schritt gehört nicht zu diesem Tutorial." };
+      return { ok: false, reason: "Der Anker-Schritt gehört nicht zu dieser Anleitung." };
     }
     // Die (lineare) Verbindung, die bisher von afterStep weiterführte = erste ausgehende
     // Kante (nach position). Fehlt sie, ist afterStep ein Blatt -> neue Kante anlegen.
@@ -491,7 +491,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (await quotaReached(admin, account.id, (acc?.plan as string | null) ?? null)) {
     return recorderJson(
-      { error: "Das Tutorial-Limit des kostenlosen Tarifs ist erreicht. Bitte upgraden." },
+      { error: "Der kostenlose Tarif erlaubt keine weiteren Anleitungen. Einen größeren Tarif wählen Sie in Steply unter „Einstellungen → Tarif“." },
       403,
     );
   }

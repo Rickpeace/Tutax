@@ -55,7 +55,7 @@ export async function GET(
   // 404 auch bei fremdem Konto (kein Existenz-Orakel für fremde Tutorials).
   if (!tutorial || tutorial.account_id !== account.id) {
     return NextResponse.json(
-      { error: "Tutorial nicht gefunden." },
+      { error: "Anleitung nicht gefunden." },
       { status: 404, headers: RECORDER_ME_CORS },
     );
   }
