@@ -341,8 +341,40 @@ try {
     toSec(tResumed) - toSec(tPaused) <= 1,
     "Fortsetzen: Timer ohne Sprung (" + tPaused + " → " + tResumed + ")"
   );
-  await sendStep(TAB1, "Klicken Sie auf „Hochladen“");
+  // iframe-Schritt: content.js kennt nur die iframe-Adresse -> Panel setzt Seite/Titel des TABS.
+  await page.evaluate(
+    ({ ts }) => {
+      window.__T.events.onMessage._fire(
+        {
+          type: "steply-guide-step",
+          step: {
+            rect: { x: 0, y: 0, w: 0, h: 0 },
+            label: "Klicken Sie auf „Hochladen“",
+            action: "click",
+            url: "https://frame.example.net/upload?token=geheim",
+            title: "iframe",
+            interaction: { frame: { url: "https://frame.example.net/upload" } },
+            ts,
+          },
+        },
+        { tab: { id: 1, windowId: 10, url: "https://portal.example.com/belege", title: "Belege – Portal" } },
+        () => {}
+      );
+    },
+    { ts: (tsBase += 2000) }
+  );
   ok(await waitSteps(3), "Nach Fortsetzen: Schritt angenommen (3)");
+  {
+    const fs = await page.evaluate(() => {
+      const s = guideSteps[2];
+      return { url: s.url, title: s.title, frame: s.interaction && s.interaction.frame && s.interaction.frame.url };
+    });
+    ok(
+      fs.url === "https://portal.example.com/belege" && fs.title === "Belege – Portal" &&
+        fs.frame === "https://frame.example.net/upload",
+      "iframe-Schritt: Seite/Titel = Tab, iframe-Adresse bleibt in interaction.frame (" + JSON.stringify(fs) + ")"
+    );
+  }
 
   // ---- 4) Stopp mit Schritt „unterwegs" ----
   await sendStep(TAB1, "Klicken Sie auf „Speichern“");

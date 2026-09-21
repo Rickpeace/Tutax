@@ -2446,6 +2446,14 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   // Panel-Fenster ODER aus der Aufnahme geöffnetes Popup (Welle 48a, guideExtraTabs).
   if (!guideAcceptsSender(sender)) return;
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
+  // iframe-Schritt (Welle 48): content.js kennt dort nur die iframe-Adresse. Seite/Titel des
+  // Schritts sind aber die des TABS (Seiten-Zuordnung, Führung, Automations-Navigation);
+  // die iframe-Adresse steht in interaction.frame.url.
+  const st = msg.step;
+  if (st && st.interaction && st.interaction.frame && sender.tab.url) {
+    st.url = String(sender.tab.url).slice(0, 500);
+    if (sender.tab.title) st.title = String(sender.tab.title).slice(0, 200);
+  }
   // Kleine FIFO-Queue statt Einzel-Slot: schnelle Folgen (Eingabe + Klick) gehen NICHT
   // verloren. windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster
   // (robuster als das beim Panel-Start ermittelte Fenster, z. B. bei mehreren Fenstern).

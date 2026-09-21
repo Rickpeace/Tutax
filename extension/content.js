@@ -1813,9 +1813,11 @@
   // Inhalt noch da -> Zeilenumbruch -> Schritt zuruecknehmen, Feld offen lassen (blur meldet
   // spaeter den normalen Eingabe-Schritt). Gelesen wird NUR die Textlaenge, lokal.
   const RICH_ENTER_PROBE_MS = 400;
+  // Gleiche Probe fuer mehrzeilige <textarea>-Chatfelder (ChatGPT u. ae.): dort zaehlt der Wert.
   function richTextLen(el) {
     try {
-      return (el.textContent || "").replace(/[\s​-‍﻿]/g, "").length;
+      const raw = (el.tagName || "").toLowerCase() === "textarea" ? el.value : el.textContent;
+      return (raw || "").replace(/[\s​-‍﻿]/g, "").length;
     } catch (err) {
       return 0;
     }
@@ -1938,7 +1940,7 @@
       emitStep(fe.el, "type", { interaction: { enter: true } });
       return;
     }
-    if (fe.kind === "rich") probeRichEnter(fe);
+    if (fe.kind === "rich" || (fe.el.tagName || "").toLowerCase() === "textarea") probeRichEnter(fe);
   }
   document.addEventListener("keydown", onKeyDown, true);
 
@@ -4542,11 +4544,16 @@
       startEpoch = rec.startedAt;
       mode = rec.mode === "guide" ? "guide" : "video";
       recording = true;
-      // Ist beim Start schon ein Feld fokussiert (Google-Suchfeld), gleich uebernehmen.
-      if (mode === "guide" && !focusedEditable && document.activeElement) {
-        adoptEditable(document.activeElement, false);
+      // Ist beim Start schon ein Feld fokussiert (Google-Suchfeld, auch in Shadow-Roots),
+      // gleich uebernehmen.
+      const active = deepActiveElement();
+      if (mode === "guide" && !focusedEditable && active) {
+        adoptEditable(active, false);
       }
     } else {
+      // Pause/Stopp (Welle 48): eine noch nicht abgeschlossene Eingabe (Feld nicht verlassen)
+      // JETZT melden — das Panel nimmt nach dem Entfernen von rec noch kurz Schritte an.
+      if (recording && mode === "guide") flushPendingInput();
       recording = false;
     }
   }

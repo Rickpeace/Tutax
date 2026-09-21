@@ -52,13 +52,14 @@ const STUB = `<script>
       getManifest: function () { return { version: "2.16.0" }; },
       sendMessage: function (m) {
         if (m && m.type === "steply-guide-step") { window.__log.push({ ev: "step", step: m.step }); return; }
+        if (m && m.type === "steply-guide-retract") { window.__log.push({ ev: "retract", ts: m.ts }); return; }
         return Promise.resolve(undefined);
       },
       onMessage: { addListener: function () {} },
     },
     storage: {
       local: { get: function (key, cb) { cb({ rec: { startedAt: Date.now(), mode: "guide" } }); } },
-      onChanged: { addListener: function () {} },
+      onChanged: { addListener: function (fn) { (window.__recListeners = window.__recListeners || []).push(fn); } },
     },
     tabs: { sendMessage: function () {} },
   };
@@ -78,10 +79,16 @@ const HTML = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">${STUB}
     <label for="pre">Kundennummer</label>
     <input id="pre" name="pre" type="text" value="4711">
   </form>
+  <label for="chat">Nachricht</label>
+  <textarea id="chat" name="chat"></textarea>
   <label for="notes">Bemerkung</label>
   <textarea id="notes" name="notes"></textarea>
   <button id="other">Andere Aktion</button>
   <script>
+    // Chat (ChatGPT-artig): Enter schickt ab und leert das textarea.
+    document.getElementById("chat").addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); this.value = ""; }
+    });
     // Google schickt das Suchfeld (ein textarea) per eigenem Skript bei Enter ab.
     document.getElementById("q").addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); this.form.requestSubmit(); }
@@ -103,7 +110,13 @@ try {
   await page.addScriptTag({ content: CONTENT_JS });
 
   const log = () => page.evaluate(() => window.__log.map((e) =>
-    e.ev === "step" ? { ev: "step", action: e.step.action, label: e.step.label, enter: !!(e.step.interaction && e.step.interaction.enter) } : e));
+    e.ev === "step" ? { ev: "step", ts: e.step.ts, action: e.step.action, label: e.step.label, enter: !!(e.step.interaction && e.step.interaction.enter) } : e));
+  // Netto-Schritte: zurueckgenommene (retract) herausrechnen.
+  const net = async () => {
+    const l = await log();
+    const gone = new Set(l.filter((e) => e.ev === "retract").map((e) => e.ts));
+    return l.filter((e) => e.ev === "step" && !gone.has(e.ts));
+  };
   const raw = () => page.evaluate(() => JSON.stringify(window.__log));
   const reset = () => page.evaluate(() => { window.__log.length = 0; });
 
@@ -148,16 +161,47 @@ try {
   await page.click("#notes");
   await page.keyboard.type("Zeile 1");
   await page.keyboard.press("Enter");
+  await page.waitForTimeout(700); // Chat-Probe (400 ms) abwarten
   {
-    const l = await log();
-    ok(l.filter((e) => e.ev === "step").length === 0, `Textarea: Enter erzeugt KEINEN Schritt (${JSON.stringify(l)})`);
+    const n = await net();
+    ok(n.length === 0, `Textarea: Enter (Zeilenumbruch) hinterlaesst netto KEINEN Schritt (${JSON.stringify(await log())})`);
   }
   await page.click("#other");
   {
-    const steps = (await log()).filter((e) => e.ev === "step");
+    const steps = await net();
     ok(steps.length === 2 && steps[0].action === "type" && steps[0].enter === false,
       `Textarea: beim Verlassen normaler Eingabe-Schritt ohne enter (${JSON.stringify(steps)})`);
   }
+
+  // ---------- 3b) Chat-textarea: Enter schickt ab (Feld leert sich) -> Schritt bleibt ----------
+  await reset();
+  await page.click("#chat");
+  await page.keyboard.type("Hallo Team");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(700);
+  {
+    const n = await net();
+    ok(n.length === 1 && n[0].action === "type" && n[0].enter === true && n[0].label === "Nachricht",
+      `Chat-textarea: abgeschickte Nachricht bleibt als Schritt mit enter (${JSON.stringify(await log())})`);
+    ok(!(await raw()).includes("Hallo Team"), "DATENSCHUTZ: Chat-Text NICHT im Payload");
+  }
+
+  // ---------- 3c) Pause mitten in der Eingabe: offene Eingabe wird noch gemeldet ----------
+  await reset();
+  await page.click("#city");
+  await page.keyboard.type("Hamburg");
+  await page.evaluate(() =>
+    window.__recListeners.forEach((fn) => fn({ rec: { oldValue: {}, newValue: undefined } }, "local")));
+  {
+    const n = await net();
+    ok(n.length === 1 && n[0].action === "type" && n[0].label === "Stadt",
+      `Pause: offene Eingabe wird beim Anhalten gemeldet (${JSON.stringify(n)})`);
+  }
+  await page.click("#other");
+  ok((await net()).length === 1, "Pause: danach keine Schritte mehr (Aufnahme passiv)");
+  await page.evaluate(() =>
+    window.__recListeners.forEach((fn) =>
+      fn({ rec: { newValue: { startedAt: Date.now(), mode: "guide" } } }, "local")));
 
   // ---------- 4) Vorbefuelltes Feld, nur Enter ----------
   await reset();
