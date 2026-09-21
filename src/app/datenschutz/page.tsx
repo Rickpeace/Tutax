@@ -11,7 +11,7 @@ const sections = [
   },
   {
     h: "2. Welche Daten wir verarbeiten",
-    p: "Kontodaten (E-Mail, Name der Organisation), von Ihnen hochgeladene Inhalte (Screenshots, Texte) sowie technische Zugriffsdaten. Veröffentlichte Hilfeseiten sind ohne Personenbezug abrufbar.",
+    p: "Kontodaten (E-Mail, Name der Organisation), von Ihnen hochgeladene Inhalte (Screenshots, Texte) sowie technische Zugriffsdaten. Veröffentlichte Hilfe-Seiten sind ohne Personenbezug abrufbar.",
   },
   {
     h: "3. Zweck und Rechtsgrundlage",
@@ -23,7 +23,7 @@ const sections = [
   },
   {
     h: "5. KI-Funktionen & Übermittlung in Drittländer",
-    p: "Für KI-gestützte Funktionen (Hilfe-Chat auf den veröffentlichten Seiten sowie die KI-Erstellung von Tutorials) nutzen wir OpenAI als Auftragsverarbeiter. Dabei werden die jeweiligen Eingaben und Inhalte an OpenAI, L.L.C. (USA) übermittelt und dort verarbeitet. Diese Übermittlung in ein Drittland stützt sich auf die EU-Standardvertragsklauseln sowie das EU-US Data Privacy Framework. Über die API übermittelte Inhalte werden nach Zusicherung von OpenAI nicht zum Training der Modelle verwendet. Bitte geben Sie im Hilfe-Chat keine personenbezogenen oder vertraulichen Daten ein.",
+    p: "Für KI-gestützte Funktionen (Hilfe-Chat auf den veröffentlichten Seiten sowie die KI-Erstellung von Anleitungen) nutzen wir OpenAI als Auftragsverarbeiter. Dabei werden die jeweiligen Eingaben und Inhalte an OpenAI, L.L.C. (USA) übermittelt und dort verarbeitet. Diese Übermittlung in ein Drittland stützt sich auf die EU-Standardvertragsklauseln sowie das EU-US Data Privacy Framework. Über die API übermittelte Inhalte werden nach Zusicherung von OpenAI nicht zum Training der Modelle verwendet. Bitte geben Sie im Hilfe-Chat keine personenbezogenen oder vertraulichen Daten ein.",
   },
   {
     h: "6. Cookies & Analyse",

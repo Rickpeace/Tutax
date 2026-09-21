@@ -21,7 +21,7 @@ export async function markCompleted(tutorialId: string) {
     .eq("account_id", account.id)
     .eq("visibility", "internal")
     .maybeSingle();
-  if (!tut) throw new Error("Tutorial nicht gefunden");
+  if (!tut) throw new Error("Anleitung nicht gefunden");
   const { error } = await supabase.from("tutorial_completions").upsert(
     { tutorial_id: tutorialId, user_id: userId, account_id: account.id },
     { onConflict: "tutorial_id,user_id", ignoreDuplicates: true },

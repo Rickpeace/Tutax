@@ -145,7 +145,7 @@ export function CleanupControls() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Mehrere Tutorials löschen — {count} ausgewählt
+              Mehrere Anleitungen löschen — {count} ausgewählt
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">

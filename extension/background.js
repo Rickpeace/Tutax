@@ -318,7 +318,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const appUrl =
     typeof msg.appUrl === "string" ? msg.appUrl.trim().replace(/\/+$/, "") : "";
   if (!token || token.length > 200 || !/^https?:\/\//i.test(appUrl) || appUrl.length > 300) {
-    sendResponse({ ok: false, error: "Ungueltige Verbindungsdaten." });
+    sendResponse({ ok: false, error: "Ungültige Verbindungsdaten." });
     return true;
   }
 
@@ -341,7 +341,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           ok: false,
           error:
             status === 401
-              ? "Token wurde von Steply nicht akzeptiert."
+              ? "Der Verbindungscode wurde von Steply nicht akzeptiert."
               : "Steply antwortete unerwartet (" + status + ").",
         });
         return;
@@ -355,7 +355,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const aborted = err && err.name === "AbortError";
       sendResponse({
         ok: false,
-        error: aborted ? "Zeitueberschreitung - Steply nicht erreichbar." : "Steply nicht erreichbar.",
+        error: aborted ? "Zeitüberschreitung – Steply nicht erreichbar." : "Steply nicht erreichbar.",
       });
     })
     .finally(() => clearTimeout(timer));

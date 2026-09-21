@@ -102,7 +102,7 @@ export default function LandingPage() {
           <div className="relative">
             <Image
               src="/marketing-bibliothek.png"
-              alt="Steply-Bibliothek: Anleitungen nach Kategorien"
+              alt="Steply: Ihre Anleitungen nach Kategorien"
               width={1440}
               height={1100}
               priority
@@ -146,8 +146,8 @@ export default function LandingPage() {
             {
               n: "3",
               bg: "bg-amber",
-              title: "Teilen — intern oder öffentlich",
-              body: "Fürs Team in der Bibliothek, für Kunden im eigenen Hilfe-Center.",
+              title: "Teilen — mit Kunden oder nur im Team",
+              body: "Für Kunden auf Ihrer Hilfe-Seite, fürs Team in den Schulungen.",
             },
           ].map((s) => (
             <div
@@ -281,7 +281,7 @@ export default function LandingPage() {
               Ein Chat, der nur Ihre Inhalte kennt.
             </h2>
             <p className="mt-3 text-sm font-bold leading-relaxed text-muted-foreground sm:text-[15px]">
-              Der Hilfe-Assistent auf Ihrer Hilfe-Seite antwortet aus Ihren
+              Der KI-Assistent auf Ihrer Hilfe-Seite antwortet aus Ihren
               Anleitungen und Ihrer Wissensdatenbank — nicht aus dem Internet.
             </p>
             <ul className="mt-5 space-y-2.5">
@@ -305,7 +305,7 @@ export default function LandingPage() {
       {/* Eine Bibliothek — zwei Welten */}
       <section className="px-4 py-10 sm:px-10 sm:py-[52px]">
         <h2 className="mx-auto max-w-[640px] text-center text-[20px] font-black leading-tight sm:text-[32px]">
-          Eine Bibliothek — zwei Welten
+          Einmal erstellt — für Kunden und Team
         </h2>
         <div className="mx-auto mt-4 flex max-w-[1000px] flex-col gap-2.5 sm:mt-[34px] sm:grid sm:grid-cols-2 sm:gap-5">
           <div className="relative overflow-hidden rounded-2xl bg-accent p-4 sm:rounded-[22px] sm:p-7">
@@ -317,7 +317,7 @@ export default function LandingPage() {
               Für Kunden
             </p>
             <h3 className="relative mt-1.5 max-w-[340px] text-[15px] font-black leading-snug sm:mt-2 sm:text-[21px]">
-              Öffentliches Hilfe-Center im eigenen Branding
+              Öffentliche Hilfe-Seite im eigenen Branding
             </h3>
             <p className="relative mt-1.5 max-w-[340px] text-[11.5px] font-bold leading-relaxed text-accent-foreground sm:mt-2.5 sm:text-[13.5px]">
               Kunden öffnen Anleitungen ohne Login — sortiert nach Kategorien, mit
@@ -333,7 +333,7 @@ export default function LandingPage() {
               Für Mitarbeiter
             </p>
             <h3 className="relative mt-1.5 max-w-[340px] text-[15px] font-black leading-snug sm:mt-2 sm:text-[21px]">
-              Interne Bibliothek mit Rechten &amp; Kategorien
+              Schulungen nur fürs Team – mit Schulungsnachweis
             </h3>
             <p className="relative mt-1.5 max-w-[340px] text-[11.5px] font-bold leading-relaxed text-violet-text sm:mt-2.5 sm:text-[13.5px]">
               Onboarding, HR, CRM — jede Abteilung findet ihre Abläufe, immer aktuell.
@@ -445,15 +445,15 @@ export default function LandingPage() {
             },
             {
               q: "Brauchen meine Kunden ein Login?",
-              a: "Nein. Ihr Hilfe-Center ist eine öffentliche Seite in Ihrem Branding — Link teilen oder QR-Code aufhängen genügt. Interne Anleitungen bleiben davon getrennt und sind nur fürs Team sichtbar.",
+              a: "Nein. Ihre Hilfe-Seite ist eine öffentliche Seite in Ihrem Branding — Link teilen oder QR-Code aufhängen genügt. Anleitungen „Nur Team“ bleiben davon getrennt und sind nur für Ihr Team sichtbar.",
             },
             {
-              q: "Kann der KI-Chat Dinge erfinden?",
-              a: "Der Assistent antwortet ausschließlich aus Ihren Anleitungen und Ihrer Wissensdatenbank. Kennt er die Antwort nicht, sagt er das ehrlich und leitet die Frage an Sie weiter — Sie sehen alle offenen Fragen im Überblick.",
+              q: "Kann der KI-Assistent Dinge erfinden?",
+              a: "Der KI-Assistent antwortet ausschließlich aus Ihren Anleitungen und Ihrer Wissensdatenbank. Kennt er die Antwort nicht, sagt er das ehrlich und leitet die Frage an Sie weiter — Sie sehen alle offenen Fragen im Überblick.",
             },
             {
               q: "Passt das zu unserem Erscheinungsbild?",
-              a: "Ja — Logo und Farben stellen Sie selbst ein, oder die KI leitet Ihr Design automatisch von Ihrer Website ab. Das Hilfe-Center wirkt wie Ihre eigene Seite, nicht wie ein Fremd-Tool.",
+              a: "Ja — Logo und Farben stellen Sie selbst ein, oder die KI leitet Ihr Design automatisch von Ihrer Website ab. Die Hilfe-Seite wirkt wie Ihre eigene Seite, nicht wie ein Fremd-Tool.",
             },
             {
               q: "Was kostet Steply?",

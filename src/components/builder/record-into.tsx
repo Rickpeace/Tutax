@@ -139,7 +139,8 @@ export function RecordIntoDialog({
               {requested
                 ? "Seitenleiste geöffnet — rufen Sie jetzt die Zielseite auf und klicken Sie Ihren " +
                   "Ablauf durch. Beim Fertigstellen landen die Schritte an dieser Stelle. (Nichts " +
-                  "passiert? Extension-Symbol oben rechts anklicken oder Extension aktualisieren.)"
+                  "passiert? Klicken Sie oben rechts auf das Steply-Symbol oder aktualisieren Sie die " +
+                  "Steply-Erweiterung.)"
                 : "Klicken, um die Aufnahme-Seitenleiste zu öffnen — dann Zielseite aufrufen und " +
                   "losklicken; die Schritte werden an dieser Stelle eingefügt."}
             </span>
@@ -154,15 +155,15 @@ export function RecordIntoDialog({
               <Zap className="size-5" />
             </span>
             <span className="flex-1">
-              <span className="block font-bold text-ink">Extension nötig</span>
+              <span className="block font-bold text-ink">Steply-Erweiterung nötig</span>
               <span className="block text-xs text-muted-foreground">
-                Zum Aufnehmen in diese Anleitung installieren Sie die Steply-Recorder-Extension.
+                Zum Aufnehmen in diese Anleitung installieren Sie die Steply-Erweiterung.
               </span>
             </span>
             <ArrowRight className="size-4 shrink-0 text-primary" />
           </Link>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">Extension wird erkannt …</p>
+          <p className="mt-1 text-xs text-muted-foreground">Steply-Erweiterung wird erkannt …</p>
         )}
       </DialogContent>
     </Dialog>

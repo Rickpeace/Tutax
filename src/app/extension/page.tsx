@@ -15,9 +15,9 @@ import { SiteHeader } from "@/components/marketing/site-header";
 import { SiteFooter } from "@/components/marketing/site-footer";
 
 export const metadata: Metadata = {
-  title: "Steply Recorder installieren",
+  title: "Steply-Erweiterung installieren",
   description:
-    "Die Steply-Recorder-Extension für Chrome: Klick-Anleitungen und Videos aufnehmen und direkt zu Steply hochladen.",
+    "Die Steply-Erweiterung für Chrome: Klick-Anleitungen und Videos aufnehmen und direkt zu Steply hochladen.",
 };
 
 // Statische, cachebare Seite (keine dynamischen Daten). Die Versionsnummer lesen wir zur
@@ -43,15 +43,15 @@ export default function ExtensionPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-12">
         {/* Hero */}
         <div className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-card px-3 py-1 text-xs font-extrabold text-ink-2">
-          <Zap className="size-3.5 text-primary" /> Chrome-Extension · v{VERSION}
+          <Zap className="size-3.5 text-primary" /> Für Google Chrome · v{VERSION}
         </div>
         <h1 className="mt-4 text-3xl font-black tracking-tight text-ink sm:text-4xl">
-          Steply Recorder
+          Steply-Erweiterung
         </h1>
         <p className="mt-3 max-w-xl text-ink-2">
-          Nehmen Sie einen Ablauf einmal auf – Steply macht daraus eine fertige
-          Klick-Anleitung. Die Extension lebt in der Browser-Seitenleiste und lädt
-          Aufnahmen direkt in Ihre Bibliothek.
+          Nehmen Sie eine Aufgabe einmal auf – Steply macht daraus eine fertige
+          Klick-Anleitung. Die Steply-Erweiterung lebt in der Browser-Seitenleiste und
+          lädt Aufnahmen direkt zu Ihren Anleitungen in Steply.
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -60,7 +60,7 @@ export default function ExtensionPage() {
             nativeButton={false}
             render={<a href={ZIP_URL} download />}
           >
-            <Download className="size-4" /> Extension herunterladen
+            <Download className="size-4" /> Steply-Erweiterung herunterladen
           </Button>
           <span className="text-xs font-semibold text-muted-foreground">
             ZIP · v{VERSION} · für Google Chrome ab Version 114
@@ -95,7 +95,7 @@ export default function ExtensionPage() {
         {/* Installation in 3 Schritten */}
         <h2 className="mt-12 text-xl font-black text-ink">In 3 Schritten installiert</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bis der Chrome Web Store fertig ist, laden Sie die Extension einmal von Hand.
+          Bis der Chrome Web Store fertig ist, laden Sie die Steply-Erweiterung einmal von Hand.
           Das dauert unter einer Minute.
         </p>
 
@@ -103,7 +103,7 @@ export default function ExtensionPage() {
           <InstallStep
             n={1}
             title="ZIP entpacken"
-            desc="Laden Sie die Datei oben herunter und entpacken Sie sie in einen festen Ordner (nicht löschen – Chrome lädt die Extension von dort)."
+            desc="Laden Sie die Datei oben herunter und entpacken Sie sie in einen festen Ordner (nicht löschen – Chrome lädt die Erweiterung von dort)."
             illustration={<UnzipArt />}
           />
           <InstallStep
@@ -126,8 +126,8 @@ export default function ExtensionPage() {
           <div>
             <div className="font-black text-ink">Zum Schluss: verbinden</div>
             <p className="mt-1 text-sm text-ink-2">
-              Damit Aufnahmen automatisch in Ihrer Bibliothek landen, verbinden Sie die
-              Extension einmal mit Ihrem Konto: in Steply unter{" "}
+              Damit Aufnahmen automatisch bei Ihren Anleitungen landen, verbinden Sie die
+              Steply-Erweiterung einmal mit Ihrem Konto: in Steply unter{" "}
               <b className="text-ink">Einstellungen → Steply-Erweiterung → „Jetzt verbinden“</b>
               . Ein Klick genügt – kein Token-Kopieren.
             </p>
@@ -149,7 +149,7 @@ export default function ExtensionPage() {
           <ShieldCheck className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
           <p className="text-sm text-ink-2">
             <b className="text-ink">Chrome Web Store in Vorbereitung.</b> Sobald die
-            Extension dort verfügbar ist, installieren Sie sie mit einem Klick – inklusive
+            Steply-Erweiterung dort verfügbar ist, installieren Sie sie mit einem Klick – inklusive
             <b> automatischer Updates</b>. Bis dahin ist der manuelle Weg oben die saubere
             Zwischenlösung.
           </p>

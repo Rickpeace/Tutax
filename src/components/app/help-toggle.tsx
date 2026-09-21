@@ -1,36 +1,34 @@
 "use client";
 
-/** Einheitlicher „Auf Hilfe-Seite"-Schalter (eigene Tutorials + Standard-Anleitungen). */
+import { StatusSwitch } from "@/components/app/status-switch";
+
+/**
+ * Ein-/Aus-Schalter mit fester Beschriftung (Standard-Anleitungen „Auf der Hilfe-Seite",
+ * Wissensdatenbank „Im KI-Assistenten aktiv"). Seit Welle 50d derselbe Stil wie der
+ * Status-Schalter der Anleitungs-Karten — keine eigene Variante mehr.
+ */
 export function HelpToggle({
   on,
   onToggle,
   disabled,
-  label = "Auf Hilfe-Seite",
+  label = "Auf der Hilfe-Seite",
+  compact,
 }: {
   on: boolean;
   onToggle: () => void;
   disabled?: boolean;
   label?: string;
+  compact?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <StatusSwitch
+      on={on}
+      onToggle={onToggle}
       disabled={disabled}
-      onClick={onToggle}
-      className="flex items-center gap-2 text-xs font-semibold text-ink-2 disabled:opacity-50"
+      labelOn={label}
+      labelOff={label}
       title={label}
-      aria-pressed={on}
-    >
-      {/* Label VOR dem Regler: rechtsbündig ausgerichtete Schalter sitzen so in
-          jeder Karte an derselben Position, egal wie lang der Text ist. */}
-      <span className="hidden sm:inline">{label}</span>
-      <span
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-primary" : "bg-[#e3d7c2]"}`}
-      >
-        <span
-          className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${on ? "left-[18px]" : "left-0.5"}`}
-        />
-      </span>
-    </button>
+      compact={compact}
+    />
   );
 }

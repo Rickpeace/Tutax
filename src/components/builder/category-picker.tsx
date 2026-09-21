@@ -66,7 +66,8 @@ export function CategoryPicker({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-ink-2 transition-colors hover:bg-muted"
+        className="flex max-w-full items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1 text-[12.5px] font-extrabold text-ink-2 transition-colors hover:border-[#e3d7c2] hover:text-ink"
+        aria-label="Kategorie wählen"
       >
         <Tag className="size-3.5 text-muted-foreground" />
         {selected ? selected.name : <span className="text-muted-foreground">Kategorie</span>}

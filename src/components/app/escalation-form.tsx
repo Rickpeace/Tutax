@@ -51,7 +51,7 @@ export function EscalationForm({ initial }: { initial: Initial }) {
       <div>
         <h2 className="text-lg font-bold text-ink">Kontakt &amp; Eskalation</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Wenn der Chatbot eine Frage nicht beantworten kann, leitet er den Kunden weiter –
+          Wenn der KI-Assistent eine Frage nicht beantworten kann, leitet er den Kunden weiter –
           bei passendem Thema an die richtige Person.
         </p>
       </div>

@@ -31,7 +31,7 @@
 > **v2.2 — Ein-Klick-Verbinden & Download-Seite.** Kein Token mehr von Hand kopieren:
 > Auf der öffentlichen **Download-Seite `/extension`** laden Sie die Extension als ZIP
 > herunter (mit bebilderter 3-Schritt-Anleitung). Danach verbinden Sie sie **mit einem
-> Klick** — in Steply unter **Einstellungen → Einbetten → „Extension verbinden"**. Die
+> Klick** — in Steply unter **Einstellungen → Steply-Erweiterung → „Jetzt verbinden“**. Die
 > Seite überträgt den Token per `postMessage` (origin-gebunden) an die Extension; diese
 > **validiert ihn gegen `/api/recorder/me`, bevor sie ihn speichert**, und meldet den
 > Kontonamen zurück. Panel und Seite zeigen „Verbunden mit X" — eine Fehlbindung fällt
@@ -75,8 +75,8 @@ Die Extension bietet **zwei Modi** (Wahl in der Seitenleiste):
 **Zwei Wege am Ende der Aufnahme:**
 
 - **Mit Verbindungs-Token → Direkt-Upload.** Ist in der Extension ein
-  Verbindungs-Token hinterlegt (aus Steply: Einstellungen → Einbetten → „Steply
-  Recorder verbinden"), lädt die Extension Video + Klicks **direkt** zu Steply
+  Verbindungs-Token hinterlegt (aus Steply: Einstellungen → Steply-Erweiterung →
+  „Jetzt verbinden“), lädt die Extension Video + Klicks **direkt** zu Steply
   hoch. Das Tutorial wird sofort erstellt — kein Datei-Umweg.
 - **Ohne Token → zwei Dateien.** Wie bisher: `steply-aufnahme-<datum>.webm` +
   `steply-clicks-<datum>.json`, die Sie manuell in Steply hochladen (Aus Video).
@@ -290,7 +290,7 @@ Neue, **einzige zusätzliche** Route: `GET /api/recorder/me` mit
 zu welchem Konto ein Token gehört (dieselbe Token-Prüfung wie die Upload-Routen). Der
 Ein-Klick-Ablauf:
 
-1. **Seite** (Einstellungen → Einbetten → „Extension verbinden") erzeugt einen frischen
+1. **Seite** (Einstellungen → Steply-Erweiterung → „Jetzt verbinden“) erzeugt einen frischen
    Token und sendet `window.postMessage({ __steply:true, type:"steply-pair", token,
    appUrl:location.origin }, location.origin)` — **nur** an den eigenen Origin.
 2. **`content.js`** nimmt die Nachricht **nur** an, wenn `event.source === window` **und**

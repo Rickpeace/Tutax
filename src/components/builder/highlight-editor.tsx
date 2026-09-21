@@ -264,7 +264,7 @@ export function HighlightEditor({
           <ToolBtn active={tool === "arrow"} onClick={() => setTool("arrow")} title="Pfeil">
             <ArrowUpRight className="size-4" />
           </ToolBtn>
-          <ToolBtn active={tool === "blur"} onClick={() => setTool("blur")} title="Schwärzen / Blur">
+          <ToolBtn active={tool === "blur"} onClick={() => setTool("blur")} title="Verpixeln">
             <EyeOff className="size-4" />
           </ToolBtn>
         </div>
@@ -312,7 +312,7 @@ export function HighlightEditor({
         <div className="flex items-start gap-2 rounded-lg border-2 border-primary/30 bg-accent px-3 py-2 text-xs text-ink">
           <EyeOff className="mt-0.5 size-3.5 shrink-0 text-primary" />
           <span>
-            <b>Automatisch geschwärzt — bitte prüfen.</b> Sensible Felder wurden erkannt und
+            <b>Automatisch verpixelt — bitte prüfen.</b> Sensible Felder wurden erkannt und
             unkenntlich gemacht. Verschieben, anpassen oder löschen Sie die Markierungen bei
             Bedarf; jede Änderung bestätigt die Prüfung.
           </span>
@@ -364,8 +364,8 @@ export function HighlightEditor({
       </div>
       <p className="text-xs text-muted-foreground">
         Werkzeug wählen, dann über dem Bild ziehen. Form anklicken zum Verschieben,
-        an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern. „Blur“
-        schwärzt sensible Daten.
+        an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern.
+        „Verpixeln“ macht sensible Daten unkenntlich.
       </p>
     </div>
   );

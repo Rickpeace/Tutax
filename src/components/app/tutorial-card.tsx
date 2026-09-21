@@ -18,6 +18,7 @@ import {
   Globe,
 } from "lucide-react";
 import { useCleanup } from "@/components/app/bulk-cleanup";
+import { StatusSwitch } from "@/components/app/status-switch";
 import { VideoExport } from "@/components/app/video-export";
 import {
   DropdownMenu,
@@ -148,7 +149,7 @@ export function TutorialCard({
         .then((res) => {
           if ("internal" in res) {
             const url = `${window.location.origin}/app/lernen/${tutorial.id}`;
-            toast.success("Für das Team freigegeben", {
+            toast.success("Veröffentlicht – für Ihr Team in den Schulungen", {
               action: {
                 label: "Öffnen",
                 onClick: () => window.open(url, "_blank", "noopener,noreferrer"),
@@ -160,7 +161,7 @@ export function TutorialCard({
           toast.success("Veröffentlicht! 🎉", {
             description: url,
             action: {
-              label: "Live ansehen",
+              label: "Ansehen",
               onClick: () => window.open(url, "_blank", "noopener,noreferrer"),
             },
           });
@@ -171,7 +172,12 @@ export function TutorialCard({
         });
     } else {
       unpublishTutorial(tutorial.id)
-        .then(() => toast(internal ? "Nicht mehr freigegeben." : "Nicht mehr öffentlich."))
+        .then(() => toast(
+            internal
+              ? "Auf Entwurf gesetzt – nicht mehr in den Schulungen."
+              : "Auf Entwurf gesetzt – nicht mehr auf der Hilfe-Seite.",
+          ),
+        )
         .catch(() => {
           setLive(true);
           toast.error("Konnte nicht speichern");
@@ -181,7 +187,16 @@ export function TutorialCard({
 
   const editHref = `/app/tutorials/${tutorial.id}`;
   const statusSwitch = (
-    <StatusSwitch on={live} internal={internal} onToggle={toggleLive} compact={layout === "row"} />
+    <StatusSwitch
+      on={live}
+      onToggle={toggleLive}
+      compact={layout === "row"}
+      title={
+        internal
+          ? "Nur für Ihr Team – veröffentlicht erscheint sie in den Schulungen"
+          : "Veröffentlicht erscheint sie auf der Hilfe-Seite"
+      }
+    />
   );
   const menu = (
     <TutorialMenu
@@ -417,43 +432,6 @@ function StaleBadge() {
   );
 }
 
-/** EIN Status-Schalter statt Etikett + Schalter: Regler + „Veröffentlicht"/„Entwurf". */
-function StatusSwitch({
-  on,
-  internal,
-  onToggle,
-  compact,
-}: {
-  on: boolean;
-  internal: boolean;
-  onToggle: () => void;
-  /** Listenzeile: Beschriftung erst ab sm (mobil fehlt der Platz). */
-  compact?: boolean;
-}) {
-  const label = on ? (internal ? "Freigegeben" : "Veröffentlicht") : "Entwurf";
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onToggle}
-      className="flex items-center gap-2 text-xs font-extrabold"
-      title={internal ? "Für das Team freigeben" : "Auf der Hilfe-Seite veröffentlichen"}
-    >
-      <span
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-teal" : "bg-[#e3d7c2]"}`}
-      >
-        <span
-          className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}
-        />
-      </span>
-      <span className={`${compact ? "hidden sm:inline" : ""} ${on ? "text-teal-text" : "text-muted-foreground"}`}>
-        {label}
-      </span>
-    </button>
-  );
-}
-
 function TutorialMenu({
   tutorial,
   accountSlug,
@@ -508,7 +486,7 @@ function TutorialMenu({
           <DropdownMenuItem
             render={<Link href={`/h/${accountSlug}/${tutorial.slug}`} target="_blank" />}
           >
-            <ExternalLink className="size-4" /> Live-Seite öffnen
+            <ExternalLink className="size-4" /> Auf der Hilfe-Seite öffnen
           </DropdownMenuItem>
         )}
         {publicLive && (

@@ -259,8 +259,8 @@ try {
       "(e) Free: Teaser-Satz sichtbar",
     );
     ok(
-      (await page.locator('a[href="/app/settings/abo"]').count()) > 0,
-      "(e) Free: Link zur Abo-Seite vorhanden",
+      (await page.locator('a[href="/app/settings/tarif"]').count()) > 0,
+      "(e) Free: Link zur Tarif-Seite vorhanden",
     );
     const enFree = await checkboxState(page, "Englisch");
     ok(enFree && enFree.disabled === true, `(e) Free: EN-Checkbox deaktiviert (${JSON.stringify(enFree)})`);

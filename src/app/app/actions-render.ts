@@ -30,10 +30,10 @@ export async function createRenderJob(tutorialId: string, style: RenderStyle) {
     .select("id, account_id, title, status, visibility")
     .eq("id", tutorialId)
     .single<Pick<Tutorial, "id" | "account_id" | "title" | "status" | "visibility">>();
-  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden.");
-  if (tutorial.account_id !== account.id) throw new Error("Kein Zugriff auf dieses Tutorial.");
+  if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden.");
+  if (tutorial.account_id !== account.id) throw new Error("Kein Zugriff auf diese Anleitung.");
   if (tutorial.status !== "published" || tutorial.visibility !== "public")
-    throw new Error("Bitte das Tutorial zuerst öffentlich veröffentlichen.");
+    throw new Error("Bitte veröffentlichen Sie die Anleitung zuerst auf der Hilfe-Seite.");
 
   // Kein doppelter laufender Job (gleiches Tutorial + Stil).
   const { data: running } = await supabase
@@ -44,7 +44,7 @@ export async function createRenderJob(tutorialId: string, style: RenderStyle) {
     .eq("render_style", style)
     .in("status", ["queued", "processing"])
     .limit(1);
-  if (running && running.length) throw new Error("Für dieses Tutorial läuft bereits ein Export in diesem Stil.");
+  if (running && running.length) throw new Error("Für diese Anleitung läuft bereits ein Export in diesem Stil.");
 
   const { data: job, error: jErr } = await supabase
     .from("video_jobs")

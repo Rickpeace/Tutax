@@ -262,7 +262,7 @@ export function LibraryBrowser({
 
           {view === "row" && (
             /* Liste: nach Kategorie gruppiert, Spalten zum Überfliegen */
-            <div className="overflow-hidden rounded-card border-2 border-line bg-card">
+            <div className="overflow-hidden rounded-card border-2 border-line bg-card" data-testid="library-list">
               <div className="hidden grid-cols-[minmax(0,1fr)_190px_90px_110px_150px_32px] gap-4 border-b-2 border-line px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
                 <span>Anleitung</span>
                 <span>Website</span>

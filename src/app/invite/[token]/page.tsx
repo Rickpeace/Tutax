@@ -44,7 +44,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
             <h1 className="text-lg font-extrabold text-ink">Andere Adresse</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Diese Einladung ist für <b>{inv.email}</b>, du bist aber als <b>{user.email}</b> angemeldet.
+              Diese Einladung ist für <b>{inv.email}</b>, Sie sind aber als <b>{user.email}</b> angemeldet.
             </p>
             <a
               href={`/logout?next=/invite/${token}`}
