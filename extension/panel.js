@@ -2568,7 +2568,9 @@ function guideRenderStep() {
       // Overlay auf der Seite anfordern; found:false -> Fallback (siehe Message-Listener).
       sendGuideToTab({
         type: "steply-guide-show",
-        step: { selector: sel, title: step.title, index: idx, total: total },
+        // interaction (Welle 48): Hover-Menü/Rechtsklick/…/iframe — content.js passt Hinweis,
+        // „weiter"-Erkennung und den zuständigen Frame daran an.
+        step: { selector: sel, title: step.title, index: idx, total: total, interaction: guideInteraction(step) },
       });
     } else {
       // Ohne Selektor gleich Fallback (großer Screenshot + Hinweis).
@@ -3187,13 +3189,26 @@ function guideLinearChain() {
   return chain;
 }
 
+// Erweiterte Interaktion (Welle 48) eines Führungs-Schritts: nur ein echtes Objekt durchreichen
+// (content.js prüft die Felder selbst tolerant). Fehlt es → null = normaler Klick/normale Eingabe.
+function guideInteraction(step) {
+  const it = step && step.interaction;
+  return it && typeof it === "object" && !Array.isArray(it) ? it : null;
+}
+
 // Overlay des aktuellen Schritts neu senden (exakt das bisherige Navigation-Überleben-Verhalten).
 function guideResendOverlay(step) {
   const sel = step && step.selector;
   if (sel && typeof sel === "object" && (sel.css || sel.text || sel.role)) {
     sendGuideToTab({
       type: "steply-guide-show",
-      step: { selector: sel, title: step.title, index: guide.history.length + 1, total: guideTotal() },
+      step: {
+        selector: sel,
+        title: step.title,
+        index: guide.history.length + 1,
+        total: guideTotal(),
+        interaction: guideInteraction(step),
+      },
     });
   }
 }
@@ -3816,6 +3831,9 @@ function execSendStep(planStep, extra) {
         total: planStep.total,
         // Datei-Brücke (Welle 39): für Upload-Schritte die zuvor übertragene fileId.
         fileId: extra && extra.fileId != null ? extra.fileId : undefined,
+        // Erweiterte Interaktion (Welle 48): Enter/Rechtsklick/Doppelklick/Ziehen/Kürzel/Hover/
+        // iframe — aus dem Plan (SteplyExecPlan.parseInteraction). Bestimmt auch den Frame.
+        interaction: planStep.interaction || undefined,
       },
     });
   });

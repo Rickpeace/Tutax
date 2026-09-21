@@ -44,6 +44,8 @@ type StepRow = {
   condition: unknown;
   // Bedingter Sprung (Welle 47): {when, to_position} | null. Der Lauf wertet ihn aus.
   jump: unknown;
+  // Erweiterte Interaktion (Welle 48): {enter|variant|key|drop|hover|frame} | null.
+  interaction: unknown;
 };
 
 export async function OPTIONS() {
@@ -81,7 +83,7 @@ export async function GET(
 
   const { data: stepsData } = await admin
     .from("automation_steps")
-    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition, jump")
+    .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition, jump, interaction")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -150,6 +152,12 @@ export async function GET(
         jump:
           s.jump && typeof s.jump === "object" && !Array.isArray(s.jump)
             ? s.jump
+            : null,
+        // Erweiterte Interaktion (Welle 48): Enter nach Eingabe, Rechts-/Doppelklick, Ziehen,
+        // Tastenkürzel, Hover-Menü, iframe. Der Plan reicht es bis in steply-exec-step durch.
+        interaction:
+          s.interaction && typeof s.interaction === "object" && !Array.isArray(s.interaction)
+            ? s.interaction
             : null,
       })),
     },

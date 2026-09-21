@@ -8,6 +8,7 @@
 // leicht testbar und die Regeln liegen an EINER Stelle.
 import "server-only";
 import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
+import { displayKeyDe, dropLabelOf, hoverLabelOf } from "@/lib/interaction-text";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -454,6 +455,8 @@ export function highlightFromRect(rect: GuideStepInput["rect"]): Highlight {
  * Vorlagen-Titel je Schritt (Tango-Stil, deutsche Sie-Form, typografische Quotes):
  *  - click + Label → „Klicken Sie auf „{label}""
  *  - type  + Label → „Tragen Sie {label} ein"
+ *  - Welle 48 (interaction): Rechtsklick, Doppelklick, Ziehen „X“ auf „Y“, „Drücken Sie Strg+S“,
+ *    Hover-Menü („Fahren Sie mit der Maus über „H“ und klicken Sie dann auf „X““)
  *  - ohne Label    → „Schritt {n}"
  */
 export function templateTitle(step: GuideStepInput, index: number): string {
@@ -464,21 +467,98 @@ export function templateTitle(step: GuideStepInput, index: number): string {
     const name = step.file_meta.filename;
     return name ? `Datei hochladen: „${name.slice(0, TITLE_MAX - 18)}“` : "Datei hochladen";
   }
-  if (!step.label) return `Schritt ${n}`;
-  const wrap = (l: string) =>
-    step.action === "type" ? `Tragen Sie „${l}“ ein` : `Klicken Sie auf „${l}“`;
-  // ZITAT-SICHER kürzen (Richards YouTube-Fund): Der alte Hard-Cut nach dem Einsetzen
-  // schnitt das schließende „“" weg („…96GB of VRAM). Stattdessen das Zitat-INNERE an
-  // einer Wortgrenze kürzen — die Anführungszeichen bleiben immer paarig.
-  const room = TITLE_MAX - wrap("").length;
-  let label = step.label;
-  if (label.length > room) {
-    let cut = label.slice(0, Math.max(1, room - 1));
-    const sp = cut.lastIndexOf(" ");
-    if (sp >= Math.floor(room * 0.5)) cut = cut.slice(0, sp);
-    label = cut.replace(/[\s.,;:]+$/, "") + "…";
+  const it = step.interaction;
+  // Tastenkürzel (Welle 48): braucht kein Label — die Kombination IST der Inhalt.
+  if (step.action === "click" && it?.variant === "key" && it.key) {
+    return `Drücken Sie ${displayKeyDe(it.key)}`.slice(0, TITLE_MAX);
   }
-  return wrap(label);
+  if (!step.label) return `Schritt ${n}`;
+  const label = step.label;
+  if (step.action === "click" && it?.variant === "drag") {
+    const drop = dropLabelOf(it);
+    if (drop) return wrapTwo((a, b) => `Ziehen Sie „${a}“ auf „${b}“`, label, drop);
+    return wrapOne([(l) => `Ziehen Sie „${l}“ an die markierte Stelle`, (l) => `Ziehen Sie „${l}“`], label);
+  }
+  if (step.action === "click" && it?.variant === "right") {
+    return wrapOne(
+      [(l) => `Klicken Sie mit der rechten Maustaste auf „${l}“`, (l) => `Rechtsklick auf „${l}“`],
+      label,
+    );
+  }
+  if (step.action === "click" && it?.variant === "double") {
+    return wrapOne([(l) => `Doppelklicken Sie auf „${l}“`], label);
+  }
+  // Hover-Menü (Welle 48): ausführlich, wenn es passt; sonst „Klicken Sie im Menü „H“ auf „X““.
+  const hover = hoverLabelOf(it);
+  if (step.action === "click" && hover && !it?.variant) {
+    const long = `Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf „${label}“`;
+    if (long.length <= TITLE_MAX) return long;
+    return wrapTwo((a, b) => `Klicken Sie im Menü „${a}“ auf „${b}“`, hover, label);
+  }
+  return wrapOne(
+    [step.action === "type" ? (l) => `Tragen Sie „${l}“ ein` : (l) => `Klicken Sie auf „${l}“`],
+    label,
+  );
+}
+
+/**
+ * ZITAT-SICHER kürzen (Richards YouTube-Fund): Der alte Hard-Cut nach dem Einsetzen schnitt das
+ * schließende „“" weg („…96GB of VRAM). Stattdessen das Zitat-INNERE an einer Wortgrenze kürzen —
+ * die Anführungszeichen bleiben immer paarig.
+ */
+function cutLabel(label: string, room: number): string {
+  if (label.length <= room) return label;
+  let cut = label.slice(0, Math.max(1, room - 1));
+  const sp = cut.lastIndexOf(" ");
+  if (sp >= Math.floor(room * 0.5)) cut = cut.slice(0, sp);
+  return cut.replace(/[\s.,;:]+$/, "") + "…";
+}
+
+/**
+ * Wählt die erste Titel-Form, in der das Label UNGEKÜRZT Platz hat; sonst die letzte (kürzeste)
+ * Form mit zitat-sicher gekürztem Label. So bleibt „Klicken Sie mit der rechten Maustaste auf
+ * „Datei““ ausführlich, und lange Labels verlieren nicht alles an den Vorspann.
+ */
+function wrapOne(forms: ((l: string) => string)[], label: string): string {
+  for (const f of forms) {
+    if (f(label).length <= TITLE_MAX) return f(label);
+  }
+  const last = forms[forms.length - 1];
+  return last(cutLabel(label, TITLE_MAX - last("").length));
+}
+
+/**
+ * Titel mit ZWEI Zitaten („Ziehen Sie „X“ auf „Y““, Menü „H“ → „X“) auf TITLE_MAX bringen: der
+ * Platz wird fair geteilt; ein kurzes Label bleibt ganz, das längere wird zitat-sicher gekürzt.
+ */
+function wrapTwo(wrap: (a: string, b: string) => string, a: string, b: string): string {
+  const room = TITLE_MAX - wrap("", "").length;
+  if (a.length + b.length <= room) return wrap(a, b);
+  const half = Math.floor(room / 2);
+  if (a.length <= half) return wrap(a, cutLabel(b, room - a.length));
+  if (b.length <= half) return wrap(cutLabel(a, room - b.length), b);
+  return wrap(cutLabel(a, half), cutLabel(b, room - half));
+}
+
+/** Satz für die Klick-Variante (Welle 48) — ohne Kontext-Präfix, mit Punkt. null = normal. */
+function variantSentence(step: GuideStepInput): string | null {
+  const it = step.interaction;
+  if (step.action !== "click" || !it?.variant) return null;
+  const target = step.label ? `„${step.label}“` : "die markierte Stelle";
+  if (it.variant === "right") return `Klicken Sie mit der rechten Maustaste auf ${target}.`;
+  if (it.variant === "double") return `Doppelklicken Sie auf ${target}.`;
+  if (it.variant === "drag") {
+    const drop = dropLabelOf(it);
+    const what = step.label ? `„${step.label}“` : "das markierte Element";
+    return `Ziehen Sie ${what} mit gedrückter Maustaste auf ${drop ? `„${drop}“` : "die Zielstelle"}.`;
+  }
+  if (it.variant === "key" && it.key) {
+    const k = displayKeyDe(it.key);
+    return k.length > 1 && k.includes("+")
+      ? `Drücken Sie die Tastenkombination ${k}.`
+      : `Drücken Sie die Taste ${k}.`;
+  }
+  return null;
 }
 
 /**
@@ -497,21 +577,36 @@ export function templateBodyText(
     const name = step.file_meta.filename;
     return `${context}Legen Sie die Datei${name ? ` „${name}“` : ""} in dieses Feld.`;
   }
+  // Hover-Menü (Welle 48): erst mit der Maus über den Auslöser, dann die eigentliche Aktion.
+  const hover = hoverLabelOf(step.interaction);
+  const variant = variantSentence(step);
+  if (hover) {
+    if (step.action === "click" && !variant) {
+      const what = step.label ? `„${step.label}“` : "die markierte Stelle";
+      return `${context}Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf ${what}.`;
+    }
+    return `${context}Fahren Sie zuerst mit der Maus über „${hover}“. ${variant ?? baseBodySentence(step)}`;
+  }
+  return `${context}${variant ?? baseBodySentence(step)}`;
+}
+
+/** Der bisherige Satz (Download/Eingabe/Klick) — ohne Kontext-Präfix. */
+function baseBodySentence(step: GuideStepInput): string {
   if (step.file_meta?.role === "download" && step.label) {
-    return `${context}Klicken Sie auf „${step.label}“ — dabei wird eine Datei heruntergeladen.`;
+    return `Klicken Sie auf „${step.label}“ — dabei wird eine Datei heruntergeladen.`;
   }
   if (step.action === "type" && step.label) {
     return step.interaction?.enter
-      ? `${context}Tragen Sie hier „${step.label}“ ein und bestätigen Sie mit Enter.`
-      : `${context}Tragen Sie hier „${step.label}“ ein.`;
+      ? `Tragen Sie hier „${step.label}“ ein und bestätigen Sie mit Enter.`
+      : `Tragen Sie hier „${step.label}“ ein.`;
   }
   if (step.action === "type" && step.interaction?.enter) {
-    return `${context}Tragen Sie hier Ihre Eingabe ein und bestätigen Sie mit Enter.`;
+    return "Tragen Sie hier Ihre Eingabe ein und bestätigen Sie mit Enter.";
   }
   if (step.label) {
-    return `${context}Klicken Sie auf „${step.label}“, um fortzufahren.`;
+    return `Klicken Sie auf „${step.label}“, um fortzufahren.`;
   }
-  return `${context}Führen Sie diesen Schritt wie im Bild markiert aus.`;
+  return "Führen Sie diesen Schritt wie im Bild markiert aus.";
 }
 
 // Tiptap-Doc aus einem Absatz (gleiches Schema wie mkBody in den bestehenden Actions).

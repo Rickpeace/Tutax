@@ -129,6 +129,8 @@ export type GuideStepRow = {
   page_url: string | null;
   is_decision: boolean | null;
   position: number;
+  // Erweiterte Interaktion (Welle 48, Migration 0036) — optional: nur die Recorder-Route liest sie.
+  interaction?: unknown;
 };
 
 export type GuideBranchRow = {
@@ -158,6 +160,9 @@ export type GuidePayload = {
     highlights: unknown[];
     selector: unknown;
     page_url: string | null;
+    // Welle 48: Enter/Rechtsklick/Doppelklick/Ziehen/Kürzel/Hover/iframe — die Live-Führung
+    // passt Hinweis + „weiter"-Erkennung daran an. null = normaler Klick/normale Eingabe.
+    interaction: Record<string, unknown> | null;
     is_decision: boolean;
     question: string | null;
   }[];
@@ -200,6 +205,10 @@ export function buildGuidePayload(
       highlights: Array.isArray(s.highlights) ? s.highlights : [],
       selector: s.selector ?? null,
       page_url: s.page_url ?? null,
+      interaction:
+        s.interaction && typeof s.interaction === "object" && !Array.isArray(s.interaction)
+          ? (s.interaction as Record<string, unknown>)
+          : null,
       is_decision: !!s.is_decision,
       // Kein eigenes question-Feld in der DB: bei Entscheidungen ist der Schritt-Titel die
       // Frage (so rendert es auch der Web-Viewer). Sonst null.

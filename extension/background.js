@@ -68,7 +68,12 @@ function injectIntoOpenTabs() {
       for (const tab of tabs || []) {
         if (tab.id == null || tab.discarded) continue;
         chrome.scripting
-          .executeScript({ target: { tabId: tab.id }, files: ["guide-resolve.js", "content.js"] })
+          // allFrames (Welle 48): wie das Manifest (all_frames) auch in iframes nachimpfen —
+          // der Installations-Guard in content.js macht Doppel-Injektion je Frame harmlos.
+          .executeScript({
+            target: { tabId: tab.id, allFrames: true },
+            files: ["guide-resolve.js", "content.js"],
+          })
           .catch(() => {
             /* Tab nicht injizierbar - beim naechsten echten Laden greift das Manifest */
           });
@@ -235,9 +240,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: false });
     return true;
   }
+  // Welle 48 (iframes): die Sonde im FRAGENDEN Frame ausführen — das markierte Formular kann in
+  // einem iframe liegen. frameId 0 = Hauptfenster (heutiges Verhalten).
+  const frameId = sender && typeof sender.frameId === "number" ? sender.frameId : 0;
   chrome.scripting
     .executeScript({
-      target: { tabId },
+      target: frameId ? { tabId, frameIds: [frameId] } : { tabId },
       world: "MAIN",
       func: () => {
         const el = document.querySelector("[data-steply-hydration-probe]");

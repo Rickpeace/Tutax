@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { readSchedule, type AutomationParam } from "@/lib/automations";
-import type { Highlight, StepCondition, StepJump } from "@/lib/types";
+import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
 import {
   AutomationDetail,
   type AutomationStepView,
@@ -34,7 +34,7 @@ export default async function AutomationDetailPage({
   const [{ data: stepsData }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
-      .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition, jump")
+      .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition, jump, interaction")
       .eq("automation_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -72,6 +72,11 @@ export default async function AutomationDetailPage({
     jump:
       s.jump && typeof s.jump === "object" && !Array.isArray(s.jump)
         ? (s.jump as StepJump)
+        : null,
+    // Erweiterte Interaktion (Welle 48): nur Anzeige (Chips wie „↵ Enter", „Rechtsklick").
+    interaction:
+      s.interaction && typeof s.interaction === "object" && !Array.isArray(s.interaction)
+        ? (s.interaction as StepInteraction)
         : null,
   }));
 

@@ -120,6 +120,8 @@ export type Step = {
   condition: StepCondition | null;
   /** Bedingter Vorwärts-Sprung für Automationen (Welle 47) — vom Menschen ignoriert; sonst null. */
   jump: StepJump | null;
+  /** Erweiterte Interaktion (Welle 48, Migration 0036): Enter/Rechtsklick/Ziehen/… — sonst null. */
+  interaction: StepInteraction | null;
   position: number;
   is_decision: boolean;
   video_time: number | null; // Sekunde im Quell-Video (Video-Pipeline) für den Frame-Picker
