@@ -29,6 +29,11 @@
 // weiterhin „target-hidden"). Das Modul bleibt PUR: die Sichtbarkeit wird INJIZIERT, nie selbst
 // (kein getBoundingClientRect) ermittelt.
 //
+// SHADOW DOM (Welle 48): selector.shadow = [hostCss, …] -> Host für Host in den offenen
+// shadowRoot absteigen, dort css/text/role auflösen. Ohne shadow: wie bisher; findet der Text
+// im Dokument GAR NICHTS, suchen Stufe 2/3 zusätzlich in offenen Shadow-Roots. Slot-Text
+// (<button><slot></slot></button>) zählt über den flachen Baum mit.
+//
 // PUR halten: keine Chrome-APIs, keine Seiteneffekte, kein globaler Zustand.
 
 (function (root) {
@@ -135,7 +140,51 @@
   // da ist. Deshalb beim Aufloesen ebenfalls innerText bevorzugen (spiegelt die Aufnahme), und nur
   // wenn es fehlt (Test-Stub / seltene Faelle) auf textContent zurueckfallen. Die Fuzzy-Grenzen
   // (containsEither, Mindestlaenge 3) bleiben UNVERAENDERT.
+  // Shadow DOM (Welle 48): Text im „flachen" Baum — <slot> durch die zugewiesenen Light-DOM-
+  // Knoten ersetzt, Shadow-Roots betreten. innerText/textContent eines Buttons IM Shadow-Root
+  // (<button><slot></slot></button>) sind sonst LEER, obwohl sichtbar „Speichern" dasteht.
+  // Spiegelt content.js flatText (Aufnahme). Nur bei Slot/Shadow-Root (Stub-Elemente: nie).
+  function hasSlotOrShadow(el) {
+    try {
+      if (el.shadowRoot) return true;
+      return typeof el.querySelector === "function" && !!el.querySelector("slot");
+    } catch (err) {
+      return false;
+    }
+  }
+  function flatTextOf(node, depth) {
+    if (!node || depth > 12) return "";
+    if (node.nodeType === 3) return node.nodeValue || "";
+    if (node.nodeType !== 1 && node.nodeType !== 11) return "";
+    var tag = node.nodeType === 1 ? tagOf(node) : "";
+    if (tag === "style" || tag === "script" || tag === "template" || tag === "noscript") return "";
+    if (tag === "slot" && typeof node.assignedNodes === "function") {
+      var assigned = [];
+      try {
+        assigned = node.assignedNodes({ flatten: true });
+      } catch (err) {
+        assigned = [];
+      }
+      if (assigned.length) {
+        var s = "";
+        for (var a = 0; a < assigned.length; a++) s += " " + flatTextOf(assigned[a], depth + 1);
+        return s;
+      }
+    }
+    var kids = node.nodeType === 1 && node.shadowRoot ? node.shadowRoot.childNodes : node.childNodes;
+    var out = "";
+    for (var i = 0; kids && i < kids.length; i++) {
+      out += " " + flatTextOf(kids[i], depth + 1);
+      if (out.length > 400) break;
+    }
+    return out;
+  }
+
   function visibleTextOf(el) {
+    if (hasSlotOrShadow(el)) {
+      var flat = norm(flatTextOf(el, 0));
+      if (flat) return flat;
+    }
     var it = null;
     try {
       it = el.innerText;
@@ -308,7 +357,7 @@
   // für die Panel-Anzeige/Telemetrie und ist rein ADDITIV — Aufrufer, die nur el/confidence
   // lesen, bleiben unberührt. Werte: "no-selector" | "css-miss" | "volatile-id" |
   // "text-mismatch" | "ambiguous". Bei Treffer ist reason null.
-  function resolveSelector(scope, selector, opts) {
+  function resolveIn(scope, selector, opts, deep) {
     if (!scope || !selector || typeof selector !== "object") {
       return { el: null, confidence: null, reason: "no-selector" };
     }
@@ -384,60 +433,36 @@
       return { el: null, confidence: null, reason: cssVolatile ? "volatile-id" : "css-miss" };
     }
 
-    var cands = clickableCandidates(scope);
+    var first = textStages(clickableCandidates(scope), function () {
+      return scope;
+    });
+    if (first.hit) return first.hit;
+    var exactMatches = first.exactMatches;
+    var fuzzyMatches = first.fuzzyMatches;
 
-    // ── Stufe 2: Rolle (falls vorhanden) + EXAKT normalisierter Text, genau EIN Treffer ──
-    var exactMatches = [];
-    for (var i = 0; i < cands.length; i++) {
-      var el = cands[i];
-      if (wantRole && roleOf(el) !== wantRole) continue;
-      if (textOf(el, scope) === wantText) exactMatches.push(el);
-    }
-    if (hasVis) {
-      // Welle 45: unter den exakten Treffern die SICHTBAREN bevorzugen. Genau EIN sichtbarer
-      // -> nimm ihn (auch wenn daneben unsichtbare Duplikate liegen — Richards Fall). Ist KEINER
-      // sichtbar, aber existiert genau einer -> Fallback auf den einen (nicht schlechter als heute;
-      // der Aufrufer meldet dann per 0×0-Nachprüfung target-hidden). Mehrere sichtbare -> wie
-      // bisher mehrdeutig (durchfallen zu Stufe 3, am Ende „ambiguous").
-      var visExact = [];
-      for (var vi = 0; vi < exactMatches.length; vi++) {
-        if (isVisibleEl(exactMatches[vi])) visExact.push(exactMatches[vi]);
+    // ── Shadow-DOM-Fallback (Welle 48): NUR wenn im Dokument GAR NICHTS passte (weder exakt
+    // noch fuzzy — mehrdeutig bleibt mehrdeutig), dieselben Text-Stufen über die Kandidaten in
+    // OFFENEN Shadow-Roots (Web-Komponenten: Salesforce/Microsoft/UI5). Teurer (Baum-Lauf),
+    // darum nur hier. Jeder Kandidat löst seine Label-Referenzen in SEINEM Root auf.
+    if (deep && !exactMatches.length && !fuzzyMatches.length) {
+      var roots = openShadowRoots(scope);
+      if (roots.length) {
+        var dCands = [];
+        var dScopes = [];
+        for (var ri = 0; ri < roots.length; ri++) {
+          var rc = clickableCandidates(roots[ri]);
+          for (var rj = 0; rj < rc.length; rj++) {
+            dCands.push(rc[rj]);
+            dScopes.push(roots[ri]);
+          }
+        }
+        var second = textStages(dCands, function (el, idx) {
+          return dScopes[idx];
+        });
+        if (second.hit) return second.hit;
+        exactMatches = second.exactMatches;
+        fuzzyMatches = second.fuzzyMatches;
       }
-      if (visExact.length === 1) return { el: visExact[0], confidence: "text", reason: null };
-      if (visExact.length === 0 && exactMatches.length === 1) {
-        return { el: exactMatches[0], confidence: "text", reason: null };
-      }
-    } else if (exactMatches.length === 1) {
-      return { el: exactMatches[0], confidence: "text", reason: null };
-    }
-
-    // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
-    // Typ-Grenze (Hotfix 06.07.): Ein Eingabefeld-Schritt (textbox/searchbox/combobox) darf
-    // NIE an einem Nicht-Eingabefeld ankern — und umgekehrt. Sonst „gewinnt" während des
-    // Seitenaufbaus (Hydration/PPR) kurzzeitig ein völlig falsches Element als „eindeutig".
-    var wantEditable =
-      wantRole === "textbox" || wantRole === "searchbox" || wantRole === "combobox";
-    var fuzzyMatches = [];
-    for (var j = 0; j < cands.length; j++) {
-      var cel = cands[j];
-      if (wantRole && wantEditable !== isEditableEl(cel)) continue;
-      var t = textOf(cel, scope);
-      if (t && containsEither(t, wantText)) fuzzyMatches.push(cel);
-    }
-    if (hasVis) {
-      // Welle 45: analog zu Stufe 2 — sichtbare contains-Treffer bevorzugen. Genau EIN
-      // sichtbarer -> fuzzy; kein sichtbarer, aber genau einer existiert -> Fallback (Aufrufer
-      // meldet target-hidden); mehrere sichtbare -> mehrdeutig (durchfallen zu „ambiguous").
-      var visFuzzy = [];
-      for (var fj = 0; fj < fuzzyMatches.length; fj++) {
-        if (isVisibleEl(fuzzyMatches[fj])) visFuzzy.push(fuzzyMatches[fj]);
-      }
-      if (visFuzzy.length === 1) return { el: visFuzzy[0], confidence: "fuzzy", reason: null };
-      if (visFuzzy.length === 0 && fuzzyMatches.length === 1) {
-        return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
-      }
-    } else if (fuzzyMatches.length === 1) {
-      return { el: fuzzyMatches[0], confidence: "fuzzy", reason: null };
     }
 
     // Kein eindeutiger Treffer: mehrere Kandidaten (ambiguous), sonst — bei totem
@@ -449,6 +474,139 @@
           ? "volatile-id"
           : "text-mismatch";
     return { el: null, confidence: null, reason: reason };
+
+    // Stufe 2 + 3 über eine Kandidatenliste. scopeOf(el, index) liefert den Root für die
+    // Label-Auflösung. Rückgabe: { hit } bei eindeutigem Treffer, sonst die Trefferlisten.
+    function textStages(cands, scopeOf) {
+      // ── Stufe 2: Rolle (falls vorhanden) + EXAKT normalisierter Text, genau EIN Treffer ──
+      var exactMatches = [];
+      for (var i = 0; i < cands.length; i++) {
+        var el = cands[i];
+        if (wantRole && roleOf(el) !== wantRole) continue;
+        if (textOf(el, scopeOf(el, i)) === wantText) exactMatches.push(el);
+      }
+      if (hasVis) {
+        // Welle 45: unter den exakten Treffern die SICHTBAREN bevorzugen. Genau EIN sichtbarer
+        // -> nimm ihn (auch wenn daneben unsichtbare Duplikate liegen — Richards Fall). Ist KEINER
+        // sichtbar, aber existiert genau einer -> Fallback auf den einen (nicht schlechter als heute;
+        // der Aufrufer meldet dann per 0×0-Nachprüfung target-hidden). Mehrere sichtbare -> wie
+        // bisher mehrdeutig (durchfallen zu Stufe 3, am Ende „ambiguous").
+        var visExact = [];
+        for (var vi = 0; vi < exactMatches.length; vi++) {
+          if (isVisibleEl(exactMatches[vi])) visExact.push(exactMatches[vi]);
+        }
+        if (visExact.length === 1) return { hit: { el: visExact[0], confidence: "text", reason: null } };
+        if (visExact.length === 0 && exactMatches.length === 1) {
+          return { hit: { el: exactMatches[0], confidence: "text", reason: null } };
+        }
+      } else if (exactMatches.length === 1) {
+        return { hit: { el: exactMatches[0], confidence: "text", reason: null } };
+      }
+
+      // ── Stufe 3: Fuzzy contains über klickbare Elemente, nur bei EINDEUTIG einem Treffer ──
+      // Typ-Grenze (Hotfix 06.07.): Ein Eingabefeld-Schritt (textbox/searchbox/combobox) darf
+      // NIE an einem Nicht-Eingabefeld ankern — und umgekehrt. Sonst „gewinnt" während des
+      // Seitenaufbaus (Hydration/PPR) kurzzeitig ein völlig falsches Element als „eindeutig".
+      var wantEditable =
+        wantRole === "textbox" || wantRole === "searchbox" || wantRole === "combobox";
+      var fuzzyMatches = [];
+      for (var j = 0; j < cands.length; j++) {
+        var cel = cands[j];
+        if (wantRole && wantEditable !== isEditableEl(cel)) continue;
+        var t = textOf(cel, scopeOf(cel, j));
+        if (t && containsEither(t, wantText)) fuzzyMatches.push(cel);
+      }
+      if (hasVis) {
+        // Welle 45: analog zu Stufe 2 — sichtbare contains-Treffer bevorzugen. Genau EIN
+        // sichtbarer -> fuzzy; kein sichtbarer, aber genau einer existiert -> Fallback (Aufrufer
+        // meldet target-hidden); mehrere sichtbare -> mehrdeutig (durchfallen zu „ambiguous").
+        var visFuzzy = [];
+        for (var fj = 0; fj < fuzzyMatches.length; fj++) {
+          if (isVisibleEl(fuzzyMatches[fj])) visFuzzy.push(fuzzyMatches[fj]);
+        }
+        if (visFuzzy.length === 1) return { hit: { el: visFuzzy[0], confidence: "fuzzy", reason: null } };
+        if (visFuzzy.length === 0 && fuzzyMatches.length === 1) {
+          return { hit: { el: fuzzyMatches[0], confidence: "fuzzy", reason: null } };
+        }
+      } else if (fuzzyMatches.length === 1) {
+        return { hit: { el: fuzzyMatches[0], confidence: "fuzzy", reason: null } };
+      }
+      return { hit: null, exactMatches: exactMatches, fuzzyMatches: fuzzyMatches };
+    }
+  }
+
+  // ── Shadow DOM (Welle 48) ──────────────────────────────────────────────────────────────
+  // selector.shadow = [hostCss, …] (von außen nach innen): Host für Host in dessen OFFENEN
+  // shadowRoot absteigen; css/text/role gelten dann im innersten Root. Geschlossene Roots
+  // (mode:"closed") sind von außen unsichtbar -> null (dann Text-Fallback).
+  function descendShadow(scope, hosts) {
+    var cur = scope;
+    for (var i = 0; i < hosts.length; i++) {
+      var h = null;
+      try {
+        h = cur.querySelector(hosts[i]);
+      } catch (err) {
+        h = null;
+      }
+      var sr = h ? h.shadowRoot : null;
+      if (!sr || typeof sr.querySelector !== "function") return null;
+      cur = sr;
+    }
+    return cur;
+  }
+
+  // Alle OFFENEN Shadow-Roots unterhalb von scope (auch verschachtelt), gekappt. Nur für den
+  // Text-Fallback — ein Baum-Lauf über „*" ist teurer als die normalen Stufen.
+  var MAX_SHADOW_ROOTS = 200;
+  function openShadowRoots(scope) {
+    var out = [];
+    var queue = [scope];
+    while (queue.length && out.length < MAX_SHADOW_ROOTS) {
+      var s = queue.shift();
+      var all = null;
+      try {
+        all = s.querySelectorAll("*");
+      } catch (err) {
+        all = null;
+      }
+      if (!all) continue;
+      for (var i = 0; i < all.length && out.length < MAX_SHADOW_ROOTS; i++) {
+        var sr = all[i] ? all[i].shadowRoot : null;
+        if (sr && typeof sr.querySelectorAll === "function") {
+          out.push(sr);
+          queue.push(sr);
+        }
+      }
+    }
+    return out;
+  }
+
+  // Öffentlicher Einstieg. Ohne selector.shadow: EXAKT wie bisher (plus Shadow-Text-Fallback,
+  // der nur greift, wenn im Dokument nichts passte). Mit shadow: im innersten Root auflösen;
+  // fehlt ein Host oder trifft dort nichts, bleibt der seitenweite Text/Rolle-Fallback (ohne
+  // css — der css-Pfad ist relativ zu einem Root und im Dokument bedeutungslos).
+  function resolveSelector(scope, selector, opts) {
+    if (!scope || !selector || typeof selector !== "object") {
+      return { el: null, confidence: null, reason: "no-selector" };
+    }
+    var hosts = [];
+    if (Array.isArray(selector.shadow)) {
+      for (var i = 0; i < selector.shadow.length; i++) {
+        if (typeof selector.shadow[i] === "string" && selector.shadow[i]) hosts.push(selector.shadow[i]);
+      }
+    }
+    if (!hosts.length) return resolveIn(scope, selector, opts, true);
+    var textOnly = { text: selector.text, role: selector.role };
+    var inner = descendShadow(scope, hosts);
+    if (inner) {
+      var r = resolveIn(inner, selector, opts, true);
+      if (r.el) return r;
+      if (!selector.text) return r;
+      var r2 = resolveIn(scope, textOnly, opts, true);
+      return r2.el ? r2 : r;
+    }
+    if (!selector.text) return { el: null, confidence: null, reason: "css-miss" };
+    return resolveIn(scope, textOnly, opts, true);
   }
 
   var api = {
