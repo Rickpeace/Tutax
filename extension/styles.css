@@ -1397,3 +1397,56 @@ body {
 .auto-cancel {
   color: var(--stop);
 }
+
+/* ===== Sofort-Anleitung: Aufnahme-Phasen (Welle 48a) =====
+   Bereit -> Nimmt auf -> Pausiert -> Gestoppt (Prüfen). Sichtbarkeit per [hidden]
+   (siehe globale Regel oben), die Klassen hier regeln nur Layout/Farbe. */
+.guide-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guide-ctl-row {
+  display: flex;
+  gap: 8px;
+}
+
+.guide-ctl-row .btn {
+  flex: 1 1 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.guide-discard {
+  color: var(--stop);
+}
+
+.guide-ready-hint {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.guide-capture-hint {
+  font-size: 12.5px;
+  background: #fff6e6;
+  border: 1px solid #f3dfb8;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+/* Badge-Farben je Phase: läuft = Rot mit Puls (Standard), sonst ohne Puls. */
+.rec-badge.is-ready,
+.rec-badge.is-stopped {
+  color: var(--muted);
+}
+
+.rec-badge.is-paused {
+  color: #c07d16;
+}
+
+.timer.is-frozen {
+  color: var(--muted);
+}

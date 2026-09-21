@@ -192,11 +192,25 @@
     </section>
 
     <!-- ============ (c) SOFORT-ANLEITUNG: Aufnahme laeuft ============ -->
+    <!-- Welle 48a: Aufnahme-Ablauf mit Phasen (panel.js guidePhase + renderGuidePhase):
+         ready (Bereit, nimmt noch NICHT auf) -> recording -> paused -> stopped (Prüfen).
+         Sichtbarkeit der Knöpfe/Texte setzt ausschließlich renderGuidePhase (el.hidden). -->
     <section id="guideLive" hidden>
       <div class="rec-row">
-        <span class="rec-badge"><span class="rec-pulse"></span> Sofort-Anleitung laeuft</span>
+        <span id="guideBadge" class="rec-badge"><span id="guidePulse" class="rec-pulse"></span> <span id="guideBadgeText">Aufnahme läuft</span></span>
         <span id="guideTimer" class="timer">00:00</span>
       </div>
+
+      <p id="guideReadyHint" class="lead guide-ready-hint" hidden>
+        Öffnen Sie die Seite, auf der Ihr Ablauf beginnt – dann auf „Aufnahme starten“ klicken.
+      </p>
+
+      <!-- Welle 48a: dezenter, NICHT blockierender Hinweis, wenn im aktiven Tab kein
+           Content-Script antwortet (Browser-Seite, PDF, Web Store). -->
+      <p id="guideCaptureHint" class="note-warn guide-capture-hint" role="status" hidden>
+        Auf dieser Seite kann Steply nicht aufnehmen (Browser-Seite, PDF-Ansicht oder Chrome
+        Web Store). Klicks hier werden nicht erfasst.
+      </p>
 
       <!-- ===== Welle 31d: Titel + Kategorie fuer die neue Sofort-Anleitung =====
            Nur im Neu-Aufnahme-Modus sichtbar; bei aktivem Aufnahme-Anker
@@ -217,18 +231,26 @@
         </div>
       </div>
 
-      <p class="clicks-count">
-        <strong id="guideCount">0</strong> Schritte aufgenommen
+      <p id="guideCountLine" class="clicks-count">
+        <strong id="guideCount">0</strong> <span id="guideCountText">Schritte aufgenommen</span>
       </p>
       <div id="guideList" class="guide-list" aria-live="polite"></div>
-      <button id="guideStop" class="btn btn-primary" type="button">
-        Anleitung fertigstellen
-      </button>
-      <p class="note">
-        Klicken Sie Ihren Ablauf im Browser durch - <strong>Tab-Wechsel ist
-        erlaubt</strong>. Jeder Klick wird als Schritt (Screenshot + Markierung)
-        festgehalten. Einzelne Schritte oben mit &#10005; entfernen.
-      </p>
+
+      <div class="guide-controls">
+        <button id="guideStartRec" class="btn btn-primary" type="button">● Aufnahme starten</button>
+        <button id="guideCreate" class="btn btn-primary" type="button">Anleitung erstellen</button>
+        <div id="guideCtlLive" class="guide-ctl-row">
+          <button id="guidePause" class="btn" type="button">⏸ Pause</button>
+          <button id="guideResume" class="btn btn-primary" type="button">▶ Fortsetzen</button>
+          <button id="guideStop" class="btn btn-stop" type="button">■ Stopp</button>
+        </div>
+        <div id="guideCtlStopped" class="guide-ctl-row">
+          <button id="guideContinue" class="btn" type="button">Weiter aufnehmen</button>
+          <button id="guideDiscard" class="btn guide-discard" type="button">Verwerfen</button>
+        </div>
+        <button id="guideCancel" class="btn" type="button">Abbrechen</button>
+      </div>
+      <p id="guideNote" class="note"></p>
     </section>
 
     <!-- ============ (e) SOFORT-ANLEITUNG: Fertig / Upload ============ -->
