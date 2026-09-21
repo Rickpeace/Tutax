@@ -121,28 +121,29 @@ Platzhalter. Neu erzeugen: `node extension/make-icons.mjs` (ohne Abhängigkeiten
 
 1. Klicken Sie auf das **Steply-Symbol** → die **Seitenleiste** öffnet sich rechts
    im Browserfenster und bleibt dort offen.
-2. **Beim ersten Mal (für Direkt-Upload) — am einfachsten per Ein-Klick-Verbinden:**
-   In Steply **Einstellungen → Einbetten → „Extension verbinden"** klicken. Die Seite
-   überträgt den Token automatisch an die installierte Extension; das Panel zeigt danach
-   „Verbunden mit X" (auch wenn es gerade offen ist — es aktualisiert sich sofort).
-   **Fallback:** Ist noch kein Token hinterlegt, zeigt die Seitenleiste den
-   **Verbinden**-Schritt, in dem man den Token von Hand einfügt (Einstellungen →
-   Einbetten → „Token manuell kopieren"), **Speichern**. Die App-URL ist voreingestellt
-   (`https://app.steply.de`); für lokale Tests hier z. B. `http://localhost:3013`
-   eintragen. Ohne Verbindung geht es per „Ohne Verbindung fortfahren (nur Video)" weiter.
-3. **Modus wählen:** Zwei große Karten — **Sofort-Anleitung** (Screenshot je Klick,
-   ohne Video; braucht Verbindung) oder **Video mit Ton**.
-4. **Video mit Ton:** Zuerst der **Mikro-Preflight** — die Seitenleiste zeigt
-   „🎙 Mikrofon bereit" (grün) oder einen roten Hinweis mit „erneut prüfen". Der
-   Start-Knopf ist erst aktiv, wenn das Mikro bereit ist **oder** Sie bewusst
-   „Ohne Ton aufnehmen" ankreuzen. Dann **Bildschirm wählen & aufnehmen** → im
-   Chrome-Dialog den Tab bzw. das Fenster auswählen.
-5. Führen Sie Ihre Schritte vor. Sie dürfen dabei **zwischen Tabs wechseln** — die
-   Seitenleiste bleibt offen und zählt Klicks aus jedem Tab des Fensters. Der Zähler
-   zeigt Laufzeit und erfasste Klicks (bzw. bei der Sofort-Anleitung die Schrittliste
-   mit **Thumbnail je Schritt** und **✕** zum Entfernen).
-6. **Beenden** (Video: „Aufnahme beenden"; Sofort-Anleitung: „Anleitung
-   fertigstellen") →
+2. **Beim ersten Mal — „Nicht verbunden"-Bildschirm (Welle 50a):** Hauptknopf
+   **„In Steply verbinden"** öffnet in der App *Einstellungen → Steply-Erweiterung*
+   (`/app/settings/erweiterung`); die Seite überträgt den Token automatisch, das Panel
+   wechselt sofort zum Start. **Fallback:** „Code manuell eingeben" klappt das Code-Feld
+   (verdeckt) auf; die App-Adresse steht darunter unter „Erweitert" (Standard: Prod-URL,
+   für lokale Tests z. B. `http://localhost:3013`). Ohne Konto: „nur Video aufnehmen".
+3. **Aufbau (Welle 50a):** Kopf mit Logo, **?-Menü** (Steply lernen · Video mit Ton
+   aufnehmen · Hilfe bei Aufnahme-Problemen) und **Avatar-Menü** (Organisation +
+   „Verbunden", Steply öffnen, Update installieren — nur wenn verfügbar, dann Punkt am
+   Avatar —, Verbindung ändern, Trennen, Version). Darunter drei Reiter:
+   **Aufnehmen** (ein Hauptknopf „Aufnahme starten" + feste Zeile „Für diese Seite (n)"),
+   **Anleitungen** (Suche, „Diese Seite | Alle", Schalter „Entwürfe"; Auswahl →
+   „Auf der Seite zeigen" oder „Öffnen") und **Automationen** (nur verbunden).
+4. **Sofort-Anleitung:** „Aufnahme starten" startet direkt — vorher nimmt nichts auf.
+   Während der Aufnahme bleibt oben eine dunkle Steuerleiste (Zeit · Schritte,
+   Pause/Fortsetzen, **Fertig**); darunter die Schrittliste mit Thumbnail, **✕** und
+   „?" (optional für Automationen). „Fertig" → **Prüfen** mit Titel/Kategorie und fester
+   Fußleiste („Anleitung erstellen", „Weiter aufnehmen", „Verwerfen"). Der Haken erscheint
+   erst nach erfolgreichem Upload; Fehler stehen dort mit „Erneut versuchen".
+5. **Video mit Ton** (?-Menü): zuerst der **Mikro-Preflight**; der Start-Knopf ist erst
+   aktiv, wenn das Mikro bereit ist **oder** „Ohne Ton aufnehmen" angekreuzt ist. Dann
+   „Bildschirm wählen und aufnehmen". Sie dürfen dabei **zwischen Tabs wechseln**.
+6. **Beenden** (Video: „Aufnahme beenden") →
    - **Mit Token:** Upload mit Fortschritt, dann „In Steply öffnen".
    - **Ohne Token (nur Video):** beide Dateien werden heruntergeladen → manuell in
      Steply hochladen (**Aus Video**).
@@ -239,9 +240,14 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
   `background.js` ruft einmal
   `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`, damit der
   **Klick aufs Symbol** die Seitenleiste öffnet.
-- **Panel-Zustände** (genau einer sichtbar): `connect` (a, Token) · `start`
-  (b, zwei Karten) · `videoSetup` (Mikro-Preflight) · `videoLive` (d) · `videoDone`
-  (e) · `guideLive` (c, Schrittliste mit Thumbnails) · `guideDone` (e).
+- **Panel-Zustände** (genau einer sichtbar, `show()`): `connect` (nicht verbunden /
+  Verbindung ändern) · Reiter `start` | `guides` | `automations` · `autoPrep` · `autoRun`
+  · `guideLive` (Aufnahme + Prüfen) · `guideDone` (Hochladen/Fertig/Fehler) · `videoSetup`
+  · `videoLive` · `videoDone` · `guideRun` (Auf der Seite zeigen) · `steplyLearn` · `recHelp`.
+- **Sofort-Start (Welle 50a):** Beim Öffnen rendert das Panel aus `chrome.storage.local`
+  (`badgeCache` mit Token-Fingerabdruck, `steplyDocCache`, `steplyAccountCache`) und
+  aktualisiert beide Listen parallel im Hintergrund; „Für diese Seite" ist eine feste
+  Zeile, nichts verschiebt sich beim Nachladen (`scripts/test-panel-start-cache.mjs`).
 - **Message-Fluss:** `content.js` sendet per `chrome.runtime.sendMessage`
   (`steply-click` im Video-Modus, `steply-guide-step` im Sofort-Modus); das offene
   Panel empfängt via `chrome.runtime.onMessage` und akzeptiert nur Nachrichten aus
@@ -323,8 +329,8 @@ Vision-Pipeline.
 
 **Ablauf (nur mit Verbindungs-Token):**
 
-1. Seitenleiste → Karte **„Sofort-Anleitung"** (ohne Verbindung ist die Karte
-   deaktiviert, mit Hinweis „Zuerst mit Steply verbinden").
+1. Seitenleiste → Reiter **Aufnehmen** → **„Aufnahme starten"** (ohne Verbindung zeigt
+   die Seitenleiste stattdessen den „Nicht verbunden"-Bildschirm).
 2. Das Panel setzt `chrome.storage.local` `{ rec: { startedAt, mode: "guide" } }`.
    Das Content-Script erfasst dann bei jedem `pointerdown` (Capture-Phase, **vor** der
    Klick-Wirkung/Navigation) die **BoundingClientRect des Elements** (normalisiert 0..1
@@ -339,8 +345,8 @@ Vision-Pipeline.
    Qualität 0,85, spart ~70 % Upload). Schritte sammeln sich im Speicher; **Live-Zähler**
    + **scrollende Schrittliste mit Thumbnail je Schritt** und **✕** zum Entfernen
    einzelner Schritte vor dem Upload.
-4. **„Anleitung fertigstellen"** → Upload (s. u.) → Abschluss-Screen mit
-   „In Steply öffnen" (`{appUrl}/app/tutorials/{id}`).
+4. **„Fertig"** → Prüfen → **„Anleitung erstellen"** → Upload (s. u.) → Abschluss-Screen
+   mit „In Steply öffnen" (`{appUrl}/app/tutorials/{id}`).
 
 **captureVisibleTab-Grenzen (bewusst behandelt):**
 
@@ -355,9 +361,8 @@ Vision-Pipeline.
   Schritt still übersprungen und ein Hinweis gezeigt.
 - **Berechtigungen:** `captureVisibleTab` ist durch die vorhandenen
   `host_permissions` (`http/https`) gedeckt — **kein** zusätzliches `"tabs"`-Recht nötig.
-- **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token ist die
-  Sofort-Anleitung-Karte deaktiviert (Hinweis: „In Steply verbinden — Einstellungen
-  → Einbetten").
+- **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token gibt es den Knopf
+  nicht — die Seitenleiste zeigt den „Nicht verbunden"-Bildschirm.
 
 ### Eingaben & Selektoren (v2.1)
 

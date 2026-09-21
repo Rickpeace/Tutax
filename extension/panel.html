@@ -3,447 +3,486 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Steply Recorder</title>
+    <title>Steply</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="panel">
-    <header class="brand">
-      <span class="dot"></span>
-      <h1>Steply Recorder</h1>
+    <!-- Linien-Icons (Welle 50a): EIN Symbol-Satz statt Emoji. Nutzung: <svg class="i"><use href="#i-…"/></svg> -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8"/><path d="M12 17.2h.01"/></symbol>
+        <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></symbol>
+        <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+        <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+        <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5.5v13l11-6.5z"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.5 2.4 14.5 0 17M12 3.5c-2.4 2.5-2.4 14.5 0 17"/></symbol>
+        <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+        <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 16l-4-4 4-4M6 12h10"/></symbol>
+        <symbol id="i-cap" viewBox="0 0 24 24"><path d="m3 9 9-4 9 4-9 4z"/><path d="M7 11v4.5c1.5 1.3 3.2 2 5 2s3.5-.7 5-2V11"/></symbol>
+        <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></symbol>
+        <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0zM12 17v4"/></symbol>
+        <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.3h.01"/></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4.2h-4.2"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+        <symbol id="i-skip" viewBox="0 0 24 24"><path d="m6 6 7 6-7 6zM17 6v12"/></symbol>
+        <symbol id="i-file" viewBox="0 0 24 24"><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5v5h5"/></symbol>
+        <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5v3"/></symbol>
+      </defs>
+    </svg>
+
+    <!-- ============ Kopf: Logo, ?-Menü, Avatar-Menü (Welle 50a) ============ -->
+    <header class="top">
+      <div class="logo"><b>S</b>Steply</div>
+      <span class="sp"></span>
+      <button id="helpBtn" class="iconbtn" type="button" aria-label="Hilfe" aria-haspopup="menu" aria-expanded="false">
+        <svg class="i"><use href="#i-help"/></svg>
+      </button>
+      <button id="avatarBtn" class="avatar" type="button" aria-label="Konto" aria-haspopup="menu" aria-expanded="false" hidden>
+        <span id="avatarLetter">S</span><i id="avatarDot" hidden></i>
+      </button>
     </header>
 
-    <p id="interruptedHint" class="note note-warn" hidden>
-      Eine unterbrochene Aufnahme wurde verworfen.
-    </p>
+    <!-- Reiter (nur auf den drei Haupt-Bildschirmen sichtbar; show() steuert). -->
+    <nav id="tabs" class="tabs" role="tablist" hidden>
+      <button id="tabRecord" class="tab" type="button" role="tab">Aufnehmen</button>
+      <button id="tabGuides" class="tab" type="button" role="tab">Anleitungen <span id="tabGuidesCount" class="n" hidden></span></button>
+      <button id="tabAutos" class="tab" type="button" role="tab">Automationen</button>
+    </nav>
 
-    <!-- Dezenter Update-Hinweis (nie blockierend); Link wird per JS verdrahtet. -->
-    <p id="updateHint" class="update-hint" hidden></p>
-
-    <!-- Aufnahme-Anker (Welle 27): Ziel, in das die Aufnahme eingefuegt wird. -->
-    <div id="targetBanner" class="target-banner" hidden>
-      <span class="target-icon" aria-hidden="true">&#127919;</span>
-      <span class="target-text">
-        <span id="targetPrefix">Aufnahme f&uuml;r: </span><strong id="targetLabel"></strong>
-      </span>
-      <button id="targetClear" class="target-clear" type="button">Ziel verwerfen</button>
+    <!-- Menüs (über allem). -->
+    <div id="menuDim" class="dim" hidden></div>
+    <div id="menuHelp" class="menu" role="menu" hidden>
+      <button id="mLearn" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-cap"/></svg>Steply lernen</button>
+      <button id="mVideo" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-video"/></svg>Video mit Ton aufnehmen</button>
+      <button id="mRecHelp" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-help"/></svg>Hilfe bei Aufnahme-Problemen</button>
+    </div>
+    <div id="menuAccount" class="menu" role="menu" hidden>
+      <div class="who">
+        <b id="mAccountName">Ihr Steply-Konto</b>
+        <span><svg class="i s"><use href="#i-check"/></svg>Verbunden</span>
+      </div>
+      <button id="mOpenApp" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-ext"/></svg>Steply öffnen</button>
+      <button id="mUpdate" class="it hl" type="button" role="menuitem" hidden><svg class="i s"><use href="#i-dl"/></svg>Update installieren<small id="mUpdateVer"></small></button>
+      <div class="sep"></div>
+      <button id="mChange" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-link"/></svg>Verbindung ändern</button>
+      <button id="mDisconnect" class="it" type="button" role="menuitem"><svg class="i s"><use href="#i-out"/></svg>Trennen</button>
+      <div class="sep"></div>
+      <div id="mVersion" class="it ver">Version</div>
     </div>
 
-    <!-- ============ (a) NICHT VERBUNDEN: Token / App-URL ============ -->
-    <section id="connect" hidden>
-      <p class="lead">Mit Steply verbinden</p>
-      <p id="connectAccount" class="status status-ok" hidden></p>
-      <p class="note">
-        Am einfachsten verbinden Sie <strong>per Klick in Steply</strong>:
-        Einstellungen &rarr; Einbetten &rarr; „Extension verbinden". Der Token wird
-        dann automatisch hierher uebertragen. Alternativ fuegen Sie ihn unten von
-        Hand ein.
-      </p>
-      <label class="field">
-        <span>Verbindungs-Token</span>
-        <input id="token" type="text" autocomplete="off" spellcheck="false"
-          placeholder="z. B. 3f9a1c2e-..." />
-      </label>
-      <label class="field">
-        <span>Steply-App-URL</span>
-        <input id="appUrl" type="url" autocomplete="off" spellcheck="false"
-          placeholder="https://tutax-ivory.vercel.app" />
-      </label>
-      <button id="saveCfg" class="btn btn-primary" type="button">Speichern</button>
-      <p id="cfgStatus" class="status" role="status" aria-live="polite"></p>
-      <button id="skipConnect" class="btn" type="button">
-        Ohne Verbindung fortfahren
-      </button>
-    </section>
+    <!-- Aufnahme-Anker (Welle 27, Welle 50a kompakt): Ziel, in das die Aufnahme eingefügt wird. -->
+    <div id="targetBanner" class="target" hidden>
+      <svg class="i s"><use href="#i-target"/></svg>
+      <span class="target-text"><span id="targetPrefix">Wird eingefügt in: </span><b id="targetLabel"></b></span>
+      <button id="targetClear" class="x" type="button">Aufheben</button>
+    </div>
 
-    <!-- ============ (b) START: zwei Karten ============ -->
-    <section id="start" hidden>
-      <!-- „Fuer diese Seite" (Welle 31c): passende Tutorials zur gerade offenen Seite.
-           Sichtbarkeit + Inhalt steuert panel.js (refreshSiteMatch); Matching rein LOKAL,
-           die besuchte URL verlaesst NIE den Browser. -->
-      <div id="siteMatch" class="site-match" hidden>
-        <p class="site-match-title">&#128205; F&uuml;r diese Seite</p>
-        <div id="siteMatchList" class="site-match-list" aria-live="polite"></div>
-      </div>
-
-      <p class="lead">Wie moechten Sie den Ablauf festhalten?</p>
-
-      <button id="cardGuide" class="card-choice" type="button">
-        <span class="card-emoji" aria-hidden="true">&#9889;</span>
-        <span class="card-body">
-          <strong>Sofort-Anleitung</strong>
-          <em>Screenshot je Klick - fertige Anleitung in Sekunden, ohne Video.</em>
-        </span>
-      </button>
-
-      <button id="cardVideo" class="card-choice" type="button">
-        <span class="card-emoji" aria-hidden="true">&#127909;</span>
-        <span class="card-body">
-          <strong>Video mit Ton</strong>
-          <em>Bildschirm-Aufnahme mit Mikrofon - KI erzeugt Texte &amp; Ton.</em>
-        </span>
-      </button>
-
-      <!-- Live-Führung (Welle 31): Einstieg in die Führen-Liste. -->
-      <button id="cardGuideRun" class="card-choice" type="button">
-        <span class="card-emoji" aria-hidden="true">&#129517;</span>
-        <span class="card-body">
-          <strong>Anleitung f&uuml;hren</strong>
-          <em>Schritt f&uuml;r Schritt auf der echten Website - mit Markierung.</em>
-        </span>
-      </button>
-
-      <!-- Automationen (Welle 36b): aufgezeichnete Abläufe von der Extension AUSFÜHREN
-           lassen. NUR bei gepairtem Token sichtbar (Automationen sind Kontodaten) -
-           panel.js blendet die Karte ohne Token aus. -->
-      <button id="cardAutomations" class="card-choice" type="button" hidden>
-        <span class="card-emoji" aria-hidden="true">&#9881;&#65039;</span>
-        <span class="card-body">
-          <strong>Automationen</strong>
-          <em>Aufgezeichnete Abl&auml;ufe automatisch ausf&uuml;hren - mit sichtbarer Maus.</em>
-        </span>
-      </button>
-
-      <!-- „Steply lernen" (Welle 35): IMMER sichtbar - auch ohne Verbindung (Onboarding).
-           Öffnet die öffentlichen Steply-Doku-Touren (kein Token nötig). -->
-      <button id="cardSteplyLearn" class="card-choice" type="button">
-        <span class="card-emoji" aria-hidden="true">&#127891;</span>
-        <span class="card-body">
-          <strong>Steply lernen</strong>
-          <em>Interaktive Touren: So nutzen Sie Steply Schritt f&uuml;r Schritt.</em>
-        </span>
-      </button>
-
-      <div id="connInfo" class="conn-info">
-        <span id="connText"></span>
-        <button id="connBtn" type="button"></button>
-      </div>
-    </section>
-
-    <!-- ============ VIDEO: Vorbereitung (Mikro-Preflight) ============ -->
-    <section id="videoSetup" hidden>
-      <button id="videoBack" class="link-back" type="button">&larr; Zurueck</button>
-      <p class="lead">Video mit Ton</p>
-
-      <div id="micStatus" class="mic-status pending">Mikrofon wird geprueft ...</div>
-      <button id="micRetry" class="btn" type="button" hidden>
-        Mikrofon erneut pruefen
-      </button>
-
-      <label class="checkbox">
-        <input type="checkbox" id="noAudio" />
-        <span>Ohne Ton aufnehmen</span>
-      </label>
-
-      <button id="begin" class="btn btn-primary" type="button" disabled>
-        Bildschirm waehlen &amp; aufnehmen
-      </button>
-
-      <p id="clicksTabInfo" class="note">
-        Klicks werden auf normalen Websites erfasst - auch ueber Tab- und
-        Seitenwechsel hinweg. Auf Browser-Systemseiten (chrome://, Web Store)
-        nicht; das Video entsteht trotzdem.
-      </p>
-    </section>
-
-    <!-- ============ (d) VIDEO: Aufnahme laeuft ============ -->
-    <section id="videoLive" hidden>
-      <div class="rec-row">
-        <span class="rec-badge"><span class="rec-pulse"></span> Aufnahme laeuft</span>
-        <span id="timer" class="timer">00:00</span>
-      </div>
-      <p id="micLive" class="mic-live"></p>
-      <p class="clicks-count">
-        Erfasste Klicks: <strong id="clickCount">0</strong>
-      </p>
-      <button id="stop" class="btn btn-stop" type="button">
-        Aufnahme beenden
-      </button>
-      <p class="note">
-        Sie koennen jetzt zwischen Tabs wechseln und Ihre Schritte vorfuehren -
-        die Seitenleiste bleibt offen. Schliessen Sie sie nicht, sonst geht die
-        Aufnahme verloren.
-      </p>
-    </section>
-
-    <!-- ============ (e) VIDEO: Fertig / Upload ============ -->
-    <section id="videoDone" hidden>
-      <div class="done-check">&#10003;</div>
-      <h2>Aufnahme fertig</h2>
-
-      <div id="uploadBox" hidden>
-        <p id="uploadProgress" class="lead" role="status" aria-live="polite"></p>
-        <div id="uploadDone" hidden>
-          <p class="lead">Hochgeladen - das Tutorial wird erstellt.</p>
-          <button id="openApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
-        </div>
-      </div>
-
-      <div id="downloadBox" hidden>
-        <p class="lead">
-          Laden Sie <strong>beide</strong> Dateien in Steply hoch (Aus Video):
-        </p>
-        <ul class="filelist">
-          <li id="fileVideo">aufnahme.webm</li>
-          <li id="fileClicks">clicks.json</li>
-        </ul>
-      </div>
-
-      <button id="again" class="btn" type="button">Neue Aufnahme</button>
-    </section>
-
-    <!-- ============ (c) SOFORT-ANLEITUNG: Aufnahme laeuft ============ -->
-    <!-- Welle 48a: Aufnahme-Ablauf mit Phasen (panel.js guidePhase + renderGuidePhase):
-         ready (Bereit, nimmt noch NICHT auf) -> recording -> paused -> stopped (Prüfen).
-         Sichtbarkeit der Knöpfe/Texte setzt ausschließlich renderGuidePhase (el.hidden). -->
-    <section id="guideLive" hidden>
-      <div class="rec-row">
-        <span id="guideBadge" class="rec-badge"><span id="guidePulse" class="rec-pulse"></span> <span id="guideBadgeText">Aufnahme läuft</span></span>
-        <span id="guideTimer" class="timer">00:00</span>
-      </div>
-
-      <p id="guideReadyHint" class="lead guide-ready-hint" hidden>
-        Öffnen Sie die Seite, auf der Ihr Ablauf beginnt – dann auf „Aufnahme starten“ klicken.
-      </p>
-
-      <!-- Welle 48a: dezenter, NICHT blockierender Hinweis, wenn im aktiven Tab kein
-           Content-Script antwortet (Browser-Seite, PDF, Web Store). -->
-      <p id="guideCaptureHint" class="note-warn guide-capture-hint" role="status" hidden>
-        Auf dieser Seite kann Steply nicht aufnehmen (Browser-Seite, PDF-Ansicht oder Chrome
-        Web Store). Klicks hier werden nicht erfasst.
-      </p>
-
-      <!-- ===== Welle 31d: Titel + Kategorie fuer die neue Sofort-Anleitung =====
-           Nur im Neu-Aufnahme-Modus sichtbar; bei aktivem Aufnahme-Anker
-           (pendingTarget) blendet panel.js den ganzen Block aus (das Ziel-Tutorial
-           hat Titel + Kategorie bereits). Werte werden in chrome.storage.session
-           gehalten und beim Fertigstellen an guide-complete mitgeschickt. -->
-      <div id="guideMeta" class="guide-meta" hidden>
-        <label class="field field-compact">
-          <span>Titel (optional)</span>
-          <input id="guideTitle" type="text" autocomplete="off" spellcheck="false"
-            maxlength="120" placeholder="z. B. Beleg in DATEV hochladen" />
-        </label>
-        <div id="guideCatWrap" class="field field-compact" hidden>
-          <span>Kategorie (optional)</span>
-          <select id="guideCategory" class="guide-cat-select"></select>
-          <input id="guideCategoryNew" type="text" autocomplete="off" spellcheck="false"
-            maxlength="60" placeholder="Name der neuen Kategorie" hidden />
-        </div>
-      </div>
-
-      <p id="guideCountLine" class="clicks-count">
-        <strong id="guideCount">0</strong> <span id="guideCountText">Schritte aufgenommen</span>
-      </p>
-      <div id="guideList" class="guide-list" aria-live="polite"></div>
-
-      <div class="guide-controls">
-        <button id="guideStartRec" class="btn btn-primary" type="button">● Aufnahme starten</button>
-        <button id="guideCreate" class="btn btn-primary" type="button">Anleitung erstellen</button>
-        <div id="guideCtlLive" class="guide-ctl-row">
-          <button id="guidePause" class="btn" type="button">⏸ Pause</button>
-          <button id="guideResume" class="btn btn-primary" type="button">▶ Fortsetzen</button>
-          <button id="guideStop" class="btn btn-stop" type="button">■ Stopp</button>
-        </div>
-        <div id="guideCtlStopped" class="guide-ctl-row">
-          <button id="guideContinue" class="btn" type="button">Weiter aufnehmen</button>
-          <button id="guideDiscard" class="btn guide-discard" type="button">Verwerfen</button>
-        </div>
-        <button id="guideCancel" class="btn" type="button">Abbrechen</button>
-      </div>
-      <p id="guideNote" class="note"></p>
-    </section>
-
-    <!-- ============ (e) SOFORT-ANLEITUNG: Fertig / Upload ============ -->
-    <section id="guideDone" hidden>
-      <div class="done-check">&#10003;</div>
-      <h2>Anleitung erstellt</h2>
-      <div id="guideUploadBox">
-        <p id="guideProgress" class="lead" role="status" aria-live="polite"></p>
-        <div id="guideUploadDone" hidden>
-          <p class="lead">Ihre Anleitung ist als Entwurf in Steply.</p>
-          <button id="guideOpenApp" class="btn btn-primary" type="button">In Steply oeffnen</button>
-        </div>
-      </div>
-      <button id="guideAgain" class="btn" type="button">Neue Aufnahme</button>
-    </section>
-
-    <!-- ============ LIVE-FÜHRUNG (Welle 31): Führen-Liste ============ -->
-    <section id="fuehren" hidden>
-      <button id="fuehrenBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
-      <p class="lead">Anleitung live f&uuml;hren</p>
-      <!-- Filter-Chips (Welle 32, Punkt C): Default „Diese Seite" + „Live". Auswahl bleibt
-           in chrome.storage.session. Matching REIN LOKAL (site-match.js). -->
-      <div id="fuehrenFilters" class="fuehren-filters" hidden>
-        <div class="chip-group" role="group" aria-label="Seiten-Filter">
-          <button id="chipSite" class="chip" type="button">Diese Seite</button>
-          <button id="chipAll" class="chip" type="button">Alle</button>
-        </div>
-        <div class="chip-group" role="group" aria-label="Status-Filter">
-          <button id="chipLive" class="chip" type="button">Live</button>
-          <button id="chipDrafts" class="chip" type="button">Auch Entw&uuml;rfe</button>
-        </div>
-      </div>
-      <p id="fuehrenHint" class="note" hidden></p>
-      <div id="fuehrenList" class="fuehren-list" aria-live="polite"></div>
-    </section>
-
-    <!-- ============ LIVE-FÜHRUNG (Welle 31): Führungs-Ansicht ============ -->
-    <section id="guideRun" hidden>
-      <div class="run-top">
-        <button id="runExit" class="link-back" type="button">&larr; Beenden</button>
-        <span id="runProgress" class="run-progress"></span>
-      </div>
-      <div id="runBar" class="run-bar"><span></span></div>
-
-      <div id="runImageWrap" class="run-image-wrap" hidden>
-        <div id="runImageFrame" class="run-image-frame">
-          <img id="runImage" class="run-image" alt="" />
-        </div>
-      </div>
-      <p id="runFallbackHint" class="run-fallback-hint" hidden></p>
-      <!-- Zustands-Intelligenz (Welle 40): Vorspul-Notiz in der Fuehrung. -->
-      <p id="runSkipNote" class="run-skip" hidden></p>
-
-      <h2 id="runTitle" class="run-title"></h2>
-      <div id="runBody" class="run-body"></div>
-
-      <div id="runDecision" class="run-decision" hidden></div>
-      <div id="runNav" class="run-nav">
-        <button id="runBack" class="btn" type="button">Zur&uuml;ck</button>
-        <button id="runNext" class="btn btn-primary" type="button">Weiter</button>
-      </div>
-
-      <div id="runDone" class="run-done" hidden>
-        <div class="done-check">&#10003;</div>
-        <h2>Fertig &#127881;</h2>
-        <p class="lead">Sie haben die Anleitung durchlaufen.</p>
-        <button id="runDoneList" class="btn" type="button">Andere Anleitung f&uuml;hren</button>
-      </div>
-    </section>
-
-    <!-- ============ „STEPLY LERNEN" (Welle 35): öffentliche Doku-Touren ============ -->
-    <section id="steplyLearn" hidden>
-      <button id="steplyLearnBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
-      <p class="lead">&#127891; Steply lernen</p>
-      <p class="note">
-        Interaktive Touren, die Steply mit Steply erkl&auml;ren &ndash; Schritt f&uuml;r
-        Schritt. F&uuml;r manche Schritte gibt es eine Live-Markierung, wenn Sie in der
-        Steply-App sind; sonst leiten die Screenshots.
-      </p>
-      <p id="steplyLearnHint" class="note" hidden></p>
-      <div id="steplyLearnList" class="fuehren-list" aria-live="polite"></div>
-    </section>
-
-    <!-- ============ AUTOMATIONEN (Welle 36b): Liste ============ -->
-    <section id="automations" hidden>
-      <button id="autoListBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
-      <p class="lead">&#9881;&#65039; Automationen</p>
-      <p id="autoListHint" class="note" hidden></p>
-      <div id="autoList" class="fuehren-list" aria-live="polite"></div>
-    </section>
-
-    <!-- ============ AUTOMATIONEN (Welle 36b): Vorbereitung ============ -->
-    <section id="autoPrep" hidden>
-      <button id="autoPrepBack" class="link-back" type="button">&larr; Zur&uuml;ck</button>
-      <h2 id="autoPrepTitle" class="run-title"></h2>
-
-      <!-- (a) Domain-Hinweis (Sicherheit: der Nutzer sieht VOR dem Start, wo gearbeitet wird). -->
-      <p id="autoDomainHint" class="auto-domain"></p>
-
-      <!-- (b) Parameter-Formular (dynamisch aus params). Werte leben NUR lokal. -->
-      <div id="autoParamForm" class="auto-params"></div>
-
-      <button id="autoClearValues" class="btn auto-clear" type="button" hidden>
-        Gespeicherte Werte l&ouml;schen
-      </button>
-
-      <!-- (c) Modus-Wahl: Halbautomatik ist Standard (Sicherheit). -->
-      <fieldset class="auto-modes">
-        <legend>Wie soll der Lauf ablaufen?</legend>
-        <label class="mode">
-          <input type="radio" name="autoMode" id="autoModeSemi" value="semi" checked />
-          <span>
-            <strong>Schritt f&uuml;r Schritt best&auml;tigen</strong>
-            <em>Empfohlen - Sie best&auml;tigen jeden Schritt selbst.</em>
-          </span>
-        </label>
-        <label class="mode">
-          <input type="radio" name="autoMode" id="autoModeAuto" value="auto" />
-          <span>
-            <strong>Automatisch durchlaufen</strong>
-            <em>L&auml;uft ohne Nachfrage - pausiert nur bei Problemen.</em>
-          </span>
-        </label>
-      </fieldset>
-
-      <!-- (d) Start (zugleich die Sicherheits-Best&auml;tigung fuer die Domain oben). -->
-      <button id="autoStart" class="btn btn-primary" type="button">Lauf starten</button>
-      <p id="autoPrepHint" class="status" role="status" aria-live="polite"></p>
-    </section>
-
-    <!-- ============ AUTOMATIONEN (Welle 36b): Lauf-Ansicht ============ -->
-    <section id="autoRun" hidden>
-      <div class="run-top">
-        <button id="autoExit" class="link-back" type="button">&larr; Abbrechen</button>
-        <span id="autoProgress" class="run-progress"></span>
-      </div>
-      <div id="autoBar" class="run-bar"><span></span></div>
-
-      <h2 id="autoStepTitle" class="run-title"></h2>
-      <p id="autoStepAction" class="auto-step-action"></p>
-
-      <!-- Live-Status (Vollautomatik) bzw. „wird ausgefuehrt". -->
-      <p id="autoLiveStatus" class="auto-live" hidden></p>
-
-      <!-- Zustands-Intelligenz (Welle 40): Anmelde-Wache (hoefliches Warten) + Vorspul-Notiz. -->
-      <p id="autoWaitLogin" class="auto-wait" hidden></p>
-      <p id="autoSkipNote" class="auto-skip" hidden></p>
-      <!-- Bedingte Schritte (Welle 42): dezente Notiz „⏭ Schritt X übersprungen (Bedingung …)". -->
-      <p id="autoCondSkipNote" class="auto-skip" hidden></p>
-
-      <!-- Pausen-/Miss-Box: klare Meldung + Referenz-Screenshot (imageUrl), falls vorhanden. -->
-      <div id="autoMissBox" class="auto-miss" hidden>
-        <p id="autoMissText" class="auto-miss-text"></p>
-        <div id="autoMissImageWrap" class="run-image-wrap auto-miss-image" hidden>
-          <div id="autoMissImageFrame" class="run-image-frame">
-            <img id="autoMissImage" class="run-image" alt="" />
+    <main class="main">
+      <!-- ============ Nicht verbunden / Verbindung ändern (Bildschirm 9) ============ -->
+      <section id="connect" class="screen" hidden>
+        <div class="body">
+          <button id="connectBack" class="backlink" type="button" hidden><svg class="i s"><use href="#i-back"/></svg>Zurück</button>
+          <div class="connect">
+            <div class="plug"><svg class="i"><use href="#i-plug"/></svg></div>
+            <h3 id="connectTitle">Mit Ihrem Steply-Konto verbinden</h3>
+            <p id="connectLead">Dann landen Aufnahmen direkt in Ihrer Bibliothek, und Sie können Anleitungen auf Websites zeigen.</p>
+            <p id="connectAccount" class="ok-line" hidden></p>
+            <button id="connectApp" class="btn primary full" type="button"><svg class="i s"><use href="#i-ext"/></svg>In Steply verbinden</button>
+            <button id="manualToggle" class="btn text" type="button" aria-expanded="false">Code manuell eingeben</button>
+            <div id="manualBox" class="manual" hidden>
+              <label class="field">
+                <span>Verbindungs-Code</span>
+                <input id="token" class="input" type="password" autocomplete="off" spellcheck="false" placeholder="Code aus Steply einfügen" />
+              </label>
+              <details class="adv">
+                <summary>Erweitert</summary>
+                <label class="field">
+                  <span>Steply-Adresse</span>
+                  <input id="appUrl" class="input" type="url" autocomplete="off" spellcheck="false" />
+                </label>
+              </details>
+              <button id="saveCfg" class="btn dark full" type="button">Verbinden</button>
+              <p id="cfgStatus" class="status" role="status" aria-live="polite"></p>
+            </div>
+            <p id="connectVideoLine" class="muted">Ohne Konto: <button id="connectVideo" class="linkbtn" type="button">nur Video aufnehmen</button></p>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Dezenter Download-Hinweis (chrome.downloads-Ereignis waehrend des Laufs). -->
-      <p id="autoDownloadNote" class="auto-download" hidden>&#8595; Download gestartet &#10003;</p>
-
-      <!-- Datei-Bruecke (Welle 39): transparent zeigen, welche Datei gerade getragen wird. -->
-      <p id="autoFileChip" class="auto-file" hidden></p>
-
-      <!-- Steuer-Knoepfe: panel.js zeigt je nach Zustand die passende Gruppe. -->
-      <div class="auto-controls">
-        <div id="autoCtlSemi" class="auto-ctl-row" hidden>
-          <button id="autoExec" class="btn btn-primary" type="button">Ausf&uuml;hren</button>
-          <button id="autoSkip" class="btn" type="button">&Uuml;berspringen</button>
+      <!-- ============ Reiter „Aufnehmen" (Bildschirm 1) ============ -->
+      <section id="start" class="screen" hidden>
+        <div class="body">
+          <p id="interruptedHint" class="info warn" hidden>
+            <svg class="i s"><use href="#i-alert"/></svg>Eine unterbrochene Aufnahme wurde verworfen.
+          </p>
+          <div class="hero">
+            <div class="recdot"><span></span></div>
+            <h3>Neue Anleitung aufnehmen</h3>
+            <p>Klicken Sie Ihren Ablauf einfach durch – jeder Klick wird ein Schritt mit Screenshot und Markierung.</p>
+            <button id="recStart" class="btn primary full" type="button">Aufnahme starten</button>
+          </div>
+          <!-- Feste Zeile (Welle 50a): kommt sofort aus dem Speicher, schiebt beim Nachladen nichts. -->
+          <button id="siteRow" class="linkrow" type="button">
+            <svg class="i s muted-ic"><use href="#i-globe"/></svg>
+            <span>Für diese Seite</span>
+            <span id="siteRowCount" class="badge is-loading">…</span>
+            <span class="sp"></span>
+            <svg class="i s faint-ic"><use href="#i-chev"/></svg>
+          </button>
+          <p class="hint">Öffnen Sie zuerst die Seite, auf der Ihr Ablauf beginnt.</p>
+          <div class="status-slot"></div>
         </div>
-        <div id="autoCtlAuto" class="auto-ctl-row" hidden>
-          <button id="autoPause" class="btn" type="button">Pause</button>
-        </div>
-        <div id="autoCtlPaused" class="auto-ctl-row" hidden>
-          <button id="autoResume" class="btn btn-primary" type="button">Fortsetzen</button>
-        </div>
-        <div id="autoCtlMiss" class="auto-ctl-row" hidden>
-          <button id="autoContinue" class="btn btn-primary" type="button">Weiter</button>
-        </div>
-        <button id="autoCancel" class="btn auto-cancel" type="button">Abbrechen</button>
-      </div>
+      </section>
 
-      <!-- Ende: Fertig / Abgebrochen. -->
-      <div id="autoDone" class="run-done" hidden>
-        <div class="done-check">&#10003;</div>
-        <h2 id="autoDoneTitle">Fertig &#127881;</h2>
-        <p id="autoDoneText" class="lead"></p>
-        <button id="autoDoneList" class="btn" type="button">Andere Automation</button>
-      </div>
-    </section>
+      <!-- ============ Reiter „Anleitungen" (Bildschirm 5) ============ -->
+      <section id="guides" class="screen" hidden>
+        <div class="body">
+          <label class="search">
+            <svg class="i s"><use href="#i-search"/></svg>
+            <input id="guideSearch" type="search" placeholder="Anleitung suchen" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="chips">
+            <div class="chips" role="group" aria-label="Seiten-Filter">
+              <button id="chipSite" class="chip" type="button">Diese Seite</button>
+              <button id="chipAll" class="chip" type="button">Alle</button>
+            </div>
+            <span class="sp"></span>
+            <button id="chipDrafts" class="chip chip-toggle" type="button" aria-pressed="true"><svg class="i s"><use href="#i-check"/></svg>Entwürfe</button>
+          </div>
+          <div class="status-slot"></div>
+          <div id="guidesList" class="list" aria-live="polite"></div>
+          <div id="guidesEmpty" class="empty" hidden>
+            <p id="guidesEmptyText"></p>
+            <button id="guidesEmptyAction" class="btn ghost" type="button"></button>
+          </div>
+        </div>
+      </section>
 
+      <!-- ============ Reiter „Automationen" (Bildschirm 6) ============ -->
+      <section id="automations" class="screen" hidden>
+        <div class="body">
+          <div class="status-slot"></div>
+          <div id="autoList" class="list" aria-live="polite"></div>
+          <div id="autoListEmpty" class="empty" hidden>
+            <p id="autoListHint"></p>
+            <button id="autoListRetry" class="btn ghost" type="button" hidden><svg class="i s"><use href="#i-refresh"/></svg>Erneut versuchen</button>
+          </div>
+          <p class="hint">Neue Automation: in der Bibliothek bei einer Anleitung „Als Automation nutzen“.</p>
+        </div>
+      </section>
+
+      <!-- ============ Automation starten (Bildschirm 7) ============ -->
+      <section id="autoPrep" class="screen" hidden>
+        <div class="body">
+          <button id="autoPrepBack" class="backlink" type="button"><svg class="i s"><use href="#i-back"/></svg>Automationen</button>
+          <h2 id="autoPrepTitle" class="h2"></h2>
+          <!-- Sicherheit: der Nutzer sieht VOR dem Start, wo gearbeitet wird (neutral statt Warnkasten). -->
+          <p id="autoDomainHint" class="info"></p>
+          <p id="autoFileHint" class="info" hidden><svg class="i s"><use href="#i-file"/></svg>Überträgt eine Datei zwischen Websites – nur in Ihrem Browser.</p>
+          <!-- Angaben-Formular (dynamisch). Werte leben NUR lokal. -->
+          <div id="autoParamForm" class="params"></div>
+          <button id="autoClearValues" class="btn text" type="button" hidden>Gespeicherte Werte löschen</button>
+          <!-- Modus-Wahl als Segment: Halbautomatik ist Standard (Sicherheit). -->
+          <div class="seg" role="radiogroup" aria-label="Ablauf">
+            <label class="seg-opt">
+              <input type="radio" name="autoMode" id="autoModeSemi" value="semi" checked />
+              <span>Jeden Schritt bestätigen<small>empfohlen</small></span>
+            </label>
+            <label class="seg-opt">
+              <input type="radio" name="autoMode" id="autoModeAuto" value="auto" />
+              <span>Selbstständig<small>hält bei Problemen an</small></span>
+            </label>
+          </div>
+          <p id="autoPrepHint" class="status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="footer">
+          <!-- Start = zugleich die Sicherheits-Bestätigung für die Website oben. -->
+          <button id="autoStart" class="btn primary full" type="button"><svg class="i s"><use href="#i-play"/></svg>Automation starten</button>
+        </div>
+      </section>
+
+      <!-- ============ Automation: Lauf ============ -->
+      <section id="autoRun" class="screen" hidden>
+        <div class="body">
+          <div class="run-top">
+            <span id="autoProgress" class="run-progress"></span>
+          </div>
+          <div id="autoBar" class="run-bar"><span></span></div>
+
+          <h2 id="autoStepTitle" class="h2"></h2>
+          <p id="autoStepAction" class="muted"></p>
+
+          <p id="autoLiveStatus" class="info" hidden></p>
+          <!-- Zustands-Intelligenz (Welle 40) + Bedingte Schritte (Welle 42). -->
+          <p id="autoWaitLogin" class="info accent" hidden></p>
+          <p id="autoSkipNote" class="info ok" hidden></p>
+          <p id="autoCondSkipNote" class="info ok" hidden></p>
+
+          <div id="autoMissBox" class="miss" hidden>
+            <p id="autoMissText" class="miss-text"></p>
+            <div id="autoMissImageWrap" class="run-image-wrap auto-miss-image" hidden>
+              <div id="autoMissImageFrame" class="run-image-frame">
+                <img id="autoMissImage" class="run-image" alt="" />
+              </div>
+            </div>
+          </div>
+
+          <p id="autoDownloadNote" class="info ok" hidden><svg class="i s"><use href="#i-dl"/></svg>Download gestartet</p>
+          <p id="autoFileChip" class="filechip" hidden></p>
+
+          <div id="autoDone" class="done" hidden>
+            <div id="autoDoneIcon" class="ok"><svg class="i"><use href="#i-check"/></svg></div>
+            <h3 id="autoDoneTitle">Fertig</h3>
+            <p id="autoDoneText"></p>
+            <button id="autoDoneList" class="btn ghost" type="button">Zu den Automationen</button>
+          </div>
+        </div>
+        <div id="autoControls" class="footer">
+          <div id="autoCtlSemi" class="row" hidden>
+            <button id="autoExec" class="btn primary" type="button"><svg class="i s"><use href="#i-play"/></svg>Ausführen</button>
+            <button id="autoSkip" class="btn ghost" type="button">Überspringen</button>
+          </div>
+          <div id="autoCtlAuto" class="row" hidden>
+            <button id="autoPause" class="btn ghost" type="button"><svg class="i s"><use href="#i-pause"/></svg>Pause</button>
+          </div>
+          <div id="autoCtlPaused" class="row" hidden>
+            <button id="autoResume" class="btn primary" type="button"><svg class="i s"><use href="#i-play"/></svg>Fortsetzen</button>
+          </div>
+          <div id="autoCtlMiss" class="row" hidden>
+            <button id="autoContinue" class="btn primary" type="button">Weiter</button>
+          </div>
+          <!-- Genau EIN „Abbrechen" im Lauf (Welle 50a). -->
+          <button id="autoCancel" class="btn text danger" type="button">Abbrechen</button>
+        </div>
+      </section>
+
+      <!-- ============ Sofort-Anleitung: Aufnahme (Bildschirm 2) + Prüfen (Bildschirm 3) ============ -->
+      <!-- Phasen (panel.js guidePhase + renderGuidePhase): recording ⇄ paused → stopped (Prüfen).
+           Eine eigene Phase „Bereit" gibt es seit Welle 50a nicht mehr: „Aufnahme starten" auf dem
+           Start-Screen startet direkt – vorher nimmt nichts auf. Sichtbarkeit setzt NUR renderGuidePhase. -->
+      <section id="guideLive" class="screen" hidden>
+        <div class="body">
+          <div id="guideRecBar" class="recbar">
+            <div class="l">
+              <span id="guidePulse" class="dot"></span><span id="guidePauseDot" class="dot paused" hidden></span>
+              <span id="guideBadgeText">Aufnahme läuft</span>
+              <span class="t"><span id="guideTimer">00:00</span> · <span id="guideCountInline">0 Schritte</span></span>
+            </div>
+            <div class="row">
+              <button id="guidePause" class="btn ghost" type="button"><svg class="i s"><use href="#i-pause"/></svg>Pause</button>
+              <button id="guideResume" class="btn ghost" type="button"><svg class="i s"><use href="#i-play"/></svg>Fortsetzen</button>
+              <button id="guideStop" class="btn primary" type="button">Fertig</button>
+            </div>
+          </div>
+
+          <div id="guideReviewHead" class="review-head" hidden>
+            <div class="label">Prüfen</div>
+            <div id="guideCountLine" class="h2"><span id="guideCount">0</span> <span id="guideCountText">Schritte aufgenommen</span></div>
+          </div>
+
+          <div class="status-slot"></div>
+
+          <!-- Welle 48a: dezenter, NICHT blockierender Hinweis, wenn im aktiven Tab kein Content-Script antwortet. -->
+          <p id="guideCaptureHint" class="info warn" role="status" hidden>
+            <svg class="i s"><use href="#i-alert"/></svg><span>Auf dieser Seite kann Steply nicht aufnehmen (Browser-Seite, PDF-Ansicht oder Chrome Web Store). Klicks hier werden nicht erfasst.</span>
+          </p>
+
+          <!-- Titel + Kategorie (Welle 31d; seit Welle 50a erst beim Prüfen). Bei Aufnahme-Anker aus. -->
+          <div id="guideMeta" class="meta" hidden>
+            <label class="field">
+              <span>Titel</span>
+              <input id="guideTitle" class="input" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="z. B. Beleg in DATEV hochladen" />
+            </label>
+            <div id="guideCatWrap" class="field" hidden>
+              <span>Kategorie</span>
+              <div class="select-wrap">
+                <select id="guideCategory" class="input"></select>
+                <svg class="i s"><use href="#i-down"/></svg>
+              </div>
+              <input id="guideCategoryNew" class="input" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="Name der neuen Kategorie" hidden />
+            </div>
+          </div>
+
+          <div id="guideList" class="steps" aria-live="polite"></div>
+          <p id="guideNote" class="hint"></p>
+        </div>
+        <div id="guideFooter" class="footer" hidden>
+          <button id="guideCreate" class="btn primary full" type="button">Anleitung erstellen</button>
+          <div id="guideCtlStopped" class="row">
+            <button id="guideContinue" class="btn ghost" type="button">Weiter aufnehmen</button>
+            <button id="guideDiscard" class="btn text danger" type="button">Verwerfen</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Sofort-Anleitung: Hochladen / Fertig (Bildschirm 4) ============ -->
+      <section id="guideDone" class="screen" hidden>
+        <div class="body">
+          <div id="guideUploading" class="done">
+            <div class="spinner" aria-hidden="true"></div>
+            <h3>Anleitung wird erstellt …</h3>
+            <p id="guideProgress" role="status" aria-live="polite"></p>
+            <div class="progress"><span id="guideProgressBar"></span></div>
+          </div>
+          <div id="guideUploadDone" class="done" hidden>
+            <div class="ok"><svg class="i"><use href="#i-check"/></svg></div>
+            <h3 id="guideDoneTitle">Anleitung ist fertig</h3>
+            <p id="guideDoneText"></p>
+            <button id="guideOpenApp" class="btn primary" type="button"><svg class="i s"><use href="#i-ext"/></svg>In Steply öffnen</button>
+            <button id="guideAgain" class="btn text" type="button">Neue Aufnahme</button>
+          </div>
+          <div id="guideUploadError" class="done" hidden>
+            <div class="err"><svg class="i"><use href="#i-alert"/></svg></div>
+            <h3>Hochladen hat nicht geklappt</h3>
+            <p id="guideErrorText"></p>
+            <button id="guideRetry" class="btn primary" type="button"><svg class="i s"><use href="#i-refresh"/></svg>Erneut versuchen</button>
+            <button id="guideBackReview" class="btn text" type="button">Zurück zur Prüfung</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Video mit Ton: Vorbereitung ============ -->
+      <section id="videoSetup" class="screen" hidden>
+        <div class="body">
+          <button id="videoBack" class="backlink" type="button"><svg class="i s"><use href="#i-back"/></svg>Zurück</button>
+          <h2 class="h2">Video mit Ton aufnehmen</h2>
+          <p class="muted">Bildschirm-Aufnahme mit Mikrofon – Steply erzeugt daraus Texte und Sprache.</p>
+          <p id="micStatus" class="info">Mikrofon wird geprüft …</p>
+          <button id="micRetry" class="btn ghost" type="button" hidden><svg class="i s"><use href="#i-refresh"/></svg>Mikrofon erneut prüfen</button>
+          <label class="check-row">
+            <input type="checkbox" id="noAudio" />
+            <span>Ohne Ton aufnehmen</span>
+          </label>
+          <p id="clicksTabInfo" class="hint left">
+            Klicks werden auf normalen Websites erfasst – auch über Tab- und Seitenwechsel hinweg.
+            Auf Browser-Seiten (chrome://, Web Store) nicht; das Video entsteht trotzdem.
+          </p>
+          <div class="status-slot"></div>
+        </div>
+        <div class="footer">
+          <button id="begin" class="btn primary full" type="button" disabled>Bildschirm wählen und aufnehmen</button>
+        </div>
+      </section>
+
+      <!-- ============ Video mit Ton: Aufnahme läuft ============ -->
+      <section id="videoLive" class="screen" hidden>
+        <div class="body">
+          <div class="recbar">
+            <div class="l"><span class="dot"></span>Video-Aufnahme läuft<span class="t"><span id="timer">00:00</span> · <span id="clickCount">0</span> Klicks</span></div>
+            <button id="stop" class="btn primary full" type="button">Aufnahme beenden</button>
+          </div>
+          <p id="micLive" class="info"></p>
+          <p class="hint left">
+            Sie können jetzt zwischen Tabs wechseln und Ihre Schritte vorführen – die Seitenleiste
+            bleibt offen. Schließen Sie sie nicht, sonst geht die Aufnahme verloren.
+          </p>
+          <div class="status-slot"></div>
+        </div>
+      </section>
+
+      <!-- ============ Video mit Ton: Fertig / Hochladen ============ -->
+      <section id="videoDone" class="screen" hidden>
+        <div class="body">
+          <div class="done">
+            <div class="ok"><svg class="i"><use href="#i-check"/></svg></div>
+            <h3>Aufnahme fertig</h3>
+            <div id="uploadBox" hidden>
+              <p id="uploadProgress" role="status" aria-live="polite"></p>
+              <div id="uploadDone" hidden>
+                <p>Hochgeladen – Steply erstellt jetzt die Anleitung.</p>
+                <button id="openApp" class="btn primary" type="button"><svg class="i s"><use href="#i-ext"/></svg>In Steply öffnen</button>
+              </div>
+            </div>
+            <div id="downloadBox" hidden>
+              <p>Laden Sie in Steply unter „Aus Video“ <strong>beide</strong> Dateien hoch:</p>
+              <ul class="filelist">
+                <li id="fileVideo">Video</li>
+                <li id="fileClicks">Klick-Datei</li>
+              </ul>
+            </div>
+            <div class="status-slot"></div>
+            <button id="again" class="btn text" type="button">Neue Aufnahme</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Anleitung auf der Seite zeigen (Live-Führung, Welle 31) ============ -->
+      <section id="guideRun" class="screen" hidden>
+        <div class="body">
+          <div class="run-top">
+            <button id="runExit" class="backlink" type="button"><svg class="i s"><use href="#i-back"/></svg>Beenden</button>
+            <span id="runProgress" class="run-progress"></span>
+          </div>
+          <div id="runBar" class="run-bar"><span></span></div>
+
+          <div id="runImageWrap" class="run-image-wrap" hidden>
+            <div id="runImageFrame" class="run-image-frame">
+              <img id="runImage" class="run-image" alt="" />
+            </div>
+          </div>
+          <p id="runFallbackHint" class="info warn" hidden></p>
+          <p id="runSkipNote" class="info ok" hidden></p>
+
+          <h2 id="runTitle" class="h2"></h2>
+          <div id="runBody" class="run-body"></div>
+
+          <div id="runDecision" class="run-decision" hidden></div>
+          <div id="runNav" class="row">
+            <button id="runBack" class="btn ghost" type="button">Zurück</button>
+            <button id="runNext" class="btn primary" type="button">Weiter</button>
+          </div>
+
+          <div id="runDone" class="done" hidden>
+            <div class="ok"><svg class="i"><use href="#i-check"/></svg></div>
+            <h3>Geschafft</h3>
+            <p>Sie haben die Anleitung Schritt für Schritt durchlaufen.</p>
+            <button id="runDoneList" class="btn ghost" type="button">Zu den Anleitungen</button>
+          </div>
+          <div class="status-slot"></div>
+        </div>
+      </section>
+
+      <!-- ============ „Steply lernen" (Welle 35): öffentliche Anleitungen zu Steply ============ -->
+      <section id="steplyLearn" class="screen" hidden>
+        <div class="body">
+          <button id="steplyLearnBack" class="backlink" type="button"><svg class="i s"><use href="#i-back"/></svg>Zurück</button>
+          <h2 class="h2">Steply lernen</h2>
+          <p class="muted">Interaktive Anleitungen, die Steply mit Steply erklären. In der Steply-App zeigt Steply
+            die Stellen direkt auf der Seite; sonst helfen die Screenshots.</p>
+          <div id="steplyLearnEmpty" class="empty" hidden>
+            <p id="steplyLearnHint"></p>
+            <button id="steplyLearnRetry" class="btn ghost" type="button"><svg class="i s"><use href="#i-refresh"/></svg>Erneut versuchen</button>
+          </div>
+          <div id="steplyLearnList" class="list" aria-live="polite"></div>
+          <div class="status-slot"></div>
+        </div>
+      </section>
+
+      <!-- ============ Hilfe bei Aufnahme-Problemen ============ -->
+      <section id="recHelp" class="screen" hidden>
+        <div class="body">
+          <button id="recHelpBack" class="backlink" type="button"><svg class="i s"><use href="#i-back"/></svg>Zurück</button>
+          <h2 class="h2">Hilfe bei Aufnahme-Problemen</h2>
+          <div class="tips">
+            <div class="tip"><b>Klicks werden nicht erfasst</b><p>Laden Sie die Seite einmal neu (F5). Seiten, die vor der Installation der Steply-Erweiterung offen waren, kennen sie noch nicht.</p></div>
+            <div class="tip"><b>Screenshot fehlgeschlagen</b><p>Öffnen Sie <code>chrome://extensions</code> → Steply → Details und stellen Sie „Websitezugriff“ auf „Bei allen Websites“. Danach die Seite neu laden.</p></div>
+            <div class="tip"><b>Auf manchen Seiten geht es nicht</b><p>Browser-Seiten (chrome://), die PDF-Ansicht und der Chrome Web Store lassen keine Aufnahme zu. Das ist eine Schutzregel von Chrome.</p></div>
+            <div class="tip"><b>Anmelde-Fenster und neue Tabs</b><p>Fenster, die Sie während der Aufnahme öffnen (z. B. „Mit Google anmelden“), werden mit aufgenommen. Andere Fenster bleiben privat.</p></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Kontext-Meldung: show() hängt sie in den .status-slot des aktiven Bildschirms (nah an der Aktion). -->
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
     <!-- exec-plan.js (Welle 36b) VOR panel.js: stellt das globale SteplyExecPlan bereit. -->

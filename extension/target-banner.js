@@ -3,7 +3,7 @@
 // Steply Recorder — reine Banner-Entscheidung für den Aufnahme-Anker (Welle 33, Fix 4).
 //
 // targetBannerState(pendingTarget) entscheidet OHNE DOM, ob das „Aufnahme für: …"-Banner
-// sichtbar ist und welcher Label-Text darin steht. So ist die Logik in Node testbar
+// sichtbar ist („Wird eingefügt in: …", Welle 50a) und welcher Label-Text darin steht. So ist die Logik in Node testbar
 // (test-target-banner.mjs), unabhängig von panel.js/chrome/document.
 //
 // Regeln (Härtung nach Richards Befund „leeres Banner klebt, Verwerfen tot"):
@@ -13,7 +13,7 @@
 //   • Leeres/whitespace-Label -> neutraler Fallback-Text (nie ein sichtbar leeres Banner).
 
 (function (root) {
-  var FALLBACK_LABEL = "die gewählte Stelle im Tutorial";
+  var FALLBACK_LABEL = "die gewählte Stelle der Anleitung";
 
   function targetBannerState(pendingTarget) {
     if (!pendingTarget || !pendingTarget.target) {

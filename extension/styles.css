@@ -1,190 +1,720 @@
+/* Steply-Erweiterung – Seitenleiste (Welle 50a, Entwurf „Extension-Makeover").
+   Warm-Palette wie App (OVERVIEW §3). Nunito liegt lokal in fonts/ (kein Netz-Request). */
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: block;
+  src: url("fonts/nunito-latin.woff2") format("woff2");
+}
+
 :root {
-  /* Warm-Redesign 07/2026 (Design-Handoff): Koralle/Creme statt Indigo.
-     --stop bleibt ein echtes Rot (Aufnahme-Signal, bewusst != Koralle). */
-  --brand: #ef6a4e;
-  --brand-dark: #d3543a;
-  --stop: #dc2626;
   --ink: #33291f;
+  --ink-2: #6b5e4b;
   --muted: #8a7a63;
-  --bg: #ffffff;
+  --faint: #b3a48c;
   --line: #f0e7d9;
-  --ok: #118576;
-  --beige: #f7f1e6;
-  --cream: #fdf9f3;
+  --line-2: #f7f1e6;
+  --bg: #fdf9f3;
+  --card: #ffffff;
+  --primary: #ef6a4e;
+  --pressed: #d3543a;
+  --accent: #ffe8e2;
+  --teal: #18a999;
+  --teal-s: #dcf3ef;
+  --teal-d: #118576;
+  --amber-s: #fdeecd;
+  --amber-d: #c07d16;
+  --violet-s: #ece7fd;
+  --violet-d: #6d59d8;
+  --rec: #e5484d;
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* KRITISCH (Hotfix 06.07.): Das hidden-Attribut muss JEDE display-Klasse schlagen.
-   Ohne diese Regel gewann z. B. `.target-banner { display: flex }` gegen
-   `els.targetBanner.hidden = true` — das „Aufnahme fuer:"-Banner klebte dadurch
-   IMMER sichtbar (leer) und „Ziel verwerfen" wirkte tot. Gilt global, damit die
-   ganze Bug-Klasse (hidden vs. display-Klassen) ein fuer alle Mal erledigt ist. */
+/* KRITISCH (Hotfix 06.07.): Das hidden-Attribut muss JEDE display-Klasse schlagen. */
 [hidden] {
   display: none !important;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--ink);
   background: var(--bg);
-  line-height: 1.45;
-}
-
-/* Side Panel: Chrome legt die Breite fest (nutzerveraenderbar, ~320-400px). Wir
-   fuellen sie voll aus und geben nur Innenabstand. */
-.panel {
-  padding: 14px 14px 22px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.brand h1 {
-  font-size: 17px;
-  margin: 0;
-}
-
-.dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--brand);
-  display: inline-block;
-}
-
-.lead {
-  font-size: 14px;
   color: var(--ink);
-  margin: 0 0 14px;
-}
-
-.note {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 10px 0 0;
-}
-
-.btn {
-  display: block;
-  width: 100%;
-  padding: 11px 14px;
+  font-family: "Nunito", system-ui, "Segoe UI", sans-serif;
+  font-weight: 600;
   font-size: 14px;
-  font-weight: 700;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  background: var(--beige);
-  color: var(--ink);
+  line-height: 1.4;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
   cursor: pointer;
 }
 
-.btn:hover {
+/* Seitenleiste als Spalte: Kopf + Reiter fest, Bildschirm füllt den Rest, Fußleiste fest. */
+body.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer {
+  flex: none;
+  padding: 12px 14px 14px;
+  border-top: 2px solid var(--line);
+  background: var(--bg);
+  display: grid;
+  gap: 8px;
+}
+
+/* ---------- Icons ---------- */
+svg.i {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+svg.i.s {
+  width: 15px;
+  height: 15px;
+}
+
+.muted-ic {
+  color: var(--muted);
+}
+
+.faint-ic {
+  color: var(--faint);
+}
+
+/* ---------- Kopf ---------- */
+.top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 10px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  font-size: 16px;
+}
+
+.logo b {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.sp {
+  flex: 1;
+}
+
+.iconbtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  border: 0;
+  background: none;
+  position: relative;
+  padding: 0;
+}
+
+.iconbtn:hover,
+.iconbtn[aria-expanded="true"] {
+  background: var(--line-2);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  font-weight: 900;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 0;
+  padding: 0;
+}
+
+.avatar:hover,
+.avatar[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px var(--teal-s);
+}
+
+.avatar i {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+}
+
+/* ---------- Reiter ---------- */
+.tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 9px 4px 10px;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink-2);
+}
+
+.tab.on {
+  color: var(--ink);
+  border-bottom-color: var(--primary);
+}
+
+.tab .n {
   background: var(--line);
+  color: var(--ink-2);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 0 6px;
+  min-width: 18px;
+}
+
+/* ---------- Knöpfe ---------- */
+.btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-weight: 900;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
 }
 
-/* Markenzeichen „harter Schatten": drückt sich beim Klick ein. */
-.btn-primary {
-  background: var(--brand);
-  border-color: var(--brand);
+.btn.primary {
+  background: var(--primary);
   color: #fff;
-  box-shadow: 0 3px 0 var(--brand-dark);
+  box-shadow: 0 3px 0 var(--pressed);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
-.btn-primary:hover {
-  background: var(--brand);
+.btn.primary:hover:not(:disabled) {
   filter: brightness(1.04);
 }
 
-.btn-primary:active {
+.btn.primary:active:not(:disabled) {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 var(--brand-dark);
+  box-shadow: 0 1px 0 var(--pressed);
 }
 
-.btn-stop {
-  background: var(--stop);
-  border-color: var(--stop);
+.btn.dark {
+  background: var(--ink);
   color: #fff;
 }
 
-.btn-stop:hover {
-  filter: brightness(0.94);
+.btn.ghost {
+  background: var(--card);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  padding: 9px 14px;
+}
+
+.btn.ghost:hover:not(:disabled) {
+  border-color: #e6dccb;
+  background: var(--line-2);
+}
+
+.btn.text {
+  background: none;
+  color: var(--ink-2);
+  padding: 6px 8px;
+  font-weight: 800;
+}
+
+.btn.text:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.btn.text.danger,
+.btn.danger {
+  color: var(--pressed);
+}
+
+.btn.full {
+  width: 100%;
+}
+
+.linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.backlink {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--ink-2);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.backlink:hover {
+  color: var(--ink);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row > * {
+  flex: 1;
+}
+
+/* ---------- Texte ---------- */
+.muted {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 0;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.h2 {
+  margin: 0;
+  font-weight: 900;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  margin: 0;
+}
+
+.hint.left {
+  text-align: left;
 }
 
 .status {
   font-size: 12.5px;
-  margin: 12px 0 0;
-  min-height: 1em;
-  color: var(--muted);
+  margin: 0;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+.status:empty {
+  display: none;
 }
 
 .status-ok {
-  color: var(--ok);
+  color: var(--teal-d);
 }
 
 .status-error {
-  color: var(--stop);
+  color: var(--pressed);
 }
 
-.hint {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+/* Hinweis-Zeile (neutral) + Varianten. */
+.info {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--line-2);
+  border-radius: 12px;
+  padding: 9px 11px;
   font-size: 12.5px;
+  color: var(--ink-2);
+  font-weight: 700;
+  margin: 0;
 }
 
-.hint ol {
-  margin: 8px 0 0;
-  padding-left: 18px;
+.info b,
+.info strong {
+  color: var(--ink);
 }
 
-.hint li {
+.info.warn {
+  background: var(--amber-s);
+  color: var(--amber-d);
+  align-items: flex-start;
+}
+
+.info.warn svg {
+  margin-top: 1px;
+}
+
+.info.ok {
+  background: var(--teal-s);
+  color: var(--teal-d);
+}
+
+.info.accent {
+  background: var(--accent);
+  color: var(--pressed);
+}
+
+.info.err {
+  background: var(--accent);
+  color: var(--pressed);
+}
+
+/* ---------- Menüs ---------- */
+.dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(51, 41, 31, 0.1);
+  z-index: 20;
+}
+
+.menu {
+  position: absolute;
+  top: 50px;
+  right: 12px;
+  width: 264px;
+  max-width: calc(100% - 24px);
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(51, 41, 31, 0.18);
+  padding: 8px;
+  display: grid;
+  gap: 2px;
+  z-index: 21;
+}
+
+.menu .who {
+  padding: 8px 10px 10px;
+  border-bottom: 2px solid var(--line-2);
   margin-bottom: 4px;
 }
 
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin: 0 0 16px;
-  cursor: pointer;
+.menu .who b {
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
-.rec-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.rec-badge {
+.menu .who span {
+  font-size: 12px;
+  color: var(--teal-d);
+  font-weight: 800;
   display: inline-flex;
+  gap: 5px;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--stop);
 }
 
-.rec-pulse {
+.menu .it {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
+  border: 0;
+  background: none;
+  text-align: left;
+  width: 100%;
+}
+
+.menu button.it:hover {
+  background: var(--line-2);
+}
+
+.menu .it.hl {
+  background: var(--accent);
+}
+
+.menu .it.hl:hover {
+  background: #ffddd4;
+}
+
+.menu .it small {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.menu .it.ver {
+  color: var(--muted);
+  font-weight: 700;
+  cursor: default;
+}
+
+.menu .sep {
+  height: 2px;
+  background: var(--line-2);
+  margin: 4px 6px;
+}
+
+/* ---------- Aufnahme-Anker ---------- */
+.target {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--violet-s);
+  color: var(--violet-d);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin: 12px 14px 0;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.target svg {
+  margin-top: 1px;
+}
+
+.target-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.target b {
+  color: var(--ink);
+}
+
+.target .x {
+  margin-left: auto;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 0;
+  background: none;
+  color: var(--violet-d);
+  padding: 0;
+  font-size: 12.5px;
+}
+
+.target .x:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Start ---------- */
+.hero {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 16px 16px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.recdot {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.recdot span {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 6px rgba(239, 106, 78, 0.18);
+}
+
+.hero h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.linkrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 11px 12px;
+  font-weight: 800;
+  text-align: left;
+  width: 100%;
+  min-height: 48px;
+}
+
+.linkrow:hover {
+  border-color: #e6dccb;
+}
+
+.linkrow .badge {
+  background: var(--teal-s);
+  color: var(--teal-d);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  min-width: 26px;
+  text-align: center;
+}
+
+.linkrow .badge.is-zero,
+.linkrow .badge.is-loading {
+  background: var(--line-2);
+  color: var(--muted);
+}
+
+/* ---------- Aufnahme ---------- */
+.recbar {
+  background: var(--ink);
+  color: #fff;
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  /* Bleibt beim Scrollen oben kleben (Welle 50a: Pause/Fertig immer erreichbar). top = -Innen-
+     abstand des .body, damit darüber nichts durchscheint; der Rand in Hintergrundfarbe trennt
+     die darunter wegscrollende Liste sauber ab. */
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  flex: none;
+  box-shadow: 0 0 0 8px var(--bg);
+}
+
+.recbar .l {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.recbar .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--stop);
+  background: var(--rec);
+  box-shadow: 0 0 0 4px rgba(229, 72, 77, 0.3);
   animation: pulse 1.2s ease-in-out infinite;
+  flex: none;
+}
+
+.recbar .dot.paused {
+  background: #f2a93b;
+  box-shadow: 0 0 0 4px rgba(242, 169, 59, 0.28);
+  animation: none;
 }
 
 @keyframes pulse {
@@ -193,600 +723,417 @@ body {
     opacity: 1;
   }
   50% {
-    opacity: 0.3;
+    opacity: 0.35;
   }
 }
 
-.timer {
+.recbar .t {
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
-  font-size: 22px;
-  font-weight: 700;
+  color: #e9dfcf;
+  white-space: nowrap;
 }
 
-.clicks-count {
-  font-size: 14px;
-  margin: 0 0 16px;
+.recbar .btn.ghost {
+  background: #4a3e31;
+  border-color: #4a3e31;
+  color: #fff;
 }
 
-.done-check {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #dcf3ef;
-  color: var(--ok);
-  font-size: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 12px;
+.recbar .btn.ghost:hover:not(:disabled) {
+  background: #57493a;
+  border-color: #57493a;
 }
 
-#videoDone h2,
-#guideDone h2 {
-  text-align: center;
-  font-size: 18px;
-  margin: 0 0 10px;
-}
-
-.filelist {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 18px;
-}
-
-.filelist li {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 13px;
-  background: var(--beige);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  word-break: break-all;
-}
-
-/* Konfiguration im Popup: Verbindungs-Token + App-URL. */
-.cfg {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  font-size: 12.5px;
-}
-
-.cfg > summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.field {
-  display: block;
-  margin: 10px 0 0;
-}
-
-.field > span {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-
-.field > input {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--bg);
-}
-
-.field > input:focus {
-  outline: 2px solid var(--brand);
-  outline-offset: 0;
-  border-color: var(--brand);
-}
-
-.cfg .btn {
-  margin-top: 10px;
-}
-
-/* Abstand zwischen "In Steply oeffnen" / Downloads und "Neue Aufnahme". */
-#again,
-#guideAgain {
-  margin-top: 14px;
-}
-
-/* ===== Modus-Wahl im Popup ===== */
-.modes {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px 10px;
-  margin: 0 0 12px;
-}
-
-.modes legend {
-  font-size: 12px;
-  color: var(--muted);
-  padding: 0 4px;
-}
-
-.mode {
-  display: flex;
-  align-items: flex-start;
+.steps {
+  display: grid;
   gap: 8px;
-  font-size: 13px;
-  padding: 6px 2px;
-  cursor: pointer;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.mode input {
-  margin-top: 3px;
-}
-
-.mode strong {
-  font-weight: 600;
-}
-
-.mode em {
-  display: block;
-  font-style: normal;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 1px;
-}
-
-.mode input:disabled + span {
-  opacity: 0.5;
-}
-
-/* ===== Sofort-Anleitung: Vorschau + Schrittliste ===== */
-.preview-wrap {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  margin: 0 0 12px;
-  background: var(--cream);
-}
-
-.preview-img {
-  display: block;
-  width: 100%;
-  max-height: 200px;
-  object-fit: contain;
-}
-
-.guide-list {
-  list-style: none;
-  margin: 0 0 16px;
-  padding: 0;
-  max-height: 46vh;
-  overflow-y: auto;
+.steps:empty {
+  display: none;
 }
 
 .guide-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
+  gap: 10px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 7px 8px;
 }
 
 .guide-item .idx {
-  flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: var(--brand);
-  color: #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--pressed);
+  font-weight: 900;
   font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.guide-item .thumb {
+  width: 52px;
+  height: 32px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #efe7da, #e3d8c6);
+  object-fit: cover;
+  flex: none;
+  display: block;
 }
 
 .guide-item .lbl {
-  flex: 1 1 auto;
+  flex: 1;
+  min-width: 0;
+  font-weight: 800;
+  font-size: 12.5px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.guide-item .lbl small {
+  display: block;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .guide-item .rm {
-  flex: 0 0 auto;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 6px;
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  padding: 4px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
 }
 
 .guide-item .rm:hover {
-  background: var(--beige);
-  color: var(--stop);
+  background: var(--accent);
+  color: var(--pressed);
 }
 
-/* Bedingte Schritte (Welle 42): „?"-Toggle „nur wenn Element vorhanden" je Aufnahme-Schritt. */
+/* Bedingte Schritte (Welle 42): „?"-Umschalter „nur wenn Element vorhanden". */
 .guide-item .guide-opt {
-  flex: 0 0 auto;
+  flex: none;
   width: 22px;
   height: 22px;
-  border: 1px solid var(--line);
-  background: transparent;
+  border: 2px solid var(--line);
+  background: none;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 900;
   line-height: 1;
-  cursor: pointer;
   border-radius: 999px;
+  padding: 0;
 }
+
 .guide-item .guide-opt:hover {
-  background: var(--beige);
+  border-color: #e6dccb;
   color: var(--ink);
 }
+
 .guide-item .guide-opt.on {
-  background: var(--accent, #ef6a4e);
-  border-color: var(--accent, #ef6a4e);
+  background: var(--violet-d);
+  border-color: var(--violet-d);
   color: #fff;
 }
 
-/* Thumbnail je Schritt (Tango-Gefuehl: man sieht jeden Screenshot). */
-.guide-item .thumb {
-  flex: 0 0 auto;
-  width: 54px;
-  height: 34px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--cream);
+.review-head {
+  display: grid;
+  gap: 2px;
 }
 
-/* ===== Welle 31d: Titel + Kategorie fuer die neue Sofort-Anleitung =====
-   Kompakter Block im Aufnahme-Screen (guideLive), im warmen Panel-Look. */
-.guide-meta {
-  margin: 12px 0 4px;
-  padding: 10px 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--cream);
+/* Titel + Kategorie beim Prüfen. */
+.meta {
+  display: grid;
+  gap: 12px;
 }
 
-/* Engere .field-Variante fuer den kompakten Meta-Block. */
-.guide-meta .field-compact {
+.field {
+  display: grid;
+  gap: 5px;
   margin: 0;
 }
 
-.guide-meta .field-compact + .field-compact {
-  margin-top: 10px;
+.field > span {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-2);
 }
 
-/* Kategorie-Dropdown im Stil der Textfelder (.field > input). */
-.guide-cat-select {
+.input {
   width: 100%;
-  padding: 8px 10px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--bg);
-  cursor: pointer;
-}
-
-.guide-cat-select:focus {
-  outline: 2px solid var(--brand);
-  outline-offset: 0;
-  border-color: var(--brand);
-}
-
-/* Eingabefeld fuer eine neue Kategorie (erscheint unter dem Dropdown). */
-#guideCategoryNew {
-  width: 100%;
-  margin-top: 8px;
-  padding: 8px 10px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--bg);
-}
-
-#guideCategoryNew:focus {
-  outline: 2px solid var(--brand);
-  outline-offset: 0;
-  border-color: var(--brand);
-}
-
-/* ===== Start-Auswahl: zwei grosse Karten (Tango-Look) ===== */
-.card-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
+  background: var(--card);
+  border: 2px solid var(--line);
   border-radius: 12px;
-  padding: 14px;
-  margin: 0 0 10px;
-  background: var(--bg);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.card-choice:hover:not(:disabled) {
-  border-color: var(--brand);
-  background: #fdf3ec;
-}
-
-.card-choice:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.card-emoji {
-  font-size: 24px;
-  line-height: 1.1;
-  flex: 0 0 auto;
-}
-
-.card-body strong {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.card-body em {
-  display: block;
-  font-style: normal;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-
-/* ===== Verbindungsinfo unter den Karten (dezent) ===== */
-.conn-info {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.conn-info button {
-  flex: 0 0 auto;
-  border: none;
-  background: transparent;
-  color: var(--brand);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-}
-
-.conn-info button:hover {
-  text-decoration: underline;
-}
-
-/* ===== Mikro-Preflight (Video-Vorbereitung) ===== */
-.mic-status {
-  font-size: 13px;
   padding: 9px 11px;
-  border-radius: 8px;
-  margin: 0 0 12px;
-}
-
-.mic-status.pending {
-  background: var(--beige);
-  color: var(--muted);
-}
-
-.mic-status.ok {
-  background: #dcf3ef;
-  color: var(--ok);
-}
-
-.mic-status.err {
-  background: #ffe8e2;
-  color: var(--stop);
-}
-
-.mic-live {
-  font-size: 13px;
-  color: var(--muted);
-  margin: 0 0 10px;
-}
-
-/* Dezenter Hinweis "unterbrochene Aufnahme verworfen" + Zurueck-Link. */
-.note-warn {
-  color: #c07d16;
-  margin-top: 0;
-  margin-bottom: 10px;
-}
-
-/* Dezenter Update-Hinweis (neue Version verfuegbar); nie blockierend. */
-.update-hint {
-  font-size: 12px;
-  color: var(--muted);
-  background: var(--beige);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 10px;
-  margin: 0 0 10px;
-}
-
-.update-hint a {
-  color: var(--brand);
   font-weight: 700;
-  cursor: pointer;
-  text-decoration: none;
+  color: var(--ink);
+  font-size: 14px;
 }
 
-.update-hint a:hover {
-  text-decoration: underline;
+.input::placeholder {
+  color: var(--faint);
 }
 
-.link-back {
-  border: none;
-  background: transparent;
-  color: var(--brand);
-  cursor: pointer;
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.select-wrap {
+  position: relative;
+}
+
+.select-wrap select {
+  appearance: none;
+  padding-right: 32px;
+}
+
+.select-wrap svg {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#guideCategoryNew {
+  margin-top: 6px;
+}
+
+/* ---------- Fertig / Fortschritt ---------- */
+.done {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+  align-content: center;
+  padding: 10px 4px;
+}
+
+.done .ok,
+.done .err {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--teal-s);
+  color: var(--teal-d);
+  display: grid;
+  place-items: center;
+}
+
+.done .err {
+  background: var(--accent);
+  color: var(--pressed);
+}
+
+.done .ok svg,
+.done .err svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 2.6;
+}
+
+.done h3 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.done p {
+  margin: 0;
+  color: var(--ink-2);
   font-size: 13px;
+  max-width: 32ch;
+}
+
+.done .btn.primary {
+  margin-top: 6px;
+}
+
+.spinner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 4px solid var(--line);
+  border-top-color: var(--primary);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress {
+  width: 100%;
+  max-width: 240px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 200ms ease-out;
+}
+
+.filelist {
+  list-style: none;
   padding: 0;
-  margin: 0 0 8px;
+  margin: 4px 0 0;
+  display: grid;
+  gap: 6px;
+  width: 100%;
 }
 
-.link-back:hover {
-  text-decoration: underline;
+.filelist li {
+  font-size: 12.5px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 10px;
+  word-break: break-all;
+  text-align: left;
 }
 
-/* ===== Aufnahme-Anker: „Aufnahme fuer: <label>" (Welle 27) ===== */
-.target-banner {
+/* ---------- Listen (Anleitungen / Automationen) ---------- */
+.search {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
-  color: var(--ink);
-  background: #ffe8e2;
-  border: 2px solid var(--brand);
-  border-radius: 10px;
-  padding: 8px 10px;
-  margin: 0 0 12px;
-}
-
-/* Ohne Ziel (v2.4.1): neutraler Hinweis "wird als neues Tutorial angelegt" -
-   gedeckt statt Alarm-Koralle, kein Verwerfen-Knopf. */
-.target-banner.target-banner-neutral {
-  background: #f6f1ec;
-  border-color: #e4d9d0;
-  color: var(--ink-2, #5c5049);
-}
-
-.target-icon {
-  flex: 0 0 auto;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.target-text {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.target-text strong {
-  font-weight: 700;
-}
-
-.target-clear {
-  flex: 0 0 auto;
-  border: none;
-  background: transparent;
-  color: var(--brand-dark);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 4px;
-}
-
-.target-clear:hover {
-  text-decoration: underline;
-}
-
-/* ===== Live-Führung: Filter-Chips (Welle 32, Punkt C) ===== */
-.fuehren-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 2px 0 12px;
-}
-
-.chip-group {
-  display: inline-flex;
-  border: 1px solid var(--line);
+  background: var(--card);
+  border: 2px solid var(--line);
   border-radius: 999px;
-  overflow: hidden;
-  background: var(--beige);
+  padding: 7px 12px;
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.search:focus-within {
+  border-color: var(--primary);
+}
+
+.search input {
+  border: 0;
+  outline: none;
+  background: none;
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 1px 0;
+}
+
+.search input::placeholder {
+  color: var(--faint);
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .chip {
-  border: none;
-  background: transparent;
-  color: var(--muted);
+  border: 2px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 4px 11px;
   font-size: 12px;
-  font-weight: 700;
-  padding: 5px 12px;
-  cursor: pointer;
-}
-
-.chip + .chip {
-  border-left: 1px solid var(--line);
-}
-
-.chip.chip-active {
-  background: var(--brand);
-  color: #fff;
-}
-
-.chip:not(.chip-active):hover {
-  color: var(--ink);
-}
-
-/* Kategorie-Gruppen-Überschrift in der Führen-Liste. */
-.fuehren-group {
-  font-size: 11px;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  margin: 12px 0 2px;
-  padding: 0 2px;
-}
-
-.fuehren-group:first-child {
-  margin-top: 2px;
-}
-
-/* ===== Gemeinsame Tutorial-Karte (Welle 32, Punkt D2): „Für diese Seite" + „Führen" ===== */
-.tut-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 9px 11px;
-  background: var(--bg);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.tut-card:hover {
-  border-color: var(--brand);
-  background: #fdf3ec;
-}
-
-.tut-card-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
 }
 
-/* Titel darf ZWEIZEILIG umbrechen (line-clamp 2 statt hart abgeschnitten). */
-.tut-card-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--ink);
+.chip:hover {
+  border-color: #e6dccb;
+}
+
+.chip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.chip-toggle svg {
+  display: none;
+}
+
+.chip-toggle.on {
+  background: var(--amber-s);
+  border-color: var(--amber-s);
+  color: var(--amber-d);
+}
+
+.chip-toggle.on svg {
+  display: block;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.list:empty {
+  display: none;
+}
+
+.item {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+
+.item:hover {
+  border-color: #e6dccb;
+}
+
+.item.sel {
+  border-color: var(--primary);
+  cursor: default;
+}
+
+.item .h {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.item .h > span {
+  flex: 1;
+  min-width: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -794,177 +1141,241 @@ body {
   overflow: hidden;
 }
 
-.tut-card-meta {
+.item .h svg {
+  margin-top: 2px;
+  color: var(--faint);
+}
+
+.item .m {
   display: flex;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
 }
 
-/* Kategorie als kleiner Chip (Koralle-Pastell + brand-dark; bestehende Tokens). */
-.tut-cat-chip {
+.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+  font-weight: 800;
   max-width: 150px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--brand-dark);
-  background: #ffe8e2;
+  text-overflow: ellipsis;
+}
+
+.cat i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.st {
   border-radius: 999px;
   padding: 1px 8px;
-}
-
-.tut-steps {
   font-size: 11px;
-  color: var(--muted);
+  font-weight: 900;
 }
 
-/* Status nur als kleiner Punkt rechts: Teal = veröffentlicht, Amber = Entwurf. */
-.tut-status {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-top: 3px;
+.st.live {
+  background: var(--teal-s);
+  color: var(--teal-d);
 }
 
-.tut-status-pub {
-  background: var(--ok);
+.st.draft {
+  background: var(--amber-s);
+  color: var(--amber-d);
 }
 
-.tut-status-draft {
-  background: #f2a93b;
-}
-
-/* ===== Live-Führung (Welle 31): Führen-Liste ===== */
-.fuehren-list {
+.item .act {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 62vh;
-  overflow-y: auto;
-  margin-top: 6px;
-}
-
-.fuehren-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--bg);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.fuehren-item:hover {
-  border-color: var(--brand);
-  background: #fdf3ec;
-}
-
-.fuehren-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.fuehren-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ===== „Fuer diese Seite" (Welle 31c): passende Tutorials zur offenen Seite ===== */
-.site-match {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 10px 8px;
-  margin: 0 0 14px;
-  background: var(--cream);
-}
-
-.site-match-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  margin: 0 0 8px;
-}
-
-.site-match-list {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
 }
 
-/* Treffer-Zeile: Titel + Schritt-Zahl + Status-Chip; klickbar. */
-.site-match-item {
+.item .act .btn {
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
+.item .m .next {
+  color: var(--teal-d);
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.item .m .file {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sect {
+  margin-top: 2px;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 9px;
-  background: var(--bg);
-  color: var(--ink);
+  color: var(--ink-2);
+  font-weight: 800;
+  font-size: 12.5px;
+}
+
+.sect::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: var(--line);
+}
+
+.empty {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+  padding: 18px 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.empty p {
+  margin: 0;
+  max-width: 32ch;
+}
+
+.skeleton {
+  height: 62px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--line-2), #fbf6ee, var(--line-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* ---------- Automation starten ---------- */
+.params {
+  display: grid;
+  gap: 12px;
+}
+
+.params:empty {
+  display: none;
+}
+
+.check-row,
+.auto-param-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
   cursor: pointer;
 }
 
-.site-match-item:hover {
-  border-color: var(--brand);
-  background: #fdf3ec;
-}
-
-.site-match-item .sm-title {
-  flex: 1 1 auto;
-  min-width: 0;
+.check-row {
   font-size: 13px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink-2);
 }
 
-.fuehren-meta {
-  font-size: 11.5px;
-  color: var(--muted);
+.check-row input,
+.auto-param-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--teal);
+  margin: 0;
 }
 
-.fuehren-live {
-  flex: 0 0 auto;
-  font-size: 10.5px;
+.auto-param-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-2);
+}
+
+.auto-param-req {
+  color: var(--pressed);
+  margin-left: 2px;
+}
+
+.seg {
+  display: flex;
+  background: var(--line-2);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.seg-opt {
+  flex: 1;
+  position: relative;
+  cursor: pointer;
+}
+
+.seg-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seg-opt span {
+  display: block;
+  text-align: center;
+  border-radius: 9px;
+  padding: 7px 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-2);
+  line-height: 1.25;
+}
+
+.seg-opt small {
+  display: block;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #fff;
-  background: var(--ok);
-  border-radius: 999px;
-  padding: 2px 8px;
+  color: var(--muted);
+  font-size: 10.5px;
 }
 
-/* ===== Live-Führung: Führungs-Ansicht ===== */
+.seg-opt input:checked + span {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(51, 41, 31, 0.12);
+}
+
+.seg-opt input:focus-visible + span {
+  outline: 2px solid var(--primary);
+}
+
+/* ---------- Läufe (Führung + Automation) ---------- */
 .run-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 20px;
 }
 
 .run-progress {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--faint);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  margin-left: auto;
 }
 
 .run-bar {
@@ -972,7 +1383,7 @@ body {
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
-  margin: 6px 0 12px;
+  flex: none;
 }
 
 .run-bar > span {
@@ -980,29 +1391,25 @@ body {
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: var(--brand);
+  background: var(--primary);
   transition: width 250ms ease-out;
 }
 
 .run-image-wrap {
-  /* Zentriert nur noch die Bild-Ebene (Welle 33, Fix 1). Die Markierungen liegen NICHT
-     mehr hier, sondern im inneren .run-image-frame, der exakt die Bildgröße hat. */
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
   overflow: hidden;
-  background: var(--cream);
-  margin-bottom: 10px;
+  background: var(--card);
+  flex: none;
 }
 
-/* Shrink-wrap-Ebene: hat GENAU das Seitenverhältnis des Screenshots (--run-ar aus
-   imageWidth/imageHeight). Dadurch liegt sie schon VOR dem Bild-Load richtig und die
-   Markierungen (in % DIESER Ebene) sitzen pixelgenau — kein object-fit-Letterbox mehr,
-   der sie verschiebt. Die Breite ist so gedeckelt, dass die Höhe nie über den Rahmen läuft. */
+/* Shrink-wrap-Ebene mit GENAU dem Seitenverhältnis des Screenshots (--run-ar) — die
+   Markierungen (in % dieser Ebene) sitzen pixelgenau (Welle 33, Fix 1). */
 .run-image-frame {
   position: relative;
   width: 100%;
@@ -1011,7 +1418,6 @@ body {
   line-height: 0;
 }
 
-/* Fallback: Screenshot groß, damit man sich ohne Overlay orientieren kann. */
 .run-image-wrap.run-image-large .run-image-frame {
   max-width: calc(var(--run-ar, 1.6) * 46vh);
 }
@@ -1020,24 +1426,18 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  /* Frame-Verhältnis == Bild-Verhältnis -> contain erzeugt keinen Letterbox mehr; nur als
-     Sicherheitsnetz, falls imageWidth/imageHeight einmal fehlen (dann greift --run-ar-Default). */
   object-fit: contain;
 }
 
-/* Highlight-Rechtecke über dem Screenshot (normalisiert 0..1), verankert am .run-image-frame. */
 .run-hl {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid var(--brand);
+  border: 2px solid var(--primary);
   border-radius: 6px;
   box-shadow: 0 0 0 2px rgba(239, 106, 78, 0.2);
   pointer-events: none;
 }
 
-/* Blur-Markierung im Referenzbild (Welle 37, Fix 4): dunkle Box, die den sensiblen Bereich
-   sichtbar abdeckt. Automations-Referenzbilder liegen im privaten Bucket (unredigiert) —
-   die Box verdeckt hier, was im veröffentlichten Bild eingebrannt wäre. Kein Koralle-Rahmen. */
 .run-hl-blur {
   position: absolute;
   box-sizing: border-box;
@@ -1046,27 +1446,14 @@ body {
   pointer-events: none;
 }
 
-.run-fallback-hint {
-  font-size: 12px;
-  color: #c07d16;
-  background: #fdf6e8;
-  border: 1px solid #f0e2c4;
-  border-radius: 8px;
-  padding: 7px 10px;
-  margin: 0 0 10px;
-}
-
-.run-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin: 2px 0 6px;
-  color: var(--ink);
-}
-
 .run-body {
   font-size: 13.5px;
   color: var(--ink);
-  margin-bottom: 14px;
+  font-weight: 600;
+}
+
+.run-body:empty {
+  display: none;
 }
 
 .run-body p {
@@ -1080,373 +1467,142 @@ body {
 }
 
 .run-decision {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
 }
 
-.run-answer {
-  text-align: center;
-}
-
-.run-back-inline {
-  margin-top: 2px;
-}
-
-.run-nav {
-  display: flex;
+.miss {
+  background: var(--amber-s);
+  border-radius: 12px;
+  padding: 10px 11px;
+  display: grid;
   gap: 8px;
 }
 
-.run-nav .btn {
-  flex: 1 1 0;
-}
-
-.run-done {
-  text-align: center;
-  padding-top: 8px;
-}
-
-.run-done h2 {
-  font-size: 18px;
-  margin: 0 0 8px;
-}
-
-.run-done .btn {
-  margin-top: 12px;
-}
-
-.site-match-item .sm-meta {
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.site-match-item .sm-chip {
-  flex: 0 0 auto;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 2px 7px;
-}
-
-/* Status-Chips wie in der App: Veroeffentlicht = Teal-Pastell, Entwurf = Amber-Pastell. */
-.site-match-item .sm-chip-pub {
-  background: #dcf3ef;
-  color: var(--ok);
-}
-
-.site-match-item .sm-chip-draft {
-  background: #fdeecd;
-  color: #c07d16;
-}
-
-/* Dezenter Leer-Zustand: „... jetzt aufnehmen?" -> springt zur Aufnehmen-Karte. */
-.site-match-empty {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  padding: 8px 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.site-match-empty:hover {
-  border-color: var(--brand);
-  color: var(--ink);
-}
-
-/* ===== Automationen (Welle 36b) ===== */
-
-/* Karte in der Automationen-Liste: Titel + Meta (Schritt-/Parameterzahl). */
-.auto-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--bg);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.auto-card:hover {
-  border-color: var(--brand);
-  background: #fdf3ec;
-}
-
-.auto-card .auto-card-emoji {
-  flex: 0 0 auto;
-  font-size: 18px;
-  line-height: 1.2;
-}
-
-.auto-card-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.auto-card-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.auto-card-meta {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-
-/* Domain-Hinweis in der Vorbereitung (Sicherheit: WO wird gearbeitet). */
-.auto-domain {
+.miss-text {
+  margin: 0;
   font-size: 12.5px;
-  color: var(--ink);
-  background: #ffe8e2;
-  border: 1px solid var(--brand);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 2px 0 14px;
-}
-
-.auto-domain strong {
+  color: var(--amber-d);
   font-weight: 700;
 }
 
-/* Parameter-Formular. */
-.auto-params {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.auto-param {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
-  background: var(--cream);
-}
-
-.auto-param-label {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  margin-bottom: 5px;
-}
-
-.auto-param-req {
-  color: var(--stop);
-  margin-left: 2px;
-}
-
-.auto-param-input {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--bg);
-}
-
-.auto-param-input:focus {
-  outline: 2px solid var(--brand);
-  outline-offset: 0;
-  border-color: var(--brand);
-}
-
-.auto-param-remember {
-  display: flex;
+.filechip {
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 7px;
-  cursor: pointer;
-}
-
-.auto-clear {
-  margin-bottom: 14px;
+  gap: 6px;
+  flex-wrap: wrap;
   font-size: 12.5px;
-  padding: 8px 12px;
-}
-
-/* Modus-Wahl (Halbautomatik ist Standard). */
-.auto-modes {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px 10px;
-  margin: 0 0 14px;
-}
-
-.auto-modes legend {
-  font-size: 12px;
-  color: var(--muted);
-  padding: 0 4px;
-}
-
-/* Lauf-Ansicht. */
-.auto-step-action {
-  font-size: 12.5px;
-  color: var(--muted);
-  margin: 0 0 12px;
-}
-
-.auto-live {
-  font-size: 13px;
-  color: var(--brand-dark);
-  font-weight: 600;
-  margin: 0 0 12px;
-}
-
-.auto-miss {
-  border: 1px solid #f0e2c4;
-  background: #fdf6e8;
-  border-radius: 10px;
-  padding: 10px;
-  margin: 0 0 12px;
-}
-
-.auto-miss-text {
-  font-size: 12.5px;
-  color: #c07d16;
-  margin: 0 0 8px;
-}
-
-.auto-miss-image {
-  margin-bottom: 0;
-}
-
-.auto-download {
-  font-size: 12.5px;
-  color: var(--ok);
-  font-weight: 600;
-  margin: 0 0 12px;
-}
-
-/* Datei-Bruecke (Welle 39): der Datei-Chip zeigt die getragene Datei waehrend des Laufs. */
-.auto-file {
-  font-size: 12.5px;
-  color: var(--brand-dark);
-  font-weight: 700;
-  background: var(--brand-soft, #fdeee9);
-  border: 1px solid var(--brand, #ef6a4e);
+  font-weight: 800;
+  color: var(--ink-2);
+  background: var(--card);
+  border: 2px solid var(--line);
   border-radius: 999px;
   padding: 5px 12px;
-  margin: 0 0 12px;
-  display: inline-block;
+  margin: 0;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* Zustands-Intelligenz (Welle 40): Anmelde-Wache + Vorspul-Notiz. */
-.auto-wait,
-.run-fallback-hint.auto-wait {
+/* ---------- Verbinden ---------- */
+.connect {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 10px;
+}
+
+.connect .plug {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: var(--accent);
+  color: var(--pressed);
+  display: grid;
+  place-items: center;
+}
+
+.connect .plug svg {
+  width: 28px;
+  height: 28px;
+}
+
+.connect h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  text-wrap: balance;
+}
+
+.connect p {
+  margin: 0;
+  color: var(--ink-2);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--brand-dark);
-  background: var(--brand-soft, #fdeee9);
-  border: 1px solid var(--brand, #ef6a4e);
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin: 0 0 12px;
+  line-height: 1.45;
+  max-width: 32ch;
 }
 
-.auto-skip,
-.run-skip {
+.connect .muted {
+  color: var(--muted);
   font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ok, #2e8b57);
-  background: #edf7f0;
-  border: 1px solid #cfeadb;
-  border-radius: 10px;
-  padding: 8px 12px;
-  margin: 0 0 12px;
+  margin-top: 8px;
 }
 
-.auto-controls {
-  display: flex;
-  flex-direction: column;
+.ok-line {
+  color: var(--teal-d) !important;
+  font-weight: 800;
+}
+
+.manual {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.adv summary {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adv[open] summary {
+  margin-bottom: 8px;
+}
+
+/* ---------- Hilfe ---------- */
+.tips {
+  display: grid;
   gap: 8px;
 }
 
-.auto-ctl-row {
-  display: flex;
-  gap: 8px;
-}
-
-.auto-ctl-row .btn {
-  flex: 1 1 0;
-}
-
-.auto-cancel {
-  color: var(--stop);
-}
-
-/* ===== Sofort-Anleitung: Aufnahme-Phasen (Welle 48a) =====
-   Bereit -> Nimmt auf -> Pausiert -> Gestoppt (Prüfen). Sichtbarkeit per [hidden]
-   (siehe globale Regel oben), die Klassen hier regeln nur Layout/Farbe. */
-.guide-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.guide-ctl-row {
-  display: flex;
-  gap: 8px;
-}
-
-.guide-ctl-row .btn {
-  flex: 1 1 0;
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-.guide-discard {
-  color: var(--stop);
-}
-
-.guide-ready-hint {
-  background: var(--cream);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+.tip {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 14px;
   padding: 10px 12px;
 }
 
-.guide-capture-hint {
+.tip b {
+  font-weight: 900;
+}
+
+.tip p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
   font-size: 12.5px;
-  background: #fff6e6;
-  border: 1px solid #f3dfb8;
-  border-radius: 8px;
-  padding: 7px 10px;
 }
 
-/* Badge-Farben je Phase: läuft = Rot mit Puls (Standard), sonst ohne Puls. */
-.rec-badge.is-ready,
-.rec-badge.is-stopped {
-  color: var(--muted);
-}
-
-.rec-badge.is-paused {
-  color: #c07d16;
-}
-
-.timer.is-frozen {
-  color: var(--muted);
+.tip code {
+  font-size: 12px;
+  background: var(--line-2);
+  border-radius: 6px;
+  padding: 0 4px;
 }
