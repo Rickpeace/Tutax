@@ -2928,4 +2928,18 @@
   } catch (err) {
     // ignorieren
   }
+
+  // Aufnahme-Ping (Welle 48a): Das Panel fragt in „Nimmt auf" beim Tab-Wechsel/Laden, ob hier
+  // ein Content-Script lebt (sonst Hinweis „Auf dieser Seite kann Steply nicht aufnehmen").
+  // Eigener Listener; antwortet NUR im Hauptfenster (iframes schweigen).
+  try {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (!msg || msg.type !== "steply-rec-ping") return false;
+      if (!IS_TOP) return false;
+      sendResponse({ ok: true });
+      return false;
+    });
+  } catch (err) {
+    // ignorieren
+  }
 })();

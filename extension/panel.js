@@ -13,7 +13,8 @@
 //   videoSetup     Video-Vorbereitung: Mikro-Preflight + "ohne Ton" + Start.
 //   videoLive  (d) Video-Aufnahme laeuft.
 //   videoDone  (e) Upload/Fertig (Video).
-//   guideLive  (c) Sofort-Anleitung laeuft: Live-Zaehler + Schrittliste mit Thumbnails.
+//   guideLive  (c) Sofort-Anleitung: Phasen Bereit / Nimmt auf / Pausiert / Gestoppt
+//                  (guidePhase + renderGuidePhase, Welle 48a) + Schrittliste mit Thumbnails.
 //   guideDone  (e) Upload/Fertig (Sofort-Anleitung).
 //
 // MESSAGE-FLUSS: content.js (deklarativ auf jeder http(s)-Seite) sendet per
@@ -83,6 +84,24 @@ const els = {
   guideCount: document.getElementById("guideCount"),
   guideList: document.getElementById("guideList"),
   guideStop: document.getElementById("guideStop"),
+  // Aufnahme-Phasen (Welle 48a): Bereit / Nimmt auf / Pausiert / Gestoppt.
+  guideBadge: document.getElementById("guideBadge"),
+  guidePulse: document.getElementById("guidePulse"),
+  guideBadgeText: document.getElementById("guideBadgeText"),
+  guideReadyHint: document.getElementById("guideReadyHint"),
+  guideCaptureHint: document.getElementById("guideCaptureHint"),
+  guideCountLine: document.getElementById("guideCountLine"),
+  guideCountText: document.getElementById("guideCountText"),
+  guideStartRec: document.getElementById("guideStartRec"),
+  guideCreate: document.getElementById("guideCreate"),
+  guideCtlLive: document.getElementById("guideCtlLive"),
+  guidePause: document.getElementById("guidePause"),
+  guideResume: document.getElementById("guideResume"),
+  guideCtlStopped: document.getElementById("guideCtlStopped"),
+  guideContinue: document.getElementById("guideContinue"),
+  guideDiscard: document.getElementById("guideDiscard"),
+  guideCancel: document.getElementById("guideCancel"),
+  guideNote: document.getElementById("guideNote"),
   // Titel + Kategorie (Welle 31d)
   guideMeta: document.getElementById("guideMeta"),
   guideTitle: document.getElementById("guideTitle"),
@@ -1054,60 +1073,396 @@ function notifyAppTabs() {
   }
 }
 
-// Warnen, wenn der gerade aktive Tab prinzipiell nicht aufnehmbar ist (chrome://,
-// Web Store, PDF-Viewer, neuer-Tab-Seite): dort laeuft kein Content-Script, Klicks
-// waeren stumm - der Nutzer soll wissen, dass er zum Ziel-Tab wechseln muss.
-async function warnIfActiveTabNotCapturable() {
+// ============================================================================
+// AUFNAHME-PHASEN (Welle 48a): Bereit → Nimmt auf ⇄ Pausiert → Gestoppt (Prüfen).
+//
+// Vorher startete ein Klick auf die Karte SOFORT die Aufnahme, und es gab nur „fertigstellen"
+// (= sofort hochladen). Jetzt:
+//   idle       kein Sofort-Ablauf (Start-Screen o. Ä.)
+//   ready      Karte geklickt; es wird NOCH NICHT aufgenommen (kein rec im Storage, kein Timer)
+//   recording  rec gesetzt → content.js erfasst; Timer läuft; Downloads + Popups werden beobachtet
+//   paused     rec entfernt → content.js passiv (Navigieren erzeugt keine Schritte); Timer steht
+//   stopped    rec entfernt; Liste prüfen/bearbeiten → „Anleitung erstellen" | „Weiter aufnehmen"
+//              | „Verwerfen"
+// EINE Render-Funktion (renderGuidePhase) setzt Badge/Hinweise/Knöpfe passend zur Phase.
+//
+// guideActive bleibt die Annahme-Schranke für „steply-guide-step": true in „recording" und
+// noch KURZ nach Pause/Stopp, bis bereits unterwegs befindliche Schritte (Queue/Screenshot)
+// verarbeitet sind (max. GUIDE_HALT_MAX_MS) — so geht kein Klick kurz vor „Stopp" verloren.
+// ============================================================================
+
+let guidePhase = "idle"; // "idle" | "ready" | "recording" | "paused" | "stopped"
+let guidePausedMs = 0; // Summe der pausierten/gestoppten Zeit (zählt nicht zur Aufnahmedauer)
+let guidePauseAt = 0; // Beginn der aktuellen Pause/des Stopps (0 = läuft)
+let guideSeq = 0; // Übergangs-Token: ein späteres Fortsetzen macht ein laufendes Anhalten ungültig
+let guideHaltPromise = null; // laufendes Anhalten (Queue leerlaufen lassen)
+const GUIDE_HALT_MAX_MS = 3000; // höchstens so lange auf unterwegs befindliche Schritte warten
+const GUIDE_HALT_GRACE_MS = 150; // Nachzügler-Nachrichten (schon gesendet, noch nicht da)
+
+function guideSleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Aufnahmedauer ohne Pausen (steht, solange pausiert/gestoppt).
+function guideElapsedMs() {
+  if (!startEpoch) return 0;
+  const now = guidePauseAt || Date.now();
+  return Math.max(0, now - startEpoch - guidePausedMs);
+}
+
+function guideTimerTick() {
+  els.guideTimer.textContent = fmtTime(guideElapsedMs() / 1000);
+}
+
+function guideTimerRun() {
+  stopTimer();
+  guideTimerTick();
+  timerInterval = setInterval(guideTimerTick, 500);
+}
+
+// Altoffene Tabs nachimpfen (v2.2.2): ohne das fehlte content.js in Tabs, die vor dem
+// (Neu-)Laden der Extension geoeffnet wurden - Klicks dort blieben stumm.
+function guideEnsureContent() {
+  try {
+    const p = chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+    if (p && p.catch) p.catch(() => {});
+  } catch (err) {
+    /* egal - deklarative Injektion deckt neue Seiten ab */
+  }
+}
+
+// Karte „Sofort-Anleitung" (und jeder andere Einstieg): in die Phase „Bereit" — es wird
+// NOCH NICHT aufgenommen. Titel/Kategorie können schon eingetragen werden.
+async function startGuide() {
+  resetGuide();
+  guideFinishing = false;
+  guidePhase = "ready";
+  interruptedDiscarded = false;
+  els.interruptedHint.hidden = true;
+  els.guideCount.textContent = "0";
+  els.guideList.textContent = "";
+  startEpoch = 0;
+  guidePausedMs = 0;
+  guidePauseAt = 0;
+  stopTimer();
+  els.guideTimer.textContent = "00:00";
+  setStatus("");
+  show("guideLive");
+  renderGuidePhase();
+  // Titel + Kategorie (Welle 31d): Block vorbereiten (nicht blockierend — die Kategorie-
+  // Liste lädt asynchron). Bei Aufnahme-Anker bleibt er aus.
+  guideMetaPrepare();
+  // Schon jetzt nachimpfen, damit beim Klick auf „Aufnahme starten" alles bereit ist.
+  guideEnsureContent();
+}
+
+// „● Aufnahme starten" (aus Bereit), „▶ Fortsetzen" (aus Pausiert), „Weiter aufnehmen"
+// (aus Gestoppt): Erfassung (wieder) einschalten. Die Schrittliste bleibt erhalten.
+async function guideStartRecording() {
+  if (guideFinishing) return;
+  if (guidePhase !== "ready" && guidePhase !== "paused" && guidePhase !== "stopped") return;
+  guideSeq++; // ein noch laufendes Anhalten (Queue-Drain) wird damit gegenstandslos
+  const from = guidePhase;
+  if (from === "ready") {
+    startEpoch = Date.now();
+    guidePausedMs = 0;
+  } else if (guidePauseAt) {
+    guidePausedMs += Date.now() - guidePauseAt;
+  }
+  guidePauseAt = 0;
+  guidePhase = "recording";
+  guideActive = true;
+  setStatus("");
+  // Datei-Brücke (Welle 39): Downloads NUR in „Nimmt auf" beobachten (Metadaten-Zuordnung).
+  if (!guideDownloadHandler) guideAddDownloadWatch();
+  guideTimerRun();
+  renderGuidePhase();
+  guideEnsureContent();
+  try {
+    await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
+  } catch (err) {
+    console.warn("Steply: Aufnahmezustand (guide) nicht gesetzt:", err);
+  }
+  // Nicht aufnehmbare Seite (chrome://, PDF, Web Store)? → dezenter Hinweis.
+  guideCheckCapturable();
+}
+
+// Pause / Stopp: Erfassung aus. Reihenfolge ist wichtig: ERST rec entfernen (content.js wird
+// passiv, es kommen keine neuen Schritte), DANN kurz warten, bis bereits unterwegs befindliche
+// Schritte (Queue + laufender Screenshot) verarbeitet sind (max. GUIDE_HALT_MAX_MS), ERST DANN
+// guideActive=false. Wird währenddessen fortgesetzt (guideSeq ändert sich), bleibt es aktiv.
+function guideHalt(nextPhase) {
+  if (guidePhase !== "recording" && guidePhase !== "paused") return guideHaltPromise;
+  if (guidePhase === nextPhase) return guideHaltPromise;
+  const seq = ++guideSeq;
+  if (guidePhase === "recording") guidePauseAt = Date.now();
+  guidePhase = nextPhase;
+  stopTimer();
+  guideTimerTick();
+  guideSetCaptureHint(false);
+  renderGuidePhase();
+  const run = (async () => {
+    try {
+      await chrome.storage.local.remove("rec");
+    } catch (err) {
+      /* egal */
+    }
+    await guideSleep(GUIDE_HALT_GRACE_MS);
+    const deadline = Date.now() + GUIDE_HALT_MAX_MS;
+    while ((guideQueue.length || guideCapturing) && Date.now() < deadline) {
+      if (seq !== guideSeq) return;
+      await guideSleep(50);
+    }
+    if (seq !== guideSeq) return; // inzwischen fortgesetzt → Erfassung bleibt an
+    guideActive = false;
+    guideQueue = [];
+    guideRemoveDownloadWatch();
+    renderGuidePhase();
+  })();
+  const tracked = run.finally(() => {
+    if (guideHaltPromise === tracked) guideHaltPromise = null;
+  });
+  guideHaltPromise = tracked;
+  return tracked;
+}
+
+function guidePauseRecording() {
+  if (guidePhase !== "recording") return;
+  guideHalt("paused");
+}
+
+function guideStopRecording() {
+  if (guidePhase !== "recording" && guidePhase !== "paused") return;
+  guideHalt("stopped");
+}
+
+// „Abbrechen" (Bereit) bzw. „Verwerfen" (Gestoppt): alles verwerfen, zurück zum Start-Screen.
+// Mit Schritten nur nach Bestätigung. Titel/Kategorie werden mit verworfen; ein Aufnahme-Anker
+// (Ziel im Builder) bleibt stehen — er hat seinen eigenen „Ziel verwerfen"-Knopf.
+async function guideDiscardRecording() {
+  if (guideFinishing) return;
+  if (guideSteps.length > 0) {
+    const n = guideSteps.length;
+    const ok = confirm(
+      (n === 1 ? "1 aufgenommener Schritt wird" : n + " aufgenommene Schritte werden") +
+        " verworfen. Wirklich verwerfen?"
+    );
+    if (!ok) return;
+  }
+  guideSeq++;
+  guidePhase = "idle";
+  guideActive = false;
+  try {
+    await chrome.storage.local.remove("rec");
+  } catch (err) {
+    /* egal */
+  }
+  guideMetaReset();
+  guideMetaClear();
+  newRecording();
+}
+
+// EINE Render-Funktion für die Sektion guideLive: Badge, Timer, Hinweise, Knöpfe.
+function renderGuidePhase() {
+  const p = guidePhase;
+  const n = guideSteps.length;
+  const busy = guideFinishing;
+  const badgeText = {
+    ready: "Bereit",
+    recording: "Aufnahme läuft",
+    paused: "Pausiert",
+    stopped: "Aufnahme gestoppt",
+  };
+  if (els.guideBadge) {
+    els.guideBadge.classList.toggle("is-ready", p === "ready");
+    els.guideBadge.classList.toggle("is-paused", p === "paused");
+    els.guideBadge.classList.toggle("is-stopped", p === "stopped");
+  }
+  if (els.guideBadgeText) els.guideBadgeText.textContent = badgeText[p] || "";
+  if (els.guidePulse) els.guidePulse.hidden = p !== "recording";
+  els.guideTimer.hidden = p === "ready";
+  els.guideTimer.classList.toggle("is-frozen", p === "paused" || p === "stopped");
+
+  if (els.guideReadyHint) els.guideReadyHint.hidden = p !== "ready";
+  if (p !== "recording") guideSetCaptureHint(false);
+
+  // Zähler + Liste: in „Bereit" noch nichts zu zeigen.
+  if (els.guideCountLine) els.guideCountLine.hidden = p === "ready";
+  els.guideList.hidden = p === "ready";
+  if (els.guideCountText) {
+    const unit = n === 1 ? "Schritt aufgenommen" : "Schritte aufgenommen";
+    els.guideCountText.textContent =
+      p === "stopped" && n > 0 ? unit + " – prüfen und erstellen" : unit;
+  }
+
+  // Knöpfe je Phase.
+  if (els.guideStartRec) {
+    els.guideStartRec.hidden = p !== "ready";
+    els.guideStartRec.disabled = busy;
+  }
+  if (els.guideCancel) els.guideCancel.hidden = p !== "ready";
+  if (els.guideCtlLive) els.guideCtlLive.hidden = p !== "recording" && p !== "paused";
+  if (els.guidePause) els.guidePause.hidden = p !== "recording";
+  if (els.guideResume) els.guideResume.hidden = p !== "paused";
+  els.guideStop.hidden = p !== "recording" && p !== "paused";
+  els.guideStop.disabled = busy;
+  if (els.guideCreate) {
+    els.guideCreate.hidden = p !== "stopped";
+    els.guideCreate.disabled = busy || n === 0;
+  }
+  if (els.guideCtlStopped) els.guideCtlStopped.hidden = p !== "stopped";
+  if (els.guideContinue) els.guideContinue.disabled = busy;
+  if (els.guideDiscard) els.guideDiscard.disabled = busy;
+
+  // Hinweis unten.
+  if (els.guideNote) {
+    let note = "";
+    if (p === "ready") {
+      note = "Tipp: Titel und Kategorie können Sie schon jetzt oder später eintragen.";
+    } else if (p === "recording") {
+      note =
+        "Klicken Sie Ihren Ablauf im Browser durch – Tab-Wechsel und Anmelde-Fenster sind " +
+        "erlaubt. Jeder Klick wird als Schritt (Screenshot + Markierung) festgehalten.";
+    } else if (p === "paused") {
+      note =
+        "Pausiert – Klicks werden gerade nicht erfasst. Sie können in Ruhe zu einer anderen " +
+        "Seite wechseln und dann fortsetzen.";
+    } else if (p === "stopped") {
+      note =
+        n === 0
+          ? "Noch keine Schritte – mit „Weiter aufnehmen“ im Browser klicken, dann erstellen."
+          : "Einzelne Schritte mit ✕ entfernen. „Weiter aufnehmen“ hängt weitere Schritte an.";
+    }
+    els.guideNote.textContent = note;
+    els.guideNote.hidden = !note;
+  }
+}
+
+// ── Popup-Fenster während der Aufnahme (Welle 48a) ─────────────────────────────────────────
+// Schritte werden nur aus Tabs des Panel-Fensters angenommen (fromPanelWindow). Ein Popup
+// („Mit Google anmelden", window.open) öffnet aber ein NEUES Fenster. Darum merken wir uns in
+// „Nimmt auf" jeden Tab, dessen openerTabId aus einem akzeptierten Tab stammt (Panel-Fenster
+// oder schon akzeptiertes Popup — Kette). DATENSCHUTZ: Fenster, die NICHT aus der Aufnahme
+// heraus geöffnet wurden (z. B. private E-Mail im zweiten Fenster), bleiben ausgeschlossen.
+// Die Menge gilt nur für den Sofort-Modus (Video-Modus unverändert) und wird geleert, wenn
+// der Aufnahme-Vorgang endet (Verwerfen/Erstellen/Reset) — über Pause/Stopp→„Weiter aufnehmen"
+// hinweg bleibt ein offenes Anmelde-Popup also weiter aufnehmbar.
+const guideExtraTabs = new Set();
+
+async function guideOnTabCreated(tab) {
+  if (guidePhase !== "recording") return;
+  if (!tab || tab.id == null || tab.openerTabId == null) return;
+  // Im Panel-Fenster ist der Tab ohnehin akzeptiert.
+  if (panelWindowId != null && tab.windowId === panelWindowId) return;
+  if (guideExtraTabs.has(tab.openerTabId)) {
+    guideExtraTabs.add(tab.id);
+    return;
+  }
+  if (panelWindowId == null) return; // Fenster unbekannt → fromPanelWindow nimmt eh alles
+  try {
+    const opener = await chrome.tabs.get(tab.openerTabId);
+    if (opener && opener.windowId === panelWindowId) guideExtraTabs.add(tab.id);
+  } catch (err) {
+    /* Opener schon weg → nicht zuordenbar → bleibt ausgeschlossen */
+  }
+}
+
+function guideOnTabRemoved(tabId) {
+  guideExtraTabs.delete(tabId);
+}
+
+// Annahme-Regel NUR für Sofort-Schritte: Panel-Fenster ODER aus der Aufnahme geöffnetes Popup.
+function guideAcceptsSender(sender) {
+  if (fromPanelWindow(sender)) return true;
+  return !!(sender && sender.tab && guideExtraTabs.has(sender.tab.id));
+}
+
+// ── Hinweis „hier kann nicht aufgenommen werden" (Welle 48a) ──────────────────────────────
+// In „Nimmt auf" bei Tab-Wechsel und fertig geladenem aktiven Tab prüfen, ob im aktiven Tab
+// des Panel-Fensters ein Content-Script antwortet (steply-rec-ping, nur Hauptframe). Keine
+// Antwort / keine http(s)-URL → dezenter Hinweis; verschwindet bei aufnehmbarem Tab wieder.
+let guideCheckSeq = 0;
+const GUIDE_PING_TIMEOUT_MS = 1200;
+const GUIDE_PING_RETRY_MS = 500;
+
+function guideSetCaptureHint(on) {
+  if (els.guideCaptureHint) els.guideCaptureHint.hidden = !on;
+}
+
+function guidePingTab(tabId) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(false), GUIDE_PING_TIMEOUT_MS);
+    try {
+      const p = chrome.tabs.sendMessage(tabId, { type: "steply-rec-ping" }, { frameId: 0 });
+      if (p && p.then) {
+        p.then((resp) => finish(!!(resp && resp.ok)), () => finish(false));
+      } else {
+        finish(false);
+      }
+    } catch (err) {
+      finish(false);
+    }
+  });
+}
+
+async function guideCheckCapturable() {
+  if (guidePhase !== "recording") {
+    guideSetCaptureHint(false);
+    return;
+  }
+  const seq = ++guideCheckSeq;
+  let tab = null;
   try {
     const q =
       panelWindowId == null
         ? { active: true, currentWindow: true }
         : { active: true, windowId: panelWindowId };
     const tabs = await chrome.tabs.query(q);
-    const tab = tabs && tabs[0];
-    if (tab && tab.url && !/^https?:\/\//i.test(tab.url)) {
-      setStatus(
-        "Hinweis: Der aktive Tab ist eine Browser-Seite und kann nicht aufgenommen " +
-          "werden. Wechsle zum Tab der Ziel-Website - dort zaehlen die Klicks.",
-        "error"
-      );
-    }
+    tab = tabs && tabs[0];
   } catch (err) {
-    /* egal - reine Komfort-Warnung */
+    return; // tabs-API gestört → lieber kein (falscher) Hinweis
   }
+  if (!tab || tab.id == null) return;
+  let ok = false;
+  const url = typeof tab.url === "string" ? tab.url : "";
+  if (/^https?:\/\//i.test(url)) {
+    ok = await guidePingTab(tab.id);
+    if (!ok) {
+      // Tab war evtl. vor dem Laden der Extension offen → erst nachimpfen, dann erneut pingen.
+      guideEnsureContent();
+      await guideSleep(GUIDE_PING_RETRY_MS);
+      if (seq !== guideCheckSeq) return;
+      ok = await guidePingTab(tab.id);
+    }
+  }
+  if (seq !== guideCheckSeq || guidePhase !== "recording") return;
+  guideSetCaptureHint(!ok);
 }
 
-async function startGuide() {
-  resetGuide();
-  guideActive = true;
-  guideFinishing = false;
-  interruptedDiscarded = false;
-  els.interruptedHint.hidden = true;
-  els.guideStop.disabled = false;
-  els.guideCount.textContent = "0";
-  els.guideList.textContent = "";
-  setStatus("");
-  show("guideLive");
-  // Titel + Kategorie (Welle 31d): Block vorbereiten (nicht blockierend — die Kategorie-
-  // Liste lädt asynchron; Aufnahme startet sofort). Bei Aufnahme-Anker bleibt er aus.
-  guideMetaPrepare();
-  // Altoffene Tabs nachimpfen (v2.2.2): ohne das fehlte content.js in Tabs, die vor dem
-  // (Neu-)Laden der Extension geoeffnet wurden - Klicks dort blieben stumm.
-  try {
-    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
-  } catch (err) {
-    /* egal - deklarative Injektion deckt neue Seiten ab */
-  }
-  warnIfActiveTabNotCapturable();
-  startEpoch = Date.now();
-  startTimer(els.guideTimer);
-  // Datei-Brücke (Welle 39): Downloads während der Aufnahme beobachten (Metadaten-Zuordnung).
-  guideAddDownloadWatch();
-  try {
-    await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
-  } catch (err) {
-    console.warn("Steply: Aufnahmezustand (guide) nicht gesetzt:", err);
-  }
+try {
+  chrome.tabs.onCreated.addListener(guideOnTabCreated);
+  chrome.tabs.onRemoved.addListener(guideOnTabRemoved);
+  chrome.tabs.onActivated.addListener((info) => {
+    if (guidePhase !== "recording") return;
+    if (info && panelWindowId != null && info.windowId !== panelWindowId) return;
+    guideCheckCapturable();
+  });
+  chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+    if (guidePhase !== "recording") return;
+    if (!changeInfo || changeInfo.status !== "complete") return;
+    if (!tab || !tab.active) return;
+    if (panelWindowId != null && tab.windowId !== panelWindowId) return;
+    guideCheckCapturable();
+  });
+} catch (err) {
+  /* tabs-API nicht verfügbar → keine Popup-Erfassung / kein Hinweis */
 }
 
 // PNG-DataURL -> WebP-Blob (Qualitaet 0.85). Faellt bei Fehler auf PNG zurueck.
@@ -1391,40 +1746,43 @@ function renderGuideSteps() {
   });
   // Neuen Schritt in Sicht scrollen.
   els.guideList.scrollTop = els.guideList.scrollHeight;
+  // Zähler-Text + „Anleitung erstellen" (aktiv nur mit ≥1 Schritt) nachziehen (Welle 48a).
+  if (guidePhase !== "idle") renderGuidePhase();
 }
 
-// "Anleitung fertigstellen" -> hochladen.
+// „Anleitung erstellen" (Phase „Gestoppt", Welle 48a) -> hochladen.
 async function finishGuide() {
   if (guideFinishing) return;
+  if (guidePhase !== "stopped") return;
   guideFinishing = true;
-  els.guideStop.disabled = true;
+  renderGuidePhase();
+  // Ein noch laufendes Anhalten (unterwegs befindliche Schritte) erst abschließen lassen.
+  if (guideHaltPromise) {
+    try {
+      await guideHaltPromise;
+    } catch (err) {
+      /* egal */
+    }
+  }
   guideActive = false;
   guideRemoveDownloadWatch();
   stopTimer();
-  // Content-Scripts stoppen die Erfassung.
+  // Content-Scripts sind seit dem Stopp passiv; zur Sicherheit rec nochmals räumen.
   try {
     await chrome.storage.local.remove("rec");
   } catch (err) {
     /* egal */
   }
-  // Noch laufende Captures kurz auslaufen lassen.
-  await new Promise((r) => setTimeout(r, 50));
 
   if (guideSteps.length === 0) {
     setStatus("Es wurden keine Schritte aufgenommen.", "error");
-    els.guideStop.disabled = false;
     guideFinishing = false;
-    guideActive = true;
-    guideAddDownloadWatch();
-    startTimer(els.guideTimer);
-    try {
-      await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
-    } catch (err) {
-      /* egal */
-    }
+    renderGuidePhase();
     return;
   }
 
+  guidePhase = "idle";
+  guideExtraTabs.clear();
   show("guideDone");
   els.guideUploadDone.hidden = true;
   try {
@@ -2079,7 +2437,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-guide-step") return;
   if (!guideActive) return;
-  if (!fromPanelWindow(sender)) return;
+  // Panel-Fenster ODER aus der Aufnahme geöffnetes Popup (Welle 48a, guideExtraTabs).
+  if (!guideAcceptsSender(sender)) return;
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
   // Kleine FIFO-Queue statt Einzel-Slot: schnelle Folgen (Eingabe + Klick) gehen NICHT
   // verloren. windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster
@@ -2103,7 +2462,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (!changes.steplyToken && !changes.steplyAppUrl) return;
   const recording =
-    (mediaRecorder && mediaRecorder.state !== "inactive") || guideActive;
+    (mediaRecorder && mediaRecorder.state !== "inactive") || guideActive || guidePhase !== "idle";
   loadConfig().then(() => {
     accountName = ""; // neu ermitteln (Token koennte auf ein anderes Konto zeigen)
     fetchAccountName();
@@ -2121,7 +2480,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // offenes Panel bekommt kein „open" -> darum hier auf die storage-Aenderung reagieren.)
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes.pendingTarget) return;
-  loadPendingTarget();
+  loadPendingTarget().then(() => {
+    // Welle 48a: Kommt das Ziel, während „Bereit" angezeigt wird, Titel/Kategorie-Block
+    // passend ein-/ausblenden (bei Aufnahme-Anker gehören sie dem Ziel-Tutorial).
+    if (guidePhase === "ready") guideMetaPrepare();
+  });
 });
 
 // ============================================================================
@@ -2144,6 +2507,14 @@ function resetGuide() {
   guideFinishing = false;
   guideActive = false;
   guideRemoveDownloadWatch();
+  // Aufnahme-Phasen (Welle 48a): Vorgang beendet → Phase, Popups, Hinweise zurücksetzen.
+  guideSeq++;
+  guidePhase = "idle";
+  guidePausedMs = 0;
+  guidePauseAt = 0;
+  guideHaltPromise = null;
+  guideExtraTabs.clear();
+  guideSetCaptureHint(false);
 }
 
 function resetVideo() {
@@ -5346,7 +5717,15 @@ els.noAudio.addEventListener("change", updateBeginEnabled);
 els.micRetry.addEventListener("click", micPreflight);
 els.begin.addEventListener("click", begin);
 els.stop.addEventListener("click", stop);
-els.guideStop.addEventListener("click", finishGuide);
+// Aufnahme-Phasen (Welle 48a): Bereit → Nimmt auf ⇄ Pausiert → Gestoppt (Prüfen).
+if (els.guideStartRec) els.guideStartRec.addEventListener("click", guideStartRecording);
+if (els.guideCancel) els.guideCancel.addEventListener("click", guideDiscardRecording);
+if (els.guidePause) els.guidePause.addEventListener("click", guidePauseRecording);
+if (els.guideResume) els.guideResume.addEventListener("click", guideStartRecording);
+els.guideStop.addEventListener("click", guideStopRecording);
+if (els.guideCreate) els.guideCreate.addEventListener("click", finishGuide);
+if (els.guideContinue) els.guideContinue.addEventListener("click", guideStartRecording);
+if (els.guideDiscard) els.guideDiscard.addEventListener("click", guideDiscardRecording);
 // Titel + Kategorie (Welle 31d): Feldwerte in die Session spiegeln; „＋ Neue Kategorie …"
 // blendet das Namensfeld ein.
 if (els.guideTitle) els.guideTitle.addEventListener("input", guideMetaSave);

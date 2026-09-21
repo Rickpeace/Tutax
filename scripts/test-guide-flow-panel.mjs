@@ -1,0 +1,522 @@
+// Headless-Beweis des Sofort-Aufnahme-Ablaufs im Panel (Welle 48a), OHNE Netz/Server.
+// Laedt die ECHTE extension/panel.html + panel.js in echtem Chromium mit einem minimalen
+// `chrome`-Stub (runtime/storage/tabs/windows/downloads) und prueft den Zustandsautomaten:
+//   1) Versoehnung: klemmendes rec beim Oeffnen wird verworfen (Hinweis sichtbar).
+//   2) Karte -> „Bereit": KEIN rec im Storage, Schritt-Nachrichten werden ignoriert.
+//   3) Start -> rec gesetzt, Schritt wird angenommen; Pause -> rec weg, Schritt ignoriert,
+//      Timer steht; Fortsetzen -> Timer zaehlt ohne Sprung weiter.
+//   4) Stopp mit einem Schritt „unterwegs" -> der Schritt geht NICHT verloren.
+//   5) Gestoppt: Liste sichtbar, „Anleitung erstellen" aktiv; „Weiter aufnehmen"; „Verwerfen"
+//      (mit Bestaetigung) -> Start-Screen; 0 Schritte -> „Anleitung erstellen" deaktiviert.
+//   6) Popups: Schritt aus fremdem Fenster verworfen; aus per onCreated (openerTabId-Kette)
+//      registriertem Popup angenommen, Screenshot aus DESSEN Fenster; nach onRemoved verworfen.
+//   7) Hinweis „kann nicht aufnehmen": chrome://-Tab / Tab ohne Content-Script -> Hinweis;
+//      Nachimpfen + Retry erfolgreich -> kein Hinweis; aufnehmbarer Tab -> Hinweis weg.
+//
+// Nutzung:  node scripts/test-guide-flow-panel.mjs [--shots <verzeichnis>]
+// Playwright wird lokal ODER aus dem npx-Cache aufgeloest (wie test-guide-capture.mjs).
+import { createRequire } from "node:module";
+import { existsSync, readdirSync, mkdirSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import path from "node:path";
+
+const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function resolvePlaywright() {
+  try {
+    return require("playwright");
+  } catch {
+    /* nicht lokal installiert -> npx-Cache absuchen */
+  }
+  const base = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local");
+  const npxDir = path.join(base, "npm-cache", "_npx");
+  if (existsSync(npxDir)) {
+    for (const d of readdirSync(npxDir)) {
+      const p = path.join(npxDir, d, "node_modules", "playwright");
+      if (existsSync(p)) return require(p);
+    }
+  }
+  throw new Error("playwright nicht gefunden (weder lokal noch im npx-Cache).");
+}
+
+const shotsIdx = process.argv.indexOf("--shots");
+const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : "";
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+
+let failed = false;
+const ok = (c, m) => {
+  console.log(`${c ? "✓" : "✗"} ${m}`);
+  if (!c) failed = true;
+};
+
+const PANEL_URL = pathToFileURL(path.join(__dirname, "..", "extension", "panel.html")).href;
+
+// chrome-Stub: laeuft VOR panel.js (addInitScript). Welt: Panel-Fenster 10 mit Tab 1
+// (https, Content-Script antwortet) + fremdes Fenster 20 mit Tab 99 (z. B. private E-Mail).
+const STUB = () => {
+  const mkEvent = () => {
+    const ls = [];
+    return {
+      addListener: (f) => ls.push(f),
+      removeListener: (f) => {
+        const i = ls.indexOf(f);
+        if (i >= 0) ls.splice(i, 1);
+      },
+      hasListener: (f) => ls.includes(f),
+      _fire: (...a) => ls.map((f) => f(...a)),
+    };
+  };
+  const onChanged = mkEvent();
+  const mkArea = (obj, name) => ({
+    get: (keys, cb) => {
+      let out = {};
+      if (keys == null) out = { ...obj };
+      else if (typeof keys === "string") {
+        if (keys in obj) out[keys] = obj[keys];
+      } else if (Array.isArray(keys)) {
+        for (const k of keys) if (k in obj) out[k] = obj[k];
+      } else {
+        for (const k of Object.keys(keys)) out[k] = k in obj ? obj[k] : keys[k];
+      }
+      if (cb) cb(out);
+      return Promise.resolve(out);
+    },
+    set: (items) => {
+      const ch = {};
+      for (const k of Object.keys(items)) {
+        ch[k] = { oldValue: obj[k], newValue: items[k] };
+        obj[k] = items[k];
+      }
+      onChanged._fire(ch, name);
+      return Promise.resolve();
+    },
+    remove: (keys) => {
+      const ch = {};
+      for (const k of [].concat(keys)) {
+        if (k in obj) {
+          ch[k] = { oldValue: obj[k], newValue: undefined };
+          delete obj[k];
+        }
+      }
+      if (Object.keys(ch).length) onChanged._fire(ch, name);
+      return Promise.resolve();
+    },
+  });
+  const T = (window.__T = {
+    local: { steplyToken: "tok-test", steplyAppUrl: "https://app.example.test", rec: { startedAt: 1, mode: "guide" } },
+    session: {},
+    tabs: [
+      { id: 1, windowId: 10, url: "https://example.com/start", active: true, status: "complete" },
+      { id: 99, windowId: 20, url: "https://mail.example.org/", active: true, status: "complete" },
+    ],
+    pingOk: { 1: true, 99: true },
+    injectOnEnsure: {}, // tabId -> true: „steply-ensure-content" macht den Tab aufnehmbar
+    runtimeSent: [],
+    captureWindows: [],
+    events: {},
+  });
+  const tabsEv = {
+    onCreated: mkEvent(),
+    onRemoved: mkEvent(),
+    onActivated: mkEvent(),
+    onUpdated: mkEvent(),
+  };
+  T.events = { ...tabsEv, onMessage: mkEvent(), downloadsCreated: mkEvent() };
+  const fakePng = () => {
+    const c = document.createElement("canvas");
+    c.width = 320;
+    c.height = 200;
+    const x = c.getContext("2d");
+    x.fillStyle = "#f7f1e6";
+    x.fillRect(0, 0, 320, 200);
+    x.fillStyle = "#ef6a4e";
+    x.fillRect(40, 60, 120, 40);
+    return c.toDataURL("image/png");
+  };
+  const chromeStub = {
+    runtime: {
+      id: "stub",
+      lastError: undefined,
+      getManifest: () => ({ version: "2.16.0" }),
+      onMessage: T.events.onMessage,
+      connect: () => ({ onDisconnect: mkEvent(), onMessage: mkEvent(), postMessage() {}, disconnect() {} }),
+      sendMessage: (msg) => {
+        T.runtimeSent.push(msg && msg.type);
+        if (msg && msg.type === "steply-capture") {
+          T.captureWindows.push(msg.windowId);
+          return Promise.resolve({ ok: true, dataUrl: fakePng() });
+        }
+        if (msg && msg.type === "steply-ensure-content") {
+          for (const id of Object.keys(T.injectOnEnsure)) T.pingOk[id] = true;
+        }
+        return Promise.resolve(undefined);
+      },
+    },
+    storage: {
+      local: mkArea(T.local, "local"),
+      session: mkArea(T.session, "session"),
+      onChanged,
+    },
+    windows: {
+      getCurrent: () => Promise.resolve({ id: 10 }),
+      update: () => Promise.resolve({}),
+    },
+    tabs: {
+      ...tabsEv,
+      query: (q) => {
+        let r = T.tabs.slice();
+        if (q && q.active) r = r.filter((t) => t.active);
+        if (q && q.windowId != null) r = r.filter((t) => t.windowId === q.windowId);
+        if (q && q.currentWindow) r = r.filter((t) => t.windowId === 10);
+        return Promise.resolve(r);
+      },
+      get: (id) => {
+        const t = T.tabs.find((x) => x.id === id);
+        return t ? Promise.resolve({ ...t }) : Promise.reject(new Error("No tab with id " + id));
+      },
+      sendMessage: (tabId, msg) => {
+        if (msg && msg.type === "steply-rec-ping") {
+          const t = T.tabs.find((x) => x.id === tabId);
+          if (t && /^https?:/.test(t.url) && T.pingOk[tabId]) return Promise.resolve({ ok: true });
+          return Promise.reject(new Error("Could not establish connection. Receiving end does not exist."));
+        }
+        return Promise.resolve(undefined);
+      },
+      create: () => Promise.resolve({ id: 500 }),
+      update: () => Promise.resolve({}),
+      captureVisibleTab: () => Promise.reject(new Error("stub")),
+    },
+    downloads: {
+      onCreated: T.events.downloadsCreated,
+      onChanged: mkEvent(),
+      search: () => Promise.resolve([]),
+    },
+    extension: { isAllowedFileSchemeAccess: () => Promise.resolve(false) },
+    sidePanel: { open: () => Promise.resolve() },
+  };
+  Object.defineProperty(window, "chrome", { value: chromeStub, configurable: true, writable: true });
+};
+
+const chromium = resolvePlaywright().chromium;
+let browser;
+try {
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 380, height: 860 } });
+  const pageErrors = [];
+  page.on("pageerror", (e) => pageErrors.push(String(e && e.message)));
+  // Bestaetigungen („Verwerfen?") annehmen und mitzaehlen.
+  let dialogs = 0;
+  page.on("dialog", (d) => {
+    dialogs++;
+    d.accept();
+  });
+  // Kein echtes Netz: alle http(s)-Requests (Konto, Update, Kategorien …) -> 404.
+  await page.route(/^https?:/, (r) => r.fulfill({ status: 404, body: "" }));
+  await page.addInitScript(STUB);
+  await page.goto(PANEL_URL, { waitUntil: "load" });
+
+  const vis = (id) => page.evaluate((i) => {
+    const el = document.getElementById(i);
+    return !!el && !el.hidden && !(el.closest("section") && el.closest("section").hidden) &&
+      el.offsetParent !== null;
+  }, id);
+  const st = () =>
+    page.evaluate(() => ({
+      phase: guidePhase,
+      active: guideActive,
+      steps: guideSteps.length,
+      rec: window.__T.local.rec,
+      extra: Array.from(guideExtraTabs),
+    }));
+  const click = (id) => page.click("#" + id);
+  const sleep = (ms) => page.waitForTimeout(ms);
+  let tsBase = Date.now();
+  const sendStep = (tab, label) =>
+    page.evaluate(
+      ({ tab, label, ts }) => {
+        window.__T.events.onMessage._fire(
+          {
+            type: "steply-guide-step",
+            step: {
+              rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.05 },
+              label,
+              action: "click",
+              url: "https://example.com/start",
+              ts,
+            },
+          },
+          { tab: { id: tab.id, windowId: tab.windowId } },
+          () => {}
+        );
+      },
+      { tab, label, ts: (tsBase += 2000) }
+    );
+  const waitSteps = async (n, ms = 4000) => {
+    try {
+      await page.waitForFunction((k) => guideSteps.length === k, n, { timeout: ms });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const TAB1 = { id: 1, windowId: 10 };
+  const TAB_FOREIGN = { id: 99, windowId: 20 };
+
+  // ---- 1) Versoehnung ----
+  await page.waitForFunction(() => !document.getElementById("start").hidden, null, { timeout: 5000 });
+  let s = await st();
+  ok(s.rec === undefined, "Versöhnung: klemmendes rec beim Öffnen verworfen");
+  ok(await vis("interruptedHint"), "Versöhnung: Hinweis „unterbrochene Aufnahme“ sichtbar");
+
+  // ---- 2) Bereit ----
+  await click("cardGuide");
+  s = await st();
+  ok(s.phase === "ready", "Karte → Phase „ready“");
+  ok(s.rec === undefined, "Bereit: KEIN rec im Storage");
+  ok(await vis("guideStartRec"), "Bereit: „Aufnahme starten“ sichtbar");
+  ok(await vis("guideCancel"), "Bereit: „Abbrechen“ sichtbar");
+  ok(!(await vis("guideStop")) && !(await vis("guidePause")), "Bereit: kein Pause/Stopp");
+  ok(await vis("guideReadyHint"), "Bereit: Hinweis „Öffnen Sie die Seite …“ sichtbar");
+  ok(!(await vis("guideTimer")), "Bereit: Timer ausgeblendet");
+  ok(await vis("guideTitle"), "Bereit: Titel-Feld sichtbar");
+  ok(
+    (await page.textContent("#guideBadgeText")).trim() === "Bereit",
+    "Bereit: Badge „Bereit“"
+  );
+  await sendStep(TAB1, "Ignoriert (Bereit)");
+  await sleep(800);
+  ok((await st()).steps === 0, "Bereit: Schritt-Nachricht wird ignoriert");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "1-bereit.png"), fullPage: true });
+
+  // Abbrechen aus „Bereit" -> Start-Screen, ohne Rueckfrage.
+  const dBefore = dialogs;
+  await click("guideCancel");
+  s = await st();
+  ok(s.phase === "idle" && (await vis("cardGuide")), "Abbrechen (Bereit) → Start-Screen");
+  ok(dialogs === dBefore, "Abbrechen ohne Schritte: keine Rückfrage");
+
+  // ---- 3) Start / Schritt / Pause / Fortsetzen ----
+  await click("cardGuide");
+  await click("guideStartRec");
+  await page.waitForFunction(() => !!window.__T.local.rec, null, { timeout: 2000 });
+  s = await st();
+  ok(s.phase === "recording" && s.active, "Start → Phase „recording“, guideActive");
+  ok(s.rec && s.rec.mode === "guide", "Start: rec {mode:'guide'} gesetzt");
+  ok(await vis("guidePause") && (await vis("guideStop")), "Nimmt auf: Pause + Stopp sichtbar");
+  ok(!(await vis("guideStartRec")) && !(await vis("guideCreate")), "Nimmt auf: kein Start/Erstellen");
+  await sendStep(TAB1, "Klicken Sie auf „Anmelden“");
+  ok(await waitSteps(1), "Nimmt auf: Schritt wird angenommen (1)");
+  await sendStep(TAB1, "Klicken Sie auf „Belege“");
+  ok(await waitSteps(2), "Nimmt auf: zweiter Schritt (2)");
+  await sleep(1100);
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "2-nimmt-auf.png"), fullPage: true });
+
+  await click("guidePause");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  s = await st();
+  ok(s.phase === "paused" && s.rec === undefined, "Pause: Phase „paused“, rec entfernt");
+  ok(
+    (await page.textContent("#guideBadgeText")).trim() === "Pausiert" && !(await vis("guidePulse")),
+    "Pause: Badge „Pausiert“ ohne Puls"
+  );
+  ok(await vis("guideResume") && (await vis("guideStop")), "Pause: Fortsetzen + Stopp sichtbar");
+  const tPaused = await page.textContent("#guideTimer");
+  await sendStep(TAB1, "Ignoriert (Pause)");
+  // Bewusst >3 s pausieren: zaehlte die Pause mit, sprange der Timer beim Fortsetzen um >=3 s.
+  await sleep(3200);
+  ok((await st()).steps === 2, "Pause: Schritt-Nachricht wird ignoriert");
+  ok((await page.textContent("#guideTimer")) === tPaused, "Pause: Timer steht (" + tPaused + ")");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "3-pausiert.png"), fullPage: true });
+
+  await click("guideResume");
+  s = await st();
+  ok(s.phase === "recording" && s.active && s.rec, "Fortsetzen → recording, rec wieder gesetzt");
+  const toSec = (t) => {
+    const [m, x] = t.split(":").map(Number);
+    return m * 60 + x;
+  };
+  const tResumed = await page.textContent("#guideTimer");
+  ok(
+    toSec(tResumed) - toSec(tPaused) <= 1,
+    "Fortsetzen: Timer ohne Sprung (" + tPaused + " → " + tResumed + ")"
+  );
+  await sendStep(TAB1, "Klicken Sie auf „Hochladen“");
+  ok(await waitSteps(3), "Nach Fortsetzen: Schritt angenommen (3)");
+
+  // ---- 4) Stopp mit Schritt „unterwegs" ----
+  await sendStep(TAB1, "Klicken Sie auf „Speichern“");
+  await click("guideStop");
+  ok(await waitSteps(4), "Stopp: unterwegs befindlicher Schritt geht NICHT verloren (4)");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  s = await st();
+  ok(s.phase === "stopped" && s.rec === undefined, "Stopp: Phase „stopped“, rec entfernt");
+  await sendStep(TAB1, "Ignoriert (Gestoppt)");
+  await sleep(900);
+  ok((await st()).steps === 4, "Gestoppt: Schritt-Nachricht wird ignoriert");
+
+  // ---- 5) Gestoppt: Pruefen ----
+  ok(await vis("guideCreate"), "Gestoppt: „Anleitung erstellen“ sichtbar");
+  ok(!(await page.isDisabled("#guideCreate")), "Gestoppt: „Anleitung erstellen“ aktiv");
+  ok(await vis("guideContinue") && (await vis("guideDiscard")), "Gestoppt: Weiter aufnehmen + Verwerfen");
+  ok((await page.$$("#guideList .guide-item")).length === 4, "Gestoppt: Liste mit 4 Schritten sichtbar");
+  ok(
+    /4\s*Schritte aufgenommen – prüfen und erstellen/.test(await page.textContent("#guideCountLine")),
+    "Gestoppt: „4 Schritte aufgenommen – prüfen und erstellen“"
+  );
+  await page.click("#guideList .guide-item:last-child .rm");
+  ok((await st()).steps === 3, "Gestoppt: Schritt per ✕ entfernbar (3)");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "4-gestoppt.png"), fullPage: true });
+
+  await click("guideContinue");
+  s = await st();
+  ok(s.phase === "recording" && s.rec && s.steps === 3, "Weiter aufnehmen → recording, Liste bleibt (3)");
+  await click("guideStop");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  const dBefore2 = dialogs;
+  await click("guideDiscard");
+  await page.waitForFunction(() => !document.getElementById("start").hidden, null, { timeout: 3000 });
+  s = await st();
+  ok(dialogs === dBefore2 + 1, "Verwerfen mit Schritten: Bestätigung abgefragt");
+  ok(s.phase === "idle" && s.steps === 0 && s.rec === undefined, "Verwerfen → Start-Screen, alles leer");
+
+  // 0 Schritte -> „Anleitung erstellen" deaktiviert.
+  await click("cardGuide");
+  await click("guideStartRec");
+  await click("guideStop");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  ok(await page.isDisabled("#guideCreate"), "0 Schritte: „Anleitung erstellen“ deaktiviert");
+  ok(/Noch keine Schritte/.test(await page.textContent("#guideNote")), "0 Schritte: Hinweis sichtbar");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "5-gestoppt-leer.png"), fullPage: true });
+  const dBefore3 = dialogs;
+  await click("guideDiscard");
+  ok(dialogs === dBefore3 && (await st()).phase === "idle", "Verwerfen ohne Schritte: ohne Rückfrage");
+
+  // ---- 6) Popups ----
+  await click("cardGuide");
+  await click("guideStartRec");
+  await sendStep(TAB_FOREIGN, "Private Mail (fremdes Fenster)");
+  await sleep(1300);
+  ok((await st()).steps === 0, "Popup: Schritt aus fremdem Fenster wird verworfen");
+  // Popup aus Tab 1 (Panel-Fenster) in NEUEM Fenster 30; dann Kette (Popup aus Popup) in 31;
+  // dazu ein Fenster, das aus dem fremden Tab 99 heraus geoeffnet wurde (muss draussen bleiben).
+  await page.evaluate(() => {
+    const T = window.__T;
+    const add = (t) => {
+      T.tabs.push(t);
+      T.events.onCreated._fire({ ...t });
+    };
+    add({ id: 50, windowId: 30, openerTabId: 1, url: "https://accounts.google.com/", active: true });
+  });
+  await sleep(100);
+  await page.evaluate(() => {
+    const T = window.__T;
+    const add = (t) => {
+      T.tabs.push(t);
+      T.events.onCreated._fire({ ...t });
+    };
+    add({ id: 51, windowId: 31, openerTabId: 50, url: "https://accounts.google.com/x", active: true });
+    add({ id: 60, windowId: 32, openerTabId: 99, url: "https://mail.example.org/p", active: true });
+  });
+  await sleep(100);
+  s = await st();
+  ok(s.extra.includes(50) && s.extra.includes(51), "Popup: Tabs 50 (Opener Panel-Tab) + 51 (Kette) registriert");
+  ok(!s.extra.includes(60), "Popup: Fenster aus fremdem Tab bleibt ausgeschlossen");
+  await page.evaluate(() => (window.__T.captureWindows = []));
+  await sendStep({ id: 50, windowId: 30 }, "Klicken Sie auf „Mit Google anmelden“");
+  ok(await waitSteps(1), "Popup: Schritt aus registriertem Popup angenommen");
+  const capWins = await page.evaluate(() => window.__T.captureWindows.slice());
+  ok(capWins.includes(30), "Popup: Screenshot aus dem Popup-Fenster (windowId 30)");
+  await sendStep({ id: 51, windowId: 31 }, "Klicken Sie auf „Weiter“");
+  ok(await waitSteps(2), "Popup: Schritt aus Ketten-Popup angenommen");
+  await sendStep({ id: 60, windowId: 32 }, "Fremd");
+  await sleep(1300);
+  ok((await st()).steps === 2, "Popup: Schritt aus nicht zugehörigem Fenster verworfen");
+  await page.evaluate(() => window.__T.events.onRemoved._fire(50, { windowId: 30 }));
+  await sendStep({ id: 50, windowId: 30 }, "Nach Schließen");
+  await sleep(1300);
+  ok((await st()).steps === 2, "Popup: nach onRemoved wird der Tab nicht mehr angenommen");
+  // Waehrend Pause geoeffnete Popups werden NICHT registriert.
+  await click("guidePause");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  await page.evaluate(() => {
+    const t = { id: 70, windowId: 33, openerTabId: 1, url: "https://x.example/", active: true };
+    window.__T.tabs.push(t);
+    window.__T.events.onCreated._fire({ ...t });
+  });
+  await sleep(100);
+  ok(!(await st()).extra.includes(70), "Popup: in der Pause geöffnetes Fenster wird nicht registriert");
+  await click("guideStop");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  await click("guideDiscard");
+  ok((await st()).extra.length === 0, "Popup: Menge nach Verwerfen leer");
+
+  // ---- 7) Hinweis „kann nicht aufnehmen" ----
+  await click("cardGuide");
+  await click("guideStartRec");
+  await sleep(300);
+  ok(!(await vis("guideCaptureHint")), "Hinweis: aufnehmbarer Tab → kein Hinweis");
+  const activate = (id, url) =>
+    page.evaluate(
+      ({ id, url }) => {
+        const T = window.__T;
+        let t = T.tabs.find((x) => x.id === id);
+        if (!t) {
+          t = { id, windowId: 10, url, active: false, status: "complete" };
+          T.tabs.push(t);
+        }
+        if (url) t.url = url;
+        for (const x of T.tabs) if (x.windowId === 10) x.active = x.id === id;
+        T.events.onActivated._fire({ tabId: id, windowId: 10 });
+      },
+      { id, url }
+    );
+  await activate(2, "chrome://extensions/");
+  await page.waitForFunction(() => !document.getElementById("guideCaptureHint").hidden, null, { timeout: 3000 }).catch(() => {});
+  ok(await vis("guideCaptureHint"), "Hinweis: chrome://-Tab → Hinweis sichtbar");
+  ok(
+    /Auf dieser Seite kann Steply nicht aufnehmen/.test(await page.textContent("#guideCaptureHint")),
+    "Hinweis: Text korrekt"
+  );
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "6-hinweis.png"), fullPage: true });
+  await activate(1);
+  await page.waitForFunction(() => document.getElementById("guideCaptureHint").hidden, null, { timeout: 3000 }).catch(() => {});
+  ok(!(await vis("guideCaptureHint")), "Hinweis: zurück auf aufnehmbaren Tab → Hinweis weg");
+  // https-Tab OHNE Content-Script (z. B. Web Store) → Hinweis nach Retry.
+  await activate(3, "https://chromewebstore.google.com/detail/x");
+  await page.waitForFunction(() => !document.getElementById("guideCaptureHint").hidden, null, { timeout: 5000 }).catch(() => {});
+  ok(await vis("guideCaptureHint"), "Hinweis: https-Tab ohne Antwort → Hinweis (nach Retry)");
+  // Altoffener Tab: antwortet erst nach dem Nachimpfen → KEIN Hinweis.
+  await page.evaluate(() => {
+    window.__T.injectOnEnsure[4] = true;
+    window.__T.runtimeSent = [];
+  });
+  await activate(4, "https://old-tab.example/");
+  await sleep(2500);
+  ok(!(await vis("guideCaptureHint")), "Hinweis: altoffener Tab wird nachgeimpft → kein Hinweis");
+  ok(
+    (await page.evaluate(() => window.__T.runtimeSent.includes("steply-ensure-content"))),
+    "Hinweis: steply-ensure-content vor dem Retry gesendet"
+  );
+  // onUpdated complete des aktiven Tabs → neue Pruefung (Tab navigiert auf chrome://).
+  await page.evaluate(() => {
+    const T = window.__T;
+    const t = T.tabs.find((x) => x.id === 4);
+    t.url = "chrome://settings/";
+    T.events.onUpdated._fire(4, { status: "complete" }, { ...t });
+  });
+  await page.waitForFunction(() => !document.getElementById("guideCaptureHint").hidden, null, { timeout: 3000 }).catch(() => {});
+  ok(await vis("guideCaptureHint"), "Hinweis: Laden auf Browser-Seite (onUpdated) → Hinweis");
+  await click("guidePause");
+  ok(!(await vis("guideCaptureHint")), "Hinweis: in der Pause ausgeblendet");
+
+  ok(pageErrors.length === 0, "keine Seitenfehler" + (pageErrors.length ? ": " + pageErrors.join(" | ") : ""));
+} catch (err) {
+  console.error(err);
+  failed = true;
+} finally {
+  if (browser) await browser.close();
+}
+
+console.log(failed ? "\nFEHLGESCHLAGEN" : "\nAlle Prüfungen grün.");
+process.exit(failed ? 1 : 0);
