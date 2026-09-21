@@ -1,4 +1,4 @@
-import { brandFonts } from "@/lib/theme";
+import { brandFonts, DEFAULT_BRAND_COLORS } from "@/lib/theme";
 
 type Tokens = {
   colors?: Record<string, string>;
@@ -12,18 +12,22 @@ export function BrandPreview({
   tokens,
   logoUrl,
   accountName,
+  compact = false,
 }: {
   tokens: unknown;
   logoUrl: string | null;
   accountName: string;
+  /** Mini-Vorschau (Auswahlkarten): nur Kopf, eine Karte, Knopf. */
+  compact?: boolean;
 }) {
   const t = (tokens ?? {}) as Tokens;
   const c = t.colors ?? {};
   const fonts = brandFonts(tokens);
-  const bg = c.background ?? "#f6f7fe";
-  const surface = c.surface ?? "#ffffff";
-  const ink = c.text ?? "#101524";
-  const accent = c.primary ?? "#3d4ee6";
+  // Fallbacks = dieselben warmen Standard-Farben wie die echte Hilfe-Seite (lib/theme.ts).
+  const bg = c.background || DEFAULT_BRAND_COLORS.background;
+  const surface = c.surface || DEFAULT_BRAND_COLORS.surface;
+  const ink = c.text || DEFAULT_BRAND_COLORS.text;
+  const accent = c.primary || DEFAULT_BRAND_COLORS.primary;
   const border = c.border ?? "rgba(16,21,36,0.10)";
   const rawRadius = t.shape?.radius;
   const radius = rawRadius != null ? `${parseInt(String(rawRadius), 10) || 0}px` : "14px";
@@ -43,7 +47,7 @@ export function BrandPreview({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border" style={{ background: bg, fontFamily: fonts.body, color: ink }}>
-      <div className="space-y-3 p-4">
+      <div className={compact ? "space-y-2 p-2.5" : "space-y-3 p-4"}>
         <div className="flex items-center gap-2.5">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -64,7 +68,7 @@ export function BrandPreview({
           </div>
         </div>
 
-        {["SmartLogin einrichten", "Belege hochladen"].map((title) => (
+        {(compact ? ["SmartLogin einrichten"] : ["SmartLogin einrichten", "Belege hochladen"]).map((title) => (
           <div
             key={title}
             className="flex items-center gap-2.5 p-2.5"

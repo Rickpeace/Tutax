@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
 import { changeEmail } from "@/app/app/settings/konto/actions";
 
 export function EmailForm({ current }: { current: string }) {
@@ -27,9 +27,9 @@ export function EmailForm({ current }: { current: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="new-email">Neue E-Mail-Adresse</Label>
+    <div className="grid gap-3">
+      <div className="grid gap-1.5">
+        <FieldLabel htmlFor="new-email">Neue E-Mail-Adresse</FieldLabel>
         <Input
           id="new-email"
           type="email"
@@ -37,9 +37,10 @@ export function EmailForm({ current }: { current: string }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder={current}
           autoComplete="email"
+          className={settingsInputClass}
         />
       </div>
-      <Button onClick={save} disabled={pending || !email.trim()}>
+      <Button onClick={save} disabled={pending || !email.trim()} className="w-fit">
         {pending ? "Sendet …" : "E-Mail ändern"}
       </Button>
     </div>

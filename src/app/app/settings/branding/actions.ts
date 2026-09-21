@@ -61,7 +61,8 @@ export async function saveBranding(
   // Öffentlichen Hub-Cache räumen — alter UND neuer Slug (Slug kann sich ändern).
   invalidateHubTag(account.slug);
   invalidateHubTag(slug);
-  revalidatePath("/app/settings/branding");
+  // Welle 50c: Name/Adresse/Farben verteilen sich auf mehrere Einstellungs-Seiten.
+  revalidatePath("/app/settings", "layout");
   revalidatePath("/app");
   return { ok: true, slug };
 }
@@ -100,7 +101,7 @@ export async function saveLanguages(
 
   // Sprach-Umschalter erscheint/verschwindet auf der Hilfe-Seite -> Hub-Cache räumen.
   invalidateHubTag(account.slug);
-  revalidatePath("/app/settings/branding");
+  revalidatePath("/app/settings", "layout");
 
   // Neue Sprache(n) aktiviert -> published+public Tutorials im Hintergrund nachübersetzen
   // (Best-Effort, gedeckelt; Rest fängt der manuelle Button). Nur wenn wirklich etwas
@@ -131,6 +132,6 @@ export async function setThemeMode(mode: "manual" | "ai" | "extreme") {
     .eq("account_id", account.id);
   if (error) throw new Error(error.message);
   invalidateHubTag(account.slug); // Design-Wechsel sofort öffentlich sichtbar
-  revalidatePath("/app/settings/branding");
+  revalidatePath("/app/settings", "layout");
   revalidatePath("/app");
 }

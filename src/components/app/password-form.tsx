@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { Label } from "@/components/ui/label";
+import { FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
 import { changePassword } from "@/app/app/settings/konto/actions";
 
 export function PasswordForm() {
@@ -30,26 +30,28 @@ export function PasswordForm() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="pw">Neues Passwort</Label>
+    <div className="grid gap-3">
+      <div className="grid gap-1.5">
+        <FieldLabel htmlFor="pw">Neues Passwort</FieldLabel>
         <PasswordInput
           id="pw"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
           autoComplete="new-password"
+          className={settingsInputClass}
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="pw2">Wiederholen</Label>
+      <div className="grid gap-1.5">
+        <FieldLabel htmlFor="pw2">Wiederholen</FieldLabel>
         <PasswordInput
           id="pw2"
           value={pw2}
           onChange={(e) => setPw2(e.target.value)}
           autoComplete="new-password"
+          className={settingsInputClass}
         />
       </div>
-      <Button onClick={save} disabled={pending || !pw}>
+      <Button onClick={save} disabled={pending || !pw} className="w-fit">
         {pending ? "Speichert …" : "Passwort ändern"}
       </Button>
     </div>

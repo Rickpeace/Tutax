@@ -30,6 +30,6 @@ export async function rotateRecorderToken(): Promise<
     return { ok: false, error: "Der Token konnte nicht erzeugt werden." };
   }
 
-  revalidatePath("/app/settings/einbetten");
+  revalidatePath("/app/settings", "layout");
   return { ok: true, token };
 }

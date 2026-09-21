@@ -42,9 +42,9 @@ export default function AssistentLayout({
             variant="outline"
             size="sm"
             nativeButton={false}
-            render={<Link href="/app/settings/einbetten" />}
+            render={<Link href="/app/settings/chat" />}
           >
-            <MessageCircle className="size-4" /> Chat-Bubble einbetten
+            <MessageCircle className="size-4" /> Chat auf Ihrer Website
           </Button>
         </div>
       </div>

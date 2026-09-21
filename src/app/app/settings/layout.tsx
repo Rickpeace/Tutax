@@ -1,21 +1,34 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SettingsNav } from "@/components/app/settings-nav";
+import { Suspense } from "react";
+import { SettingsSidebar, SettingsMobileNav } from "@/components/app/settings-nav";
 
+/**
+ * Einstellungen mit Seitenleiste (Welle 50c, Entwurf „App-Makeover" §2):
+ * Desktop = linke Leiste mit Gruppen, mobil = Auswahl oben. Kein „← Dashboard"-Link
+ * mehr — die Kopfleiste ist immer da. Leiste/Auswahl lesen usePathname → eigene
+ * Suspense-Grenzen (cacheComponents), die statische Hülle bleibt sofort sichtbar.
+ */
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8">
-      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/app" />}>
-        <ChevronLeft className="size-4" /> Dashboard
-      </Button>
-      <h1 className="mt-3 text-xl font-bold text-ink">Einstellungen</h1>
-      <SettingsNav />
-      <div className="mt-6">{children}</div>
-    </main>
+    <div className="mx-auto flex w-full max-w-[1180px] flex-1">
+      <aside className="hidden w-[240px] shrink-0 border-r-2 border-line px-3 py-[18px] lg:block">
+        <div className="sticky top-[82px]">
+          <Suspense fallback={<div className="h-96" />}>
+            <SettingsSidebar />
+          </Suspense>
+        </div>
+      </aside>
+      <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-8 lg:pt-6">
+        <div className="mb-5 lg:hidden">
+          <Suspense fallback={<div className="h-11 rounded-full border-2 border-line bg-card" />}>
+            <SettingsMobileNav />
+          </Suspense>
+        </div>
+        <div className="max-w-[820px]">{children}</div>
+      </main>
+    </div>
   );
 }

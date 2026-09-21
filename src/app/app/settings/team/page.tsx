@@ -2,10 +2,10 @@ import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TeamManager } from "@/components/app/team-manager";
-import { AccountSwitcher } from "@/components/app/account-switcher";
+import { SettingsHeader } from "@/components/app/settings-ui";
 
 export default async function TeamPage() {
-  const { account, memberships } = await requireAccount();
+  const { account } = await requireAccount();
   const supabase = await createClient();
   const {
     data: { user },
@@ -36,20 +36,12 @@ export default async function TeamPage() {
   const myRole = members.find((m) => m.isYou)?.role ?? "editor";
 
   return (
-    <div className="space-y-6">
-      {memberships.length > 1 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-ink">Aktive Organisation</div>
-            <div className="text-xs text-muted-foreground">
-              Du gehörst zu mehreren – hier wählst du, welche du gerade verwaltest.
-            </div>
-          </div>
-          <div className="ml-auto">
-            <AccountSwitcher currentId={account.id} currentName={account.name} memberships={memberships} />
-          </div>
-        </div>
-      )}
+    <div className="grid gap-[18px]">
+      <SettingsHeader
+        group="Arbeitsbereich"
+        title="Team"
+        lead="Laden Sie Mitarbeitende ein, die gemeinsam mit Ihnen an Anleitungen arbeiten."
+      />
       {/* Einladungen (inkl. Token = Beitritts-Link) NUR an Inhaber geben – ein Editor
           könnte sonst aus dem Client-Payload einen offenen Owner-Invite-Token abgreifen. */}
       <TeamManager
