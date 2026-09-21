@@ -39,8 +39,8 @@ const steps = [
   },
   {
     icon: Palette,
-    t: "5. Branding setzen",
-    d: "Unter Einstellungen → Branding legen Sie Logo und Farben fest. So sieht Ihre Hilfeseite aus wie Ihre Organisation.",
+    t: "5. Aussehen festlegen",
+    d: "Unter Einstellungen → Aussehen legen Sie Logo und Farben fest. So sieht Ihre Hilfe-Seite aus wie Ihre Organisation.",
   },
   {
     icon: Send,
@@ -50,7 +50,7 @@ const steps = [
   {
     icon: Link2,
     t: "7. Verlinken",
-    d: "Kopieren Sie unter Einstellungen → Einbetten Ihren Hilfeseiten-Link und setzen Sie ihn als Menüpunkt „Hilfe“ auf Ihre Website. Fertig.",
+    d: "Kopieren Sie unter Einstellungen → Adresse & Teilen den Link Ihrer Hilfe-Seite und setzen Sie ihn als Menüpunkt „Hilfe“ auf Ihre Website. Fertig.",
   },
 ];
 

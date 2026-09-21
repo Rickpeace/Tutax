@@ -23,27 +23,27 @@ export function CopyField({
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex min-w-0 gap-2">
       {multiline ? (
         <textarea
           readOnly
           value={value}
           rows={3}
           onFocus={(e) => e.currentTarget.select()}
-          className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-ink-2 outline-none"
+          className="w-full resize-none rounded-xl border-2 border-line bg-background px-3 py-2 font-mono text-xs text-ink-2 outline-none focus:border-primary/50"
         />
       ) : (
         <input
           readOnly
           value={value}
           onFocus={(e) => e.currentTarget.select()}
-          className="w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-ink-2 outline-none"
+          className="h-10 w-full min-w-0 rounded-xl border-2 border-line bg-background px-3 font-mono text-xs text-ink-2 outline-none focus:border-primary/50"
         />
       )}
       <button
         type="button"
         onClick={copy}
-        className="flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-muted"
+        className="flex h-10 shrink-0 items-center gap-1.5 self-start rounded-full border-2 border-line bg-card px-3.5 text-sm font-extrabold text-ink-2 transition-colors hover:border-[#e3d7c2] hover:text-ink"
       >
         {copied ? (
           <>

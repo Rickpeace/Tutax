@@ -48,7 +48,7 @@ async function Themed({
       className="min-h-screen"
       style={{
         ...brandStyle(tokens),
-        background: "var(--brand-bg, #f6f7fe)",
+        background: "var(--brand-bg, #fdf3ec)",
         fontFamily: fonts.body,
       }}
     >

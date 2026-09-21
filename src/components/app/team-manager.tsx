@@ -2,14 +2,27 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { UserPlus, Trash2, Copy, Mail, X } from "lucide-react";
+import { UserPlus, Trash2, Copy, Mail, X, Users, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { inviteMember, revokeInvitation, removeMember, type InviteResult } from "@/app/app/settings/team/actions";
+import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/settings-ui";
 
 type Member = { userId: string; role: string; email: string; isYou: boolean };
 type Invitation = { id: string; email: string; role: string; token: string };
+
+const roleLabel = (role: string) => (role === "owner" ? "Inhaber" : "Bearbeiter");
+
+function RolePill({ role }: { role: string }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black ${
+        role === "owner" ? "bg-accent text-coral-text" : "bg-line-2 text-ink-2"
+      }`}
+    >
+      {roleLabel(role)}
+    </span>
+  );
+}
 
 export function TeamManager({
   members,
@@ -42,51 +55,51 @@ export function TeamManager({
     });
   };
 
-  const roleBadge = (role: string) =>
-    role === "owner"
-      ? "rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
-      : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground";
-
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-bold text-ink">Team</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Laden Sie Mitarbeiter ein, die gemeinsam an Anleitungen arbeiten.
-        </p>
-      </div>
-
+    <div className="grid gap-[18px]">
       {isOwner && (
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h3 className="mb-3 flex items-center gap-2 font-bold text-ink">
-            <UserPlus className="size-4 text-primary" /> Mitarbeiter einladen
-          </h3>
-          <form ref={formRef} onSubmit={onInvite} className="flex flex-wrap items-end gap-2">
-            <div className="min-w-[12rem] flex-1 space-y-1.5">
-              <Label htmlFor="invite-email">E-Mail</Label>
-              <Input id="invite-email" name="email" type="email" required placeholder="kollegin@firma.de" />
+        <SettingsCard
+          title="Mitglieder einladen"
+          icon={UserPlus}
+          description="Die eingeladene Person bekommt eine E-Mail mit einem Beitritts-Link."
+        >
+          <form ref={formRef} onSubmit={onInvite} className="flex flex-wrap items-end gap-2.5">
+            <div className="grid min-w-[12rem] flex-1 gap-1.5">
+              <FieldLabel htmlFor="invite-email">E-Mail</FieldLabel>
+              <input
+                id="invite-email"
+                name="email"
+                type="email"
+                required
+                placeholder="kollegin@firma.de"
+                className={settingsInputClass}
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="invite-role">Rolle</Label>
-              <select
-                id="invite-role"
-                name="role"
-                defaultValue="editor"
-                className="h-9 rounded-md border border-border bg-card px-2 text-sm text-ink"
-              >
-                <option value="editor">Bearbeiter</option>
-                <option value="owner">Inhaber</option>
-              </select>
+            <div className="grid gap-1.5">
+              <FieldLabel htmlFor="invite-role">Rolle</FieldLabel>
+              <div className="relative">
+                <select
+                  id="invite-role"
+                  name="role"
+                  defaultValue="editor"
+                  className={`${settingsInputClass} cursor-pointer appearance-none pr-9`}
+                >
+                  <option value="editor">Bearbeiter</option>
+                  <option value="owner">Inhaber</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              </div>
             </div>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending} className="h-10">
               <Mail className="size-4" /> Einladen
             </Button>
           </form>
 
           {result && (
             <div
-              className={`mt-3 rounded-lg px-3 py-2 text-sm ${
-                result.ok ? "bg-yes-soft text-ink-2" : "bg-no-soft text-no"
+              role="status"
+              className={`rounded-xl px-3 py-2 text-sm font-bold ${
+                result.ok ? "bg-teal-soft text-teal-text" : "bg-no-soft text-no"
               }`}
             >
               {result.message}
@@ -99,36 +112,35 @@ export function TeamManager({
                       () => toast.error("Kopieren fehlgeschlagen"),
                     );
                   }}
-                  className="mt-1 flex items-center gap-1 break-all text-xs font-semibold text-primary hover:underline"
+                  className="mt-1 flex items-center gap-1 break-all text-xs font-extrabold text-primary hover:underline"
                 >
                   <Copy className="size-3 shrink-0" /> {result.link}
                 </button>
               )}
             </div>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">
-            „Bearbeiter“ darf Anleitungen, Wissen & Branding bearbeiten. Konto/Abo bleiben dem Inhaber.
+          <p className="text-xs text-muted-foreground">
+            „Bearbeiter“ pflegen Anleitungen, Wissen und das Design der Hilfe-Seite. Das Team
+            verwalten nur „Inhaber“.
           </p>
-        </section>
+        </SettingsCard>
       )}
 
-      {/* Mitglieder */}
-      <section>
-        <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-          Mitglieder ({members.length})
-        </h3>
-        <div className="space-y-2">
+      <SettingsCard
+        title={`Mitglieder (${members.length})`}
+        icon={Users}
+        description={isOwner ? undefined : "Mitglieder einladen oder entfernen können nur Inhaber."}
+      >
+        <ul className="-mx-[18px] -mb-4 divide-y-2 divide-line-2 border-t-2 border-line-2">
           {members.map((m) => (
-            <div key={m.userId} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-primary">
+            <li key={m.userId} className="flex items-center gap-3 px-[18px] py-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-black text-coral-text">
                 {(m.email[0] ?? "?").toUpperCase()}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-ink">
-                  {m.email} {m.isYou && <span className="text-muted-foreground">(Sie)</span>}
-                </div>
+              <div className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                {m.email} {m.isYou && <span className="font-semibold text-muted-foreground">(Sie)</span>}
               </div>
-              <span className={roleBadge(m.role)}>{m.role === "owner" ? "Inhaber" : "Bearbeiter"}</span>
+              <RolePill role={m.role} />
               {isOwner && !m.isYou && (
                 <button
                   type="button"
@@ -148,30 +160,25 @@ export function TeamManager({
                         }
                       });
                   }}
-                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-no-soft hover:text-no"
-                  aria-label="Entfernen"
+                  className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-no-soft hover:text-no"
+                  aria-label={`${m.email} entfernen`}
                 >
                   <Trash2 className="size-4" />
                 </button>
               )}
-            </div>
+            </li>
           ))}
-        </div>
-      </section>
+        </ul>
+      </SettingsCard>
 
-      {/* Offene Einladungen */}
       {invitations.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            Offene Einladungen ({invitations.length})
-          </h3>
-          <div className="space-y-2">
+        <SettingsCard title={`Offene Einladungen (${invitations.length})`} icon={Mail}>
+          <ul className="-mx-[18px] -mb-4 divide-y-2 divide-line-2 border-t-2 border-line-2">
             {invitations.map((inv) => (
-              <div key={inv.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-border bg-card p-3">
-                <Mail className="size-4 text-muted-foreground" />
-                <span className="text-sm text-ink">{inv.email}</span>
-                <span className={roleBadge(inv.role)}>{inv.role === "owner" ? "Inhaber" : "Bearbeiter"}</span>
-                <div className="ml-auto flex items-center gap-1">
+              <li key={inv.id} className="flex flex-wrap items-center gap-2 px-[18px] py-3">
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{inv.email}</span>
+                <RolePill role={inv.role} />
+                <div className="flex items-center gap-1">
                   <Button variant="outline" size="sm" onClick={() => copy(inv.token)}>
                     <Copy className="size-4" /> Link
                   </Button>
@@ -191,10 +198,10 @@ export function TeamManager({
                     </Button>
                   )}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </SettingsCard>
       )}
     </div>
   );

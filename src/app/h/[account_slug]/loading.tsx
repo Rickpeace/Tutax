@@ -2,7 +2,7 @@
 // Brand-Variablen des persistenten Layouts (layout.tsx) — der Skeleton trägt also
 // bereits das Kunden-CI, statt Steply-Grau in fremde Designs zu blitzen.
 const tint = (pct: number) => ({
-  background: `color-mix(in srgb, var(--brand-ink, #101524) ${pct}%, transparent)`,
+  background: `color-mix(in srgb, var(--brand-ink, #33291f) ${pct}%, transparent)`,
 });
 
 export default function Loading() {

@@ -70,7 +70,7 @@ export async function createTutorial(formData: FormData) {
   const supabase = await createClient();
 
   if (await tutorialQuotaReached(supabase, account)) {
-    redirect("/app/settings/abo?limit=tutorials");
+    redirect("/app/settings/tarif?limit=tutorials");
   }
 
   const { data, error } = await supabase
@@ -169,7 +169,7 @@ export async function duplicateTutorial(id: string) {
   const supabase = await createClient();
 
   if (await tutorialQuotaReached(supabase, account)) {
-    redirect("/app/settings/abo?limit=tutorials");
+    redirect("/app/settings/tarif?limit=tutorials");
   }
 
   const { data: src, error: e1 } = await supabase

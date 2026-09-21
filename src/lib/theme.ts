@@ -1,5 +1,33 @@
 import type { CSSProperties } from "react";
 
+/**
+ * Standard-Farben der Hilfe-Seite (warmes Steply-Design, Handoff 07/2026) — EINE Quelle
+ * für Einstellungs-Formular, Vorschau und Viewer-Fallbacks. Muss zu den CSS-Defaults
+ * `--brand-accent/-soft/-bg/-ink` in `app/globals.css` (:root) passen, denn die echte
+ * Hilfe-Seite fällt ohne gespeicherte Farben auf genau diese Variablen zurück.
+ */
+export const DEFAULT_BRAND_COLORS = {
+  primary: "#ef6a4e",
+  background: "#fdf3ec",
+  surface: "#ffe8e2",
+  text: "#33291f",
+} as const;
+
+export type BrandColors = { primary: string; background: string; surface: string; text: string };
+
+/** Gespeicherte Farben (themes.tokens.colors) mit den Standard-Farben auffüllen. */
+export function brandColorsWithDefaults(tokens: unknown): BrandColors {
+  const c = ((tokens ?? {}) as { colors?: Record<string, unknown> }).colors ?? {};
+  const pick = (k: keyof BrandColors) =>
+    typeof c[k] === "string" && (c[k] as string).trim() ? (c[k] as string) : DEFAULT_BRAND_COLORS[k];
+  return {
+    primary: pick("primary"),
+    background: pick("background"),
+    surface: pick("surface"),
+    text: pick("text"),
+  };
+}
+
 type ThemeRow = {
   mode?: string | null;
   tokens?: unknown;
@@ -110,7 +138,7 @@ function darken(hex: string, amount: number): string | null {
 
 /**
  * Wandelt themes.tokens (§8) in CSS-Custom-Properties für den öffentlichen
- * Viewer/Hub. Nicht gesetzte Werte fallen auf die Indigo-Defaults (:root) zurück.
+ * Viewer/Hub. Nicht gesetzte Werte fallen auf die warmen Defaults (:root) zurück.
  */
 export function brandStyle(tokens: unknown): CSSProperties {
   const t = (tokens ?? {}) as {
@@ -136,10 +164,10 @@ export function brandStyle(tokens: unknown): CSSProperties {
 
   // Card-/Titel-Stil aus dem Design ableiten (outline | elevated | filled).
   // Fallbacks = warmes Steply-Standard-Theme (Handoff 07/2026).
-  const accent = (c.primary as string) || "#ef6a4e";
+  const accent = (c.primary as string) || DEFAULT_BRAND_COLORS.primary;
   const bg = (c.background as string) || "#ffffff";
-  const surface = (c.surface as string) || "#ffe8e2";
-  const ink = (c.text as string) || "#33291f";
+  const surface = (c.surface as string) || DEFAULT_BRAND_COLORS.surface;
+  const ink = (c.text as string) || DEFAULT_BRAND_COLORS.text;
   const border = (c.border as string) || "";
   const cardStyle = String(sh.cardStyle ?? "filled");
 

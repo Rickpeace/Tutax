@@ -128,7 +128,7 @@ export default function ExtensionPage() {
             <p className="mt-1 text-sm text-ink-2">
               Damit Aufnahmen automatisch in Ihrer Bibliothek landen, verbinden Sie die
               Extension einmal mit Ihrem Konto: in Steply unter{" "}
-              <b className="text-ink">Einstellungen → Einbetten → „Extension verbinden“</b>
+              <b className="text-ink">Einstellungen → Steply-Erweiterung → „Jetzt verbinden“</b>
               . Ein Klick genügt – kein Token-Kopieren.
             </p>
             <div className="mt-3">
@@ -136,9 +136,9 @@ export default function ExtensionPage() {
                 variant="outline"
                 size="sm"
                 nativeButton={false}
-                render={<Link href="/app/settings/einbetten" />}
+                render={<Link href="/app/settings/erweiterung" />}
               >
-                Zu den Einbetten-Einstellungen <ArrowRight className="size-4" />
+                Zu den Einstellungen der Erweiterung <ArrowRight className="size-4" />
               </Button>
             </div>
           </div>

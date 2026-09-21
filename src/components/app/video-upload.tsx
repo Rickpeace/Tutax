@@ -469,7 +469,7 @@ export function VideoUpload({
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Sie können das Fenster schließen – der Entwurf erscheint auf dem Dashboard.
+              Sie können das Fenster schließen – der Entwurf erscheint bei Ihren Anleitungen.
             </p>
           </div>
         )}
@@ -511,7 +511,7 @@ export function VideoUpload({
                 {okCount} {okCount === 1 ? "Video" : "Videos"} eingereiht 🎉
               </p>
               <p className="max-w-[22rem] text-xs text-muted-foreground">
-                Die Entwürfe erscheinen nacheinander auf dem Dashboard – der Dialog kann zu.
+                Die Entwürfe erscheinen nacheinander bei Ihren Anleitungen – der Dialog kann zu.
               </p>
               {errs.length > 0 && (
                 <div className="w-full space-y-1 rounded-lg border border-no/30 bg-no/5 p-2.5 text-left text-xs text-no">
