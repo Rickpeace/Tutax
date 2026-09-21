@@ -87,6 +87,21 @@ export type StepJump = {
   to_position: number;
 };
 
+// ── Erweiterte Interaktion (Welle 48, Migration 0036) ─────────────────────────
+// Was ein Schritt über „Klick"/„Eingabe" hinaus tut. Vertrag + Reiseweg: extension/content.js
+// (INTERACTION-Vertrag). Mensch (Text/Führung) UND Automation werten es aus.
+export type InteractionSelector = { css?: string; text?: string; role?: string; shadow?: string[] };
+export type StepInteraction = {
+  enter?: boolean; // Eingabe per Enter abgeschickt (nur type/fill)
+  variant?: "right" | "double" | "drag" | "key"; // Rechts-/Doppelklick, Ziehen, Tastenkürzel
+  key?: string; // variant key: Anzeige-Form „Ctrl+S"
+  drop?: InteractionSelector; // variant drag: Ablage-Ziel
+  dropLabel?: string;
+  hover?: InteractionSelector; // vorher mit der Maus über dieses Element (Menü öffnen)
+  hoverLabel?: string;
+  frame?: { url: string }; // Schritt liegt in einem iframe (origin+pathname)
+};
+
 export type Step = {
   id: string;
   tutorial_id: string;

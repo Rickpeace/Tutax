@@ -1248,6 +1248,10 @@ function addGuideStep(src, img) {
     // file_meta (Welle 39, Datei-Brücke): {role:'download'|'upload', …} — NUR Metadaten.
     // Download wird per guideMatchDownloads nachträglich gesetzt; Upload kommt hier mit.
     fileMeta: src.fileMeta && typeof src.fileMeta === "object" ? src.fileMeta : null,
+    // interaction (Welle 48): Enter/Rechtsklick/Doppelklick/Ziehen/Kuerzel/Hover/iframe —
+    // Vertrag s. content.js. Nur ein Objekt durchreichen; der Server validiert streng.
+    interaction:
+      src.interaction && typeof src.interaction === "object" ? src.interaction : null,
     ts: src.ts || Date.now(),
     blob: img.blob,
     width: img.width,
@@ -1488,6 +1492,8 @@ async function uploadGuide() {
     // condition (Welle 42): „nur ausführen, wenn Element vorhanden" — additiv, alte Server
     // ignorieren es. Der Server (guide.ts) validiert tolerant und persistiert steps.condition.
     if (s.condition && typeof s.condition === "object") step.condition = s.condition;
+    // interaction (Welle 48): additiv, alte Server ignorieren es.
+    if (s.interaction && typeof s.interaction === "object") step.interaction = s.interaction;
     return step;
   });
   // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.

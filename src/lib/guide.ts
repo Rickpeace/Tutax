@@ -7,7 +7,7 @@
 // Vorlagen-Texte, KEINE OpenAI/Storage-Aufrufe (die machen die Routen). So bleibt sie
 // leicht testbar und die Regeln liegen an EINER Stelle.
 import "server-only";
-import type { Highlight, StepCondition, StepJump } from "@/lib/types";
+import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -25,7 +25,11 @@ export type GuideSelector = {
   css?: string; // kürzester eindeutiger CSS-Pfad (<=400), OHNE generierte Klassennamen
   text?: string; // sichtbarer Kurztext (<=80)
   role?: string; // implizite/explizite ARIA-Rolle (<=40)
+  shadow?: string[]; // Welle 48: Shadow-Host-Kette (außen→innen); css/text/role gelten darin
 };
+
+const SHADOW_DEPTH_MAX = 5;
+const INTERACTION_VARIANTS = ["right", "double", "drag", "key"] as const;
 
 // Ein normalisiertes sensibles Rechteck (Auto-Schwärzung, Welle 28) – wie rect, 0..1.
 export type SensitiveRect = { x: number; y: number; w: number; h: number };
@@ -62,6 +66,7 @@ export type GuideStepInput = {
   file_meta?: GuideFileMeta; // optional; Datei-Brücke (Welle 39), abwärtskompatibel
   condition?: StepCondition; // optional; bedingte Schritte (Welle 42), abwärtskompatibel
   jump?: StepJump; // optional; bedingter Sprung/Block-Überspringen (Welle 47), abwärtskompatibel
+  interaction?: StepInteraction; // optional; Welle 48 (Enter/Rechtsklick/…), abwärtskompatibel
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -155,7 +160,61 @@ export function validateSelector(raw: unknown): GuideSelector | undefined {
   if (css) out.css = css;
   if (text) out.text = text;
   if (role) out.role = role;
+  // shadow (Welle 48): CSS-Pfade der Shadow-Hosts von außen nach innen; css/text/role gelten
+  // dann innerhalb des innersten Shadow-Roots. Nur mit Inhalt sinnvoll.
+  if (Array.isArray(r.shadow)) {
+    const hosts = r.shadow
+      .slice(0, SHADOW_DEPTH_MAX)
+      .map((h) => cleanSelectorString(h, SEL_CSS_MAX))
+      .filter((h): h is string => !!h);
+    if (hosts.length && hosts.length === Math.min(r.shadow.length, SHADOW_DEPTH_MAX)) {
+      out.shadow = hosts;
+    }
+  }
   return out.css || out.text || out.role ? out : undefined;
+}
+
+/**
+ * TOLERANTE Validierung der optionalen `interaction` (Welle 48, Vertrag s. extension/content.js):
+ * Enter nach Eingabe, Rechts-/Doppelklick, Ziehen, Tastenkürzel, Hover-Menü, iframe. Nur
+ * bekannte Keys überleben, Strings gekappt; kaputt/leer → undefined. Wirft NIE.
+ */
+export function validateInteraction(raw: unknown, action: GuideAction): StepInteraction | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: StepInteraction = {};
+  if (r.enter === true && action === "type") out.enter = true;
+  if (action === "click" && typeof r.variant === "string" && INTERACTION_VARIANTS.includes(r.variant as never)) {
+    const variant = r.variant as NonNullable<StepInteraction["variant"]>;
+    if (variant === "key") {
+      const key = cleanSelectorString(r.key, 40);
+      if (key) {
+        out.variant = "key";
+        out.key = key;
+      }
+    } else if (variant === "drag") {
+      const drop = validateSelector(r.drop);
+      if (drop) {
+        out.variant = "drag";
+        out.drop = drop;
+        const dl = cleanSelectorString(r.dropLabel, LABEL_MAX);
+        if (dl) out.dropLabel = dl;
+      }
+    } else {
+      out.variant = variant;
+    }
+  }
+  const hover = validateSelector(r.hover);
+  if (hover) {
+    out.hover = hover;
+    const hl = cleanSelectorString(r.hoverLabel, LABEL_MAX);
+    if (hl) out.hoverLabel = hl;
+  }
+  if (r.frame && typeof r.frame === "object" && !Array.isArray(r.frame)) {
+    const url = cleanSelectorString((r.frame as Record<string, unknown>).url, 500);
+    if (url && /^https?:\/\//i.test(url)) out.frame = { url };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /**
@@ -354,6 +413,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const condition = validateStepCondition(s.condition);
     // jump (Welle 47): optionaler bedingter Sprung/Block-Überspringen, tolerant. Fehlt/kaputt -> weg.
     const jump = validateStepJump(s.jump);
+    // interaction (Welle 48): optional, tolerant validiert. Fehlt/kaputt -> weg.
+    const interaction = validateInteraction(s.interaction, action);
 
     out.push({
       path,
@@ -369,6 +430,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       ...(fileMeta ? { file_meta: fileMeta } : {}),
       ...(condition ? { condition } : {}),
       ...(jump ? { jump } : {}),
+      ...(interaction ? { interaction } : {}),
     });
   }
   return out;
@@ -439,7 +501,12 @@ export function templateBodyText(
     return `${context}Klicken Sie auf „${step.label}“ — dabei wird eine Datei heruntergeladen.`;
   }
   if (step.action === "type" && step.label) {
-    return `${context}Tragen Sie hier „${step.label}“ ein.`;
+    return step.interaction?.enter
+      ? `${context}Tragen Sie hier „${step.label}“ ein und bestätigen Sie mit Enter.`
+      : `${context}Tragen Sie hier „${step.label}“ ein.`;
+  }
+  if (step.action === "type" && step.interaction?.enter) {
+    return `${context}Tragen Sie hier Ihre Eingabe ein und bestätigen Sie mit Enter.`;
   }
   if (step.label) {
     return `${context}Klicken Sie auf „${step.label}“, um fortzufahren.`;

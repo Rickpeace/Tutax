@@ -29,6 +29,28 @@
   if (window.__steplyRecorderInstalled) return;
   window.__steplyRecorderInstalled = true;
 
+  // Hauptfenster oder iframe? Das Script laeuft (Welle 48) in ALLEN Frames einer Seite. Nur das
+  // Hauptfenster (IS_TOP) bedient Pairing/Marker-Nachrichten und Schritte OHNE Frame-Angabe;
+  // iframes nehmen auf und bedienen nur Schritte, deren interaction.frame zu ihnen passt.
+  let IS_TOP = true;
+  try {
+    IS_TOP = window.top === window;
+  } catch (err) {
+    IS_TOP = false;
+  }
+
+  // ---- INTERACTION-Vertrag (Welle 48) ---------------------------------------------------
+  // Optionales Objekt step.interaction — alles, was ueber „Klick"/„Eingabe" hinausgeht. Reist
+  // content.js -> panel.js -> guide-complete -> steps.interaction (jsonb) -> automation_steps
+  // .interaction -> Plan -> steply-exec-step / steply-guide-show zurueck an content.js:
+  //   enter:   true                           Eingabe per Enter abgeschickt (nur action "type")
+  //   variant: "right"|"double"|"drag"|"key"  Rechtsklick / Doppelklick / Ziehen / Tastenkuerzel
+  //   key:     "Ctrl+S"                       nur variant "key": Anzeige-Form (Ctrl/Alt/Shift/Meta+Taste)
+  //   drop:    {css,text,role}, dropLabel     nur variant "drag": Ablage-Ziel
+  //   hover:   {css,text,role}, hoverLabel    vorher mit der Maus ueber dieses Element (Menue)
+  //   frame:   {url}                          Schritt liegt in einem iframe (origin+pathname)
+  // NIE Feldinhalte. Unbekannte Schluessel verwirft der Server.
+
   // ---- Erkennungs-Marker fuer App-Seiten (Welle 25) ------------------------
   // FRUEH (document_start) ein DOM-Attribut setzen, damit App-Seiten erkennen, dass die
   // Extension installiert ist. WICHTIG: Content-Script und Seite laufen in getrennten
@@ -849,7 +871,7 @@
   // Einen Schritt (Klick oder Eingabe) an das Panel senden. Die Seitenleiste macht darauf
   // SOFORT einen Screenshot. Der Klick-Puls (lastClickPx) wird erst NACH der Bestaetigung
   // gezeichnet, damit er nie mit im Bild landet. cx/cy optional (Fallback-Kreis).
-  function emitStep(el, action, cx, cy) {
+  function emitStep(el, action, cx, cy, enter) {
     const geo = rectOf(el);
     lastClickPx = {
       left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
@@ -864,6 +886,8 @@
       selector: selectorFor(el),
       ts: Date.now(),
     };
+    // Eingabe wurde mit Enter abgeschickt (Google-Suche o. ae.) — s. INTERACTION-Vertrag oben.
+    if (enter === true) step.interaction = { enter: true };
     // Auto-Schwaerzung (Welle 28): nur GEOMETRIE sichtbarer sensibler Felder, additiv.
     const sensitive = collectSensitiveRects();
     if (sensitive.length) step.sensitive = sensitive;
@@ -982,6 +1006,63 @@
     };
   }
   document.addEventListener("focusin", onFocusIn, true);
+
+  // Feld nachtraeglich uebernehmen, wenn es fokussiert wurde, BEVOR die Aufnahme scharf war
+  // (Google setzt den Cursor schon beim Laden ins Suchfeld -> kein focusin fuer uns).
+  // unknownStart: der Startwert ist unbekannt (es wurde schon getippt) -> „leer" annehmen.
+  function adoptEditable(el, unknownStart) {
+    const info = editableInfo(el);
+    if (!info.editable) return null;
+    if (focusedEditable && focusedEditable.el === info.control) return focusedEditable;
+    focusedEditable = {
+      el: info.control,
+      kind: info.kind,
+      startValue: unknownStart
+        ? (info.kind === "rich" ? "len:0" : "")
+        : fieldSnapshot(info.control, info.kind),
+      settled: false,
+    };
+    return focusedEditable;
+  }
+
+  // input: Tippen in ein nicht erfasstes Feld (s. o.) -> jetzt uebernehmen.
+  function onInput(event) {
+    if (!recording || mode !== "guide") return;
+    if (focusedEditable && focusedEditable.el === event.target) return;
+    adoptEditable(event.target, true);
+  }
+  document.addEventListener("input", onInput, true);
+
+  // Schickt Enter in diesem Feld typischerweise ab? Einzeilige Felder ja; ein textarea nur,
+  // wenn es sich als Such-/Kombifeld ausweist (Google-Suche ist ein textarea) — in einem
+  // normalen mehrzeiligen Feld ist Enter ein Zeilenumbruch.
+  function enterSubmits(fe) {
+    const el = fe.el;
+    const tag = (el.tagName || "").toLowerCase();
+    if (tag === "input") return fe.kind === "text" || fe.kind === "password";
+    if (tag !== "textarea") return false;
+    const role = ((el.getAttribute && el.getAttribute("role")) || "").toLowerCase();
+    if (role === "combobox" || role === "searchbox") return true;
+    if (el.getAttribute && el.getAttribute("aria-autocomplete")) return true;
+    try {
+      return !!(el.closest && el.closest('[role="search"], form[action*="search"]'));
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // keydown Enter: die Seite schickt gleich ab und navigiert weg — blur kommt dann NIE. Den
+  // Eingabe-Schritt darum JETZT melden (Screenshot zeigt noch das ausgefuellte Feld). Auch ein
+  // Enter ohne Aenderung (vorbefuelltes Feld abschicken) ist ein echter Schritt.
+  function onKeyDown(event) {
+    if (!recording || mode !== "guide") return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    const fe = adoptEditable(event.target, false);
+    if (!fe || fe.settled || !enterSubmits(fe)) return;
+    fe.settled = true;
+    emitStep(fe.el, "type", null, null, true);
+  }
+  document.addEventListener("keydown", onKeyDown, true);
 
   // focusout: verlaesst man ein Feld mit GEAENDERTEM Wert, einen „type"-Schritt senden. Der
   // Screenshot entsteht damit NACH der Eingabe und zeigt das ausgefuellte Feld (gewollt).
@@ -2819,6 +2900,10 @@
       startEpoch = rec.startedAt;
       mode = rec.mode === "guide" ? "guide" : "video";
       recording = true;
+      // Ist beim Start schon ein Feld fokussiert (Google-Suchfeld), gleich uebernehmen.
+      if (mode === "guide" && !focusedEditable && document.activeElement) {
+        adoptEditable(document.activeElement, false);
+      }
     } else {
       recording = false;
     }

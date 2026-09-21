@@ -4,6 +4,12 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
+- [ ] **EINGABE + ENTER testen (Extension → v2.16.1, 21.09.2026):** Sofort-Anleitung
+  starten → google.de → Suchbegriff tippen → Enter → Treffer anklicken. Erwartet: ein
+  Schritt „Suche“ (Screenshot mit ausgefülltem Suchfeld, Text „…und bestätigen Sie mit
+  Enter“), danach der Klick-Schritt. Vorher ging die Eingabe komplett verloren (Feld war
+  schon beim Laden fokussiert + Enter navigiert ohne blur). Beweis: `node scripts/test-guide-enter.mjs`.
+
 - [ ] **DATEI-BRÜCKE testen (Extension → v2.10.0):** Der Steuerberater-Kernfall.
   Sofort-Aufnahme: im Abrechnungsportal Beleg-Download klicken (Schritt bekommt 📥)
   → zu DATEV Unternehmen online → Datei im Upload-Feld wählen (Schritt wird 📤,
