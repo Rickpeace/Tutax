@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { publicImageUrl } from "@/lib/public-image";
 import type { Tutorial } from "@/lib/types";
 import { LibraryBrowser, type LibraryCategory } from "@/components/app/library-browser";
 import type { LibraryTutorial } from "@/components/app/tutorial-card";
@@ -68,39 +67,19 @@ export default async function DashboardPage() {
   // Eigene Tutorials ohne Forks (Forks erscheinen als Vorlagen-Eintrag)
   const own = allOwn.filter((t) => !forkIds.has(t.id));
 
-  // Schritt-Zahl + Thumbnail (erstes Schritt-Bild) pro Anleitung:
-  // EINE Query für ALLE eigenen Anleitungen (kein N+1), nach position sortiert.
-  const thumbById = new Map<string, string>();
+  // Schritt-Zahl pro Anleitung: EINE Query für ALLE eigenen Anleitungen (kein N+1).
+  // (Welle 49: keine Vorschaubilder mehr — Richards Wahl: Titel im Kategorie-Farbfeld.)
   const stepCountById = new Map<string, number>();
   const ownIds = own.map((t) => t.id);
   if (ownIds.length) {
     const admin = createAdminClient();
     const { data: stepRows } = await admin
       .from("steps")
-      .select("tutorial_id, image_path, position")
-      .in("tutorial_id", ownIds)
-      .order("position", { ascending: true });
-    const firstPath = new Map<string, string>();
+      .select("tutorial_id")
+      .in("tutorial_id", ownIds);
     for (const r of stepRows ?? []) {
       stepCountById.set(r.tutorial_id, (stepCountById.get(r.tutorial_id) ?? 0) + 1);
-      if (r.image_path && !firstPath.has(r.tutorial_id)) {
-        firstPath.set(r.tutorial_id, r.image_path);
-      }
     }
-    // Published → öffentliche URL; Entwurf → signierte URL (privater Bucket), parallel.
-    const statusById = new Map(own.map((t) => [t.id, t.status]));
-    const resolved = await Promise.all(
-      [...firstPath.entries()].map(async ([tutorialId, path]) => {
-        if (statusById.get(tutorialId) === "published") {
-          return [tutorialId, publicImageUrl(path)] as const;
-        }
-        const { data } = await admin.storage
-          .from("tutorial-images")
-          .createSignedUrl(path, 3600);
-        return [tutorialId, data?.signedUrl ?? null] as const;
-      }),
-    );
-    for (const [id, url] of resolved) if (url) thumbById.set(id, url);
   }
 
   // Standard-Anleitungen (Vorlagen)
@@ -142,7 +121,8 @@ export default async function DashboardPage() {
     slug: t.slug ?? null,
     freshness: t.freshness ?? null,
     stepCount: stepCountById.get(t.id) ?? 0,
-    thumbnailUrl: thumbById.get(t.id) ?? null,
+    // Website der Anleitung (Sofort-Aufnahme sät sie, im Builder „Gilt für Website").
+    siteDomain: Array.isArray(t.site_domains) && t.site_domains[0] ? t.site_domains[0] : null,
   }));
 
   const browserCats: LibraryCategory[] = cats.map((c) => ({ id: c.id, name: c.name }));

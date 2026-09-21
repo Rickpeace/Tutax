@@ -15,8 +15,8 @@ import {
   Lock,
   Film,
   Zap,
+  Globe,
 } from "lucide-react";
-import { HelpToggle } from "@/components/app/help-toggle";
 import { useCleanup } from "@/components/app/bulk-cleanup";
 import { VideoExport } from "@/components/app/video-export";
 import {
@@ -36,7 +36,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { relativeDe } from "@/lib/format";
-import { categoryColor, categoryStripes, CATEGORY_NEUTRAL } from "@/lib/category-colors";
+import {
+  categoryColor,
+  categoryStripes,
+  CATEGORY_NEUTRAL,
+  type CategoryColor,
+} from "@/lib/category-colors";
 import {
   deleteTutorial,
   duplicateTutorial,
@@ -46,7 +51,7 @@ import {
 } from "@/app/app/actions";
 import { createAutomationFromTutorial } from "@/app/app/automationen/actions";
 
-/** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte). */
+/** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte/Zeile). */
 export type LibraryTutorial = {
   id: string;
   title: string;
@@ -59,24 +64,30 @@ export type LibraryTutorial = {
   slug: string | null;
   freshness: string | null;
   stepCount: number;
-  thumbnailUrl: string | null;
+  /** Website, auf der die Anleitung spielt (erste tutorials.site_domains) — sonst null. */
+  siteDomain: string | null;
 };
 
+export type TutorialLayout = "card" | "row";
+
 /**
- * Bibliotheks-Karte (Design 2a): Streifen-Thumbnail im Kategorie-Pastell
- * (oder echtes Schritt-Bild) mit Kategorie-/Bereichs-Chips, darunter Titel,
- * Meta und Fußzeile mit Status-Chip. Funktionalität wie gehabt: optimistischer
- * Publish-Toggle, Kontextmenü (Umbenennen/Duplizieren/QR/Export/Löschen),
- * Aufräum-Modus als Auswahl-Fläche.
+ * Eine Anleitung in der Bibliothek (Welle 49, nach Richards Auswahl aus den Varianten):
+ *  - layout "card": Kopf-Feld in der Kategorie-Farbe mit TITEL + Website, darunter Kategorie
+ *    (+ „Intern" nur als Ausnahme), Schritte · Datum und EIN Status-Schalter.
+ *  - layout "row": Listenzeile (Titel · Website · Schritte · Geändert · Status · Menü).
+ * Beide teilen Zustand, Menü und Dialoge: optimistischer Veröffentlichen-Schalter, Kontextmenü
+ * (Umbenennen/Duplizieren/QR/Export/Automation/Löschen), Aufräum-Modus als Auswahl-Fläche.
  */
 export function TutorialCard({
   tutorial,
   accountSlug,
   categoryName,
+  layout = "card",
 }: {
   tutorial: LibraryTutorial;
   accountSlug: string;
   categoryName: string | null;
+  layout?: TutorialLayout;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -85,7 +96,7 @@ export function TutorialCard({
   const [exportOpen, setExportOpen] = useState(false);
   const [title, setTitle] = useState(tutorial.title);
 
-  // Optimistischer „Auf Hilfe-Seite"-Zustand (= veröffentlicht).
+  // Optimistischer Veröffentlicht-Zustand.
   const [live, setLive] = useState(tutorial.status === "published");
   // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: optimistischen live-Zustand mit neuem Server-Status resyncen, kein Cascade
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
@@ -94,7 +105,7 @@ export function TutorialCard({
 
   const color = categoryName ? categoryColor(categoryName) : CATEGORY_NEUTRAL;
 
-  // Bulk-Aufräumen: im Aufräum-Modus wird die Karte zur Auswahl-Fläche.
+  // Bulk-Aufräumen: im Aufräum-Modus wird Karte/Zeile zur Auswahl-Fläche.
   const cleanup = useCleanup();
   const cleanupActive = cleanup?.active ?? false;
   const checked = cleanup?.isSelected(tutorial.id) ?? false;
@@ -168,236 +179,42 @@ export function TutorialCard({
     }
   };
 
-  return (
-    <div
-      className={`group relative flex flex-col overflow-hidden rounded-card border-2 bg-card transition-colors ${
-        cleanupActive
-          ? checked
-            ? "border-primary ring-2 ring-primary/25"
-            : "border-line"
-          : "border-line hover:border-[#e3d7c2]"
-      }`}
-      data-pending={pending}
+  const editHref = `/app/tutorials/${tutorial.id}`;
+  const statusSwitch = (
+    <StatusSwitch on={live} internal={internal} onToggle={toggleLive} compact={layout === "row"} />
+  );
+  const menu = (
+    <TutorialMenu
+      tutorial={tutorial}
+      accountSlug={accountSlug}
+      live={live}
+      internal={internal}
+      onExport={() => setExportOpen(true)}
+      onRename={() => setRenameOpen(true)}
+      onDuplicate={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
+      onAutomation={convertToAutomation}
+      onDelete={() => setDeleteOpen(true)}
+    />
+  );
+  const selectOverlay = cleanupActive && (
+    <button
+      type="button"
+      onClick={() => cleanup?.toggle(tutorial.id)}
+      aria-pressed={checked}
+      aria-label={`${tutorial.title} ${checked ? "abwählen" : "auswählen"}`}
+      className={`absolute inset-0 z-10 cursor-pointer ${layout === "card" ? "rounded-card" : ""}`}
     >
-      {/* Aufräum-Modus: ganze Karte wird zur Auswahl-Fläche (Links deaktiviert). */}
-      {cleanupActive && (
-        <button
-          type="button"
-          onClick={() => cleanup?.toggle(tutorial.id)}
-          aria-pressed={checked}
-          aria-label={`${tutorial.title} ${checked ? "abwählen" : "auswählen"}`}
-          className="absolute inset-0 z-10 cursor-pointer rounded-card"
-        >
-          <span
-            className={`absolute left-2 top-2 flex size-6 items-center justify-center rounded-md border-2 ${
-              checked ? "border-primary bg-primary text-white" : "border-line bg-card"
-            }`}
-          >
-            {checked && <Check className="size-4" />}
-          </span>
-        </button>
-      )}
-
-      {/* Thumbnail: erstes Schritt-Bild oder Kategorie-Streifen */}
-      <Link
-        href={`/app/tutorials/${tutorial.id}`}
-        aria-label={`${tutorial.title} bearbeiten`}
-        className="relative block h-[110px] w-full overflow-hidden"
-        style={
-          tutorial.thumbnailUrl ? undefined : { background: categoryStripes(color) }
-        }
+      <span
+        className={`absolute flex size-6 items-center justify-center rounded-md border-2 ${
+          layout === "card" ? "left-2 top-2" : "left-2 top-1/2 -translate-y-1/2"
+        } ${checked ? "border-primary bg-primary text-white" : "border-line bg-card"}`}
       >
-        {tutorial.thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={tutorial.thumbnailUrl}
-            alt=""
-            className="size-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <span
-            className="absolute inset-0 grid place-items-center font-mono text-[9.5px]"
-            style={{ color: color.deep }}
-            aria-hidden
-          >
-            noch kein screenshot
-          </span>
-        )}
-        {categoryName && (
-          <span
-            className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-card px-2 py-[3px] text-[10px] font-extrabold"
-            style={{ color: color.text }}
-          >
-            <span
-              aria-hidden
-              className="size-1.5 rounded-full"
-              style={{ background: color.solid }}
-            />
-            {categoryName}
-          </span>
-        )}
-        <span
-          className={`absolute right-2 top-2 flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-extrabold ${
-            internal
-              ? "border-[1.5px] border-line bg-card text-ink-2"
-              : "bg-ink text-background"
-          }`}
-          title={
-            internal
-              ? "Interne Anleitung – nur für das Team sichtbar"
-              : "Für Kunden auf der Hilfe-Seite"
-          }
-        >
-          {internal ? (
-            <>
-              <Lock className="size-2.5" /> Intern
-            </>
-          ) : (
-            "Kunde"
-          )}
-        </span>
-      </Link>
-
-      {/* Body */}
-      <div className="flex min-w-0 flex-1 flex-col px-3.5 pb-3 pt-3">
-        <div className="flex items-start gap-2">
-          <Link href={`/app/tutorials/${tutorial.id}`} className="min-w-0 flex-1">
-            <h3 className="line-clamp-2 break-words text-sm font-extrabold leading-[1.3] text-ink group-hover:text-primary">
-              {tutorial.title}
-            </h3>
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="-mr-1 -mt-0.5 shrink-0 text-faint hover:text-ink"
-                  aria-label="Aktionen"
-                >
-                  <MoreVertical className="size-4" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
-                <FileText className="size-4" /> Bearbeiten
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href={
-                      internal
-                        ? `/app/lernen/${tutorial.id}`
-                        : `/app/preview/${tutorial.id}`
-                    }
-                    target={internal ? undefined : "_blank"}
-                  />
-                }
-              >
-                <Eye className="size-4" /> Ansehen
-              </DropdownMenuItem>
-              {live && !internal && tutorial.slug && (
-                <DropdownMenuItem
-                  render={
-                    <Link href={`/h/${accountSlug}/${tutorial.slug}`} target="_blank" />
-                  }
-                >
-                  <ExternalLink className="size-4" /> Live-Seite öffnen
-                </DropdownMenuItem>
-              )}
-              {live && !internal && tutorial.slug && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    const url = `${window.location.origin}/h/${accountSlug}/${tutorial.slug}`;
-                    window.open(
-                      `/api/qr?url=${encodeURIComponent(url)}`,
-                      "_blank",
-                      "noopener,noreferrer",
-                    );
-                  }}
-                >
-                  <QrCode className="size-4" /> QR-Code öffnen
-                </DropdownMenuItem>
-              )}
-              {live && !internal && tutorial.slug && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setExportOpen(true);
-                  }}
-                >
-                  <Film className="size-4" /> Als Video exportieren
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                Umbenennen
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
-              >
-                Duplizieren
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={convertToAutomation}>
-                <Zap className="size-4" /> Als Automation nutzen
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
-                Löschen
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <p className="mt-1 text-xs font-semibold text-faint">
-          {tutorial.stepCount} Schritt{tutorial.stepCount === 1 ? "" : "e"} ·{" "}
-          {relativeDe(tutorial.updatedAt)}
-          {tutorial.description ? (
-            <span className="block truncate">{tutorial.description}</span>
-          ) : null}
-        </p>
-
-        {/* Fußzeile: Status-Chip + Prüfen-Hinweis + Publish-Toggle */}
-        <div className="mt-auto flex items-center gap-1.5 pt-2.5 text-[11px] font-extrabold">
-          <span
-            className={`rounded-full px-2.5 py-[3px] ${
-              live ? "bg-teal-soft text-teal-text" : "bg-amber-soft text-amber-text"
-            }`}
-          >
-            {live ? (internal ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
-          </span>
-          {stale && (
-            <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-[3px] text-accent-foreground">
-              <AlertTriangle className="size-3" /> Prüfen
-            </span>
-          )}
-          <span className="ml-auto">
-            <HelpToggle
-              on={live}
-              onToggle={toggleLive}
-              label={internal ? "Fürs Team" : "Auf Hilfe-Seite"}
-            />
-          </span>
-        </div>
-      </div>
-
-      {/* Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich
-          veröffentlichte). empty:hidden: ohne sichtbaren Inhalt darf der Wrapper
-          kein Phantom-Padding erzeugen — sonst sitzt die Fußzeile dieser Karten
-          höher als bei den anderen. */}
-      {live && !internal && tutorial.slug && (
-        <div className="px-3.5 pb-3 empty:hidden">
-          <VideoExport
-            tutorialId={tutorial.id}
-            open={exportOpen}
-            onOpenChange={setExportOpen}
-          />
-        </div>
-      )}
-
+        {checked && <Check className="size-4" />}
+      </span>
+    </button>
+  );
+  const dialogs = (
+    <>
       {/* Umbenennen */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-md">
@@ -449,6 +266,283 @@ export function TutorialCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+  // Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte).
+  // empty:hidden: ohne sichtbaren Inhalt darf der Wrapper kein Phantom-Padding erzeugen.
+  const videoExport = live && !internal && tutorial.slug && (
+    <div className={layout === "card" ? "px-3.5 pb-3 empty:hidden" : "px-4 pb-2.5 empty:hidden"}>
+      <VideoExport tutorialId={tutorial.id} open={exportOpen} onOpenChange={setExportOpen} />
     </div>
+  );
+
+  if (layout === "row") {
+    return (
+      <div
+        className={`group relative border-t-2 border-line-2 transition-colors ${
+          cleanupActive && checked ? "bg-accent/50" : "hover:bg-[#fffcf7]"
+        } ${cleanupActive ? "pl-8" : ""}`}
+        data-pending={pending}
+      >
+        {selectOverlay}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2.5 md:grid-cols-[minmax(0,1fr)_190px_90px_110px_150px_32px] md:gap-4">
+          <div className="min-w-0">
+            <Link href={editHref} className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-extrabold text-ink group-hover:text-primary">
+                {tutorial.title}
+              </span>
+              {internal && <InternBadge />}
+              {stale && <StaleBadge />}
+            </Link>
+            {tutorial.description && (
+              <p className="truncate text-xs font-semibold text-faint">{tutorial.description}</p>
+            )}
+          </div>
+          <span className="hidden min-w-0 md:block">
+            <SiteLabel domain={tutorial.siteDomain} />
+          </span>
+          <span className="hidden text-xs font-bold tabular-nums text-muted-foreground md:block">
+            {stepsLabel(tutorial.stepCount)}
+          </span>
+          <span className="hidden text-xs font-bold text-muted-foreground md:block">
+            {relativeDe(tutorial.updatedAt)}
+          </span>
+          {statusSwitch}
+          {menu}
+        </div>
+        {videoExport}
+        {dialogs}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`group relative flex flex-col overflow-hidden rounded-card border-2 bg-card transition-colors ${
+        cleanupActive
+          ? checked
+            ? "border-primary ring-2 ring-primary/25"
+            : "border-line"
+          : "border-line hover:border-[#e3d7c2]"
+      }`}
+      data-pending={pending}
+    >
+      {selectOverlay}
+
+      {/* Kopf-Feld in der Kategorie-Farbe: Titel + Website (Richards Wahl, Welle 49). */}
+      <div
+        className="flex flex-col gap-2.5 border-b-2 border-line px-4 pb-3.5 pt-3"
+        style={{ background: categoryStripes(color, 12) }}
+      >
+        <div className="flex items-start gap-2">
+          <Link href={editHref} className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 min-h-[2.6em] break-words text-[17px] font-black leading-[1.3] text-ink [text-wrap:balance] group-hover:text-primary">
+              {tutorial.title}
+            </h3>
+          </Link>
+          {menu}
+        </div>
+        <SiteLabel domain={tutorial.siteDomain} pill />
+      </div>
+
+      {/* Body */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 px-4 pb-3 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <CategoryLabel name={categoryName} color={color} />
+          {internal && <InternBadge />}
+          {stale && <StaleBadge />}
+        </div>
+        <p className="text-xs font-bold text-muted-foreground">
+          {stepsLabel(tutorial.stepCount)} · {relativeDe(tutorial.updatedAt)}
+        </p>
+        {tutorial.description && (
+          <p className="truncate text-xs font-semibold text-faint">{tutorial.description}</p>
+        )}
+        <div className="mt-auto border-t-2 border-line-2 pt-2.5">{statusSwitch}</div>
+      </div>
+
+      {videoExport}
+      {dialogs}
+    </div>
+  );
+}
+
+const stepsLabel = (n: number) => `${n} Schritt${n === 1 ? "" : "e"}`;
+
+/** Website der Anleitung (aus der Aufnahme bzw. „Gilt für Website"); ohne → nichts/Strich. */
+function SiteLabel({ domain, pill }: { domain: string | null; pill?: boolean }) {
+  // Karte ohne Website: Platz trotzdem halten, sonst stehen die Farbfelder einer Reihe ungleich.
+  if (!domain) {
+    return pill ? <span aria-hidden className="h-6" /> : <span className="text-xs font-bold text-faint">–</span>;
+  }
+  return (
+    <span
+      className={`flex min-w-0 max-w-full items-center gap-1.5 text-xs font-extrabold text-ink-2 ${
+        pill ? "self-start rounded-full bg-card/90 px-2.5 py-1" : ""
+      }`}
+      title={domain}
+    >
+      <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="truncate">{domain}</span>
+    </span>
+  );
+}
+
+function CategoryLabel({ name, color }: { name: string | null; color: CategoryColor }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-extrabold text-ink-2">
+      <span aria-hidden className="size-2 rounded-full" style={{ background: color.solid }} />
+      {name ?? "Sonstiges"}
+    </span>
+  );
+}
+
+/** Nur die AUSNAHME wird markiert: „Intern" (Kunden-Anleitungen sind der Normalfall). */
+function InternBadge() {
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1 rounded-full bg-violet-soft px-2 py-[2px] text-[11px] font-black text-violet-text"
+      title="Interne Anleitung – nur für das Team sichtbar"
+    >
+      <Lock className="size-2.5" /> Intern
+    </span>
+  );
+}
+
+function StaleBadge() {
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-[2px] text-[11px] font-extrabold text-accent-foreground">
+      <AlertTriangle className="size-3" /> Prüfen
+    </span>
+  );
+}
+
+/** EIN Status-Schalter statt Etikett + Schalter: Regler + „Veröffentlicht"/„Entwurf". */
+function StatusSwitch({
+  on,
+  internal,
+  onToggle,
+  compact,
+}: {
+  on: boolean;
+  internal: boolean;
+  onToggle: () => void;
+  /** Listenzeile: Beschriftung erst ab sm (mobil fehlt der Platz). */
+  compact?: boolean;
+}) {
+  const label = on ? (internal ? "Freigegeben" : "Veröffentlicht") : "Entwurf";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className="flex items-center gap-2 text-xs font-extrabold"
+      title={internal ? "Für das Team freigeben" : "Auf der Hilfe-Seite veröffentlichen"}
+    >
+      <span
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-teal" : "bg-[#e3d7c2]"}`}
+      >
+        <span
+          className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}
+        />
+      </span>
+      <span className={`${compact ? "hidden sm:inline" : ""} ${on ? "text-teal-text" : "text-muted-foreground"}`}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function TutorialMenu({
+  tutorial,
+  accountSlug,
+  live,
+  internal,
+  onExport,
+  onRename,
+  onDuplicate,
+  onAutomation,
+  onDelete,
+}: {
+  tutorial: LibraryTutorial;
+  accountSlug: string;
+  live: boolean;
+  internal: boolean;
+  onExport: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onAutomation: () => void;
+  onDelete: () => void;
+}) {
+  const publicLive = live && !internal && !!tutorial.slug;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="-mr-1 -mt-0.5 shrink-0 text-muted-foreground hover:text-ink"
+            aria-label="Aktionen"
+          >
+            <MoreVertical className="size-4" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
+          <FileText className="size-4" /> Bearbeiten
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          render={
+            <Link
+              href={internal ? `/app/lernen/${tutorial.id}` : `/app/preview/${tutorial.id}`}
+              target={internal ? undefined : "_blank"}
+            />
+          }
+        >
+          <Eye className="size-4" /> Ansehen
+        </DropdownMenuItem>
+        {publicLive && (
+          <DropdownMenuItem
+            render={<Link href={`/h/${accountSlug}/${tutorial.slug}`} target="_blank" />}
+          >
+            <ExternalLink className="size-4" /> Live-Seite öffnen
+          </DropdownMenuItem>
+        )}
+        {publicLive && (
+          <DropdownMenuItem
+            onClick={() => {
+              const url = `${window.location.origin}/h/${accountSlug}/${tutorial.slug}`;
+              window.open(`/api/qr?url=${encodeURIComponent(url)}`, "_blank", "noopener,noreferrer");
+            }}
+          >
+            <QrCode className="size-4" /> QR-Code öffnen
+          </DropdownMenuItem>
+        )}
+        {publicLive && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.preventDefault();
+              onExport();
+            }}
+          >
+            <Film className="size-4" /> Als Video exportieren
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onRename}>Umbenennen</DropdownMenuItem>
+        <DropdownMenuItem onClick={onDuplicate}>Duplizieren</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onAutomation}>
+          <Zap className="size-4" /> Als Automation nutzen
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          Löschen
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
