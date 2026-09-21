@@ -2,25 +2,31 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import {
   AppHeader,
-  TopBell,
+  BellPopover,
+  HelpPageButton,
   UserMenu,
   TabBar,
+  MoreTab,
   CreateTabTrigger,
 } from "@/components/app/app-header";
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
 import { ContentUpdatedRefresh } from "@/components/app/content-updated-refresh";
-import { requireAccount } from "@/lib/account";
+import { NEW_TUTORIAL_EVENT } from "@/components/app/nav-config";
+import { getCurrentUser, requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
+import { loadOpenGaps } from "@/lib/gaps";
+import { relativeDe } from "@/lib/format";
+import { userDisplayName } from "@/lib/user-name";
 
 /**
- * App-Shell (Design-Handoff 07/2026): 64px-Topnav (Option 2a) für alle
- * /app-Seiten; mobil übernimmt die TabBar (Option 2b) die Navigation.
+ * App-Shell (Welle 50b): 60px-Kopfleiste für alle /app-Seiten; mobil übernimmt
+ * die Leiste unten die Navigation.
  *
  * Cache-Components-Disziplin: Das GERÜST (Header, Nav-Pills, Suchfeld)
- * ist statisch; konto-abhängige Teile (Glocke, „Neue Anleitung", Avatar)
- * streamen in eigenen Suspense-Boundaries und teilen sich EINEN
- * requireAccount()-Abruf (per cache() dedupt). AppHeader/TabBar lesen
+ * ist statisch; konto-abhängige Teile (Hilfe-Seite, Glocke, „Neue Anleitung",
+ * Avatar, „Neu"/„Mehr" mobil) streamen in eigenen Suspense-Boundaries und teilen
+ * sich EINEN requireAccount()-Abruf (per cache() dedupt). AppHeader/TabBar lesen
  * usePathname → eigene Boundaries. Onboarding-Redirect wohnt im Avatar-Slot.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,8 +36,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-1 flex-col">
       {/* Extension-Uploads erscheinen ohne F5 (client-only, rendert nichts). */}
       <ContentUpdatedRefresh />
-      <Suspense fallback={<div className="h-16 border-b-2 border-line bg-card" />}>
+      <Suspense fallback={<div className="h-[60px] border-b-2 border-line bg-card" />}>
         <AppHeader
+          helpPage={
+            <Suspense fallback={null}>
+              <HelpPageSlot />
+            </Suspense>
+          }
           bell={
             <Suspense fallback={<div className="size-9" />}>
               <BellSlot />
@@ -46,7 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }
           userMenu={
             <Suspense
-              fallback={<div className="size-[34px] animate-pulse rounded-full bg-line-2" />}
+              fallback={<div className="ml-1 size-8 animate-pulse rounded-full bg-line-2" />}
             >
               <UserMenuSlot />
             </Suspense>
@@ -56,13 +67,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">{children}</div>
 
-      {/* Platzhalter, damit die mobile TabBar keinen Inhalt verdeckt. */}
-      <div className="h-16 lg:hidden" aria-hidden />
+      {/* Platzhalter, damit die mobile Leiste keinen Inhalt verdeckt. */}
+      <div className="h-[72px] lg:hidden" aria-hidden />
       <Suspense fallback={null}>
         <TabBar
           createAction={
-            <Suspense fallback={<div className="min-w-16" />}>
+            <Suspense fallback={<div />}>
               <CreateTabSlot />
+            </Suspense>
+          }
+          more={
+            <Suspense fallback={<div />}>
+              <MoreSlot />
             </Suspense>
           }
         />
@@ -73,40 +89,93 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 /** Avatar-Menü (rechts). Enthält den Onboarding-Redirect. */
 async function UserMenuSlot() {
-  const { account, memberships, email } = await requireAccount();
+  const [{ account, memberships, email }, user, isAdmin] = await Promise.all([
+    requireAccount(),
+    getCurrentUser(),
+    checkAdmin(),
+  ]);
   if (!account.onboarded) redirect("/onboarding");
-  const isAdmin = await checkAdmin();
   return (
     <UserMenu
+      userName={userDisplayName(user?.user_metadata)}
+      email={email}
       accountName={account.name}
       memberships={memberships}
       isAdmin={isAdmin}
-      accountSlug={account.slug}
-      email={email}
     />
   );
 }
 
-/** „＋ Neue Anleitung" (Desktop-Header). */
-async function NewActionSlot() {
+/** „Hilfe-Seite“-Knopf (braucht den Konto-Slug). */
+async function HelpPageSlot() {
   const { account } = await requireAccount();
-  return <NewTutorialButton accountId={account.id} />;
+  return <HelpPageButton accountSlug={account.slug} />;
 }
 
-/** „Aufnehmen"-Tab (mobil) öffnet dieselbe Erstell-Weiche. */
+/** „＋ Neue Anleitung" (Desktop-Header). Hört auch auf die ⌘K-Aktion. */
+async function NewActionSlot() {
+  const { account } = await requireAccount();
+  return <NewTutorialButton accountId={account.id} openOnEvent={NEW_TUTORIAL_EVENT} />;
+}
+
+/** „Neu"-Tab (mobil) öffnet dieselbe Erstell-Weiche. */
 async function CreateTabSlot() {
   const { account } = await requireAccount();
   return <NewTutorialButton accountId={account.id} trigger={<CreateTabTrigger />} />;
 }
 
-/** Glocke mit offener-Hinweise-Badge. */
+/** „Mehr"-Tab (mobil) — braucht den Konto-Slug für „Hilfe-Seite ansehen“. */
+async function MoreSlot() {
+  const { account } = await requireAccount();
+  return <MoreTab accountSlug={account.slug} />;
+}
+
+type BellAlertRow = {
+  id: string;
+  summary: string | null;
+  detected_at: string;
+  tutorial_id: string;
+  tutorials: { title: string | null } | null;
+};
+
+/**
+ * Glocke: je die 3 neuesten offenen Hinweise („Aktualität prüfen“) und die 3
+ * häufigsten offenen Fragen + Gesamtzahlen. Beide Abfragen parallel; Zeitangaben
+ * werden hier (Server) formatiert, damit der Client nichts neu berechnet.
+ */
 async function BellSlot() {
   const { account } = await requireAccount();
   const supabase = await createClient();
-  const { count } = await supabase
-    .from("change_alerts")
-    .select("id, tutorials!inner(account_id)", { count: "exact", head: true })
-    .eq("tutorials.account_id", account.id)
-    .eq("status", "open");
-  return <TopBell alertCount={count} />;
+  const [{ data: alertRows, count: alertCount }, gaps] = await Promise.all([
+    supabase
+      .from("change_alerts")
+      .select("id, summary, detected_at, tutorial_id, tutorials!inner(title, account_id)", {
+        count: "exact",
+      })
+      .eq("tutorials.account_id", account.id)
+      .eq("status", "open")
+      .order("detected_at", { ascending: false })
+      .limit(3),
+    // Wie „Offene Fragen“ (bis 25) — Zähler = Anzahl dieser Liste.
+    loadOpenGaps(account.id, 25),
+  ]);
+  const alerts = ((alertRows ?? []) as unknown as BellAlertRow[]).map((a) => ({
+    id: a.id,
+    tutorialId: a.tutorial_id,
+    title: a.tutorials?.title?.trim() || "Anleitung",
+    summary: a.summary?.trim() || "Bitte prüfen",
+    when: relativeDe(a.detected_at),
+  }));
+  return (
+    <BellPopover
+      alerts={alerts}
+      alertTotal={alertCount ?? alerts.length}
+      gaps={gaps.slice(0, 3).map((g) => ({
+        question: g.question,
+        count: g.count,
+        when: relativeDe(g.lastAt),
+      }))}
+      gapTotal={gaps.length}
+    />
+  );
 }

@@ -30,3 +30,15 @@ const dateFmt = new Intl.DateTimeFormat("de-DE", {
 export function dateDe(iso: string): string {
   return dateFmt.format(new Date(iso));
 }
+
+const dateLongFmt = new Intl.DateTimeFormat("de-DE", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Europe/Berlin",
+});
+
+/** "2. Juli 2026" – gut lesbares Datum (Schulungsnachweis, Listen). */
+export function dateLongDe(iso: string): string {
+  return dateLongFmt.format(new Date(iso));
+}

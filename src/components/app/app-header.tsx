@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -8,16 +8,15 @@ import {
   Bell,
   LogOut,
   ShieldCheck,
-  CircleHelp,
-  ExternalLink,
   Check,
-  Settings,
-  Layers,
-  GraduationCap,
-  BookOpen,
+  Plus,
+  Ellipsis,
+  AlertTriangle,
+  MessageCircleQuestion,
+  UserRound,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,27 +24,48 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AppCommand } from "@/components/app/app-command";
+import {
+  MAIN_NAV,
+  MOBILE_TABS_LEFT,
+  MOBILE_TABS_RIGHT,
+  SETTINGS_ITEM,
+  PROFILE_HREF,
+  STEPLY_HELP_HREF,
+  STEPLY_HELP_ICON,
+  HELP_PAGE_ICON,
+  helpPageHref,
+  mobileMoreItems,
+  type NavItem,
+} from "@/components/app/nav-config";
 import { cn } from "@/lib/utils";
 import { setActiveAccount } from "@/app/app/actions";
 import { signOut } from "@/app/(auth)/actions";
 import type { Membership } from "@/lib/account";
 
 /**
- * App-Shell (Design-Handoff 07/2026, Option 2a): 64px-Topnav — Wordmark,
- * Pill-Navigation (aktiv = Ink-Pill), Such-Pill (⌘K), Glocke, Primär-Aktion
- * „＋ Neue Anleitung" und Avatar-Menü. Mobil (Option 2b) übernimmt die
- * TabBar unten die Navigation; der Header zeigt nur Logo + Suche + Avatar.
- * Konto-abhängige Teile (Glocke, Aktion, Avatar) kommen als Server-Slots.
+ * App-Shell (Welle 50b, Entwurf „App-Makeover“ Abschnitt 1): 60px-Kopfleiste —
+ * Wordmark, Pills Anleitungen · Schulungen · Automationen · KI-Assistent (aktiv =
+ * Ink-Pill), rechts Suche (Strg K), „Hilfe-Seite“ (neuer Tab), Glocke als
+ * Übersicht (Popover), „+ Neue Anleitung“ und Avatar-Menü. Mobil übernimmt die
+ * Leiste unten (Abschnitt 5) die Navigation. Konto-abhängige Teile kommen als
+ * gestreamte Server-Slots herein (siehe app/app/layout.tsx).
  */
 export function AppHeader({
   bell,
+  helpPage,
   newAction,
   userMenu,
 }: {
   bell: React.ReactNode;
+  helpPage: React.ReactNode;
   newAction: React.ReactNode;
   userMenu: React.ReactNode;
 }) {
@@ -54,65 +74,42 @@ export function AppHeader({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b-2 border-line bg-card px-4 lg:gap-6 lg:px-7">
-        <Link href="/app" aria-label="Zur Bibliothek" className="shrink-0">
-          <Wordmark size="lg" />
+      <header className="sticky top-0 z-30 flex h-[60px] items-center gap-1.5 border-b-2 border-line bg-card px-4 lg:px-[18px]">
+        <Link href="/app" aria-label="Zu den Anleitungen" className="mr-3.5 shrink-0">
+          <Wordmark />
         </Link>
 
-        {/* Pill-Navigation (Desktop) */}
-        <nav className="hidden items-center gap-1.5 text-sm font-bold lg:flex">
-          <NavPill
-            href="/app"
-            label="Bibliothek"
-            active={
-              path === "/app" ||
-              path.startsWith("/app/tutorials") ||
-              path.startsWith("/app/preview")
-            }
-          />
-          <NavPill
-            href="/app/lernen"
-            label="Lernen"
-            active={path.startsWith("/app/lernen")}
-          />
-          <NavPill
-            href="/app/automationen"
-            label="Automationen"
-            active={path.startsWith("/app/automationen")}
-          />
-          <NavPill
-            href="/app/assistent/wissen"
-            label="Assistent"
-            active={
-              path.startsWith("/app/assistent") || path.startsWith("/app/knowledge")
-            }
-          />
+        {/* Pill-Navigation (Desktop) — dieselbe Liste wie Handy-Leiste und ⌘K. */}
+        <nav aria-label="Hauptbereiche" className="hidden items-center gap-1.5 lg:flex">
+          {MAIN_NAV.map((item) => (
+            <NavPill key={item.href} item={item} active={item.match(path)} />
+          ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 lg:gap-3">
+        <div className="ml-auto flex items-center gap-1.5">
           {/* Such-Pill → ⌘K-Palette */}
           <button
             type="button"
             onClick={() => setCmdOpen(true)}
-            aria-label="Suchen und Befehle (⌘K)"
-            className="hidden w-[200px] items-center gap-2 rounded-full border-2 border-line bg-card px-4 py-2 text-left text-[13.5px] font-semibold text-faint transition-colors hover:border-[#e3d7c2] md:flex"
+            aria-label="Suchen (Strg K)"
+            className="hidden w-[190px] items-center gap-2 rounded-full border-2 border-line bg-card px-3 py-1.5 text-left text-[13px] font-bold text-faint transition-colors hover:border-[#e3d7c2] xl:flex"
           >
-            <span
-              aria-hidden
-              className="size-3 shrink-0 rounded-full border-2 border-faint"
-            />
-            <span className="truncate">Suchen …</span>
+            <Search className="size-3.5 shrink-0" />
+            <span className="truncate">Suchen</span>
+            <kbd className="ml-auto shrink-0 rounded-md bg-line-2 px-[5px] font-sans text-[11px] font-bold text-muted-foreground">
+              Strg K
+            </kbd>
           </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground md:hidden"
+          <button
+            type="button"
             onClick={() => setCmdOpen(true)}
-            aria-label="Suchen (⌘K)"
+            aria-label="Suchen (Strg K)"
+            className="grid size-9 place-items-center rounded-full text-ink-2 transition-colors hover:bg-line-2 xl:hidden"
           >
-            <Search className="size-4" />
-          </Button>
+            <Search className="size-[17px]" />
+          </button>
 
+          {helpPage}
           {bell}
           <div className="hidden md:block">{newAction}</div>
           {userMenu}
@@ -124,69 +121,229 @@ export function AppHeader({
   );
 }
 
-function NavPill({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
+function NavPill({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
-      href={href}
+      href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "rounded-full px-4 py-2 transition-colors",
-        active
-          ? "bg-ink text-background"
-          : "text-muted-foreground hover:bg-secondary hover:text-ink",
+        "rounded-full px-[13px] py-[7px] text-[13.5px] font-extrabold transition-colors",
+        active ? "bg-ink text-white" : "text-ink-2 hover:bg-line-2 hover:text-ink",
       )}
     >
-      {label}
+      {item.label}
     </Link>
   );
 }
 
-/** Glocke mit Hinweis-Badge (Server-Slot liefert den Zähler). */
-export function TopBell({ alertCount }: { alertCount: number | null }) {
+/** „Hilfe-Seite“: öffnet die öffentliche Hilfe-Seite der Organisation im neuen Tab. */
+export function HelpPageButton({ accountSlug }: { accountSlug: string }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      nativeButton={false}
-      className="text-muted-foreground"
-      render={<Link href="/app/alerts" aria-label="Hinweise" />}
+    <a
+      href={helpPageHref(accountSlug)}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Hilfe-Seite in neuem Tab öffnen"
+      title="Ihre Hilfe-Seite in neuem Tab öffnen"
+      className="hidden items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1.5 text-[13px] font-extrabold text-ink transition-colors hover:border-[#e3d7c2] md:flex"
     >
-      <span className="relative">
-        <Bell className="size-4" />
-        {alertCount ? (
-          <span className="absolute -right-1.5 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black leading-4 text-white">
-            {alertCount}
-          </span>
-        ) : null}
-      </span>
-    </Button>
+      <HELP_PAGE_ICON className="size-3.5 shrink-0" />
+      <span className="hidden lg:inline">Hilfe-Seite</span>
+    </a>
   );
 }
 
-/** Avatar-Menü: Organisation wechseln, Einstellungen, Admin, Hilfe, Abmelden. */
+export type BellAlert = {
+  id: string;
+  tutorialId: string;
+  title: string;
+  summary: string;
+  /** Vorformatiert auf dem Server (z. B. „vor 2 Tagen“) — keine Hydration-Abweichung. */
+  when: string;
+};
+export type BellGap = { question: string; count: number; when: string };
+
+/**
+ * Glocke (Entwurf Abschnitt 1): öffnet eine Übersicht mit „Aktualität prüfen“
+ * (offene change_alerts) und „Offene Fragen“ (unbeantwortete Chat-Fragen), je
+ * höchstens 3 Einträge + „Alle“-Link. Zähler = Summe beider Listen.
+ */
+export function BellPopover({
+  alerts,
+  alertTotal,
+  gaps,
+  gapTotal,
+}: {
+  alerts: BellAlert[];
+  alertTotal: number;
+  gaps: BellGap[];
+  gapTotal: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = alertTotal + gapTotal;
+  const close = () => setOpen(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={total ? `Hinweise (${total} offen)` : "Hinweise"}
+            className={cn(
+              "relative grid size-9 place-items-center rounded-full text-ink-2 transition-colors hover:bg-line-2",
+              open && "bg-line-2",
+            )}
+          >
+            <Bell className="size-[17px]" />
+            {total ? (
+              <span
+                data-testid="bell-count"
+                className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-black leading-none text-white"
+              >
+                {total > 99 ? "99+" : total}
+              </span>
+            ) : null}
+          </button>
+        }
+      />
+      <PopoverContent
+        align="end"
+        sideOffset={10}
+        className="w-[340px] max-w-[calc(100vw-24px)] gap-1 rounded-2xl border-2 border-line bg-card p-2.5 text-ink shadow-[0_16px_36px_rgba(51,41,31,0.16)] ring-0"
+      >
+        <BellSection title="Aktualität prüfen" href="/app/alerts" onNavigate={close}>
+          {alerts.length === 0 ? (
+            <BellEmpty>Alles aktuell – keine offenen Hinweise.</BellEmpty>
+          ) : (
+            alerts.map((a) => (
+              <BellNote
+                key={a.id}
+                href={`/app/tutorials/${a.tutorialId}`}
+                onNavigate={close}
+                tone="amber"
+                icon={<AlertTriangle className="size-3.5" />}
+                title={`„${a.title}“ wirkt veraltet`}
+                meta={`${a.summary} · ${a.when}`}
+              />
+            ))
+          )}
+        </BellSection>
+        <BellSection title="Offene Fragen" href="/app/assistent/fragen" onNavigate={close}>
+          {gaps.length === 0 ? (
+            <BellEmpty>Keine offenen Fragen – der KI-Assistent konnte alles beantworten.</BellEmpty>
+          ) : (
+            gaps.map((g) => (
+              <BellNote
+                key={g.question}
+                href="/app/assistent/fragen"
+                onNavigate={close}
+                tone="violet"
+                icon={<MessageCircleQuestion className="size-3.5" />}
+                title={`„${g.question}“`}
+                meta={`${g.count}× gefragt · ${g.when}`}
+              />
+            ))
+          )}
+        </BellSection>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function BellSection({
+  title,
+  href,
+  onNavigate,
+  children,
+}: {
+  title: string;
+  href: string;
+  onNavigate: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="grid gap-1">
+      <h4 className="mx-1.5 mt-1 flex items-center justify-between text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint">
+        {title}
+        <Link
+          href={href}
+          onClick={onNavigate}
+          className="text-xs font-extrabold normal-case tracking-normal text-primary hover:underline"
+        >
+          Alle
+        </Link>
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+function BellEmpty({ children }: { children: React.ReactNode }) {
+  return <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{children}</p>;
+}
+
+function BellNote({
+  href,
+  onNavigate,
+  tone,
+  icon,
+  title,
+  meta,
+}: {
+  href: string;
+  onNavigate: () => void;
+  tone: "amber" | "violet";
+  icon: React.ReactNode;
+  title: string;
+  meta: string;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className="flex items-start gap-2.5 rounded-[10px] p-2 text-[13px] transition-colors hover:bg-line-2"
+    >
+      <span
+        className={cn(
+          "grid size-7 shrink-0 place-items-center rounded-[9px]",
+          tone === "amber" ? "bg-amber-soft text-amber-text" : "bg-violet-soft text-violet-text",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <b className="line-clamp-2 block font-extrabold text-ink">{title}</b>
+        <span className="line-clamp-2 text-xs font-semibold text-muted-foreground">{meta}</span>
+      </span>
+    </Link>
+  );
+}
+
+const menuItemClass =
+  "gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-extrabold text-ink focus:bg-line-2 focus:text-ink not-data-[variant=destructive]:focus:**:text-ink";
+
+/**
+ * Avatar-Menü (Entwurf Abschnitt 1): Name/E-Mail oben, Organisation wechseln,
+ * Mein Profil, Einstellungen, (Admin), Steply-Hilfe, Abmelden. Die eigene
+ * Hilfe-Seite hat jetzt einen eigenen Knopf in der Kopfleiste.
+ */
 export function UserMenu({
+  userName,
+  email,
   accountName,
   memberships,
   isAdmin,
-  accountSlug,
-  email,
 }: {
+  userName: string | null;
+  email: string | null;
   accountName: string;
   memberships: Membership[];
   isAdmin: boolean;
-  accountSlug: string;
-  email: string | null;
 }) {
   const [busy, setBusy] = useState(false);
-  const initial = (accountName?.trim()[0] ?? "S").toUpperCase();
+  const display = userName ?? email ?? accountName;
+  const initial = (display.trim()[0] ?? "S").toUpperCase();
 
   return (
     <>
@@ -196,76 +353,92 @@ export function UserMenu({
             <button
               type="button"
               aria-label="Konto-Menü"
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-teal text-xs font-extrabold text-white transition-transform hover:scale-105"
+              className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-teal text-sm font-black text-white transition-transform hover:scale-105"
             >
               {initial}
             </button>
           }
         />
-        <DropdownMenuContent align="end" sideOffset={10} className="min-w-56">
+        <DropdownMenuContent
+          align="end"
+          sideOffset={10}
+          className="w-[250px] gap-0.5 rounded-2xl border-2 border-line bg-card p-2 text-ink shadow-[0_16px_36px_rgba(51,41,31,0.16)] ring-0"
+        >
           {/* Base UI: GroupLabel MUSS in einer Group stecken. */}
           <DropdownMenuGroup>
-            <DropdownMenuLabel>
-              <span className="block truncate font-bold text-ink">{accountName}</span>
-              {email && (
+            <DropdownMenuLabel className="mb-1 border-b-2 border-line-2 px-2.5 pb-2.5 pt-2">
+              <span className="block truncate text-sm font-black text-ink">{display}</span>
+              {email && email !== display && (
                 <span className="block truncate text-xs font-semibold text-muted-foreground">
                   {email}
                 </span>
               )}
+              <span className="mt-0.5 block truncate text-xs font-semibold text-faint">
+                {accountName}
+              </span>
             </DropdownMenuLabel>
           </DropdownMenuGroup>
+
           {memberships.length > 1 && (
-            <>
-              <DropdownMenuSeparator />
-              {memberships.map((m) => (
-                <DropdownMenuItem
-                  key={m.id}
-                  disabled={busy}
-                  onClick={async () => {
-                    if (m.name === accountName) return;
-                    setBusy(true);
-                    await setActiveAccount(m.id);
-                    window.location.assign("/app");
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "size-4",
-                      m.name === accountName ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  <span className="truncate">{m.name}</span>
-                </DropdownMenuItem>
-              ))}
-            </>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger
+                className={cn(
+                  menuItemClass,
+                  "data-open:bg-line-2 data-open:text-ink data-popup-open:bg-line-2 data-popup-open:text-ink",
+                )}
+              >
+                <ArrowLeftRight className="size-3.5" /> Organisation wechseln
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="min-w-52 rounded-2xl border-2 border-line bg-card p-2 ring-0">
+                {memberships.map((m) => (
+                  <DropdownMenuItem
+                    key={m.id}
+                    disabled={busy}
+                    className={menuItemClass}
+                    onClick={async () => {
+                      if (m.name === accountName) return;
+                      setBusy(true);
+                      await setActiveAccount(m.id);
+                      window.location.assign("/app");
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "size-3.5",
+                        m.name === accountName ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="truncate">{m.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem render={<Link href="/app/settings" />}>
-            <Settings className="size-4" /> Einstellungen
+          <DropdownMenuItem className={menuItemClass} render={<Link href={PROFILE_HREF} />}>
+            <UserRound className="size-3.5" /> Mein Profil
+          </DropdownMenuItem>
+          <DropdownMenuItem className={menuItemClass} render={<Link href={SETTINGS_ITEM.href} />}>
+            <SETTINGS_ITEM.icon className="size-3.5" /> Einstellungen
           </DropdownMenuItem>
           {isAdmin && (
-            <DropdownMenuItem render={<Link href="/admin" />}>
-              <ShieldCheck className="size-4" /> Admin
+            <DropdownMenuItem className={menuItemClass} render={<Link href="/admin" />}>
+              <ShieldCheck className="size-3.5" /> Admin
             </DropdownMenuItem>
           )}
+          <DropdownMenuSeparator className="mx-1.5 my-1 h-0.5 bg-line-2" />
           <DropdownMenuItem
-            render={<a href="/h/steply" target="_blank" rel="noreferrer" />}
+            className={menuItemClass}
+            render={<a href={STEPLY_HELP_HREF} target="_blank" rel="noreferrer" />}
           >
-            <CircleHelp className="size-4" /> Steply-Hilfe
+            <STEPLY_HELP_ICON className="size-3.5" /> Steply-Hilfe
           </DropdownMenuItem>
-          <DropdownMenuItem
-            render={<a href={`/h/${accountSlug}`} target="_blank" rel="noreferrer" />}
-          >
-            <ExternalLink className="size-4" /> Hilfe-Seite öffnen
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           {/* render = nativer <button> → nativeButton setzen (Base-UI-Warnung). */}
           <DropdownMenuItem
-            variant="destructive"
+            className={menuItemClass}
             nativeButton
             render={<button type="submit" form="steply-signout" />}
           >
-            <LogOut className="size-4" /> Abmelden
+            <LogOut className="size-3.5" /> Abmelden
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -275,53 +448,134 @@ export function UserMenu({
   );
 }
 
+const tabClass = (active: boolean) =>
+  cn(
+    "flex min-w-0 flex-col items-center gap-[3px] rounded-2xl px-0 py-1 text-[10.5px] font-extrabold tracking-[-0.02em] transition-colors",
+    active ? "text-ink" : "text-muted-foreground hover:text-ink-2",
+  );
+
 /**
- * Mobile Tab-Bar (Design 2b): Bibliothek · Aufnehmen (Erstell-Aktion als
- * Slot) · Lernen · Assistent. Das Layout reserviert Platz darunter.
+ * Handy-Leiste unten (Entwurf Abschnitt 5): Anleitungen · Schulungen · (Mitte)
+ * Neu · Automationen · Mehr. „Neu“ öffnet denselben Dialog wie „+ Neue Anleitung“
+ * (Slot vom Server), „Mehr“ öffnet ein Blatt mit dem Selteneren.
  */
-export function TabBar({ createAction }: { createAction: React.ReactNode }) {
+export function TabBar({
+  createAction,
+  more,
+}: {
+  createAction: React.ReactNode;
+  more: React.ReactNode;
+}) {
   const path = usePathname();
-  const tabClass = (active: boolean) =>
-    cn(
-      "flex min-w-16 flex-col items-center gap-1 rounded-2xl px-3 py-1.5 text-[10px]",
-      active ? "font-extrabold text-ink" : "font-bold text-faint hover:text-ink-2",
-    );
   return (
     <nav
       aria-label="Hauptnavigation"
-      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t-2 border-line bg-background px-2 pb-[max(6px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t-2 border-line bg-card px-0.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
     >
-      <Link
-        href="/app"
-        className={tabClass(path === "/app" || path.startsWith("/app/tutorials"))}
-      >
-        <Layers className="size-5" />
-        Bibliothek
-      </Link>
+      {MOBILE_TABS_LEFT.map((item) => (
+        <TabLink key={item.href} item={item} active={item.match(path)} />
+      ))}
       {createAction}
-      <Link href="/app/lernen" className={tabClass(path.startsWith("/app/lernen"))}>
-        <GraduationCap className="size-5" />
-        Lernen
-      </Link>
-      <Link
-        href="/app/assistent/wissen"
-        className={tabClass(
-          path.startsWith("/app/assistent") || path.startsWith("/app/knowledge"),
-        )}
-      >
-        <BookOpen className="size-5" />
-        Assistent
-      </Link>
+      {MOBILE_TABS_RIGHT.map((item) => (
+        <TabLink key={item.href} item={item} active={item.match(path)} />
+      ))}
+      {more}
     </nav>
   );
 }
 
+function TabLink({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={tabClass(active)}
+    >
+      <item.icon className="size-[19px]" />
+      <span className="max-w-full truncate">{item.label}</span>
+    </Link>
+  );
+}
+
 /**
- * Trigger-Optik des „Aufnehmen"-Tabs (wird an NewTutorialButton als Base-UI-render
+ * „Mehr“-Tab + Blatt (Entwurf Abschnitt 5): KI-Assistent, Hilfe-Seite ansehen,
+ * Einstellungen, Steply-Hilfe. Als Base-UI-Popover, das volle Breite direkt ÜBER der
+ * Leiste aufgeht — die Leiste bleibt sichtbar und „Mehr“ markiert (kein Vollbild-Dialog).
+ */
+export function MoreTab({ accountSlug }: { accountSlug: string }) {
+  const [open, setOpen] = useState(false);
+  const path = usePathname();
+  const items = mobileMoreItems(accountSlug);
+  const activeInside = items.some((i) => i.match(path));
+
+  // Blatt bei Navigation schließen (Pfadwechsel von außen, z. B. Zurück-Taste).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Blatt mit dem Router-Pfad synchronisieren, kein Cascade
+    setOpen(false);
+  }, [path]);
+
+  return (
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Trigger
+        render={
+          <button type="button" className={tabClass(open || activeInside)}>
+            <Ellipsis className="size-[19px]" />
+            Mehr
+          </button>
+        }
+      />
+      <PopoverPrimitive.Portal>
+        {/* sideOffset 10 = Abstand Knopf-Oberkante → Oberkante der Leiste (pt-2 + 2px Rand). */}
+        <PopoverPrimitive.Positioner
+          side="top"
+          align="end"
+          sideOffset={10}
+          collisionPadding={0}
+          className="isolate z-50 lg:hidden"
+        >
+          <PopoverPrimitive.Popup
+            aria-label="Mehr"
+            className="grid w-screen gap-0.5 rounded-t-[20px] border-t-2 border-line bg-card p-3 text-ink shadow-[0_-10px_30px_rgba(51,41,31,0.12)] outline-none duration-150 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0"
+          >
+          {items.map((item) => {
+            const cls = cn(
+              "flex items-center gap-2.5 rounded-[10px] p-2.5 text-sm font-extrabold transition-colors hover:bg-line-2",
+              item.match(path) ? "bg-line-2 text-ink" : "text-ink",
+            );
+            return item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                className={cls}
+                onClick={() => setOpen(false)}
+              >
+                <item.icon className="size-[19px] text-ink-2" /> {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cls}
+                onClick={() => setOpen(false)}
+              >
+                <item.icon className="size-[19px] text-ink-2" /> {item.label}
+              </Link>
+            );
+          })}
+          </PopoverPrimitive.Popup>
+        </PopoverPrimitive.Positioner>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  );
+}
+
+/**
+ * Trigger-Optik des „Neu“-Tabs (wird an NewTutorialButton als Base-UI-render
  * übergeben). MUSS eingehende Props (onClick/ref/aria vom DialogTrigger) durchreichen
  * und die ref forwarden — sonst bleibt der mobile Knopf tot (Base UI klont das Element
- * und hängt den Öffnen-Handler an genau diese Props). Genau das war der Bug: der
- * Trigger rannte die Props ins Leere, mobil passierte beim Tippen nichts.
+ * und hängt den Öffnen-Handler an genau diese Props).
  */
 export const CreateTabTrigger = forwardRef<
   HTMLButtonElement,
@@ -331,13 +585,14 @@ export const CreateTabTrigger = forwardRef<
     <button
       ref={ref}
       type="button"
+      aria-label="Neue Anleitung"
       {...props}
-      className="flex min-w-16 flex-col items-center gap-1 rounded-2xl px-3 py-1.5 text-[10px] font-extrabold text-primary"
+      className="flex min-w-0 flex-col items-center gap-[3px] px-1 py-1 text-[10.5px] font-extrabold text-primary"
     >
-      <span className="grid size-5 place-items-center rounded-full bg-primary text-[13px] font-black leading-none text-white shadow-[0_2px_0_var(--primary-pressed)]">
-        +
+      <span className="-mt-4 grid size-[34px] place-items-center rounded-full bg-primary text-white shadow-[0_3px_0_var(--primary-pressed)]">
+        <Plus className="size-3.5" strokeWidth={3} />
       </span>
-      Aufnehmen
+      Neu
     </button>
   );
 });

@@ -2,46 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ASSISTENT_TABS } from "@/components/app/nav-config";
+import { cn } from "@/lib/utils";
 
-const tabs = [
-  // Wissensdatenbank ist auch auf Unterpfaden (z. B. /app/assistent/wissen/<id>) aktiv.
-  {
-    href: "/app/assistent/wissen",
-    label: "Wissensdatenbank",
-    match: (p: string) => p.startsWith("/app/assistent/wissen"),
-  },
-  {
-    href: "/app/assistent/fragen",
-    label: "Offene Fragen",
-    match: (p: string) => p === "/app/assistent/fragen",
-  },
-  {
-    href: "/app/assistent/eskalation",
-    label: "Kontakt & Eskalation",
-    match: (p: string) => p === "/app/assistent/eskalation",
-  },
-];
-
+/**
+ * Reiter im KI-Assistenten als Pills (gleicher Stil wie die Kopfleiste: aktiv =
+ * Ink-Pill, sonst 2px-Rahmen). Ziele kommen aus nav-config (eine Quelle mit ⌘K).
+ */
 export function AssistentNav() {
   const path = usePathname();
   return (
-    <div className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-border [touch-action:pan-x]">
-      {tabs.map((t) => {
+    <nav
+      aria-label="Bereiche des KI-Assistenten"
+      className="-mx-5 flex gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-5 pb-1 [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden"
+    >
+      {ASSISTENT_TABS.map((t) => {
         const active = t.match(path);
         return (
           <Link
             key={t.href}
             href={t.href}
-            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-[13px] font-extrabold transition-colors",
               active
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-ink"
-            }`}
+                ? "border-ink bg-ink text-white"
+                : "border-line bg-card text-ink-2 hover:border-[#e3d7c2] hover:text-ink",
+            )}
           >
+            <t.icon className="size-3.5" />
             {t.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
