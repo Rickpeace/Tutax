@@ -32,43 +32,160 @@
 //   [{ t: Sekunden seit Aufnahmestart, x: 0..1, y: 0..1, label: Text (<=60) }]
 
 const els = {
-  interruptedHint: document.getElementById("interruptedHint"),
-  updateHint: document.getElementById("updateHint"),
-  // Aufnahme-Anker (Welle 27)
+  helpBtn: document.getElementById("helpBtn"),
+  avatarBtn: document.getElementById("avatarBtn"),
+  avatarLetter: document.getElementById("avatarLetter"),
+  avatarDot: document.getElementById("avatarDot"),
+  tabs: document.getElementById("tabs"),
+  tabRecord: document.getElementById("tabRecord"),
+  tabGuides: document.getElementById("tabGuides"),
+  tabGuidesCount: document.getElementById("tabGuidesCount"),
+  tabAutos: document.getElementById("tabAutos"),
+  menuDim: document.getElementById("menuDim"),
+  menuHelp: document.getElementById("menuHelp"),
+  mLearn: document.getElementById("mLearn"),
+  mVideo: document.getElementById("mVideo"),
+  mRecHelp: document.getElementById("mRecHelp"),
+  menuAccount: document.getElementById("menuAccount"),
+  mAccountName: document.getElementById("mAccountName"),
+  mOpenApp: document.getElementById("mOpenApp"),
+  mUpdate: document.getElementById("mUpdate"),
+  mUpdateVer: document.getElementById("mUpdateVer"),
+  mChange: document.getElementById("mChange"),
+  mDisconnect: document.getElementById("mDisconnect"),
+  mVersion: document.getElementById("mVersion"),
   targetBanner: document.getElementById("targetBanner"),
   targetPrefix: document.getElementById("targetPrefix"),
   targetLabel: document.getElementById("targetLabel"),
   targetClear: document.getElementById("targetClear"),
-  status: document.getElementById("status"),
-  // connect (a)
   connect: document.getElementById("connect"),
+  connectBack: document.getElementById("connectBack"),
+  connectTitle: document.getElementById("connectTitle"),
+  connectLead: document.getElementById("connectLead"),
   connectAccount: document.getElementById("connectAccount"),
+  connectApp: document.getElementById("connectApp"),
+  manualToggle: document.getElementById("manualToggle"),
+  manualBox: document.getElementById("manualBox"),
   token: document.getElementById("token"),
   appUrl: document.getElementById("appUrl"),
   saveCfg: document.getElementById("saveCfg"),
   cfgStatus: document.getElementById("cfgStatus"),
-  skipConnect: document.getElementById("skipConnect"),
-  // start (b)
+  connectVideoLine: document.getElementById("connectVideoLine"),
+  connectVideo: document.getElementById("connectVideo"),
   start: document.getElementById("start"),
-  cardGuide: document.getElementById("cardGuide"),
-  cardVideo: document.getElementById("cardVideo"),
-  connText: document.getElementById("connText"),
-  connBtn: document.getElementById("connBtn"),
-  // videoSetup
+  interruptedHint: document.getElementById("interruptedHint"),
+  recStart: document.getElementById("recStart"),
+  siteRow: document.getElementById("siteRow"),
+  siteRowCount: document.getElementById("siteRowCount"),
+  guides: document.getElementById("guides"),
+  guideSearch: document.getElementById("guideSearch"),
+  chipSite: document.getElementById("chipSite"),
+  chipAll: document.getElementById("chipAll"),
+  chipDrafts: document.getElementById("chipDrafts"),
+  guidesList: document.getElementById("guidesList"),
+  guidesEmpty: document.getElementById("guidesEmpty"),
+  guidesEmptyText: document.getElementById("guidesEmptyText"),
+  guidesEmptyAction: document.getElementById("guidesEmptyAction"),
+  automations: document.getElementById("automations"),
+  autoList: document.getElementById("autoList"),
+  autoListEmpty: document.getElementById("autoListEmpty"),
+  autoListHint: document.getElementById("autoListHint"),
+  autoListRetry: document.getElementById("autoListRetry"),
+  autoPrep: document.getElementById("autoPrep"),
+  autoPrepBack: document.getElementById("autoPrepBack"),
+  autoPrepTitle: document.getElementById("autoPrepTitle"),
+  autoDomainHint: document.getElementById("autoDomainHint"),
+  autoFileHint: document.getElementById("autoFileHint"),
+  autoParamForm: document.getElementById("autoParamForm"),
+  autoClearValues: document.getElementById("autoClearValues"),
+  autoModeSemi: document.getElementById("autoModeSemi"),
+  autoModeAuto: document.getElementById("autoModeAuto"),
+  autoPrepHint: document.getElementById("autoPrepHint"),
+  autoStart: document.getElementById("autoStart"),
+  autoRun: document.getElementById("autoRun"),
+  autoProgress: document.getElementById("autoProgress"),
+  autoBar: document.getElementById("autoBar"),
+  autoStepTitle: document.getElementById("autoStepTitle"),
+  autoStepAction: document.getElementById("autoStepAction"),
+  autoLiveStatus: document.getElementById("autoLiveStatus"),
+  autoWaitLogin: document.getElementById("autoWaitLogin"),
+  autoSkipNote: document.getElementById("autoSkipNote"),
+  autoCondSkipNote: document.getElementById("autoCondSkipNote"),
+  autoMissBox: document.getElementById("autoMissBox"),
+  autoMissText: document.getElementById("autoMissText"),
+  autoMissImageWrap: document.getElementById("autoMissImageWrap"),
+  autoMissImageFrame: document.getElementById("autoMissImageFrame"),
+  autoMissImage: document.getElementById("autoMissImage"),
+  autoDownloadNote: document.getElementById("autoDownloadNote"),
+  autoFileChip: document.getElementById("autoFileChip"),
+  autoDone: document.getElementById("autoDone"),
+  autoDoneIcon: document.getElementById("autoDoneIcon"),
+  autoDoneTitle: document.getElementById("autoDoneTitle"),
+  autoDoneText: document.getElementById("autoDoneText"),
+  autoDoneList: document.getElementById("autoDoneList"),
+  autoControls: document.getElementById("autoControls"),
+  autoCtlSemi: document.getElementById("autoCtlSemi"),
+  autoExec: document.getElementById("autoExec"),
+  autoSkip: document.getElementById("autoSkip"),
+  autoCtlAuto: document.getElementById("autoCtlAuto"),
+  autoPause: document.getElementById("autoPause"),
+  autoCtlPaused: document.getElementById("autoCtlPaused"),
+  autoResume: document.getElementById("autoResume"),
+  autoCtlMiss: document.getElementById("autoCtlMiss"),
+  autoContinue: document.getElementById("autoContinue"),
+  autoCancel: document.getElementById("autoCancel"),
+  guideLive: document.getElementById("guideLive"),
+  guideRecBar: document.getElementById("guideRecBar"),
+  guidePulse: document.getElementById("guidePulse"),
+  guidePauseDot: document.getElementById("guidePauseDot"),
+  guideBadgeText: document.getElementById("guideBadgeText"),
+  guideTimer: document.getElementById("guideTimer"),
+  guideCountInline: document.getElementById("guideCountInline"),
+  guidePause: document.getElementById("guidePause"),
+  guideResume: document.getElementById("guideResume"),
+  guideStop: document.getElementById("guideStop"),
+  guideReviewHead: document.getElementById("guideReviewHead"),
+  guideCountLine: document.getElementById("guideCountLine"),
+  guideCount: document.getElementById("guideCount"),
+  guideCountText: document.getElementById("guideCountText"),
+  guideCaptureHint: document.getElementById("guideCaptureHint"),
+  guideMeta: document.getElementById("guideMeta"),
+  guideTitle: document.getElementById("guideTitle"),
+  guideCatWrap: document.getElementById("guideCatWrap"),
+  guideCategory: document.getElementById("guideCategory"),
+  guideCategoryNew: document.getElementById("guideCategoryNew"),
+  guideList: document.getElementById("guideList"),
+  guideNote: document.getElementById("guideNote"),
+  guideFooter: document.getElementById("guideFooter"),
+  guideCreate: document.getElementById("guideCreate"),
+  guideCtlStopped: document.getElementById("guideCtlStopped"),
+  guideContinue: document.getElementById("guideContinue"),
+  guideDiscard: document.getElementById("guideDiscard"),
+  guideDone: document.getElementById("guideDone"),
+  guideUploading: document.getElementById("guideUploading"),
+  guideProgress: document.getElementById("guideProgress"),
+  guideProgressBar: document.getElementById("guideProgressBar"),
+  guideUploadDone: document.getElementById("guideUploadDone"),
+  guideDoneTitle: document.getElementById("guideDoneTitle"),
+  guideDoneText: document.getElementById("guideDoneText"),
+  guideOpenApp: document.getElementById("guideOpenApp"),
+  guideAgain: document.getElementById("guideAgain"),
+  guideUploadError: document.getElementById("guideUploadError"),
+  guideErrorText: document.getElementById("guideErrorText"),
+  guideRetry: document.getElementById("guideRetry"),
+  guideBackReview: document.getElementById("guideBackReview"),
   videoSetup: document.getElementById("videoSetup"),
   videoBack: document.getElementById("videoBack"),
   micStatus: document.getElementById("micStatus"),
   micRetry: document.getElementById("micRetry"),
   noAudio: document.getElementById("noAudio"),
-  begin: document.getElementById("begin"),
   clicksTabInfo: document.getElementById("clicksTabInfo"),
-  // videoLive (d)
+  begin: document.getElementById("begin"),
   videoLive: document.getElementById("videoLive"),
   timer: document.getElementById("timer"),
-  micLive: document.getElementById("micLive"),
   clickCount: document.getElementById("clickCount"),
   stop: document.getElementById("stop"),
-  // videoDone (e)
+  micLive: document.getElementById("micLive"),
   videoDone: document.getElementById("videoDone"),
   uploadBox: document.getElementById("uploadBox"),
   uploadProgress: document.getElementById("uploadProgress"),
@@ -78,54 +195,6 @@ const els = {
   fileVideo: document.getElementById("fileVideo"),
   fileClicks: document.getElementById("fileClicks"),
   again: document.getElementById("again"),
-  // guideLive (c)
-  guideLive: document.getElementById("guideLive"),
-  guideTimer: document.getElementById("guideTimer"),
-  guideCount: document.getElementById("guideCount"),
-  guideList: document.getElementById("guideList"),
-  guideStop: document.getElementById("guideStop"),
-  // Aufnahme-Phasen (Welle 48a): Bereit / Nimmt auf / Pausiert / Gestoppt.
-  guideBadge: document.getElementById("guideBadge"),
-  guidePulse: document.getElementById("guidePulse"),
-  guideBadgeText: document.getElementById("guideBadgeText"),
-  guideReadyHint: document.getElementById("guideReadyHint"),
-  guideCaptureHint: document.getElementById("guideCaptureHint"),
-  guideCountLine: document.getElementById("guideCountLine"),
-  guideCountText: document.getElementById("guideCountText"),
-  guideStartRec: document.getElementById("guideStartRec"),
-  guideCreate: document.getElementById("guideCreate"),
-  guideCtlLive: document.getElementById("guideCtlLive"),
-  guidePause: document.getElementById("guidePause"),
-  guideResume: document.getElementById("guideResume"),
-  guideCtlStopped: document.getElementById("guideCtlStopped"),
-  guideContinue: document.getElementById("guideContinue"),
-  guideDiscard: document.getElementById("guideDiscard"),
-  guideCancel: document.getElementById("guideCancel"),
-  guideNote: document.getElementById("guideNote"),
-  // Titel + Kategorie (Welle 31d)
-  guideMeta: document.getElementById("guideMeta"),
-  guideTitle: document.getElementById("guideTitle"),
-  guideCatWrap: document.getElementById("guideCatWrap"),
-  guideCategory: document.getElementById("guideCategory"),
-  guideCategoryNew: document.getElementById("guideCategoryNew"),
-  // guideDone (e)
-  guideDone: document.getElementById("guideDone"),
-  guideProgress: document.getElementById("guideProgress"),
-  guideUploadDone: document.getElementById("guideUploadDone"),
-  guideOpenApp: document.getElementById("guideOpenApp"),
-  guideAgain: document.getElementById("guideAgain"),
-  // Live-Führung (Welle 31): Einstieg + Führen-Liste + Führungs-Ansicht.
-  cardGuideRun: document.getElementById("cardGuideRun"),
-  fuehren: document.getElementById("fuehren"),
-  fuehrenBack: document.getElementById("fuehrenBack"),
-  fuehrenHint: document.getElementById("fuehrenHint"),
-  fuehrenList: document.getElementById("fuehrenList"),
-  // Filter-Chips (Welle 32, Punkt C)
-  fuehrenFilters: document.getElementById("fuehrenFilters"),
-  chipSite: document.getElementById("chipSite"),
-  chipAll: document.getElementById("chipAll"),
-  chipLive: document.getElementById("chipLive"),
-  chipDrafts: document.getElementById("chipDrafts"),
   guideRun: document.getElementById("guideRun"),
   runExit: document.getElementById("runExit"),
   runProgress: document.getElementById("runProgress"),
@@ -143,59 +212,15 @@ const els = {
   runNext: document.getElementById("runNext"),
   runDone: document.getElementById("runDone"),
   runDoneList: document.getElementById("runDoneList"),
-  // „Steply lernen" (Welle 35): Karte im Start-Screen + eigene Doku-Touren-Ansicht.
-  cardSteplyLearn: document.getElementById("cardSteplyLearn"),
   steplyLearn: document.getElementById("steplyLearn"),
   steplyLearnBack: document.getElementById("steplyLearnBack"),
+  steplyLearnEmpty: document.getElementById("steplyLearnEmpty"),
   steplyLearnHint: document.getElementById("steplyLearnHint"),
+  steplyLearnRetry: document.getElementById("steplyLearnRetry"),
   steplyLearnList: document.getElementById("steplyLearnList"),
-  // Automationen (Welle 36b): Start-Karte + Liste + Vorbereitung + Lauf-Ansicht.
-  cardAutomations: document.getElementById("cardAutomations"),
-  automations: document.getElementById("automations"),
-  autoListBack: document.getElementById("autoListBack"),
-  autoListHint: document.getElementById("autoListHint"),
-  autoList: document.getElementById("autoList"),
-  autoPrep: document.getElementById("autoPrep"),
-  autoPrepBack: document.getElementById("autoPrepBack"),
-  autoPrepTitle: document.getElementById("autoPrepTitle"),
-  autoDomainHint: document.getElementById("autoDomainHint"),
-  autoParamForm: document.getElementById("autoParamForm"),
-  autoClearValues: document.getElementById("autoClearValues"),
-  autoModeSemi: document.getElementById("autoModeSemi"),
-  autoModeAuto: document.getElementById("autoModeAuto"),
-  autoStart: document.getElementById("autoStart"),
-  autoPrepHint: document.getElementById("autoPrepHint"),
-  autoRun: document.getElementById("autoRun"),
-  autoExit: document.getElementById("autoExit"),
-  autoProgress: document.getElementById("autoProgress"),
-  autoBar: document.getElementById("autoBar"),
-  autoStepTitle: document.getElementById("autoStepTitle"),
-  autoStepAction: document.getElementById("autoStepAction"),
-  autoLiveStatus: document.getElementById("autoLiveStatus"),
-  autoWaitLogin: document.getElementById("autoWaitLogin"),
-  autoSkipNote: document.getElementById("autoSkipNote"),
-  autoCondSkipNote: document.getElementById("autoCondSkipNote"),
-  autoMissBox: document.getElementById("autoMissBox"),
-  autoMissText: document.getElementById("autoMissText"),
-  autoMissImageWrap: document.getElementById("autoMissImageWrap"),
-  autoMissImageFrame: document.getElementById("autoMissImageFrame"),
-  autoMissImage: document.getElementById("autoMissImage"),
-  autoDownloadNote: document.getElementById("autoDownloadNote"),
-  autoFileChip: document.getElementById("autoFileChip"),
-  autoCtlSemi: document.getElementById("autoCtlSemi"),
-  autoCtlAuto: document.getElementById("autoCtlAuto"),
-  autoCtlPaused: document.getElementById("autoCtlPaused"),
-  autoCtlMiss: document.getElementById("autoCtlMiss"),
-  autoExec: document.getElementById("autoExec"),
-  autoSkip: document.getElementById("autoSkip"),
-  autoPause: document.getElementById("autoPause"),
-  autoResume: document.getElementById("autoResume"),
-  autoContinue: document.getElementById("autoContinue"),
-  autoCancel: document.getElementById("autoCancel"),
-  autoDone: document.getElementById("autoDone"),
-  autoDoneTitle: document.getElementById("autoDoneTitle"),
-  autoDoneText: document.getElementById("autoDoneText"),
-  autoDoneList: document.getElementById("autoDoneList"),
+  recHelp: document.getElementById("recHelp"),
+  recHelpBack: document.getElementById("recHelpBack"),
+  status: document.getElementById("status"),
 };
 
 // ---- Zustand ----
@@ -211,14 +236,25 @@ let started = false; // Doppelstart-Schutz (Video)
 let panelWindowId = null; // Fenster-ID, an dem die Seitenleiste haengt
 let micReady = false; // Mikro-Preflight bestanden?
 let interruptedDiscarded = false; // beim Oeffnen eine klemmende Aufnahme verworfen?
+let recHelpReturn = ""; // Bildschirm, von dem aus „Hilfe bei Aufnahme-Problemen" geöffnet wurde
 
 // Konfiguration (Token + App-URL) aus chrome.storage.local.
 let cfg = { token: "", appUrl: "" };
 let hasToken = false;
 
-// Kontoname des verbundenen Tokens (via /api/recorder/me; fail-silent). Wird in Connect-
-// und Start-Screen als „Verbunden mit X" gezeigt - so faellt eine Fehlbindung sofort auf.
+// Kontoname des verbundenen Tokens (via /api/recorder/me; fail-silent). Steht im Avatar-Menü
+// („Organisation · Verbunden") und als Anfangsbuchstabe im Avatar — so fällt eine Fehlbindung
+// sofort auf. Welle 50a: pro Token in chrome.storage.local gemerkt (steplyAccountCache), damit der
+// Avatar beim Öffnen SOFORT stimmt; /me wird pro Panel-Öffnung höchstens EINMAL geholt.
 let accountName = "";
+let accountFetch = null; // laufende /me-Anfrage (Dedupe)
+
+// Aktueller Bildschirm (show) + Reiter (Aufnehmen | Anleitungen | Automationen).
+let currentSection = "";
+let currentTab = "record";
+
+// Neuere Version auf dem Server (Update-Check) — Punkt am Avatar + Menüeintrag. "" = keine.
+let updateVersion = "";
 
 // Fallback ohne Pairing (u. a. „Steply lernen" direkt nach der Installation).
 // app.steply.de ist noch NICHT mit der App verdrahtet (antwortet 403) — bis die
@@ -258,10 +294,11 @@ async function loadPendingTarget() {
   renderTargetBanner();
 }
 
-// Ziel-Banner (Welle 32, Punkt D1): erscheint NUR noch im Aufnahme-Anker-Modus
-// (pendingTarget aktiv) als „Aufnahme für: <Ziel-Label>" + „Ziel verwerfen". Im DEFAULT-Fall
-// (neues Tutorial) bleibt das Banner AUS — der frühere neutrale Hinweis „… als neues
-// Tutorial angelegt" ist bewusst entfernt (Richards Wunsch, zu viel Rauschen).
+// Ziel-Hinweis (Welle 32 D1, Welle 50a kompakt/violett): erscheint NUR im Aufnahme-Anker-Modus
+// (pendingTarget aktiv) als „Wird eingefügt in: <Ziel-Label>" + „Aufheben" — und nur auf den
+// Bildschirmen, auf denen er etwas bedeutet (Aufnehmen, Aufnahme/Prüfen; s. applyTargetBanner).
+let targetBannerOn = false;
+
 function renderTargetBanner() {
   if (!els.targetBanner) return;
   // Defensiv (Welle 33, Fix 4): Banner NUR bei echtem Ziel (pendingTarget && .target). Die
@@ -270,15 +307,14 @@ function renderTargetBanner() {
   const state =
     (typeof SteplyTargetBanner !== "undefined" && SteplyTargetBanner.targetBannerState(pendingTarget)) || {
       show: !!(pendingTarget && pendingTarget.target),
-      label: "die gewählte Stelle im Tutorial",
+      label: "die gewählte Stelle der Anleitung",
       broken: !!(pendingTarget && !pendingTarget.target),
     };
   if (state.show) {
-    if (els.targetPrefix) els.targetPrefix.textContent = "Aufnahme für: ";
+    if (els.targetPrefix) els.targetPrefix.textContent = "Wird eingefügt in: ";
     els.targetLabel.textContent = state.label;
-    els.targetBanner.classList.remove("target-banner-neutral");
     if (els.targetClear) els.targetClear.hidden = false;
-    els.targetBanner.hidden = false;
+    targetBannerOn = true;
   } else {
     // Kaputtes pendingTarget (Objekt ohne target, Altbestand) aktiv wegräumen (Selbstheilung).
     if (state.broken) {
@@ -290,15 +326,24 @@ function renderTargetBanner() {
         /* egal */
       }
     }
-    els.targetBanner.hidden = true;
+    targetBannerOn = false;
   }
+  applyTargetBanner();
 }
 
-// Ziel vergessen: aus dem Storage raeumen + Banner weg. (Verwerfen-Knopf & nach Abschluss.)
-// Härtung (Welle 33, Fix 4): jeder Schritt in try/catch; das Banner wird als LETZTE Zeile
+// Sichtbarkeit des Ziel-Hinweises je Bildschirm (Start + Aufnahme/Prüfen).
+function applyTargetBanner() {
+  if (!els.targetBanner) return;
+  const onScreen = currentSection === "start" || currentSection === "guideLive";
+  els.targetBanner.hidden = !(targetBannerOn && onScreen);
+}
+
+// Ziel vergessen: aus dem Storage räumen + Hinweis weg. (Aufheben-Knopf & nach Abschluss.)
+// Härtung (Welle 33, Fix 4): jeder Schritt in try/catch; der Hinweis wird als LETZTE Zeile
 // notfalls hart versteckt — egal, was Storage/Render vorher werfen.
 async function clearPendingTarget() {
   pendingTarget = null;
+  targetBannerOn = false;
   try {
     await chrome.storage.local.remove("pendingTarget");
   } catch (err) {
@@ -312,13 +357,15 @@ async function clearPendingTarget() {
   if (els.targetBanner) els.targetBanner.hidden = true;
 }
 
-// „Ziel verwerfen"-Knopf: Ziel raeumen; die naechste Aufnahme laeuft normal (neues Tutorial).
+// „Aufheben"-Knopf: Ziel räumen; die nächste Aufnahme wird eine neue Anleitung.
 async function discardTarget() {
   try {
     await clearPendingTarget();
-    setStatus("Ziel verworfen - die Aufnahme wird als neues Tutorial gespeichert.", "");
+    setStatus("Aufgehoben – die Aufnahme wird als neue Anleitung gespeichert.", "");
+    // Beim Prüfen gehören Titel/Kategorie jetzt wieder der neuen Anleitung.
+    if (guidePhase === "stopped") guideMetaPrepare();
   } catch (err) {
-    // Selbst bei einem Fehler muss der Knopf sichtbar wirken: Banner hart verstecken.
+    // Selbst bei einem Fehler muss der Knopf sichtbar wirken: Hinweis hart verstecken.
     if (els.targetBanner) els.targetBanner.hidden = true;
   }
 }
@@ -349,44 +396,77 @@ async function loadConfig() {
   hasToken = !!cfg.token;
 }
 
-// Kontoname des aktuellen Tokens holen (GET /api/recorder/me). FAIL-SILENT: bei jedem
-// Fehler bleibt der neutrale Text ("Mit Steply verbunden.") stehen. Kurzer Timeout, damit
-// das Panel nie auf das Netz wartet. Aktualisiert die Anzeige, wenn sie gerade sichtbar ist.
-async function fetchAccountName() {
-  if (!cfg.token) {
-    accountName = "";
-    return;
+// Kurzer, nicht umkehrbarer Fingerabdruck des Tokens (FNV-1a). Damit gehören lokal gemerkte
+// Listen/Kontonamen nachweislich zum AKTUELLEN Token — nach einem Kontowechsel wird nichts
+// Fremdes angezeigt. Der Token selbst wird dafür nirgends zusätzlich gespeichert.
+function tokenFp(token) {
+  let h = 0x811c9dc5;
+  const s = String(token || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  const base = appBase();
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(base + "/api/recorder/me", {
-      method: "GET",
-      headers: { Authorization: "Bearer " + cfg.token },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return; // neutraler Text bleibt (z. B. Token abgelaufen -> zeigt „verbunden")
-    const body = await res.json().catch(() => ({}));
-    if (body && body.account) {
-      accountName = String(body.account).slice(0, 80);
-      refreshConnectionUi();
-    }
-  } catch (err) {
-    /* fail-silent: neutraler Text wie bisher */
-  }
+  return h.toString(16);
 }
 
-// Verbindungs-Anzeige (Connect + Start) auffrischen, ohne den Screen zu wechseln.
-function refreshConnectionUi() {
-  if (!els.start.hidden) updateConnInfo();
-  if (!els.connect.hidden) updateConnectAccount();
+// Kontoname des aktuellen Tokens holen (GET /api/recorder/me). FAIL-SILENT; kurzer Timeout.
+// Dedupe: parallele Aufrufe teilen sich EINE Anfrage (vorher kam /me beim Öffnen doppelt).
+function fetchAccountName() {
+  if (!cfg.token) {
+    accountName = "";
+    return Promise.resolve();
+  }
+  if (accountFetch) return accountFetch;
+  const token = cfg.token;
+  const base = appBase();
+  accountFetch = (async () => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(base + "/api/recorder/me", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + token },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) return; // neutraler Text bleibt
+      const body = await res.json().catch(() => ({}));
+      if (body && body.account && token === cfg.token) {
+        accountName = String(body.account).slice(0, 80);
+        try {
+          chrome.storage.local.set({ steplyAccountCache: { fp: tokenFp(token), name: accountName } });
+        } catch (err) {
+          /* reiner Komfort */
+        }
+        renderHeader();
+        if (currentSection === "connect") updateConnectAccount();
+      }
+    } catch (err) {
+      /* fail-silent */
+    }
+  })();
+  return accountFetch;
+}
+
+// Gemerkten Kontonamen (passend zum Token) sofort übernehmen — vor dem ersten Rendern.
+async function loadAccountCache() {
+  if (!cfg.token) return;
+  try {
+    const r = await chrome.storage.local.get("steplyAccountCache");
+    const c = r && r.steplyAccountCache;
+    if (c && c.fp === tokenFp(cfg.token) && typeof c.name === "string") accountName = c.name.slice(0, 80);
+  } catch (err) {
+    /* egal */
+  }
 }
 
 function updateConnectAccount() {
+  if (!els.connectAccount) return;
   if (hasToken && accountName) {
     els.connectAccount.textContent = "Verbunden mit " + accountName + ".";
+    els.connectAccount.hidden = false;
+  } else if (hasToken) {
+    els.connectAccount.textContent = "Mit Steply verbunden.";
     els.connectAccount.hidden = false;
   } else {
     els.connectAccount.textContent = "";
@@ -394,16 +474,93 @@ function updateConnectAccount() {
   }
 }
 
-function updateConnInfo() {
-  if (hasToken) {
-    els.connText.textContent = accountName
-      ? "Verbunden mit " + accountName + "."
-      : "Mit Steply verbunden.";
-    els.connBtn.textContent = "Verbindung aendern";
-  } else {
-    els.connText.textContent =
-      "Nicht verbunden - Sofort-Anleitung braucht eine Verbindung.";
-    els.connBtn.textContent = "Verbinden";
+// ── Kopf: Avatar (nur verbunden) + Menüs (Welle 50a) ─────────────────────────────────────
+function extVersion() {
+  try {
+    return chrome.runtime.getManifest().version || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+function renderHeader() {
+  if (els.avatarBtn) els.avatarBtn.hidden = !hasToken;
+  if (els.avatarLetter) {
+    const letter = (accountName || "").trim().charAt(0).toUpperCase();
+    els.avatarLetter.textContent = letter || "S";
+  }
+  if (els.avatarBtn) {
+    els.avatarBtn.title = accountName ? accountName + " – verbunden" : "Mit Steply verbunden";
+  }
+  if (els.avatarDot) els.avatarDot.hidden = !updateVersion;
+  if (els.mAccountName) els.mAccountName.textContent = accountName || "Ihr Steply-Konto";
+  if (els.mUpdate) els.mUpdate.hidden = !updateVersion;
+  if (els.mUpdateVer) els.mUpdateVer.textContent = updateVersion;
+  if (els.mVersion) {
+    const v = extVersion();
+    els.mVersion.textContent = v ? "Version " + v : "Steply-Erweiterung";
+  }
+  if (els.tabAutos) els.tabAutos.hidden = !hasToken;
+}
+
+function closeMenus() {
+  if (els.menuHelp) els.menuHelp.hidden = true;
+  if (els.menuAccount) els.menuAccount.hidden = true;
+  if (els.menuDim) els.menuDim.hidden = true;
+  if (els.helpBtn) els.helpBtn.setAttribute("aria-expanded", "false");
+  if (els.avatarBtn) els.avatarBtn.setAttribute("aria-expanded", "false");
+}
+
+function toggleMenu(which) {
+  const menu = which === "help" ? els.menuHelp : els.menuAccount;
+  const btn = which === "help" ? els.helpBtn : els.avatarBtn;
+  if (!menu) return;
+  const open = menu.hidden;
+  closeMenus();
+  if (!open) return;
+  renderHeader();
+  menu.hidden = false;
+  if (els.menuDim) els.menuDim.hidden = false;
+  if (btn) btn.setAttribute("aria-expanded", "true");
+}
+
+// Menü-Aktion: erst schließen, dann ausführen.
+function menuAction(fn) {
+  return () => {
+    closeMenus();
+    fn();
+  };
+}
+
+function openAppTab(pathname) {
+  try {
+    chrome.tabs.create({ url: appBase() + pathname, active: true });
+  } catch (err) {
+    /* egal */
+  }
+}
+
+// Läuft gerade eine Aufnahme, eine Führung oder eine Automation? Dann wechseln Menü-Einträge
+// den Bildschirm nicht (nichts Laufendes wird aus Versehen „weggeklickt").
+function busyElsewhere() {
+  const videoRec = mediaRecorder && mediaRecorder.state !== "inactive";
+  return !!(videoRec || guidePhase !== "idle" || guideFinishing || exec.running || !els.guideRun.hidden);
+}
+
+function busyNotice() {
+  setStatus("Bitte beenden Sie zuerst die laufende Aufnahme, Anleitung oder Automation.", "error");
+}
+
+// „Trennen": Token entfernen (nach Rückfrage). Der storage-Listener zeigt danach den
+// „Nicht verbunden"-Bildschirm.
+async function disconnect() {
+  const ok = confirm("Die Verbindung zu Steply in diesem Browser trennen?");
+  if (!ok) return;
+  try {
+    await chrome.storage.local.remove(["badgeCache", "steplyAccountCache"]);
+    await chrome.storage.local.set({ steplyToken: "" });
+  } catch (err) {
+    setStatus("Die Verbindung konnte nicht getrennt werden.", "error");
   }
 }
 
@@ -427,9 +584,9 @@ function isNewerVersion(server, current) {
   return false;
 }
 
-// Update-Hinweis: die auf dem Server hinterlegte Version lesen (public/downloads/
-// steply-recorder.json aus Paket 2). Ist sie neuer als diese Installation, eine dezente,
-// NIE blockierende Statuszeile mit Link auf /extension zeigen. Fail-silent + kurzer Timeout.
+// Update-Hinweis (Welle 50a: Punkt am Avatar + Menüeintrag statt Banner): die auf dem Server
+// hinterlegte Version lesen (public/downloads/steply-recorder.json). Ist sie neuer als diese
+// Installation, erscheint „Update installieren" im Avatar-Menü. Fail-silent + kurzer Timeout.
 async function checkForUpdate() {
   const base = appBase();
   try {
@@ -443,57 +600,93 @@ async function checkForUpdate() {
     if (!res.ok) return;
     const data = await res.json().catch(() => null);
     const serverVer = data && typeof data.version === "string" ? data.version : "";
-    let current = "";
-    try {
-      current = chrome.runtime.getManifest().version;
-    } catch (err) {
-      current = "";
-    }
+    const current = extVersion();
     if (serverVer && current && isNewerVersion(serverVer, current)) {
-      showUpdateHint(base, serverVer);
+      updateVersion = serverVer.slice(0, 20);
+      renderHeader();
     }
   } catch (err) {
     /* fail-silent - der Update-Hinweis ist rein optional */
   }
 }
 
-function showUpdateHint(base, serverVer) {
-  if (!els.updateHint) return;
-  els.updateHint.textContent = "Neue Version verfuegbar (" + serverVer + "). ";
-  const a = document.createElement("a");
-  a.textContent = "Jetzt aktualisieren";
-  a.href = "#";
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: base + "/extension", active: true });
-  });
-  els.updateHint.appendChild(a);
-  els.updateHint.hidden = false;
-}
-
-function setStatus(text, kind) {
+// Kontext-Meldung. Sie steht im .status-slot des aktiven Bildschirms (nah an der Aktion),
+// nicht mehr ganz unten in der Seitenleiste (Welle 50a). title = optionaler Technik-Code
+// (nur als Tooltip, nie im sichtbaren Text).
+function setStatus(text, kind, title) {
   els.status.textContent = text || "";
   els.status.className = "status" + (kind ? " status-" + kind : "");
+  if (title) els.status.title = title;
+  else els.status.removeAttribute("title");
 }
 
-// Genau EINEN Abschnitt zeigen.
+// Welche Bildschirme zu welchem Reiter gehören (Reiterleiste nur dort sichtbar).
+const TAB_SECTIONS = { start: "record", guides: "guides", automations: "autos" };
+const ALL_SECTIONS = [
+  "connect",
+  "start",
+  "guides",
+  "automations",
+  "autoPrep",
+  "autoRun",
+  "guideLive",
+  "guideDone",
+  "videoSetup",
+  "videoLive",
+  "videoDone",
+  "guideRun",
+  "steplyLearn",
+  "recHelp",
+];
+
+// Genau EINEN Abschnitt zeigen (+ Reiterleiste, Ziel-Hinweis, Meldungsplatz nachziehen).
 function show(section) {
-  els.connect.hidden = section !== "connect";
-  els.start.hidden = section !== "start";
-  els.videoSetup.hidden = section !== "videoSetup";
-  els.videoLive.hidden = section !== "videoLive";
-  els.videoDone.hidden = section !== "videoDone";
-  els.guideLive.hidden = section !== "guideLive";
-  els.guideDone.hidden = section !== "guideDone";
-  // Live-Führung (Welle 31): eigene Bereiche.
-  els.fuehren.hidden = section !== "fuehren";
-  els.guideRun.hidden = section !== "guideRun";
-  // „Steply lernen" (Welle 35): eigene Doku-Touren-Ansicht.
-  if (els.steplyLearn) els.steplyLearn.hidden = section !== "steplyLearn";
-  // Automationen (Welle 36b): Liste / Vorbereitung / Lauf.
-  if (els.automations) els.automations.hidden = section !== "automations";
-  if (els.autoPrep) els.autoPrep.hidden = section !== "autoPrep";
-  if (els.autoRun) els.autoRun.hidden = section !== "autoRun";
+  closeMenus();
+  const changed = section !== currentSection;
+  currentSection = section;
+  for (const id of ALL_SECTIONS) {
+    if (els[id]) els[id].hidden = id !== section;
+  }
+  const tab = TAB_SECTIONS[section] || null;
+  if (els.tabs) els.tabs.hidden = !tab || !hasToken;
+  if (tab) currentTab = tab;
+  if (els.tabRecord) els.tabRecord.classList.toggle("on", tab === "record");
+  if (els.tabGuides) els.tabGuides.classList.toggle("on", tab === "guides");
+  if (els.tabAutos) els.tabAutos.classList.toggle("on", tab === "autos");
+  for (const t of [els.tabRecord, els.tabGuides, els.tabAutos]) {
+    if (t) t.setAttribute("aria-selected", t.classList.contains("on") ? "true" : "false");
+  }
+  renderHeader();
+  applyTargetBanner();
+  // Meldung in den Slot des aktiven Bildschirms umhängen; beim Bildschirmwechsel leeren.
+  const sec = els[section];
+  if (sec && els.status) {
+    const slot = sec.querySelector(".status-slot") || sec.querySelector(".body") || sec;
+    if (els.status.parentNode !== slot) slot.appendChild(els.status);
+  }
+  if (changed) setStatus("");
+}
+
+// Linien-Icon aus dem Symbol-Satz in panel.html (Welle 50a: Icons statt Emoji).
+function icon(name, big) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", big ? "i" : "i s");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(NS, "use");
+  use.setAttribute("href", "#i-" + name);
+  svg.appendChild(use);
+  return svg;
+}
+
+// Text + Icon in ein Element setzen (ersetzt den Inhalt).
+function setIconText(el, name, text) {
+  if (!el) return;
+  el.textContent = "";
+  if (name) el.appendChild(icon(name));
+  const span = document.createElement("span");
+  span.textContent = text;
+  el.appendChild(span);
 }
 
 function fmtTime(totalSeconds) {
@@ -524,13 +717,25 @@ function updateInterruptedHint() {
   els.interruptedHint.hidden = !interruptedDiscarded;
 }
 
-// ---- (a) Verbinden ----
-function showConnect() {
+// ---- Verbinden (Bildschirm 9) ----
+// mode "first" = nicht verbunden (Startbildschirm ohne Konto); "change" = aus dem Avatar-Menü.
+let connectMode = "first";
+
+function showConnect(mode) {
+  connectMode = mode === "change" && hasToken ? "change" : "first";
   els.token.value = cfg.token || "";
   els.appUrl.value = cfg.appUrl || "";
   els.appUrl.placeholder = DEFAULT_APP_URL;
   els.cfgStatus.textContent = "";
   els.cfgStatus.className = "status";
+  const change = connectMode === "change";
+  els.connectTitle.textContent = change ? "Verbindung ändern" : "Mit Ihrem Steply-Konto verbinden";
+  els.connectLead.textContent = change
+    ? "Verbinden Sie diese Steply-Erweiterung mit einem anderen Konto – am einfachsten direkt in Steply."
+    : "Dann landen Aufnahmen direkt in Ihrer Bibliothek, und Sie können Anleitungen auf Websites zeigen.";
+  els.connectBack.hidden = !change;
+  els.connectVideoLine.hidden = change;
+  setManualOpen(false);
   updateConnectAccount();
   show("connect");
   updateInterruptedHint();
@@ -538,49 +743,72 @@ function showConnect() {
   if (hasToken && !accountName) fetchAccountName();
 }
 
+function setManualOpen(open) {
+  els.manualBox.hidden = !open;
+  els.manualToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  els.manualToggle.textContent = open ? "Code-Eingabe schließen" : "Code manuell eingeben";
+}
+
 async function saveCfg() {
   const token = (els.token.value || "").trim();
   const appUrl = (els.appUrl.value || "").trim().replace(/\/+$/, "");
+  if (!token) {
+    els.cfgStatus.textContent = "Bitte fügen Sie den Verbindungs-Code aus Steply ein.";
+    els.cfgStatus.className = "status status-error";
+    return;
+  }
   try {
     await chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl });
     cfg.token = token;
     cfg.appUrl = appUrl;
-    hasToken = !!token;
-    els.cfgStatus.textContent = token
-      ? "Gespeichert. Sofort-Anleitung und Video-Upload sind verfuegbar."
-      : "Gespeichert. Ohne Token nur Video-Modus (zwei Dateien zum Hochladen).";
+    hasToken = true;
+    els.cfgStatus.textContent = "Gespeichert – die Steply-Erweiterung ist verbunden.";
     els.cfgStatus.className = "status status-ok";
-    // Nach dem Speichern zur Auswahl.
-    setTimeout(() => showStart(), 500);
+    setTimeout(() => {
+      if (currentSection === "connect") showStart();
+    }, 500);
   } catch (err) {
     els.cfgStatus.textContent = "Konnte nicht gespeichert werden.";
     els.cfgStatus.className = "status status-error";
   }
 }
 
-// ---- (b) Start / Auswahl ----
+// Startbildschirm je nach Verbindung: verbunden → zuletzt genutzter Reiter bzw. „Aufnehmen",
+// nicht verbunden → Bildschirm 9.
+function showHome(tab) {
+  if (!hasToken) {
+    showConnect("first");
+    return;
+  }
+  showTab(tab || currentTab || "record");
+}
+
+function showTab(tab) {
+  if (!hasToken) {
+    showConnect("first");
+    return;
+  }
+  if (tab === "guides") showGuides();
+  else if (tab === "autos") showAutomations();
+  else showStart();
+}
+
+// ---- Reiter „Aufnehmen" (Bildschirm 1) ----
 function showStart() {
-  // Banner-Zustand kann von hasToken abhaengen (neutraler "neues Tutorial"-Modus).
+  if (!hasToken) {
+    showConnect("first");
+    return;
+  }
   renderTargetBanner();
-  els.cardGuide.disabled = !hasToken;
-  els.cardGuide.title = hasToken
-    ? ""
-    : "Zuerst mit Steply verbinden (Direkt-Upload noetig).";
-  // Live-Führung (Welle 31): braucht ebenfalls eine Verbindung (Tutorial-Liste laden).
-  els.cardGuideRun.disabled = !hasToken;
-  els.cardGuideRun.title = hasToken ? "" : "Zuerst mit Steply verbinden.";
-  // Automationen (Welle 36b): NUR bei gepairtem Token sichtbar (Automationen sind Kontodaten).
-  if (els.cardAutomations) els.cardAutomations.hidden = !hasToken;
-  updateConnInfo();
-  setStatus("");
   show("start");
   updateInterruptedHint();
-  // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt.
-  if (hasToken && !accountName) fetchAccountName();
+  // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt (dedupliziert).
+  if (!accountName) fetchAccountName();
   // Kategorien (Welle 31d) schon jetzt warm laden (kurz gecacht), damit die Auswahl beim
-  // Aufnahme-Start ohne Wartezeit steht. Fail-silent, nicht blockierend.
-  if (hasToken) loadRecCategories();
-  // „Fuer diese Seite" (Welle 31c) auffrischen (nutzt gecachte Liste; matcht lokal).
+  // Prüfen ohne Wartezeit steht. Fail-silent, nicht blockierend.
+  loadRecCategories();
+  // „Für diese Seite": sofort aus dem Speicher, im Hintergrund aktualisieren.
+  renderSiteRow();
   refreshSiteMatch();
 }
 
@@ -669,8 +897,10 @@ function downloadBlob(blob, filename) {
 
 // --- Mikro-Preflight: VOR dem Start pruefen, ob das Mikrofon nutzbar ist. ---
 function setMicStatus(kind, text) {
-  els.micStatus.className = "mic-status " + kind;
-  els.micStatus.textContent = text;
+  els.micStatus.className = "info" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
+  els.micStatus.textContent = "";
+  if (kind !== "pending") els.micStatus.appendChild(icon(kind === "ok" ? "mic" : "alert"));
+  els.micStatus.appendChild(document.createTextNode(text));
 }
 
 function updateBeginEnabled() {
@@ -679,19 +909,19 @@ function updateBeginEnabled() {
 }
 
 async function micPreflight() {
-  setMicStatus("pending", "Mikrofon wird geprueft ...");
+  setMicStatus("pending", "Mikrofon wird geprüft …");
   els.micRetry.hidden = true;
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true });
     // Sofort wieder freigeben - beim eigentlichen Start neu anfordern (Recht bleibt).
     s.getTracks().forEach((t) => t.stop());
     micReady = true;
-    setMicStatus("ok", "🎙 Mikrofon bereit");
+    setMicStatus("ok", "Mikrofon bereit");
   } catch (err) {
     micReady = false;
     setMicStatus(
       "err",
-      "Mikrofon nicht verfuegbar. Bitte Zugriff erlauben - oder unten „ohne Ton aufnehmen“ waehlen."
+      "Mikrofon nicht verfügbar. Bitte Zugriff erlauben – oder unten „Ohne Ton aufnehmen“ wählen."
     );
     els.micRetry.hidden = false;
   }
@@ -706,8 +936,8 @@ function goVideoSetup() {
   // Der Verworfen-Hinweis hat seinen Zweck erfuellt, sobald der Nutzer weitergeht.
   interruptedDiscarded = false;
   els.interruptedHint.hidden = true;
-  setStatus("");
   show("videoSetup");
+  setStatus("");
   micPreflight();
 }
 
@@ -715,7 +945,7 @@ async function begin() {
   if (started) return; // Doppelstart-Schutz
   started = true;
   els.begin.disabled = true;
-  setStatus("Bitte waehlen Sie im Dialog den Tab oder das Fenster ...");
+  setStatus("Bitte wählen Sie im Dialog den Tab oder das Fenster …");
 
   try {
     displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -726,7 +956,7 @@ async function begin() {
     // Nutzer hat abgebrochen oder Berechtigung verweigert.
     started = false;
     updateBeginEnabled();
-    setStatus("Aufnahme abgebrochen. Sie koennen es erneut versuchen.", "error");
+    setStatus("Aufnahme abgebrochen. Sie können es erneut versuchen.", "error");
     return;
   }
 
@@ -742,7 +972,7 @@ async function begin() {
         ...micStream.getAudioTracks(),
       ]);
     } catch (err) {
-      setStatus("Mikrofon nicht verfuegbar - Aufnahme laeuft ohne Ton.", "error");
+      setStatus("Mikrofon nicht verfügbar – die Aufnahme läuft ohne Ton.", "error");
     }
   }
 
@@ -756,7 +986,7 @@ async function begin() {
     cleanupStreams();
     started = false;
     updateBeginEnabled();
-    setStatus("Aufnahme konnte nicht gestartet werden: " + err.message, "error");
+    setStatus("Die Aufnahme konnte nicht gestartet werden.", "error", err && err.message ? err.message : "");
     return;
   }
 
@@ -781,8 +1011,9 @@ async function begin() {
   stopping = false;
   els.stop.disabled = false;
   els.clickCount.textContent = "0";
-  els.micLive.textContent =
-    wantAudio && micStream ? "🎙 Mikrofon aktiv" : "Ohne Ton";
+  els.micLive.textContent = "";
+  els.micLive.appendChild(icon("mic"));
+  els.micLive.appendChild(document.createTextNode(wantAudio && micStream ? "Mikrofon aktiv" : "Ohne Ton"));
   show("videoLive");
   setStatus("");
   startTimer(els.timer);
@@ -792,7 +1023,7 @@ function stop() {
   if (stopping) return;
   stopping = true;
   els.stop.disabled = true;
-  setStatus("Aufnahme wird abgeschlossen ...");
+  setStatus("Aufnahme wird abgeschlossen …");
   setRecState(false); // Content-Scripts hoeren auf, Klicks zu erfassen
   stopTimer();
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
@@ -841,10 +1072,7 @@ function downloadFallback(videoBlob, clicksBlob) {
   const clicksName = downloadBlob(clicksBlob, stampName("clicks", "json"));
   els.fileVideo.textContent = videoName;
   els.fileClicks.textContent = clicksName;
-  setStatus(
-    "2 Dateien heruntergeladen - laden Sie beide in Steply hoch (Aus Video).",
-    "ok"
-  );
+  setStatus("Zwei Dateien liegen in Ihrem Download-Ordner.", "ok");
 }
 
 function setUploadProgress(text) {
@@ -853,8 +1081,9 @@ function setUploadProgress(text) {
 
 function showUploadError(message, videoBlob, clicksBlob) {
   setStatus(
-    "Upload fehlgeschlagen: " + message + " - Dateien wurden stattdessen heruntergeladen.",
-    "error"
+    "Das Hochladen hat nicht geklappt – die Dateien wurden stattdessen heruntergeladen.",
+    "error",
+    message
   );
   downloadFallback(videoBlob, clicksBlob);
 }
@@ -868,7 +1097,7 @@ function putVideo(uploadUrl, blob) {
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
         const pct = Math.round((e.loaded / e.total) * 100);
-        setUploadProgress("Video wird hochgeladen ... " + pct + "%");
+        setUploadProgress("Video wird hochgeladen … " + pct + " %");
       }
     };
     xhr.onload = () => {
@@ -885,7 +1114,7 @@ async function uploadToSteply(videoBlob) {
   els.uploadBox.hidden = false;
   els.uploadDone.hidden = true;
   setStatus("");
-  setUploadProgress("Verbindung zu Steply wird hergestellt ...");
+  setUploadProgress("Verbindung zu Steply wird hergestellt …");
 
   const base = appBase();
 
@@ -909,7 +1138,7 @@ async function uploadToSteply(videoBlob) {
   await putVideo(hs.uploadUrl, videoBlob);
 
   // 3) Complete: Job einreihen (mit Pfad, Titel, Klicks).
-  setUploadProgress("Wird verarbeitet ...");
+  setUploadProgress("Wird verarbeitet …");
   let done;
   try {
     const res = await fetch(base + "/api/recorder/complete", {
@@ -934,7 +1163,7 @@ async function uploadToSteply(videoBlob) {
   els.uploadProgress.textContent = "";
   els.uploadDone.hidden = false;
   const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
-  setStatus("Hochgeladen" + orgHint + " - das Tutorial wird erstellt.", "ok");
+  setStatus("Hochgeladen" + orgHint + ".", "ok");
   notifyAppTabs();
   if (els.openApp) {
     els.openApp.onclick = () => {
@@ -1043,7 +1272,7 @@ function guideMatchDownloads() {
 }
 
 function guideBusyHint() {
-  setStatus("Screenshot wird erfasst ...");
+  setStatus("Screenshot wird erfasst …");
 }
 
 // Nach erfolgreichem Upload alle offenen App-Tabs benachrichtigen: content.js reicht
@@ -1074,12 +1303,11 @@ function notifyAppTabs() {
 }
 
 // ============================================================================
-// AUFNAHME-PHASEN (Welle 48a): Bereit → Nimmt auf ⇄ Pausiert → Gestoppt (Prüfen).
+// AUFNAHME-PHASEN (Welle 48a, Welle 50a): Nimmt auf ⇄ Pausiert → Gestoppt (Prüfen).
 //
-// Vorher startete ein Klick auf die Karte SOFORT die Aufnahme, und es gab nur „fertigstellen"
-// (= sofort hochladen). Jetzt:
-//   idle       kein Sofort-Ablauf (Start-Screen o. Ä.)
-//   ready      Karte geklickt; es wird NOCH NICHT aufgenommen (kein rec im Storage, kein Timer)
+//   idle       kein Sofort-Ablauf. Der Start-Screen („Aufnahme starten") IST der frühere
+//              Bereit-Zustand: es wird NICHTS aufgenommen (kein rec im Storage, kein Timer),
+//              bis der Nutzer dort klickt. Eine eigene Phase „ready" gibt es seit Welle 50a nicht mehr.
 //   recording  rec gesetzt → content.js erfasst; Timer läuft; Downloads + Popups werden beobachtet
 //   paused     rec entfernt → content.js passiv (Navigieren erzeugt keine Schritte); Timer steht
 //   stopped    rec entfernt; Liste prüfen/bearbeiten → „Anleitung erstellen" | „Weiter aufnehmen"
@@ -1091,7 +1319,7 @@ function notifyAppTabs() {
 // verarbeitet sind (max. GUIDE_HALT_MAX_MS) — so geht kein Klick kurz vor „Stopp" verloren.
 // ============================================================================
 
-let guidePhase = "idle"; // "idle" | "ready" | "recording" | "paused" | "stopped"
+let guidePhase = "idle"; // "idle" | "recording" | "paused" | "stopped"
 let guideNonce = ""; // je Aufnahme-Sitzung (bleibt über Pause/Fortsetzen gleich)
 function guideRecNonce() {
   if (!guideNonce) {
@@ -1142,12 +1370,13 @@ function guideEnsureContent() {
   }
 }
 
-// Karte „Sofort-Anleitung" (und jeder andere Einstieg): in die Phase „Bereit" — es wird
-// NOCH NICHT aufgenommen. Titel/Kategorie können schon eingetragen werden.
+// „Aufnahme starten" auf dem Start-Screen (Welle 50a): startet DIREKT die Aufnahme. Vorher
+// (auf dem Start-Screen) nimmt nichts auf — der Klick ist die bewusste Entscheidung des Nutzers.
 async function startGuide() {
+  if (!hasToken) return;
+  if (guidePhase !== "idle" || guideFinishing) return; // Doppelklick-Schutz
   resetGuide();
   guideFinishing = false;
-  guidePhase = "ready";
   interruptedDiscarded = false;
   els.interruptedHint.hidden = true;
   els.guideCount.textContent = "0";
@@ -1157,24 +1386,23 @@ async function startGuide() {
   guidePauseAt = 0;
   stopTimer();
   els.guideTimer.textContent = "00:00";
-  setStatus("");
-  show("guideLive");
-  renderGuidePhase();
-  // Titel + Kategorie (Welle 31d): Block vorbereiten (nicht blockierend — die Kategorie-
-  // Liste lädt asynchron). Bei Aufnahme-Anker bleibt er aus.
+  // Titel + Kategorie (Welle 31d) im Hintergrund vorbereiten — sichtbar erst beim Prüfen.
   guideMetaPrepare();
-  // Schon jetzt nachimpfen, damit beim Klick auf „Aufnahme starten" alles bereit ist.
-  guideEnsureContent();
+  await guideBeginCapture(true);
 }
 
-// „● Aufnahme starten" (aus Bereit), „▶ Fortsetzen" (aus Pausiert), „Weiter aufnehmen"
-// (aus Gestoppt): Erfassung (wieder) einschalten. Die Schrittliste bleibt erhalten.
-async function guideStartRecording() {
+// „Fortsetzen" (aus Pausiert) bzw. „Weiter aufnehmen" (aus Gestoppt): Erfassung wieder an.
+function guideStartRecording() {
+  return guideBeginCapture(false);
+}
+
+// Erfassung (wieder) einschalten. fresh = neue Aufnahme vom Start-Screen (Phase idle).
+// Die Schrittliste bleibt bei Fortsetzen/Weiter aufnehmen erhalten.
+async function guideBeginCapture(fresh) {
   if (guideFinishing) return;
-  if (guidePhase !== "ready" && guidePhase !== "paused" && guidePhase !== "stopped") return;
+  if (fresh ? guidePhase !== "idle" : guidePhase !== "paused" && guidePhase !== "stopped") return;
   guideSeq++; // ein noch laufendes Anhalten (Queue-Drain) wird damit gegenstandslos
-  const from = guidePhase;
-  if (from === "ready") {
+  if (fresh) {
     startEpoch = Date.now();
     guidePausedMs = 0;
   } else if (guidePauseAt) {
@@ -1183,6 +1411,7 @@ async function guideStartRecording() {
   guidePauseAt = 0;
   guidePhase = "recording";
   guideActive = true;
+  show("guideLive");
   setStatus("");
   // Datei-Brücke (Welle 39): Downloads NUR in „Nimmt auf" beobachten (Metadaten-Zuordnung).
   if (!guideDownloadHandler) guideAddDownloadWatch();
@@ -1246,14 +1475,15 @@ function guidePauseRecording() {
   guideHalt("paused");
 }
 
+// „Fertig" in der Steuerleiste = Stopp → Prüfen-Bildschirm.
 function guideStopRecording() {
   if (guidePhase !== "recording" && guidePhase !== "paused") return;
   guideHalt("stopped");
 }
 
-// „Abbrechen" (Bereit) bzw. „Verwerfen" (Gestoppt): alles verwerfen, zurück zum Start-Screen.
-// Mit Schritten nur nach Bestätigung. Titel/Kategorie werden mit verworfen; ein Aufnahme-Anker
-// (Ziel im Builder) bleibt stehen — er hat seinen eigenen „Ziel verwerfen"-Knopf.
+// „Verwerfen" (Prüfen): alles verwerfen, zurück zum Start-Screen. Mit Schritten nur nach
+// Bestätigung. Titel/Kategorie werden mit verworfen; ein Aufnahme-Anker (Ziel im Builder)
+// bleibt stehen — er hat seinen eigenen „Aufheben"-Knopf.
 async function guideDiscardRecording() {
   if (guideFinishing) return;
   if (guideSteps.length > 0) {
@@ -1277,76 +1507,57 @@ async function guideDiscardRecording() {
   newRecording();
 }
 
-// EINE Render-Funktion für die Sektion guideLive: Badge, Timer, Hinweise, Knöpfe.
+// EINE Render-Funktion für die Sektion guideLive: Steuerleiste (Aufnahme), Prüfen-Kopf,
+// Titel/Kategorie, Hinweise und die feste Fußleiste (nur beim Prüfen).
 function renderGuidePhase() {
   const p = guidePhase;
   const n = guideSteps.length;
   const busy = guideFinishing;
-  const badgeText = {
-    ready: "Bereit",
-    recording: "Aufnahme läuft",
-    paused: "Pausiert",
-    stopped: "Aufnahme gestoppt",
-  };
-  if (els.guideBadge) {
-    els.guideBadge.classList.toggle("is-ready", p === "ready");
-    els.guideBadge.classList.toggle("is-paused", p === "paused");
-    els.guideBadge.classList.toggle("is-stopped", p === "stopped");
-  }
-  if (els.guideBadgeText) els.guideBadgeText.textContent = badgeText[p] || "";
-  if (els.guidePulse) els.guidePulse.hidden = p !== "recording";
-  els.guideTimer.hidden = p === "ready";
-  els.guideTimer.classList.toggle("is-frozen", p === "paused" || p === "stopped");
+  const live = p === "recording" || p === "paused";
+  const review = p === "stopped";
 
-  if (els.guideReadyHint) els.guideReadyHint.hidden = p !== "ready";
+  if (els.guideRecBar) els.guideRecBar.hidden = !live;
+  if (els.guideReviewHead) els.guideReviewHead.hidden = !review;
+  if (els.guideFooter) els.guideFooter.hidden = !review;
+
+  if (els.guideBadgeText) els.guideBadgeText.textContent = p === "paused" ? "Pausiert" : "Aufnahme läuft";
+  if (els.guidePulse) els.guidePulse.hidden = p !== "recording";
+  if (els.guidePauseDot) els.guidePauseDot.hidden = p !== "paused";
+  if (els.guideCountInline) els.guideCountInline.textContent = n === 1 ? "1 Schritt" : n + " Schritte";
   if (p !== "recording") guideSetCaptureHint(false);
 
-  // Zähler + Liste: in „Bereit" noch nichts zu zeigen.
-  if (els.guideCountLine) els.guideCountLine.hidden = p === "ready";
-  els.guideList.hidden = p === "ready";
   if (els.guideCountText) {
-    const unit = n === 1 ? "Schritt aufgenommen" : "Schritte aufgenommen";
-    els.guideCountText.textContent =
-      p === "stopped" && n > 0 ? unit + " – prüfen und erstellen" : unit;
+    els.guideCountText.textContent = n === 1 ? "Schritt aufgenommen" : "Schritte aufgenommen";
   }
 
   // Knöpfe je Phase.
-  if (els.guideStartRec) {
-    els.guideStartRec.hidden = p !== "ready";
-    els.guideStartRec.disabled = busy;
-  }
-  if (els.guideCancel) els.guideCancel.hidden = p !== "ready";
-  if (els.guideCtlLive) els.guideCtlLive.hidden = p !== "recording" && p !== "paused";
   if (els.guidePause) els.guidePause.hidden = p !== "recording";
   if (els.guideResume) els.guideResume.hidden = p !== "paused";
-  els.guideStop.hidden = p !== "recording" && p !== "paused";
+  els.guideStop.hidden = !live;
   els.guideStop.disabled = busy;
-  if (els.guideCreate) {
-    els.guideCreate.hidden = p !== "stopped";
-    els.guideCreate.disabled = busy || n === 0;
-  }
-  if (els.guideCtlStopped) els.guideCtlStopped.hidden = p !== "stopped";
+  if (els.guideCreate) els.guideCreate.disabled = busy || n === 0;
   if (els.guideContinue) els.guideContinue.disabled = busy;
   if (els.guideDiscard) els.guideDiscard.disabled = busy;
 
-  // Hinweis unten.
+  // Titel + Kategorie erst beim Prüfen (und nie bei Aufnahme-Anker).
+  if (els.guideMeta) els.guideMeta.hidden = !(review && guideMetaEnabled);
+
+  // Hinweis unter der Liste.
   if (els.guideNote) {
     let note = "";
-    if (p === "ready") {
-      note = "Tipp: Titel und Kategorie können Sie schon jetzt oder später eintragen.";
-    } else if (p === "recording") {
+    if (p === "recording") {
       note =
-        "Klicken Sie Ihren Ablauf im Browser durch – Tab-Wechsel und Anmelde-Fenster sind " +
-        "erlaubt. Jeder Klick wird als Schritt (Screenshot + Markierung) festgehalten.";
+        n === 0
+          ? "Klicken Sie Ihren Ablauf im Browser durch – jeder Klick wird ein Schritt mit Screenshot und Markierung."
+          : "Klicken Sie weiter im Browser – Tab-Wechsel und Anmelde-Fenster sind erlaubt.";
     } else if (p === "paused") {
       note =
-        "Pausiert – Klicks werden gerade nicht erfasst. Sie können in Ruhe zu einer anderen " +
-        "Seite wechseln und dann fortsetzen.";
+        "Pausiert – Klicks werden gerade nicht erfasst. Wechseln Sie in Ruhe die Seite und setzen Sie dann fort.";
     } else if (p === "stopped") {
       note =
         n === 0
           ? "Noch keine Schritte – mit „Weiter aufnehmen“ im Browser klicken, dann erstellen."
-          : "Einzelne Schritte mit ✕ entfernen. „Weiter aufnehmen“ hängt weitere Schritte an.";
+          : "Einzelne Schritte mit ✕ entfernen. „?“ macht einen Schritt für Automationen optional.";
     }
     els.guideNote.textContent = note;
     els.guideNote.hidden = !note;
@@ -1577,11 +1788,9 @@ async function captureImage(pending) {
     const why = lastErr && lastErr.message ? lastErr.message : "unbekannter Fehler";
     console.warn("Steply: Screenshot fehlgeschlagen:", why);
     setStatus(
-      "Screenshot fehlgeschlagen (" +
-        why +
-        "). Passiert das bei jedem Klick: chrome://extensions -> Steply Recorder -> " +
-        'Details -> Websitezugriff auf "Bei allen Websites" stellen und neu laden.',
-      "error"
+      "Der Screenshot hat nicht geklappt. Passiert das bei jedem Klick: ?-Menü → „Hilfe bei Aufnahme-Problemen“.",
+      "error",
+      why
     );
     return null;
   }
@@ -1710,6 +1919,15 @@ function removeGuideStep(step) {
   renderGuideSteps();
 }
 
+// Hostname einer Schritt-URL für die kleine Zweitzeile (rein lokal, nur Anzeige).
+function stepHost(url) {
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, "") : "";
+  } catch (err) {
+    return "";
+  }
+}
+
 // Schrittliste mit Thumbnail JE Schritt (nicht nur letzter) + Entfernen-Knopf.
 function renderGuideSteps() {
   els.guideCount.textContent = String(guideSteps.length);
@@ -1730,12 +1948,20 @@ function renderGuideSteps() {
     const lbl = document.createElement("span");
     lbl.className = "lbl";
     lbl.textContent = guideStepLabel(s, i);
+    lbl.title = lbl.textContent;
+    const host = stepHost(s.url);
+    if (host) {
+      const small = document.createElement("small");
+      small.textContent = host;
+      lbl.appendChild(small);
+    }
 
     const rm = document.createElement("button");
     rm.className = "rm";
     rm.type = "button";
-    rm.textContent = "✕";
     rm.title = "Schritt entfernen";
+    rm.setAttribute("aria-label", "Schritt " + (i + 1) + " entfernen");
+    rm.appendChild(icon("x"));
     rm.addEventListener("click", () => removeGuideStep(s));
 
     row.appendChild(idx);
@@ -1765,10 +1991,32 @@ function renderGuideSteps() {
     row.appendChild(rm);
     els.guideList.appendChild(row);
   });
-  // Neuen Schritt in Sicht scrollen.
-  els.guideList.scrollTop = els.guideList.scrollHeight;
-  // Zähler-Text + „Anleitung erstellen" (aktiv nur mit ≥1 Schritt) nachziehen (Welle 48a).
+  // Neuen Schritt in Sicht scrollen (während der Aufnahme; die Steuerleiste klebt oben).
+  if (guidePhase === "recording" && els.guideList.lastElementChild) {
+    try {
+      els.guideList.lastElementChild.scrollIntoView({ block: "nearest" });
+    } catch (err) {
+      /* egal */
+    }
+  }
+  // Zähler + „Anleitung erstellen" (aktiv nur mit ≥1 Schritt) nachziehen (Welle 48a).
   if (guidePhase !== "idle") renderGuidePhase();
+}
+
+// Upload-Zustand des Fertig-Bildschirms (Welle 50a): Fortschritt → Fertig (erst nach
+// erfolgreichem Upload) bzw. Fehler inline mit „Erneut versuchen".
+function setGuideUploadState(state) {
+  els.guideUploading.hidden = state !== "uploading";
+  els.guideUploadDone.hidden = state !== "done";
+  els.guideUploadError.hidden = state !== "error";
+}
+
+function setGuideProgress(text, frac) {
+  els.guideProgress.textContent = text || "";
+  if (els.guideProgressBar) {
+    const pct = Math.max(0, Math.min(1, typeof frac === "number" ? frac : 0)) * 100;
+    els.guideProgressBar.style.width = pct + "%";
+  }
 }
 
 // „Anleitung erstellen" (Phase „Gestoppt", Welle 48a) -> hochladen.
@@ -1801,28 +2049,80 @@ async function finishGuide() {
     renderGuidePhase();
     return;
   }
+  await runGuideUpload();
+}
 
-  guidePhase = "idle";
-  guideExtraTabs.clear();
+// Hochladen (auch „Erneut versuchen"): die Schritte bleiben bis zum ERFOLG erhalten.
+async function runGuideUpload() {
+  guideFinishing = true;
   show("guideDone");
-  els.guideUploadDone.hidden = true;
+  setGuideUploadState("uploading");
+  setGuideProgress("Verbindung zu Steply wird hergestellt …", 0.05);
+  let result = null;
   try {
-    await uploadGuide();
+    result = await uploadGuide();
   } catch (err) {
-    setStatus(
-      "Upload fehlgeschlagen: " + (err && err.message ? err.message : String(err)),
-      "error"
-    );
-    els.guideProgress.textContent = "";
+    const msg = err && err.message ? err.message : String(err);
+    els.guideErrorText.textContent = guideUploadErrorText(msg);
+    els.guideErrorText.title = msg; // Technik-Detail nur als Tooltip
+    setGuideUploadState("error");
+    return;
   }
-  // Aufnahme-Anker (Welle 27): nach dem Upload-Versuch (Erfolg/Fallback/Fehler) IMMER raeumen,
-  // damit die naechste Aufnahme nicht versehentlich am alten Ziel landet + Banner verschwindet.
+  // Erfolg: jetzt erst ist die Aufnahme abgeschlossen.
+  guidePhase = "idle";
+  guideFinishing = false;
+  guideExtraTabs.clear();
+  showGuideDone(result);
+  // Aufnahme-Anker (Welle 27): nach ERFOLG räumen, damit die nächste Aufnahme nicht versehentlich
+  // am alten Ziel landet. (Bei Fehler bleibt er — „Erneut versuchen" soll dasselbe Ziel treffen.)
   await clearPendingTarget();
+}
+
+// Menschliche Fehlermeldung (der technische Grund steht nur im title).
+function guideUploadErrorText(msg) {
+  const m = String(msg || "");
+  if (/Failed to fetch|NetworkError|Netzwerk/i.test(m)) {
+    return "Steply ist gerade nicht erreichbar. Prüfen Sie die Internetverbindung und versuchen Sie es erneut. Ihre Schritte bleiben erhalten.";
+  }
+  if (/\b401\b|Token/i.test(m)) {
+    return "Die Verbindung zu Steply ist nicht mehr gültig. Verbinden Sie die Steply-Erweiterung neu (Avatar → Verbindung ändern). Ihre Schritte bleiben erhalten.";
+  }
+  return "Beim Hochladen ist etwas schiefgelaufen. Ihre Schritte bleiben erhalten – versuchen Sie es gleich noch einmal.";
+}
+
+// Fertig-Bildschirm (Bildschirm 4) füllen.
+function showGuideDone(r) {
+  const title = r && r.title ? r.title : "";
+  if (r && r.fallback) {
+    els.guideDoneTitle.textContent = "Als neue Anleitung gespeichert";
+    els.guideDoneText.textContent =
+      "An der gewählten Stelle ging es nicht – die Aufnahme liegt deshalb als eigener Entwurf in Ihrer Bibliothek." +
+      (r.fallbackReason ? " " + r.fallbackReason : "");
+  } else if (r && r.inserted) {
+    els.guideDoneTitle.textContent = "Schritte eingefügt";
+    els.guideDoneText.textContent =
+      "Die Aufnahme steht jetzt an der gewählten Stelle" + (r.label ? " in „" + r.label + "“" : "") + ".";
+  } else {
+    els.guideDoneTitle.textContent = "Anleitung ist fertig";
+    els.guideDoneText.textContent = title
+      ? "„" + title + "“ liegt als Entwurf in Ihrer Bibliothek."
+      : "Ihre Anleitung liegt als Entwurf in Ihrer Bibliothek.";
+  }
+  setGuideUploadState("done");
+}
+
+// „Zurück zur Prüfung" nach einem Fehler: Liste + Titel wieder bearbeitbar.
+function guideBackToReview() {
+  guideFinishing = false;
+  guidePhase = "stopped";
+  show("guideLive");
+  renderGuideSteps();
+  renderGuidePhase();
 }
 
 async function uploadGuide() {
   const base = appBase();
-  els.guideProgress.textContent = "Verbindung zu Steply wird hergestellt ...";
+  setGuideProgress("Verbindung zu Steply wird hergestellt …", 0.05);
 
   // 1) Handshake: N signierte Upload-URLs.
   const count = guideSteps.length;
@@ -1838,8 +2138,7 @@ async function uploadGuide() {
 
   // 2) Alle WebPs per PUT hochladen (Fortschritt).
   for (let i = 0; i < count; i++) {
-    els.guideProgress.textContent =
-      "Screenshots werden hochgeladen ... " + (i + 1) + "/" + count;
+    setGuideProgress("Screenshot " + (i + 1) + " von " + count + " wird hochgeladen …", 0.1 + (0.75 * i) / count);
     const put = await fetch(hs.uploads[i].uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": guideSteps[i].blob.type || "image/webp" },
@@ -1851,7 +2150,7 @@ async function uploadGuide() {
   }
 
   // 3) Complete: Entwurf anlegen.
-  els.guideProgress.textContent = "Anleitung wird erstellt ...";
+  setGuideProgress("Anleitung wird angelegt …", 0.9);
   const steps = guideSteps.map((s, i) => {
     const step = {
       path: hs.uploads[i].path,
@@ -1879,9 +2178,9 @@ async function uploadGuide() {
   const uploadTarget = targetForUpload();
   const completeBody = { token: cfg.token, steps };
   if (uploadTarget) completeBody.target = uploadTarget;
-  // Titel + Kategorie (Welle 31d): NUR im Neu-Tutorial-Modus. guideTitleValue/
-  // guideCategoryPayload liefern nur etwas, wenn der Meta-Block sichtbar ist (kein
-  // Aufnahme-Anker) — beim Einfügen ins Ziel-Tutorial werden beide bewusst weggelassen.
+  // Titel + Kategorie (Welle 31d): NUR im Neu-Anleitungs-Modus. guideTitleValue/
+  // guideCategoryPayload liefern nur etwas ohne Aufnahme-Anker — beim Einfügen ins Ziel
+  // werden beide bewusst weggelassen.
   const metaTitle = guideTitleValue();
   if (metaTitle) completeBody.title = metaTitle;
   const metaCategory = guideCategoryPayload();
@@ -1898,31 +2197,25 @@ async function uploadGuide() {
   }
 
   // Erfolg.
-  els.guideProgress.textContent = "";
-  els.guideUploadDone.hidden = false;
+  setGuideProgress("", 1);
+  const targetLabel = pendingTarget && pendingTarget.label ? String(pendingTarget.label) : "";
   // Titel + Kategorie (Welle 31d): nach erfolgreichem Upload Felder + Session zurücksetzen,
   // damit die nächste Aufnahme frisch startet. (Bei Fehler bleiben die Werte erhalten.)
   guideMetaReset();
   guideMetaClear();
   notifyAppTabs();
-  const orgHint = hs.accountName ? " (" + hs.accountName + ")" : "";
-  if (comp.fallback) {
-    // Ziel war nicht nutzbar -> der Server hat ein NEUES Tutorial angelegt (Aufnahme nie verloren).
-    const why = comp.fallbackReason ? " " + comp.fallbackReason : "";
-    setStatus(
-      "An der Zielstelle nicht moeglich - als neues Tutorial gespeichert" + orgHint + "." + why,
-      "error"
-    );
-  } else if (uploadTarget) {
-    setStatus("Aufnahme an der Zielstelle eingefuegt" + orgHint + " - als Entwurf in Steply.", "ok");
-  } else {
-    setStatus("Anleitung erstellt" + orgHint + " - als Entwurf in Steply.", "ok");
-  }
-  // „In Steply oeffnen" fuehrt zum ZIEL-Tutorial (bei Einfuegen) bzw. zum neuen (Fallback/Standard).
+  // „In Steply öffnen" führt zum ZIEL (bei Einfügen) bzw. zur neuen Anleitung (Fallback/Standard).
   const openUrl = base + "/app/tutorials/" + comp.tutorialId;
   if (els.guideOpenApp) {
     els.guideOpenApp.onclick = () => chrome.tabs.create({ url: openUrl, active: true });
   }
+  return {
+    title: metaTitle || (typeof comp.title === "string" ? comp.title : ""),
+    fallback: !!comp.fallback,
+    fallbackReason: comp.fallbackReason ? String(comp.fallbackReason) : "",
+    inserted: !!uploadTarget && !comp.fallback,
+    label: targetLabel,
+  };
 }
 
 // ============================================================================
@@ -1935,6 +2228,9 @@ async function uploadGuide() {
 // ============================================================================
 
 const NEW_CATEGORY_VALUE = "__new__"; // Sentinel der Option „＋ Neue Kategorie …"
+// Titel/Kategorie gehören dieser Aufnahme (false bei Aufnahme-Anker: das Ziel hat beides schon).
+// Sichtbar ist der Block erst beim Prüfen (renderGuidePhase, Welle 50a).
+let guideMetaEnabled = false;
 
 let recCategories = null; // gecachte Liste [{id,name}] oder null (nicht verfügbar)
 let recCategoriesFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
@@ -2057,12 +2353,10 @@ function buildCategoryOptions(cats, selectedValue) {
 // Beim Start einer Sofort-Aufnahme: Block vorbereiten (ein-/ausblenden, Werte + Kategorien).
 async function guideMetaPrepare() {
   if (!els.guideMeta) return;
-  // Aufnahme-Anker aktiv -> ganzer Block aus (Titel/Kategorie gehören dem Ziel-Tutorial).
-  if (pendingTarget && pendingTarget.target) {
-    els.guideMeta.hidden = true;
-    return;
-  }
-  els.guideMeta.hidden = false;
+  // Aufnahme-Anker aktiv -> ganzer Block aus (Titel/Kategorie gehören der Ziel-Anleitung).
+  guideMetaEnabled = !(pendingTarget && pendingTarget.target);
+  if (guidePhase !== "idle") renderGuidePhase();
+  if (!guideMetaEnabled) return;
 
   // Gespeicherte Werte (überleben einen Panel-Reload während der Aufnahme).
   const saved = await guideMetaLoad();
@@ -2096,13 +2390,13 @@ function onGuideCategoryChange() {
 
 // Titel für den complete-Request (leer -> nicht mitschicken, Server vergibt Default-Titel).
 function guideTitleValue() {
-  if (!els.guideMeta || els.guideMeta.hidden || !els.guideTitle) return "";
+  if (!guideMetaEnabled || !els.guideTitle) return "";
   return (els.guideTitle.value || "").trim();
 }
 
 // Kategorie-Nutzlast für den complete-Request: { id } | { name } | null.
 function guideCategoryPayload() {
-  if (!els.guideMeta || els.guideMeta.hidden) return null;
+  if (!guideMetaEnabled) return null;
   if (!els.guideCatWrap || els.guideCatWrap.hidden || !els.guideCategory) return null;
   const v = els.guideCategory.value;
   if (!v) return null; // „Keine Kategorie"
@@ -2114,69 +2408,194 @@ function guideCategoryPayload() {
 }
 
 // ============================================================================
-// „FUER DIESE SEITE" (Welle 31c) — passende Tutorials zur gerade offenen Seite.
+// ANLEITUNGS-LISTEN + „FÜR DIESE SEITE" (Welle 31c/32, Welle 50a: sofort aus dem Speicher).
 //
-// DATENSCHUTZ (PFLICHT): Die besuchte URL verlaesst NIEMALS den Browser. Wir holen die
-// Tutorial-Liste (inkl. site_domains) EINMAL vom Server und cachen sie ~5 min im Speicher;
-// das Abgleichen der aktuellen Tab-URL passiert danach REIN LOKAL (site-match.js). Es geht
-// KEIN Request pro Seitenwechsel raus — die Tab-Listener unten matchen nur gegen die
-// gecachte Liste. So sieht Steply nie, welche Seiten der Nutzer besucht.
+// DATENSCHUTZ (PFLICHT): Die besuchte URL verlässt NIEMALS den Browser. Vom Server kommt nur die
+// Anleitungs-LISTE (inkl. site_domains); das Abgleichen der aktuellen Tab-URL passiert REIN LOKAL
+// (site-match.js). Tab-Wechsel lösen KEINEN Request aus — sie matchen nur gegen die Liste.
 //
-// Die Tutorial-Route (GET /api/recorder/tutorials) baut PARALLEL Welle 31a. Fehlt sie noch
-// (404) oder scheitert der Fetch, bleibt die Sektion einfach still ausgeblendet.
+// 5-SEKUNDEN-FIX (Welle 50a): Das Panel-Dokument wird beim Schließen zerstört, der Speicher im
+// Dokument ist beim Öffnen also IMMER leer. Darum:
+//   1) Beim Öffnen die zuletzt bekannten Listen aus chrome.storage.local lesen (badgeCache =
+//      Konto-Anleitungen, steplyDocCache = Steply-lernen-Anleitungen; beide teilt sich das Panel
+//      mit dem Icon-Badge im Service-Worker) und SOFORT rendern.
+//   2) Im Hintergrund BEIDE Listen PARALLEL (Promise.all) neu holen und an Ort und Stelle ersetzen.
+//   3) siteSeq verwirft veraltete Render-Durchläufe (Tab-Wechsel während eines Abrufs).
+//   4) Nichts verschiebt beim Laden das Layout: „Für diese Seite" ist eine FESTE Zeile, nur die
+//      Zahl darin wechselt.
 // ============================================================================
 
-let siteTutorials = null; // gecachte Tutorial-Liste (oder null = nicht verfuegbar)
-let siteMatchFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
-let siteMatchOk = false; // war der letzte Fetch erfolgreich?
-const SITE_MATCH_TTL = 5 * 60 * 1000; // Liste ~5 min im Speicher cachen
+let siteTutorials = null; // Konto-Anleitungen (Liste) oder null = noch unbekannt
+let siteTutorialsError = false; // letzter Abruf gescheitert (Fehler-/Leer-Zustand im Reiter)
+let siteMatchFetchedAt = 0; // Zeitpunkt des letzten Abruf-VERSUCHS (0 = frisch holen)
+const SITE_MATCH_TTL = 5 * 60 * 1000; // Liste ~5 min als aktuell betrachten
+let accountListFetch = null; // laufender Abruf (Dedupe)
+let siteSeq = 0; // Sequenz-Zähler gegen veraltete Antworten/Render-Durchläufe
+let activeUrl = ""; // URL des aktiven Tabs (NUR lokal)
+let siteMatches = null; // Treffer für die aktive Seite oder null (noch unbekannt)
 
-// Tutorial-Liste holen (Bearer-Token), ~5 min gecacht. Bei 404/Fehler: null (Sektion aus).
-async function loadSiteTutorials() {
-  if (!cfg.token) return null;
-  if (Date.now() - siteMatchFetchedAt < SITE_MATCH_TTL) {
-    return siteMatchOk ? siteTutorials : null; // Cache (auch „unverfuegbar" wird gecacht)
-  }
-  siteMatchFetchedAt = Date.now();
+// Beim Öffnen: zuletzt bekannte Listen aus dem Speicher übernehmen (vor dem ersten Rendern).
+// badgeCache.fp (vom Panel geschrieben) muss zum aktuellen Token passen — so wird nach einem
+// Kontowechsel nie die Liste des alten Kontos gezeigt. Einträge des Service-Workers tragen kein
+// fp; sie stammen ebenfalls vom aktuellen Token (der Worker liest ihn frisch aus dem Speicher).
+async function loadListCaches() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(appBase() + "/api/recorder/tutorials", {
-      method: "GET",
-      headers: { Authorization: "Bearer " + cfg.token },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      siteMatchOk = false;
-      siteTutorials = null;
-      return null;
+    const r = await chrome.storage.local.get(["badgeCache", "steplyDocCache"]);
+    const b = r && r.badgeCache;
+    if (hasToken && b && Array.isArray(b.tutorials) && (!b.fp || b.fp === tokenFp(cfg.token))) {
+      siteTutorials = b.tutorials;
     }
-    const body = await res.json().catch(() => ({}));
-    siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
-    siteMatchOk = true;
-    // Icon-Badge (Welle 32, Punkt E): Liste für den Service-Worker in chrome.storage.local
-    // mit auffrischen (TTL lebt im background.js). DATENSCHUTZ: NUR die Tutorial-Liste (inkl.
-    // site_domains) wird gecacht — die besuchte URL wird NIE gespeichert/gesendet; das
-    // Matching gegen die Live-URL läuft rein lokal im Service-Worker.
-    try {
-      chrome.storage.local.set({ badgeCache: { tutorials: siteTutorials, at: Date.now() } });
-    } catch (err) {
-      /* Badge ist reiner Komfort */
-    }
-    return siteTutorials;
+    const d = r && r.steplyDocCache;
+    if (d && Array.isArray(d.tutorials)) steplyDocs = normalizeDocs(d.tutorials);
   } catch (err) {
-    siteMatchOk = false;
-    siteTutorials = null;
-    return null;
+    /* ohne Speicher: erst die Netzantwort füllt die Listen */
   }
 }
 
+// Konto-Anleitungen holen (Bearer-Token). Erfolg ersetzt die Liste an Ort und Stelle; ein
+// Fehler lässt die zuletzt bekannte Liste stehen (siteTutorialsError = Hinweis im Reiter).
+function fetchAccountTutorials() {
+  if (!cfg.token) return Promise.resolve(null);
+  if (accountListFetch) return accountListFetch;
+  const token = cfg.token;
+  siteMatchFetchedAt = Date.now();
+  accountListFetch = (async () => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(appBase() + "/api/recorder/tutorials", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + token },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (token !== cfg.token) return siteTutorials; // Token wechselte unterwegs → verwerfen
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const body = await res.json().catch(() => ({}));
+      siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
+      siteTutorialsError = false;
+      // Icon-Badge (Welle 32, Punkt E) + Sofort-Anzeige beim nächsten Öffnen. DATENSCHUTZ: NUR die
+      // Liste (inkl. site_domains) — die besuchte URL wird NIE gespeichert/gesendet.
+      try {
+        chrome.storage.local.set({
+          badgeCache: { tutorials: siteTutorials, at: Date.now(), fp: tokenFp(token) },
+        });
+      } catch (err) {
+        /* reiner Komfort */
+      }
+      return siteTutorials;
+    } catch (err) {
+      siteTutorialsError = true;
+      return siteTutorials;
+    } finally {
+      accountListFetch = null;
+      onListsChanged();
+    }
+  })();
+  return accountListFetch;
+}
+
+// Liste mit TTL: frisch genug → aus dem Speicher, sonst holen.
+async function loadSiteTutorials() {
+  if (!cfg.token) return null;
+  if (siteTutorials && Date.now() - siteMatchFetchedAt < SITE_MATCH_TTL) return siteTutorials;
+  return fetchAccountTutorials();
+}
+
+// Beide Listen parallel aktualisieren (nur was veraltet ist). Rendert nach JEDER Antwort neu.
+function refreshLists(force) {
+  const jobs = [];
+  if (hasToken && (force || !siteTutorials || Date.now() - siteMatchFetchedAt >= SITE_MATCH_TTL)) {
+    jobs.push(fetchAccountTutorials());
+  }
+  if (force) steplyDocsFetchedAt = 0;
+  if (!steplyDocs || Date.now() - steplyDocsFetchedAt >= STEPLY_DOC_TTL) {
+    jobs.push(loadSteplyDocs().then(onListsChanged, onListsChanged));
+  }
+  return Promise.all(jobs);
+}
+
+// Eine Liste hat sich geändert: Treffer neu berechnen und sichtbare Stellen ersetzen.
+function onListsChanged() {
+  computeSiteMatches();
+  renderSiteRow();
+  if (currentSection === "guides") renderGuidesList();
+  if (currentSection === "steplyLearn") renderSteplyLearn();
+}
+
+// Treffer für die aktive Seite (REIN LOKAL). null = Listen noch unbekannt.
+function computeSiteMatches() {
+  if (typeof SteplySiteMatch === "undefined") {
+    siteMatches = [];
+    return;
+  }
+  if (siteTutorials === null && steplyDocs === null) {
+    siteMatches = null;
+    return;
+  }
+  const host = SteplySiteMatch.hostnameOf(activeUrl);
+  if (!host) {
+    siteMatches = [];
+    return;
+  }
+  const merged = mergeTutorialsById(siteTutorials || [], steplyDocs || []);
+  siteMatches = SteplySiteMatch.matchTutorials(activeUrl, merged);
+}
+
+// Feste Zeile „Für diese Seite (n) ›" + Zähler am Reiter „Anleitungen". Ändert nur Text/Zahl —
+// Höhe und Lage bleiben gleich (kein Layout-Sprung).
+function renderSiteRow() {
+  const badge = els.siteRowCount;
+  const isSite = typeof SteplySiteMatch !== "undefined" && !!SteplySiteMatch.hostnameOf(activeUrl);
+  let text = "…";
+  let cls = "badge is-loading";
+  let n = 0;
+  if (!isSite) {
+    text = "–";
+    cls = "badge is-zero";
+  } else if (siteMatches) {
+    n = siteMatches.length;
+    text = String(n);
+    cls = n ? "badge" : "badge is-zero";
+  } else if (siteTutorialsError) {
+    text = "–";
+    cls = "badge is-zero";
+  }
+  if (badge) {
+    badge.textContent = text;
+    badge.className = cls;
+  }
+  if (els.siteRow) {
+    els.siteRow.title = !isSite
+      ? "Auf dieser Seite gibt es keine Anleitungen (keine normale Website)."
+      : siteMatches
+        ? n === 1
+          ? "1 Anleitung für diese Seite"
+          : n + " Anleitungen für diese Seite"
+        : "Anleitungen werden geladen …";
+  }
+  if (els.tabGuidesCount) {
+    els.tabGuidesCount.textContent = n ? String(n) : "";
+    els.tabGuidesCount.hidden = !n;
+  }
+}
+
+// Aktive Seite neu bewerten (Tab-Wechsel, Öffnen). Rendert SOFORT gegen die bekannten Listen;
+// ein Netzabruf läuft nur, wenn die Liste veraltet ist, und ersetzt die Anzeige dann an Ort und
+// Stelle. siteSeq verwirft Ergebnisse, die von einem neueren Aufruf überholt wurden.
+async function refreshSiteMatch() {
+  const seq = ++siteSeq;
+  const url = await currentActiveUrl();
+  if (seq !== siteSeq) return; // überholt
+  activeUrl = url;
+  onListsChanged();
+  refreshLists(false);
+}
+
 // ============================================================================
-// „STEPLY LERNEN" (Welle 35): die ÖFFENTLICHEN Steply-Doku-Touren erscheinen für JEDEN
+// „STEPLY LERNEN" (Welle 35): die ÖFFENTLICHEN Steply-Anleitungen erscheinen für JEDEN
 // Kunden — auch OHNE Verbindung (Onboarding). Sie kommen von GET /api/guide/steply (kein
-// Token!). App-URL = appBase() (gespeicherte steplyAppUrl bzw. DEFAULT_APP_URL als Fallback
-// — dieselbe Default-Prod-URL, die das Panel schon für Update-Check/Pairing nutzt).
+// Token!). App-URL = appBase() (gespeicherte steplyAppUrl bzw. DEFAULT_APP_URL als Fallback).
 // ~15 min Cache: in-memory + chrome.storage.local (mit dem Icon-Badge im Service-Worker
 // geteilt). Jeder Eintrag wird auf { ..., status:"published", source:"steply" } normalisiert,
 // damit site-match/Badge (published-Filter) und der Führungs-Flow (Quelle) ihn erkennen.
@@ -2184,6 +2603,8 @@ async function loadSiteTutorials() {
 const STEPLY_DOC_TTL = 15 * 60 * 1000; // 15 min
 let steplyDocs = null; // normalisierte Liste oder null (nicht verfügbar)
 let steplyDocsFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
+let steplyDocsError = false;
+let steplyDocsFetch = null; // laufender Abruf (Dedupe)
 
 // Rohliste -> normalisiert (published + Quelle „steply"); nur brauchbare Einträge.
 function normalizeDocs(list) {
@@ -2192,47 +2613,55 @@ function normalizeDocs(list) {
     .map((t) => ({ ...t, status: "published", source: "steply" }));
 }
 
-// Doku-Liste holen (kein Token), ~15 min gecacht. Bei Fehler/Offline: zuletzt gecachte Liste
+// Doku-Liste holen (kein Token), ~15 min gecacht. Bei Fehler/Offline: zuletzt bekannte Liste
 // (in-memory oder chrome.storage.local); erst danach null. Fail-silent.
-async function loadSteplyDocs() {
+function loadSteplyDocs() {
   const now = Date.now();
-  if (steplyDocs && now - steplyDocsFetchedAt < STEPLY_DOC_TTL) return steplyDocs;
+  if (steplyDocs && now - steplyDocsFetchedAt < STEPLY_DOC_TTL) return Promise.resolve(steplyDocs);
+  if (steplyDocsFetch) return steplyDocsFetch;
   steplyDocsFetchedAt = now;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(appBase() + "/api/guide/steply", { method: "GET", signal: controller.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      const body = await res.json().catch(() => ({}));
-      steplyDocs = normalizeDocs(body.tutorials);
-      // Für den Icon-Badge (Service-Worker) mitcachen. DATENSCHUTZ: nur die Liste (inkl.
-      // site_domains) — die besuchte URL wird NIE gespeichert/gesendet.
-      try {
-        chrome.storage.local.set({ steplyDocCache: { tutorials: steplyDocs, at: now } });
-      } catch (e) {
-        /* Badge ist reiner Komfort */
+  steplyDocsFetch = (async () => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(appBase() + "/api/guide/steply", { method: "GET", signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        steplyDocs = normalizeDocs(body.tutorials);
+        steplyDocsError = false;
+        // Für den Icon-Badge (Service-Worker) mitcachen. DATENSCHUTZ: nur die Liste (inkl.
+        // site_domains) — die besuchte URL wird NIE gespeichert/gesendet.
+        try {
+          chrome.storage.local.set({ steplyDocCache: { tutorials: steplyDocs, at: now } });
+        } catch (e) {
+          /* Badge ist reiner Komfort */
+        }
+        return steplyDocs;
       }
-      return steplyDocs;
+    } catch (err) {
+      /* offline/Fehler: gecachte Liste unten */
     }
-  } catch (err) {
-    /* offline/Fehler: gecachte Liste unten */
-  }
-  if (steplyDocs) return steplyDocs;
-  try {
-    const c = (await chrome.storage.local.get("steplyDocCache")).steplyDocCache;
-    if (c && Array.isArray(c.tutorials)) {
-      steplyDocs = c.tutorials;
-      return steplyDocs;
+    steplyDocsError = true;
+    if (steplyDocs) return steplyDocs;
+    try {
+      const c = (await chrome.storage.local.get("steplyDocCache")).steplyDocCache;
+      if (c && Array.isArray(c.tutorials)) {
+        steplyDocs = normalizeDocs(c.tutorials);
+        return steplyDocs;
+      }
+    } catch (e) {
+      /* egal */
     }
-  } catch (e) {
-    /* egal */
-  }
-  return null;
+    return null;
+  })().finally(() => {
+    steplyDocsFetch = null;
+  });
+  return steplyDocsFetch;
 }
 
-// Zwei Tutorial-Listen per id zusammenführen: `primary` gewinnt bei Duplikaten (so erscheinen
-// Doku-Touren NICHT doppelt, wenn der Nutzer mit dem Steply-Konto gepairt ist).
+// Zwei Anleitungs-Listen per id zusammenführen: `primary` gewinnt bei Duplikaten (so erscheinen
+// Steply-Anleitungen NICHT doppelt, wenn der Nutzer mit dem Steply-Konto verbunden ist).
 function mergeTutorialsById(primary, secondary) {
   const seen = new Set((primary || []).map((t) => t && t.id).filter(Boolean));
   const out = (primary || []).slice();
@@ -2240,42 +2669,66 @@ function mergeTutorialsById(primary, secondary) {
   return out;
 }
 
-// Doku-Karten rendern (Reihenfolge des Servers = Hub-Reihenfolge beibehalten; Überschrift je
-// Kategorie-Wechsel). Klick startet eine Doku-Tour (Quelle „steply", per slug).
-function renderDocCards(container, list) {
+// Eigene Ansicht „Steply lernen" (?-Menü; auch UNVERBUNDEN erreichbar).
+let learnSelectedId = null;
+
+function showSteplyLearn() {
+  learnSelectedId = null;
+  show("steplyLearn");
+  // Erst den Abruf anstoßen (setzt steplyDocsFetch), dann rendern → Platzhalter statt Fehler.
+  const p = loadSteplyDocs();
+  renderSteplyLearn();
+  p.then(onListsChanged, onListsChanged);
+}
+
+function renderSteplyLearn() {
+  const list = els.steplyLearnList;
+  list.textContent = "";
+  els.steplyLearnEmpty.hidden = true;
+  if (!steplyDocs || !steplyDocs.length) {
+    if (steplyDocsFetch) {
+      appendSkeletons(list, 3);
+      return;
+    }
+    els.steplyLearnHint.textContent = "Die Steply-Anleitungen konnten gerade nicht geladen werden.";
+    els.steplyLearnEmpty.hidden = false;
+    return;
+  }
+  // Reihenfolge des Servers (= Hub-Reihenfolge) beibehalten; Überschrift je Kategorie-Wechsel.
   let lastKey = null;
-  for (const t of list) {
+  for (const t of steplyDocs) {
     const cat = t.category && typeof t.category === "object" ? t.category : null;
     const key = cat && cat.id ? cat.id : "__none__";
     if (key !== lastKey) {
       lastKey = key;
-      const h = document.createElement("p");
-      h.className = "fuehren-group";
-      h.textContent = cat && cat.name ? cat.name : "Weitere";
-      container.appendChild(h);
+      list.appendChild(sectHeading(cat && cat.name ? cat.name : "Weitere"));
     }
-    container.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.slug, "steply")));
+    list.appendChild(
+      buildTutorialItem(t, {
+        selected: learnSelectedId === t.id,
+        onSelect: () => {
+          learnSelectedId = learnSelectedId === t.id ? null : t.id;
+          renderSteplyLearn();
+        },
+      })
+    );
   }
 }
 
-// Eigene Ansicht „Steply lernen" (vom Start-Screen; auch UNVERBUNDEN erreichbar).
-async function showSteplyLearn() {
-  show("steplyLearn");
-  setStatus("");
-  els.steplyLearnHint.hidden = true;
-  els.steplyLearnList.textContent = "";
-  const loading = document.createElement("p");
-  loading.className = "note";
-  loading.textContent = "Touren werden geladen …";
-  els.steplyLearnList.appendChild(loading);
-  const list = await loadSteplyDocs();
-  els.steplyLearnList.textContent = "";
-  if (!list || !list.length) {
-    els.steplyLearnHint.textContent = "Die Steply-Touren konnten gerade nicht geladen werden.";
-    els.steplyLearnHint.hidden = false;
-    return;
+function appendSkeletons(container, n) {
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement("div");
+    s.className = "skeleton";
+    s.setAttribute("aria-hidden", "true");
+    container.appendChild(s);
   }
-  renderDocCards(els.steplyLearnList, list);
+}
+
+function sectHeading(text) {
+  const h = document.createElement("div");
+  h.className = "sect";
+  h.textContent = text;
+  return h;
 }
 
 // URL des aktiven Tabs im Panel-Fenster (nur LOKAL genutzt, nie gesendet).
@@ -2293,143 +2746,279 @@ async function currentActiveUrl() {
   }
 }
 
-// Ein Treffer öffnen: Doku-Tour (Quelle „steply", per slug) ODER Konto-Tour (per id) — beide
-// über den Führungs-Flow (guideStart). Konto-Fallback: Vorschau-Link (funktioniert für Entwurf
-// UND veröffentlicht, eingeloggter Autor). Doku-Touren haben keine App-Vorschau ohne Login.
-function openMatched(t) {
-  if (!t || !t.id) return;
-  try {
-    if (t.source === "steply") guideStart(t.slug, "steply");
-    else guideStart(t.id, "account");
-    return;
-  } catch (err) {
-    /* Fallback nur für Konto-Touren */
-  }
-  if (t.source !== "steply") chrome.tabs.create({ url: appBase() + "/app/preview/" + t.id, active: true });
+// Kategorie-Punktfarbe: stabil je Kategorie-id (die Liste liefert keine Farbe).
+const CAT_COLORS = ["#ef6a4e", "#18a999", "#6d59d8", "#c07d16", "#3b82c4"];
+function catColor(id) {
+  let h = 0;
+  const s = String(id || "");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return CAT_COLORS[h % CAT_COLORS.length];
 }
 
-// ── Gemeinsames Karten-Layout (Welle 32, Punkt D2) ──────────────────────────────────────
-// EINE Karte für „Für diese Seite" UND die „Führen"-Liste: zweizeiliger Titel (line-clamp 2),
-// Meta-Zeile (Kategorie-Chip + Schrittzahl) und ein kleiner Status-Punkt rechts (Teal =
-// veröffentlicht, Amber = Entwurf). So sieht man auf einen Blick, WAS man anklickt.
-function buildTutorialCard(t, onClick) {
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "tut-card";
+// ── EINE Listen-Karte für Anleitungen (Reiter „Anleitungen" + „Steply lernen") ──────────────
+// Titel (zweizeilig), Meta (Kategorie-Punkt + Name · n Schritte · Status als WORT). Ausgewählt →
+// Aktionen „Auf der Seite zeigen" (Live-Führung) und „Öffnen" (in der Steply-App; nur Konto).
+function buildTutorialItem(t, opts) {
+  const selected = !!(opts && opts.selected);
+  const item = document.createElement("div");
+  item.className = "item" + (selected ? " sel" : "");
+  item.dataset.id = t.id;
+  if (!selected) {
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-expanded", "false");
+  }
 
-  const main = document.createElement("span");
-  main.className = "tut-card-main";
-
+  const h = document.createElement("div");
+  h.className = "h";
   const title = document.createElement("span");
-  title.className = "tut-card-title";
   title.textContent = t.title || "Ohne Titel";
-  main.appendChild(title);
+  h.appendChild(title);
+  item.appendChild(h);
 
-  const meta = document.createElement("span");
-  meta.className = "tut-card-meta";
+  const m = document.createElement("div");
+  m.className = "m";
   const cat = t.category && typeof t.category === "object" ? t.category : null;
   if (cat && cat.name) {
-    const catChip = document.createElement("span");
-    catChip.className = "tut-cat-chip";
-    catChip.textContent = cat.name;
-    meta.appendChild(catChip);
+    const c = document.createElement("span");
+    c.className = "cat";
+    const dot = document.createElement("i");
+    dot.style.background = catColor(cat.id || cat.name);
+    c.appendChild(dot);
+    c.appendChild(document.createTextNode(cat.name));
+    m.appendChild(c);
   }
-  const steps = document.createElement("span");
-  steps.className = "tut-steps";
   const n = Number(t.stepCount) || 0;
-  steps.textContent = n === 1 ? "1 Schritt" : n + " Schritte";
-  meta.appendChild(steps);
-  main.appendChild(meta);
-  row.appendChild(main);
+  const steps = document.createElement("span");
+  steps.textContent = (cat && cat.name ? "· " : "") + (n === 1 ? "1 Schritt" : n + " Schritte");
+  m.appendChild(steps);
+  if (t.source !== "steply") {
+    const published = t.status === "published";
+    const st = document.createElement("span");
+    st.className = "st " + (published ? "live" : "draft");
+    st.textContent = published ? "Veröffentlicht" : "Entwurf";
+    m.appendChild(st);
+  }
+  item.appendChild(m);
 
-  const published = t.status === "published";
-  const dot = document.createElement("span");
-  dot.className = "tut-status " + (published ? "tut-status-pub" : "tut-status-draft");
-  dot.title = published ? "Veröffentlicht" : "Entwurf";
-  dot.setAttribute("aria-label", published ? "Veröffentlicht" : "Entwurf");
-  row.appendChild(dot);
-
-  row.addEventListener("click", () => onClick(t));
-  return row;
-}
-
-// Treffer (oder Leer-Zustand) rendern.
-function renderSiteMatch(matches) {
-  const listEl = document.getElementById("siteMatchList");
-  if (!listEl) return;
-  listEl.textContent = "";
-
-  if (!matches.length) {
-    // Dezenter Leer-Zustand: Sprung zur Aufnehmen-Karte (KEIN Autostart der Aufnahme).
-    const empty = document.createElement("button");
-    empty.type = "button";
-    empty.className = "site-match-empty";
-    empty.textContent =
-      "Für diese Seite gibt es noch keine Anleitung — jetzt aufnehmen?";
-    empty.addEventListener("click", () => {
-      try {
-        els.cardGuide.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      } catch (err) {
-        /* egal */
-      }
-      try {
-        els.cardGuide.focus({ preventScroll: true });
-      } catch (err) {
-        /* egal */
+  if (selected) {
+    const act = document.createElement("div");
+    act.className = "act";
+    const showBtn = document.createElement("button");
+    showBtn.type = "button";
+    showBtn.className = "btn primary";
+    showBtn.appendChild(icon("play"));
+    showBtn.appendChild(document.createTextNode("Auf der Seite zeigen"));
+    showBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (t.source === "steply") guideStart(t.slug, "steply");
+      else guideStart(t.id, "account");
+    });
+    act.appendChild(showBtn);
+    if (t.source !== "steply") {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "btn ghost";
+      openBtn.appendChild(icon("ext"));
+      openBtn.appendChild(document.createTextNode("Öffnen"));
+      openBtn.title = "In Steply öffnen";
+      openBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openAppTab("/app/tutorials/" + encodeURIComponent(t.id));
+      });
+      act.appendChild(openBtn);
+    }
+    item.appendChild(act);
+  } else if (opts && opts.onSelect) {
+    item.addEventListener("click", opts.onSelect);
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        opts.onSelect();
       }
     });
-    listEl.appendChild(empty);
-    return;
   }
+  return item;
+}
 
-  for (const t of matches) {
-    listEl.appendChild(buildTutorialCard(t, (tut) => openMatched(tut)));
+// ============================================================================
+// REITER „ANLEITUNGEN" (Welle 50a) — ersetzt „Für diese Seite", „Anleitung führen" und die
+// Führen-Liste: EINE Liste mit Suche, Filter „Diese Seite | Alle" und Schalter „Entwürfe".
+// Die Auswahl bleibt in chrome.storage.session. Matching REIN LOKAL (site-match.js).
+// ============================================================================
+const FUEHREN_FILTER_DEFAULT = { site: "page", live: "drafts" };
+let fuehrenFilter = { ...FUEHREN_FILTER_DEFAULT };
+let fuehrenFilterLoaded = false;
+let guidesQuery = "";
+let guidesSelectedId = null;
+
+async function loadFuehrenFilter() {
+  try {
+    const r = await chrome.storage.session.get("fuehrenFilter");
+    const f = r && r.fuehrenFilter;
+    if (f && (f.site === "page" || f.site === "all") && (f.live === "live" || f.live === "drafts")) {
+      fuehrenFilter = { site: f.site, live: f.live };
+    }
+  } catch (err) {
+    /* Session-Storage optional -> Standard */
+  }
+  fuehrenFilterLoaded = true;
+}
+
+function saveFuehrenFilter() {
+  try {
+    chrome.storage.session.set({ fuehrenFilter });
+  } catch (err) {
+    /* egal */
   }
 }
 
-// Sektion neu bewerten: nur auf dem Start-Screen + verbunden + auf einer normalen Website
-// mit verfuegbarer Route. Sonst still ausblenden. Matching REIN LOKAL (site-match.js).
-async function refreshSiteMatch() {
-  const box = document.getElementById("siteMatch");
-  if (!box) return;
-  if (typeof SteplySiteMatch === "undefined") {
-    box.hidden = true;
-    return;
-  }
-  if (els.start.hidden) {
-    box.hidden = true;
-    return;
-  }
-  // Matching-Pool = Konto-Tutorials (NUR mit Token) + Steply-Doku-Touren (immer, auch
-  // unverbunden — Onboarding). Dedupe per id (Konto gewinnt, falls Steply-Konto gepairt).
-  const account = hasToken ? await loadSiteTutorials() : null;
-  const docs = (await loadSteplyDocs()) || [];
-  const merged = mergeTutorialsById(account || [], docs);
-  if (!merged.length) {
-    box.hidden = true; // nichts verfügbar -> kein Kaputt-Zustand
-    return;
-  }
-  const url = await currentActiveUrl();
-  // DATENSCHUTZ: `url` bleibt hier lokal — nur der Abgleich gegen die gecachten
-  // site_domains passiert im Browser, es geht nichts nach draussen.
-  const host = SteplySiteMatch.hostnameOf(url);
-  if (!host) {
-    box.hidden = true; // keine normale Website (chrome://, about:, PDF-Viewer …)
-    return;
-  }
-  const matches = SteplySiteMatch.matchTutorials(url, merged);
-  // Keine Treffer + unverbunden -> Box aus (kein Nag mit deaktiviertem „aufnehmen"). Verbunden:
-  // wie bisher den „jetzt aufnehmen?"-Hinweis zeigen (renderSiteMatch behandelt den Leerfall).
-  if (!matches.length && !hasToken) {
-    box.hidden = true;
-    return;
-  }
-  renderSiteMatch(matches);
-  box.hidden = false;
+function renderFuehrenChips() {
+  if (!els.chipSite) return;
+  els.chipSite.classList.toggle("on", fuehrenFilter.site === "page");
+  els.chipAll.classList.toggle("on", fuehrenFilter.site === "all");
+  els.chipSite.setAttribute("aria-pressed", fuehrenFilter.site === "page" ? "true" : "false");
+  els.chipAll.setAttribute("aria-pressed", fuehrenFilter.site === "all" ? "true" : "false");
+  const drafts = fuehrenFilter.live === "drafts";
+  els.chipDrafts.classList.toggle("on", drafts);
+  els.chipDrafts.setAttribute("aria-pressed", drafts ? "true" : "false");
+  els.chipDrafts.title = drafts ? "Entwürfe werden angezeigt – zum Ausblenden klicken" : "Entwürfe einblenden";
 }
 
-// Aktiven Tab beobachten (Tab-Wechsel + URL-Aenderung). KEIN Netz-Request pro Wechsel —
-// refreshSiteMatch matcht nur gegen die gecachte Liste (Datenschutz, s. o.).
+function setFuehrenFilter(patch) {
+  fuehrenFilter = { ...fuehrenFilter, ...patch };
+  guidesSelectedId = null;
+  renderFuehrenChips();
+  saveFuehrenFilter();
+  renderGuidesList();
+}
+
+// Sortierung für „Alle": veröffentlicht vor Entwurf, dann Titel A→Z.
+function fuehrenSort(a, b) {
+  const ap = a.status === "published" ? 0 : 1;
+  const bp = b.status === "published" ? 0 : 1;
+  if (ap !== bp) return ap - bp;
+  return String(a.title || "").localeCompare(String(b.title || ""));
+}
+
+async function showGuides(opts) {
+  if (!hasToken) return;
+  if (!fuehrenFilterLoaded) await loadFuehrenFilter();
+  if (opts && opts.site && opts.site !== fuehrenFilter.site) {
+    fuehrenFilter = { ...fuehrenFilter, site: opts.site };
+    saveFuehrenFilter();
+  }
+  show("guides");
+  renderFuehrenChips();
+  renderGuidesList();
+  refreshSiteMatch();
+}
+
+function guidesMatchQuery(t) {
+  if (!guidesQuery) return true;
+  const hay = (String(t.title || "") + " " + String((t.category && t.category.name) || "")).toLowerCase();
+  return hay.indexOf(guidesQuery) >= 0;
+}
+
+// Liste des Reiters rendern (gefiltert, durchsucht). Ersetzt die Anzeige an Ort und Stelle.
+function renderGuidesList() {
+  const listEl = els.guidesList;
+  listEl.textContent = "";
+  els.guidesEmpty.hidden = true;
+
+  const siteRestricted = fuehrenFilter.site === "page";
+  const hasSite = typeof SteplySiteMatch !== "undefined" && !!SteplySiteMatch.hostnameOf(activeUrl);
+
+  // Noch nichts bekannt: Platzhalter (Abruf läuft) bzw. Fehler mit „Erneut versuchen".
+  if (siteTutorials === null) {
+    if (accountListFetch || !siteTutorialsError) {
+      appendSkeletons(listEl, 3);
+      return;
+    }
+    showGuidesEmpty("Die Anleitungen konnten nicht geladen werden.", "retry");
+    return;
+  }
+
+  let list = siteTutorials.slice();
+  if (fuehrenFilter.live === "live") list = list.filter((t) => t.status === "published");
+  let docs = (steplyDocs || []).filter((d) => !list.some((t) => t.id === d.id));
+  if (siteRestricted) {
+    list = hasSite ? SteplySiteMatch.matchTutorials(activeUrl, list) : [];
+    docs = hasSite ? SteplySiteMatch.matchTutorials(activeUrl, docs) : [];
+  } else {
+    list.sort(fuehrenSort);
+  }
+  list = list.filter(guidesMatchQuery);
+  docs = docs.filter(guidesMatchQuery);
+
+  const renderItem = (t) =>
+    buildTutorialItem(t, {
+      selected: guidesSelectedId === t.id,
+      onSelect: () => {
+        guidesSelectedId = guidesSelectedId === t.id ? null : t.id;
+        renderGuidesList();
+      },
+    });
+
+  for (const t of list) listEl.appendChild(renderItem(t));
+  if (docs.length) {
+    listEl.appendChild(sectHeading("Steply lernen"));
+    for (const t of docs) listEl.appendChild(renderItem(t));
+  }
+
+  if (!list.length && !docs.length) {
+    if (guidesQuery) {
+      showGuidesEmpty("Keine Anleitung passt zu „" + guidesQuery + "“.", null);
+    } else if (siteRestricted && !hasSite) {
+      showGuidesEmpty("Diese Seite ist keine normale Website. „Alle“ zeigt alle Anleitungen.", "all");
+    } else if (siteRestricted) {
+      showGuidesEmpty("Für diese Seite gibt es noch keine Anleitung.", "record");
+    } else if (fuehrenFilter.live === "live" && siteTutorials.length) {
+      showGuidesEmpty("Keine veröffentlichten Anleitungen. Schalten Sie „Entwürfe“ ein, um mehr zu sehen.", null);
+    } else {
+      showGuidesEmpty("Noch keine Anleitungen vorhanden.", "record");
+    }
+  }
+  // Hinweis, wenn nur die zuletzt bekannte Liste gezeigt werden kann (und wieder weg, sobald frisch).
+  if (siteTutorialsError && (list.length || docs.length)) setStatus(STALE_LIST_MSG, "");
+  else if (els.status.textContent === STALE_LIST_MSG) setStatus("");
+}
+
+const STALE_LIST_MSG = "Die Liste ist evtl. nicht aktuell – Steply war gerade nicht erreichbar.";
+
+// Leer-/Fehlerzustand mit passender Aktion: "retry" | "record" | "all" | null.
+function showGuidesEmpty(text, action) {
+  els.guidesEmptyText.textContent = text;
+  const btn = els.guidesEmptyAction;
+  btn.textContent = "";
+  btn.hidden = !action;
+  if (action === "retry") {
+    btn.appendChild(icon("refresh"));
+    btn.appendChild(document.createTextNode("Erneut versuchen"));
+  } else if (action === "record") {
+    btn.textContent = "Jetzt aufnehmen";
+  } else if (action === "all") {
+    btn.textContent = "Alle anzeigen";
+  }
+  btn.dataset.action = action || "";
+  els.guidesEmpty.hidden = false;
+}
+
+function onGuidesEmptyAction() {
+  const a = els.guidesEmptyAction.dataset.action;
+  if (a === "retry") {
+    siteTutorialsError = false;
+    renderGuidesList();
+    refreshLists(true);
+  } else if (a === "record") {
+    showStart();
+  } else if (a === "all") {
+    setFuehrenFilter({ site: "all" });
+  }
+}
+
+// Aktiven Tab beobachten (Tab-Wechsel + URL-Änderung). KEIN Netz-Request pro Wechsel —
+// refreshSiteMatch matcht gegen die bekannte Liste (Datenschutz, s. o.).
 try {
   chrome.tabs.onActivated.addListener(() => {
     refreshSiteMatch();
@@ -2438,7 +3027,7 @@ try {
     if (changeInfo && changeInfo.url) refreshSiteMatch();
   });
 } catch (err) {
-  /* tabs-API nicht verfuegbar -> Sektion bleibt still */
+  /* tabs-API nicht verfügbar -> Zeile bleibt still */
 }
 
 // ============================================================================
@@ -2476,7 +3065,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   // Ueberlauf: aeltesten wartenden Schritt verwerfen (+ dezenter Hinweis).
   if (guideQueue.length > GUIDE_QUEUE_CAP) {
     guideQueue.shift();
-    setStatus("Zu viele Klicks in Folge - ein Schritt wurde uebersprungen.", "error");
+    setStatus("Zu viele Klicks in Folge – ein Schritt wurde übersprungen.", "error");
   } else if (guideCapturing) {
     guideBusyHint();
   }
@@ -2685,23 +3274,39 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   else if (res.changed) renderGuideSteps();
 });
 
-// Live-Pairing (Welle 25): Wird das Panel gepairt, WAEHREND es offen ist (Seite ->
+// Live-Pairing (Welle 25): Wird das Panel verbunden, WÄHREND es offen ist (Seite ->
 // content.js -> background.js -> chrome.storage.local.set), aktualisiert sich die Anzeige
-// SOFORT - ohne Neuoeffnen. Wir reagieren NUR auf steplyToken/steplyAppUrl (nicht auf den
-// rec-Zustand) und stoeren eine laufende Aufnahme NICHT (nur Connect/Start werden gewechselt).
+// SOFORT - ohne Neuöffnen. Wir reagieren NUR auf steplyToken/steplyAppUrl (nicht auf den
+// rec-Zustand) und stören eine laufende Aufnahme NICHT (nur Verbinden/Reiter werden gewechselt).
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (!changes.steplyToken && !changes.steplyAppUrl) return;
   const recording =
     (mediaRecorder && mediaRecorder.state !== "inactive") || guideActive || guidePhase !== "idle";
+  const oldFp = tokenFp(cfg.token);
   loadConfig().then(() => {
-    accountName = ""; // neu ermitteln (Token koennte auf ein anderes Konto zeigen)
+    const tokenChanged = tokenFp(cfg.token) !== oldFp;
+    if (tokenChanged) {
+      // Anderes Konto (oder getrennt): nichts vom alten Konto weiter anzeigen.
+      accountName = "";
+      accountFetch = null;
+      siteTutorials = null;
+      siteTutorialsError = false;
+      autoListData = null;
+      computeSiteMatches();
+    }
     fetchAccountName();
-    siteMatchFetchedAt = 0; // „Fuer diese Seite"-Cache verwerfen (Token wechselte evtl. Konto)
+    siteMatchFetchedAt = 0; // Liste neu holen (Token wechselte evtl. Konto)
     recCategoriesFetchedAt = 0; // Kategorie-Cache (Welle 31d) verwerfen (Token evtl. anderes Konto)
+    renderHeader();
     if (recording) return; // laufende Aufnahme nie unterbrechen
-    // Nur wenn wir gerade auf Connect oder Start stehen, die Auswahl (neu) zeigen.
-    if (!els.connect.hidden || !els.start.hidden) showStart();
+    // Nur auf Verbinden- bzw. Reiter-Bildschirmen neu einsteigen.
+    const home = ["connect", "start", "guides", "automations", "autoPrep"];
+    if (home.indexOf(currentSection) >= 0) {
+      if (hasToken && (currentSection === "connect" || tokenChanged)) showStart();
+      else if (!hasToken) showConnect("first");
+      else if (currentSection === "start") showStart();
+    }
   });
 });
 
@@ -2712,9 +3317,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes.pendingTarget) return;
   loadPendingTarget().then(() => {
-    // Welle 48a: Kommt das Ziel, während „Bereit" angezeigt wird, Titel/Kategorie-Block
-    // passend ein-/ausblenden (bei Aufnahme-Anker gehören sie dem Ziel-Tutorial).
-    if (guidePhase === "ready") guideMetaPrepare();
+    // Kommt das Ziel während einer laufenden Aufnahme, den Titel/Kategorie-Block passend
+    // ein-/ausblenden (bei Aufnahme-Anker gehören sie der Ziel-Anleitung).
+    if (guidePhase !== "idle") guideMetaPrepare();
   });
 });
 
@@ -3100,6 +3705,7 @@ function guideSetFallback(on, hintText) {
     els.runFallbackHint.hidden = true;
     els.runFallbackHint.textContent = "";
   }
+  els.runFallbackHint.removeAttribute("title");
 }
 
 function guideRenderDecision(step) {
@@ -3110,7 +3716,7 @@ function guideRenderDecision(step) {
   list.forEach((b) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "btn btn-primary run-answer";
+    btn.className = "btn primary";
     btn.textContent = b.label || "Weiter";
     btn.addEventListener("click", () => guideAnswer(b.target_step_id));
     els.runDecision.appendChild(btn);
@@ -3118,7 +3724,7 @@ function guideRenderDecision(step) {
   if (guide.history.length) {
     const back = document.createElement("button");
     back.type = "button";
-    back.className = "btn run-back-inline";
+    back.className = "btn ghost";
     back.textContent = "Zurück";
     back.addEventListener("click", guideGoBack);
     els.runDecision.appendChild(back);
@@ -3165,7 +3771,7 @@ function guideRenderStep() {
     els.runNav.hidden = false;
     els.runBack.disabled = guide.history.length === 0;
     els.runBack.style.visibility = guide.history.length === 0 ? "hidden" : "visible";
-    els.runNext.textContent = guideLinearNext(step) ? "Weiter" : "Fertig 🎉";
+    els.runNext.textContent = guideLinearNext(step) ? "Weiter" : "Fertig";
     const sel = step.selector;
     if (sel && typeof sel === "object" && (sel.css || sel.text || sel.role)) {
       // Overlay auf der Seite anfordern; found:false -> Fallback (siehe Message-Listener).
@@ -3180,7 +3786,7 @@ function guideRenderStep() {
       sendGuideToTab({ type: "steply-guide-hide" });
       guideSetFallback(
         true,
-        "Für diesen Schritt gibt es keine Bildschirm-Markierung - orientieren Sie sich am Screenshot.",
+        "Für diesen Schritt gibt es keine Markierung auf der Seite – orientieren Sie sich am Screenshot.",
       );
     }
   }
@@ -3249,7 +3855,13 @@ async function guideExit() {
   guide.source = "account";
   guide.waitingLogin = false;
   guide.skipNote = null;
-  showStart();
+  guideBackToOrigin();
+}
+
+// Zurück dorthin, wo die Anleitung gestartet wurde (Reiter „Anleitungen" bzw. „Steply lernen").
+function guideBackToOrigin() {
+  if (guideOrigin === "steplyLearn" || !hasToken) showSteplyLearn();
+  else showGuides();
 }
 
 // ── „Bring mich hin" (Welle 32, Punkt F) ─────────────────────────────────────────────────
@@ -3265,7 +3877,7 @@ function baseDomain(host) {
 function cachedSiteDomains(id) {
   if (!id) return null;
   const find = (list) => (Array.isArray(list) ? list.find((t) => t && t.id === id) : null);
-  const t = find(fuehrenTutorials) || find(siteTutorials) || find(steplyDocs);
+  const t = find(siteTutorials) || find(steplyDocs);
   return t && Array.isArray(t.site_domains) ? t.site_domains : null;
 }
 
@@ -3478,13 +4090,28 @@ async function guideBringToStartIfNeeded() {
 // EINSTIEG (auch window.SteplyGuide.start): Tutorial laden und Führung starten.
 // source: „steply" = öffentliche Doku-Tour (per slug, KEIN Token nötig); sonst Konto-Tour
 // (per id, Token nötig). So erreichbar auch für frisch installierte, unverbundene Nutzer.
+let guideOrigin = "guides"; // Bildschirm, von dem aus die Anleitung gestartet wurde
+
 async function guideStart(idOrSlug, source) {
   const src = source === "steply" ? "steply" : "account";
   const isDoc = src === "steply";
   if (!idOrSlug) return;
-  if (!isDoc && !hasToken) return; // Konto-Touren brauchen eine Verbindung; Doku nicht
+  if (!isDoc && !hasToken) return; // Konto-Anleitungen brauchen eine Verbindung; Steply lernen nicht
+  if (guideStarting) return; // Doppelklick-Schutz
+  guideStarting = true;
+  try {
+    await guideStartInner(idOrSlug, src);
+  } finally {
+    guideStarting = false;
+  }
+}
+let guideStarting = false;
+
+async function guideStartInner(idOrSlug, src) {
+  const isDoc = src === "steply";
+  guideOrigin = currentSection === "steplyLearn" ? "steplyLearn" : "guides";
   guide.source = src;
-  setStatus("");
+  setStatus("Anleitung wird geladen …", "");
   // Content-Scripts (guide-resolve.js + content.js) sicher in alle offenen Tabs impfen -
   // deckt altoffene Tabs ab, die vor dem Extension-Laden geöffnet wurden. Die Injektion
   // läuft parallel zum Detail-Laden (Netz) -> beim ersten „steply-guide-show" sind sie da.
@@ -3496,7 +4123,7 @@ async function guideStart(idOrSlug, source) {
   guide.tabId = await guideActiveTabId();
   const okLoad = await guideLoad(idOrSlug, src);
   if (!okLoad) {
-    setStatus("Die Anleitung konnte nicht geladen werden.", "error");
+    setStatus("Die Anleitung konnte nicht geladen werden. Bitte versuchen Sie es erneut.", "error");
     return;
   }
   guide.curId = (guide.tutorial && guide.tutorial.root_step_id) || (guide.steps[0] && guide.steps[0].id) || null;
@@ -3518,183 +4145,6 @@ async function guideStart(idOrSlug, source) {
   sendGuideEvent("started", null);
   show("guideRun");
   guideRenderStep();
-}
-
-// ── „Führen"-Liste mit Filtern + Kategorien-Gruppierung (Welle 32, Punkt C) ──────────────
-// Default-Filter: „Diese Seite" + „Live" — nur veröffentlichte Tutorials, deren site_domains
-// zur aktuellen Tab-URL passen (Matching REIN LOKAL via site-match.js; die besuchte URL
-// verlässt NIE den Browser). Zwei Chip-Paare (Diese Seite|Alle, Live|Auch Entwürfe); die
-// Auswahl bleibt in chrome.storage.session. Die Liste wird nach Kategorie gruppiert
-// („Ohne Kategorie" zuletzt).
-let fuehrenTutorials = null; // volle Liste vom Server (oder null)
-const FUEHREN_FILTER_DEFAULT = { site: "page", live: "live" };
-let fuehrenFilter = { ...FUEHREN_FILTER_DEFAULT };
-let fuehrenFilterLoaded = false;
-
-async function loadFuehrenFilter() {
-  try {
-    const r = await chrome.storage.session.get("fuehrenFilter");
-    const f = r && r.fuehrenFilter;
-    if (f && (f.site === "page" || f.site === "all") && (f.live === "live" || f.live === "drafts")) {
-      fuehrenFilter = { site: f.site, live: f.live };
-    }
-  } catch (err) {
-    /* Session-Storage optional -> Defaults */
-  }
-  fuehrenFilterLoaded = true;
-}
-
-function saveFuehrenFilter() {
-  try {
-    chrome.storage.session.set({ fuehrenFilter });
-  } catch (err) {
-    /* egal */
-  }
-}
-
-function renderFuehrenChips() {
-  if (!els.chipSite) return;
-  els.chipSite.classList.toggle("chip-active", fuehrenFilter.site === "page");
-  els.chipAll.classList.toggle("chip-active", fuehrenFilter.site === "all");
-  els.chipLive.classList.toggle("chip-active", fuehrenFilter.live === "live");
-  els.chipDrafts.classList.toggle("chip-active", fuehrenFilter.live === "drafts");
-}
-
-function setFuehrenFilter(patch) {
-  fuehrenFilter = { ...fuehrenFilter, ...patch };
-  renderFuehrenChips();
-  saveFuehrenFilter();
-  applyFuehrenFilters();
-}
-
-// Sortierung innerhalb einer Kategorie-Gruppe: veröffentlicht vor Entwurf, dann Titel A→Z.
-function fuehrenSort(a, b) {
-  const ap = a.status === "published" ? 0 : 1;
-  const bp = b.status === "published" ? 0 : 1;
-  if (ap !== bp) return ap - bp;
-  return String(a.title || "").localeCompare(String(b.title || ""));
-}
-
-// Nach Kategorie gruppieren: benannte Gruppen alphabetisch, „Ohne Kategorie" ganz zuletzt.
-function groupByCategory(list) {
-  const groups = new Map(); // key -> { name|null, items[] }
-  for (const t of list) {
-    const cat = t.category && typeof t.category === "object" ? t.category : null;
-    const key = cat && cat.id ? cat.id : "__none__";
-    if (!groups.has(key)) groups.set(key, { name: cat ? cat.name || "Ohne Namen" : null, items: [] });
-    groups.get(key).items.push(t);
-  }
-  const named = [...groups.entries()].filter(([k]) => k !== "__none__");
-  named.sort((a, b) => String(a[1].name || "").localeCompare(String(b[1].name || "")));
-  const result = named.map(([, v]) => v);
-  const none = groups.get("__none__");
-  if (none) result.push({ name: null, items: none.items });
-  return result;
-}
-
-// „Führen"-Liste zeigen + Tutorials laden.
-async function showFuehren() {
-  if (!hasToken) return;
-  if (!fuehrenFilterLoaded) await loadFuehrenFilter();
-  show("fuehren");
-  setStatus("");
-  els.fuehrenHint.hidden = true;
-  if (els.fuehrenFilters) els.fuehrenFilters.hidden = false;
-  renderFuehrenChips();
-  els.fuehrenList.textContent = "";
-  const loading = document.createElement("p");
-  loading.className = "note";
-  loading.textContent = "Anleitungen werden geladen …";
-  els.fuehrenList.appendChild(loading);
-
-  const base = appBase();
-  let body;
-  try {
-    const res = await fetch(base + "/api/recorder/tutorials", {
-      headers: { Authorization: "Bearer " + cfg.token },
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    body = await res.json().catch(() => null);
-  } catch (err) {
-    fuehrenTutorials = null;
-    els.fuehrenList.textContent = "";
-    els.fuehrenHint.textContent = "Die Anleitungen konnten nicht geladen werden.";
-    els.fuehrenHint.hidden = false;
-    return;
-  }
-  fuehrenTutorials = body && Array.isArray(body.tutorials) ? body.tutorials : [];
-  await applyFuehrenFilters();
-}
-
-// Filter anwenden (Live-Status + Diese-Seite) und die gefilterte, gruppierte Liste rendern.
-async function applyFuehrenFilters() {
-  if (!Array.isArray(fuehrenTutorials)) return;
-  let list = fuehrenTutorials.slice();
-
-  // „Live": nur veröffentlichte; „Auch Entwürfe": beides.
-  if (fuehrenFilter.live === "live") list = list.filter((t) => t.status === "published");
-
-  // „Diese Seite": nur Tutorials, deren site_domains zur aktuellen Tab-URL passen. Matching
-  // REIN LOKAL (site-match.js) — die besuchte URL verlässt NIE den Browser.
-  const siteRestricted = fuehrenFilter.site === "page";
-  const url = siteRestricted ? await currentActiveUrl() : "";
-  const host =
-    siteRestricted && typeof SteplySiteMatch !== "undefined" ? SteplySiteMatch.hostnameOf(url) : null;
-  if (siteRestricted) list = host ? SteplySiteMatch.matchTutorials(url, list) : [];
-
-  // 🎓 Steply lernen: Doku-Touren als EIGENE Gruppe (unterhalb der Konto-Tutorials). Dedupe per
-  // id (falls mit dem Steply-Konto gepairt). „Diese Seite" filtert auch die Doku lokal; der
-  // „Live"-Filter ist für Doku belanglos (sie ist immer veröffentlicht).
-  let docs = (await loadSteplyDocs()) || [];
-  const accIds = new Set(list.map((t) => t.id));
-  docs = docs.filter((d) => !accIds.has(d.id));
-  if (siteRestricted) docs = host ? SteplySiteMatch.matchTutorials(url, docs) : [];
-
-  renderFuehrenList(list, siteRestricted, docs);
-}
-
-function renderFuehrenList(list, siteRestricted, docs) {
-  els.fuehrenList.textContent = "";
-  docs = Array.isArray(docs) ? docs : [];
-  if (!list.length && !docs.length) {
-    els.fuehrenHint.textContent = siteRestricted
-      ? "Für diese Seite gibt es keine passende Anleitung — „Alle“ zeigt alle."
-      : fuehrenFilter.live === "live"
-        ? "Keine veröffentlichten Anleitungen — „Auch Entwürfe“ zeigt mehr."
-        : "Noch keine Anleitungen vorhanden.";
-    els.fuehrenHint.hidden = false;
-    return;
-  }
-  els.fuehrenHint.hidden = true;
-
-  if (list.length) {
-    const groups = groupByCategory(list);
-    // Überschriften zeigen bei mehreren Gruppen, echter Kategorie ODER wenn die Doku-Gruppe folgt.
-    const showHeadings =
-      groups.length > 1 || (groups.length === 1 && !!groups[0].name) || docs.length > 0;
-    for (const g of groups) {
-      if (showHeadings) {
-        const h = document.createElement("p");
-        h.className = "fuehren-group";
-        h.textContent = g.name || "Ohne Kategorie";
-        els.fuehrenList.appendChild(h);
-      }
-      g.items.slice().sort(fuehrenSort).forEach((t) => {
-        els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.id, "account")));
-      });
-    }
-  }
-
-  // 🎓 Steply lernen: Doku-Touren als eigene Gruppe UNTERHALB der Konto-Tutorials.
-  if (docs.length) {
-    const h = document.createElement("p");
-    h.className = "fuehren-group";
-    h.textContent = "🎓 Steply lernen";
-    els.fuehrenList.appendChild(h);
-    for (const t of docs) {
-      els.fuehrenList.appendChild(buildTutorialCard(t, (tut) => guideStart(tut.slug, "steply")));
-    }
-  }
 }
 
 // Eine laufende Führung nach Panel-Schließen/Öffnen fortsetzen (chrome.storage.session).
@@ -3755,15 +4205,13 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
   if (msg.found === false) {
     const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
-    // Grund dezent in Klammern (Welle 33, Fix 3): hilft beim Debuggen künftiger Fälle.
-    const reason = typeof msg.reason === "string" ? msg.reason.trim() : "";
-    const suffix = reason ? " (" + reason + ")" : "";
+    // Technischer Grund (Welle 33, Fix 3) nur noch als Tooltip — nie im sichtbaren Text (Welle 50a).
+    const reason = typeof msg.reason === "string" ? msg.reason.trim().slice(0, 60) : "";
     guideSetFallback(
       true,
-      "Diese Stelle ist auf der Seite gerade nicht zu finden" +
-        suffix +
-        " - orientieren Sie sich am Screenshot.",
+      "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",
     );
+    if (reason) els.runFallbackHint.title = "Grund: " + reason;
     sendGuideEvent("selector_miss", step ? step.title : null);
   }
 });
@@ -3845,8 +4293,7 @@ function guideEnterWaitLogin() {
   sendGuideToTab({ type: "steply-guide-hide" });
   els.runImageWrap.hidden = true;
   guideSetFallback(false, "");
-  els.runFallbackHint.textContent =
-    "🔐 Bitte kurz anmelden — die Führung wartet und macht automatisch weiter.";
+  setIconText(els.runFallbackHint, "lock", "Bitte kurz anmelden – Steply wartet und macht danach automatisch weiter.");
   els.runFallbackHint.hidden = false;
   if (els.runSkipNote) els.runSkipNote.hidden = true;
   guideSaveSession();
@@ -4042,75 +4489,131 @@ async function clearAutoValues(automationId) {
   }
 }
 
-// ── Liste ─────────────────────────────────────────────────────────────────────
-async function showAutomations() {
-  if (!hasToken) return; // Karte ist ohnehin nur mit Token sichtbar
-  show("automations");
-  setStatus("");
-  els.autoListHint.hidden = true;
-  els.autoList.textContent = "";
-  const loading = document.createElement("p");
-  loading.className = "note";
-  loading.textContent = "Automationen werden geladen …";
-  els.autoList.appendChild(loading);
+// ── Liste (Reiter „Automationen", Bildschirm 6) ───────────────────────────────
+// Solange das Panel offen ist, bleibt die zuletzt geladene Liste im Speicher: der Reiter zeigt sie
+// sofort und ersetzt sie nach dem Neuladen an Ort und Stelle.
+let autoListData = null; // [{ id, title, stepCount, paramCount, schedule }] oder null
+let autoListFetch = null;
+let autoListError = false;
 
-  let body = null;
+function showAutomations() {
+  if (!hasToken) return; // Reiter ist ohnehin nur mit Verbindung sichtbar
+  show("automations");
+  renderAutoList();
+  loadAutomations();
+}
+
+function loadAutomations() {
+  if (autoListFetch) return autoListFetch;
+  autoListFetch = (async () => {
+    try {
+      const res = await fetch(appBase() + "/api/recorder/automations", {
+        headers: { Authorization: "Bearer " + cfg.token },
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const body = await res.json().catch(() => null);
+      autoListData = body && Array.isArray(body.automations) ? body.automations : [];
+      autoListError = false;
+    } catch (err) {
+      autoListError = true;
+    } finally {
+      autoListFetch = null;
+      if (currentSection === "automations") renderAutoList();
+    }
+  })();
+  return autoListFetch;
+}
+
+function renderAutoList() {
+  const listEl = els.autoList;
+  listEl.textContent = "";
+  els.autoListEmpty.hidden = true;
+  els.autoListRetry.hidden = true;
+  if (autoListData === null) {
+    if (autoListError && !autoListFetch) {
+      els.autoListHint.textContent = "Die Automationen konnten nicht geladen werden.";
+      els.autoListRetry.hidden = false;
+      els.autoListEmpty.hidden = false;
+    } else {
+      appendSkeletons(listEl, 3);
+    }
+    return;
+  }
+  if (!autoListData.length) {
+    els.autoListHint.textContent = "Noch keine Automationen.";
+    els.autoListEmpty.hidden = false;
+    return;
+  }
+  for (const a of autoListData) listEl.appendChild(buildAutomationCard(a));
+}
+
+// „Nächster Lauf: Mo, 08:00" aus dem Zeitplan (dieselbe pure Rechnung wie der Wecker im
+// Service-Worker: SteplyExecPlan.nextFireTime). Ohne (aktiven) Zeitplan: "".
+const WEEKDAYS_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+function nextRunLabel(schedule) {
+  if (!schedule || typeof SteplyExecPlan === "undefined" || typeof SteplyExecPlan.nextFireTime !== "function") {
+    return "";
+  }
+  let when = null;
   try {
-    const res = await fetch(appBase() + "/api/recorder/automations", {
-      headers: { Authorization: "Bearer " + cfg.token },
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    body = await res.json().catch(() => null);
+    when = SteplyExecPlan.nextFireTime(schedule, Date.now(), new Date().getTimezoneOffset());
   } catch (err) {
-    els.autoList.textContent = "";
-    els.autoListHint.textContent = "Die Automationen konnten nicht geladen werden.";
-    els.autoListHint.hidden = false;
-    return;
+    when = null;
   }
-  const list = body && Array.isArray(body.automations) ? body.automations : [];
-  els.autoList.textContent = "";
-  if (!list.length) {
-    els.autoListHint.textContent =
-      "Noch keine Automationen. In der Steply-Bibliothek ein Tutorial öffnen → „Als Automation nutzen“.";
-    els.autoListHint.hidden = false;
-    return;
-  }
-  for (const a of list) els.autoList.appendChild(buildAutomationCard(a));
+  if (when == null || !isFinite(when)) return "";
+  const d = new Date(when);
+  const pad = (n) => String(n).padStart(2, "0");
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  const now = new Date();
+  const days = Math.round(
+    (new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) /
+      86400000
+  );
+  if (days === 0) return "heute, " + time;
+  if (days === 1) return "morgen, " + time;
+  if (days < 7) return WEEKDAYS_SHORT[d.getDay()] + ", " + time;
+  return WEEKDAYS_SHORT[d.getDay()] + ", " + pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "., " + time;
 }
 
 function buildAutomationCard(a) {
   const row = document.createElement("button");
   row.type = "button";
-  row.className = "auto-card";
+  row.className = "item auto";
 
-  const emoji = document.createElement("span");
-  emoji.className = "auto-card-emoji";
-  emoji.setAttribute("aria-hidden", "true");
-  emoji.textContent = "⚙️";
-  row.appendChild(emoji);
-
-  const main = document.createElement("span");
-  main.className = "auto-card-main";
+  const h = document.createElement("span");
+  h.className = "h";
   const title = document.createElement("span");
-  title.className = "auto-card-title";
   title.textContent = a.title || "Ohne Titel";
-  main.appendChild(title);
+  h.appendChild(title);
+  h.appendChild(icon("chev"));
+  row.appendChild(h);
+
+  const next = nextRunLabel(a.schedule);
+  if (next) {
+    const m1 = document.createElement("span");
+    m1.className = "m";
+    const n = document.createElement("span");
+    n.className = "next";
+    n.appendChild(icon("clock"));
+    n.appendChild(document.createTextNode("Nächster Lauf: " + next));
+    m1.appendChild(n);
+    row.appendChild(m1);
+  }
 
   const meta = document.createElement("span");
-  meta.className = "auto-card-meta";
+  meta.className = "m";
   const sc = Number(a.stepCount) || 0;
   const pc = Number(a.paramCount) || 0;
   const stepsTxt = sc === 1 ? "1 Schritt" : sc + " Schritte";
-  const paramsTxt = pc === 1 ? "1 Parameter" : pc + " Parameter";
+  const paramsTxt = pc === 0 ? "keine Angaben nötig" : pc === 1 ? "braucht 1 Angabe" : "braucht " + pc + " Angaben";
   meta.textContent = stepsTxt + " · " + paramsTxt;
-  main.appendChild(meta);
-  row.appendChild(main);
+  row.appendChild(meta);
 
   row.addEventListener("click", () => showAutoPrep(a.id));
   return row;
 }
 
-// ── Vorbereitung ───────────────────────────────────────────────────────────────
+// ── Vorbereitung (Bildschirm 7) ──────────────────────────────────────────────────
 async function showAutoPrep(automationId) {
   show("autoPrep");
   setStatus("");
@@ -4118,10 +4621,13 @@ async function showAutoPrep(automationId) {
   els.autoPrepHint.className = "status";
   els.autoPrepTitle.textContent = "Automation wird geladen …";
   els.autoDomainHint.textContent = "";
+  els.autoDomainHint.hidden = true;
+  els.autoFileHint.hidden = true;
   els.autoParamForm.textContent = "";
   els.autoClearValues.hidden = true;
+  els.autoStart.disabled = true;
 
-  // Detail laden (404 fremd / Fehler → zurück zur Liste mit Hinweis).
+  // Detail laden (404 fremd / Fehler → Hinweis mit „Erneut versuchen").
   let det = null;
   try {
     const res = await fetch(appBase() + "/api/recorder/automations/" + encodeURIComponent(automationId), {
@@ -4130,17 +4636,14 @@ async function showAutoPrep(automationId) {
     if (!res.ok) throw new Error("HTTP " + res.status);
     det = await res.json().catch(() => null);
   } catch (err) {
-    els.autoPrepTitle.textContent = "";
-    els.autoPrepHint.textContent = "Diese Automation konnte nicht geladen werden.";
-    els.autoPrepHint.className = "status status-error";
+    showAutoPrepError("Diese Automation konnte nicht geladen werden.", automationId);
     return;
   }
   if (!det || !det.automation || !Array.isArray(det.steps)) {
-    els.autoPrepTitle.textContent = "";
-    els.autoPrepHint.textContent = "Diese Automation ist unvollständig.";
-    els.autoPrepHint.className = "status status-error";
+    showAutoPrepError("Diese Automation ist unvollständig.", null);
     return;
   }
+  if (currentSection !== "autoPrep") return; // inzwischen weggeklickt
 
   exec.automation = det.automation;
   exec.steps = det.steps;
@@ -4149,47 +4652,71 @@ async function showAutoPrep(automationId) {
 
   els.autoPrepTitle.textContent = exec.automation.title || "Automation";
 
-  // (a) Domain-Hinweis (Sicherheit: WO wird gearbeitet).
+  // (a) Website-Hinweis (Sicherheit: WO wird gearbeitet) — neutral statt Warnkasten.
   const domains = Array.isArray(exec.automation.site_domains) ? exec.automation.site_domains.filter(Boolean) : [];
   els.autoDomainHint.textContent = "";
-  const dlead = document.createTextNode("Diese Automation arbeitet auf: ");
-  els.autoDomainHint.appendChild(dlead);
-  const dstrong = document.createElement("strong");
-  dstrong.textContent = domains.length ? domains.join(", ") : "der aufgezeichneten Website";
-  els.autoDomainHint.appendChild(dstrong);
+  els.autoDomainHint.appendChild(icon("globe"));
+  const span = document.createElement("span");
+  span.appendChild(document.createTextNode("Läuft auf "));
+  const b = document.createElement("b");
+  b.textContent = domains.length ? domains.join(", ") : "der aufgezeichneten Website";
+  span.appendChild(b);
+  els.autoDomainHint.appendChild(span);
+  els.autoDomainHint.hidden = false;
 
-  // (b) Parameter-Formular aus params (+ gespeicherte Werte vorbefüllen).
+  // Datei-Brücke (Welle 39): offen sagen, dass eine Datei getragen wird.
+  els.autoFileHint.hidden = !exec.steps.some((s) => s && s.file_meta && typeof s.file_meta === "object");
+
+  // (b) Angaben-Formular aus params (+ gespeicherte Werte vorbefüllen).
   const params = Array.isArray(exec.automation.params) ? exec.automation.params : [];
   const saved = await loadAutoValues(exec.automation.id);
   await buildParamForm(params, saved);
   els.autoClearValues.hidden = !(saved && Object.keys(saved).length);
 
-  // (c) Modus: Halbautomatik ist Default.
+  // (c) Modus: Halbautomatik ist Standard.
   els.autoModeSemi.checked = true;
   els.autoModeAuto.checked = false;
+  els.autoStart.disabled = false;
 }
 
-// Parameter-Formular bauen: je Feld Label (required-Markierung), Input (secret → password)
-// und eine Checkbox „Im Browser merken" (aktiv, wenn ein Wert gespeichert war).
+function showAutoPrepError(text, retryId) {
+  els.autoPrepTitle.textContent = "";
+  els.autoPrepHint.textContent = "";
+  els.autoPrepHint.className = "status status-error";
+  els.autoPrepHint.appendChild(document.createTextNode(text + " "));
+  if (retryId) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "linkbtn";
+    retry.textContent = "Erneut versuchen";
+    retry.addEventListener("click", () => showAutoPrep(retryId));
+    els.autoPrepHint.appendChild(retry);
+  }
+}
+
+// Angaben-Formular bauen: je Feld Label (Pflicht-Markierung), Eingabe (secret → password)
+// und ein Häkchen „Im Browser merken" (aktiv, wenn ein Wert gespeichert war).
 async function buildParamForm(params, saved) {
   els.autoParamForm.textContent = "";
   saved = saved || {};
   if (!params.length) {
     const none = document.createElement("p");
-    none.className = "note";
-    none.textContent = "Diese Automation braucht keine Eingaben.";
+    none.className = "muted";
+    none.textContent = "Diese Automation braucht keine Angaben.";
     els.autoParamForm.appendChild(none);
     return;
   }
   for (const p of params) {
     if (!p || typeof p.key !== "string") continue;
     const wrap = document.createElement("div");
-    wrap.className = "auto-param";
+    wrap.className = "auto-param field";
     wrap.dataset.key = p.key;
 
     const label = document.createElement("label");
     label.className = "auto-param-label";
-    label.textContent = p.label || p.key;
+    const labelText = document.createElement("span");
+    labelText.textContent = p.label || p.key;
+    label.appendChild(labelText);
     if (p.required) {
       const req = document.createElement("span");
       req.className = "auto-param-req";
@@ -4199,7 +4726,7 @@ async function buildParamForm(params, saved) {
     }
 
     const input = document.createElement("input");
-    input.className = "auto-param-input";
+    input.className = "auto-param-input input";
     // Secrets als password-Input (maskiert). autocomplete aus, damit nichts vorschlägt.
     input.type = p.type === "secret" ? "password" : "text";
     input.autocomplete = "off";
@@ -4501,12 +5028,17 @@ function execRenderFileChip() {
     els.autoFileChip.textContent = "";
     return;
   }
-  els.autoFileChip.textContent = keys
+  els.autoFileChip.textContent = "";
+  els.autoFileChip.appendChild(icon("file"));
+  const names = document.createElement("span");
+  names.textContent = keys
     .map((k) => {
       const f = exec.files[k];
-      return "📄 " + (f.name || "Datei") + " (" + fmtBytes(f.size) + ") ✓";
+      return (f.name || "Datei") + " (" + fmtBytes(f.size) + ")";
     })
-    .join("   ");
+    .join(" · ");
+  els.autoFileChip.appendChild(names);
+  els.autoFileChip.appendChild(icon("check"));
   els.autoFileChip.hidden = false;
 }
 
@@ -5357,7 +5889,7 @@ async function startAutoRun() {
   els.autoPrepHint.textContent = "";
   els.autoPrepHint.className = "status";
   if (typeof SteplyExecPlan === "undefined") {
-    els.autoPrepHint.textContent = "Ausführ-Modul nicht geladen — Extension bitte neu laden.";
+    els.autoPrepHint.textContent = "Die Steply-Erweiterung ist nicht vollständig geladen – bitte neu laden.";
     els.autoPrepHint.className = "status status-error";
     return;
   }
@@ -5372,7 +5904,7 @@ async function startAutoRun() {
   try {
     exec.plan = SteplyExecPlan.buildRunPlan(exec.automation, exec.steps, exec.values);
   } catch (err) {
-    els.autoPrepHint.textContent = err && err.message ? err.message : "Eingaben unvollständig.";
+    els.autoPrepHint.textContent = err && err.message ? err.message : "Angaben unvollständig.";
     els.autoPrepHint.className = "status status-error";
     return;
   }
@@ -5384,6 +5916,7 @@ async function startAutoRun() {
 
   // Merken (lokal, nur Häkchen-Felder). Werte verlassen den Browser nie.
   await saveAutoValues(exec.automation.id, toRemember);
+  els.autoStart.disabled = true; // Doppelstart-Schutz (Knopf ist nach dem Lauf wieder frei)
 
   // Tab binden + ggf. zur Startseite bringen.
   exec.tabId = await guideActiveTabId();
@@ -5411,7 +5944,9 @@ async function startAutoRun() {
   execLinkStart(exec.tabId);
   execAddDownloadWatch();
 
+  els.autoStart.disabled = false;
   show("autoRun");
+  if (els.autoControls) els.autoControls.hidden = false;
   if (els.autoDownloadNote) els.autoDownloadNote.hidden = true;
   execRenderFileChip();
 
@@ -5674,7 +6209,62 @@ function execActionLabel(action) {
   if (action === "fill") return "Eingabe";
   if (action === "select") return "Auswahl";
   if (action === "toggle") return "Umschalten";
+  if (action === "upload") return "Datei hochladen";
   return "Klick";
+}
+
+// Menschliche Pausen-Meldung je Grund (Welle 50a: keine Codes im sichtbaren Text — der Code
+// steht nur noch im title der Meldung). detail = z. B. Dateiname (nur Anzeige, nie Server).
+function execMissText(r, num, detail) {
+  const pre = "Schritt " + num + ": ";
+  const tail = " Danach „Weiter“ drücken oder abbrechen.";
+  switch (r) {
+    case "submit-bounced":
+      // Ehrlichkeits-Netz (Welle 38): die Übermittlung kam nicht durch, die Seite lud neu.
+      return pre + "Die Anmeldung bzw. Übermittlung kam nicht durch – die Seite hat neu geladen. Bitte selbst prüfen." + tail;
+    case "download-manual":
+      // Datei-Brücke (Welle 39, Weg 3): Datei liegt im Downloads-Ordner, aber nicht im Speicher.
+      return (
+        pre +
+        "Die Datei" + (detail ? " „" + detail + "“" : "") +
+        " liegt in Ihrem Download-Ordner. Wählen Sie sie beim Hochladen bitte selbst aus." +
+        tail
+      );
+    case "download-timeout":
+    case "download-missing":
+      return pre + "Der Download wurde nicht erkannt. Bitte laden Sie die Datei selbst herunter." + tail;
+    case "file-missing":
+      return pre + "Bitte wählen Sie die Datei selbst aus (sie liegt in Ihrem Download-Ordner)." + tail;
+    case "file-transfer":
+      return pre + "Die Datei ließ sich nicht übertragen. Bitte laden Sie sie selbst hoch." + tail;
+    case "unexpected-page":
+      // Zustands-Intelligenz (Welle 40): Seite passt zu keinem Schritt und ist keine Login-Seite.
+      return pre + "Unerwartete Seite – bitte selbst dorthin wechseln oder „Weiter“ für einen neuen Versuch.";
+    case "skip-needs-file":
+      // Zustands-Intelligenz (Welle 40): Vorspulen überspränge einen später gebrauchten Download.
+      return (
+        pre +
+        "Die übersprungenen Schritte enthalten den Datei-Download. Starten Sie die Automation neu " +
+        "oder wählen Sie die Datei beim Hochladen selbst."
+      );
+    case "cond-skip-needs-file":
+      // Bedingte Schritte (Welle 42): Download-Schritt sollte übersprungen werden, wird aber gebraucht.
+      return pre + "Dieser optionale Schritt lädt eine Datei, die später gebraucht wird. Bitte selbst herunterladen." + tail;
+    case "timeout":
+      return pre + "Die Seite hat nicht rechtzeitig reagiert. Bitte erledigen Sie den Schritt selbst." + tail;
+    case "ambiguous":
+      return pre + "Die Stelle ist auf der Seite nicht eindeutig. Bitte erledigen Sie den Schritt selbst." + tail;
+    case "not-fillable":
+      return pre + "In dieses Feld lässt sich nichts eintragen. Bitte erledigen Sie den Schritt selbst." + tail;
+    case "option-not-found":
+    case "not-a-select":
+      return pre + "Die gewünschte Auswahl gibt es hier nicht. Bitte wählen Sie selbst aus." + tail;
+    default:
+      if (/-error$|unsupported|readonly|invalid/.test(String(r || ""))) {
+        return pre + "Die Aktion ließ sich hier nicht ausführen. Bitte erledigen Sie den Schritt selbst." + tail;
+      }
+      return pre + "Steply findet diese Stelle gerade nicht auf der Seite. Bitte erledigen Sie den Schritt selbst." + tail;
+  }
 }
 
 function execShowCtl(which) {
@@ -5744,6 +6334,7 @@ function execRenderMissImage(planStep) {
 
 function execRenderRun() {
   els.autoDone.hidden = true;
+  if (els.autoControls) els.autoControls.hidden = false;
   const planStep = exec.plan[exec.index] || null;
   const total = exec.plan.length;
   const num = Math.min(exec.index + 1, total);
@@ -5754,54 +6345,11 @@ function execRenderRun() {
   els.autoStepTitle.textContent = planStep ? planStep.title || execActionLabel(planStep.action) : "";
   els.autoStepAction.textContent = planStep ? execActionLabel(planStep.action) : "";
 
-  // Miss-Box nur im Miss-Zustand.
+  // Miss-Box nur im Miss-Zustand. Menschlicher Text; der Technik-Code steht höchstens im title.
   if (exec.phase === "miss") {
-    const r = exec.lastMissReason;
-    if (r === "submit-bounced") {
-      // Ehrlichkeits-Netz (Welle 38): die Übermittlung kam nicht durch, die Seite lud neu.
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Die Anmeldung/Übermittlung kam nicht durch — die Seite hat neu" +
-        " geladen. Bitte selbst prüfen und „Weiter“ drücken oder abbrechen.";
-    } else if (r === "download-manual") {
-      // Datei-Brücke (Welle 39, Weg 3): Datei liegt im Downloads-Ordner, aber nicht im Speicher.
-      const name = exec.lastMissDetail ? " (" + exec.lastMissDetail + ")" : "";
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Datei liegt im Downloads-Ordner" + name +
-        " — beim Upload-Schritt bitte selbst wählen. „Weiter“ drücken oder abbrechen.";
-    } else if (r === "download-timeout" || r === "download-missing") {
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Download wurde nicht erkannt — bitte selbst herunterladen und" +
-        " „Weiter“ drücken oder abbrechen.";
-    } else if (r === "file-missing") {
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Bitte die Datei von Hand wählen (sie liegt im Downloads-Ordner)." +
-        " Danach „Weiter“ drücken oder abbrechen.";
-    } else if (r === "file-transfer") {
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Die Datei konnte nicht übertragen werden — bitte selbst hochladen" +
-        " und „Weiter“ drücken oder abbrechen.";
-    } else if (r === "unexpected-page") {
-      // Zustands-Intelligenz (Welle 40): Seite passt zu keinem Schritt und ist keine Login-Seite.
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Unerwartete Seite — bitte selbst dorthin navigieren oder „Weiter“" +
-        " für einen erneuten Versuch.";
-    } else if (r === "skip-needs-file") {
-      // Zustands-Intelligenz (Welle 40): Vorspulen überspränge einen später gebrauchten Download.
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Übersprungene Schritte enthalten den Datei-Download — bitte den" +
-        " Ablauf von vorn starten oder die Datei beim Upload selbst wählen.";
-    } else if (r === "cond-skip-needs-file") {
-      // Bedingte Schritte (Welle 42): der bedingte Schritt (ein Download) sollte übersprungen
-      // werden, aber ein späterer Upload braucht dessen Datei → ehrliche Pause statt stumm.
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Dieser (bedingte) Schritt lädt eine Datei, die später gebraucht" +
-        " wird — bitte selbst herunterladen und „Weiter“ drücken oder abbrechen.";
-    } else {
-      const reason = r ? " (" + r + ")" : "";
-      els.autoMissText.textContent =
-        "Schritt " + num + ": Stelle nicht gefunden" + reason +
-        " — bitte selbst erledigen und „Weiter“ drücken oder abbrechen.";
-    }
+    els.autoMissText.textContent = execMissText(exec.lastMissReason, num, exec.lastMissDetail);
+    if (exec.lastMissReason) els.autoMissText.title = "Grund: " + exec.lastMissReason;
+    else els.autoMissText.removeAttribute("title");
     execRenderMissImage(planStep);
     els.autoMissBox.hidden = false;
   } else {
@@ -5811,7 +6359,7 @@ function execRenderRun() {
   // Vorspul-Notiz (Welle 40): sichtbar machen, dass Schritte übersprungen wurden.
   if (els.autoSkipNote) {
     if (exec.skipNote) {
-      els.autoSkipNote.textContent = execSkipNoteText(exec.skipNote);
+      setIconText(els.autoSkipNote, "skip", execSkipNoteText(exec.skipNote));
       els.autoSkipNote.hidden = false;
     } else {
       els.autoSkipNote.hidden = true;
@@ -5821,8 +6369,11 @@ function execRenderRun() {
   // Bedingte Schritte (Welle 42): dezente Notiz zum zuletzt übersprungenen Schritt.
   if (els.autoCondSkipNote) {
     if (exec.condSkip) {
-      els.autoCondSkipNote.textContent =
-        "⏭ Schritt " + (exec.condSkip.index + 1) + " übersprungen (Bedingung nicht erfüllt).";
+      setIconText(
+        els.autoCondSkipNote,
+        "skip",
+        "Schritt " + (exec.condSkip.index + 1) + " übersprungen (Bedingung nicht erfüllt)."
+      );
       els.autoCondSkipNote.hidden = false;
     } else {
       els.autoCondSkipNote.hidden = true;
@@ -5832,8 +6383,11 @@ function execRenderRun() {
   // Anmelde-Wache (Welle 40): höfliche Warte-Meldung, während der Mensch sich anmeldet.
   if (els.autoWaitLogin) {
     if (exec.phase === "waiting-login") {
-      els.autoWaitLogin.textContent =
-        "🔐 Bitte kurz anmelden — der Lauf wartet und macht automatisch weiter.";
+      setIconText(
+        els.autoWaitLogin,
+        "lock",
+        "Bitte kurz anmelden – die Automation wartet und macht danach automatisch weiter."
+      );
       els.autoWaitLogin.hidden = false;
     } else {
       els.autoWaitLogin.hidden = true;
@@ -5842,13 +6396,13 @@ function execRenderRun() {
 
   // Live-Status.
   if (exec.phase === "executing") {
-    els.autoLiveStatus.textContent = "Schritt wird ausgeführt …";
+    setIconText(els.autoLiveStatus, "play", "Schritt wird ausgeführt …");
     els.autoLiveStatus.hidden = false;
   } else if (exec.phase === "running" && exec.autoMode) {
-    els.autoLiveStatus.textContent = "Läuft automatisch …";
+    setIconText(els.autoLiveStatus, "play", "Läuft selbstständig …");
     els.autoLiveStatus.hidden = false;
   } else if (exec.phase === "paused") {
-    els.autoLiveStatus.textContent = "Pausiert.";
+    setIconText(els.autoLiveStatus, "pause", "Pausiert.");
     els.autoLiveStatus.hidden = false;
   } else {
     els.autoLiveStatus.hidden = true;
@@ -5879,6 +6433,7 @@ function execRenderRun() {
 function execRenderDone(status) {
   execShowCtl("none");
   if (els.autoCancel) els.autoCancel.hidden = true;
+  if (els.autoControls) els.autoControls.hidden = true;
   els.autoMissBox.hidden = true;
   els.autoLiveStatus.hidden = true;
   els.autoDownloadNote.hidden = true;
@@ -5890,13 +6445,19 @@ function execRenderDone(status) {
   if (els.autoBar.firstElementChild) {
     els.autoBar.firstElementChild.style.width = status === "success" ? "100%" : els.autoBar.firstElementChild.style.width;
   }
-  if (status === "success") {
-    els.autoDoneTitle.textContent = "Fertig 🎉";
-    els.autoDoneText.textContent = "Die Automation ist durchgelaufen.";
+  const okRun = status === "success";
+  if (els.autoDoneIcon) {
+    els.autoDoneIcon.className = okRun ? "ok" : "err";
+    els.autoDoneIcon.textContent = "";
+    els.autoDoneIcon.appendChild(icon(okRun ? "check" : "x", true));
+  }
+  if (okRun) {
+    els.autoDoneTitle.textContent = "Fertig";
+    els.autoDoneText.textContent = "Die Automation ist vollständig durchgelaufen.";
     els.autoProgress.textContent = "Fertig";
   } else {
     els.autoDoneTitle.textContent = "Abgebrochen";
-    els.autoDoneText.textContent = "Der Lauf wurde beendet.";
+    els.autoDoneText.textContent = "Die Automation wurde beendet.";
     els.autoProgress.textContent = "Abgebrochen";
   }
   els.autoDone.hidden = false;
@@ -5950,81 +6511,139 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 // EVENTS
 // ============================================================================
 
-// „Ziel verwerfen" GANZ FRÜH verdrahten (Welle 33, Fix 4): der Knopf muss selbst dann noch
-// funktionieren, wenn eine spätere Zeile hier oder die Init wirft — deshalb vor allen
-// ungeschützten addEventListener-Aufrufen (els.saveCfg u. a. könnten theoretisch werfen).
+// „Aufheben" (Aufnahme-Anker) GANZ FRÜH verdrahten (Welle 33, Fix 4): der Knopf muss selbst dann
+// noch funktionieren, wenn eine spätere Zeile hier oder die Init wirft — deshalb vor allen
+// ungeschützten addEventListener-Aufrufen.
 if (els.targetClear) els.targetClear.addEventListener("click", discardTarget);
 
+// ── Kopf + Menüs (Welle 50a) ──
+els.helpBtn.addEventListener("click", () => toggleMenu("help"));
+els.avatarBtn.addEventListener("click", () => toggleMenu("account"));
+els.menuDim.addEventListener("click", closeMenus);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && (!els.menuHelp.hidden || !els.menuAccount.hidden)) closeMenus();
+});
+els.mLearn.addEventListener(
+  "click",
+  menuAction(() => (busyElsewhere() ? busyNotice() : showSteplyLearn()))
+);
+els.mVideo.addEventListener(
+  "click",
+  menuAction(() => (busyElsewhere() ? busyNotice() : goVideoSetup()))
+);
+els.mRecHelp.addEventListener(
+  "click",
+  menuAction(() => {
+    recHelpReturn = currentSection;
+    show("recHelp");
+  })
+);
+els.mOpenApp.addEventListener("click", menuAction(() => openAppTab("/app")));
+els.mUpdate.addEventListener("click", menuAction(() => openAppTab("/extension")));
+els.mChange.addEventListener(
+  "click",
+  menuAction(() => (busyElsewhere() ? busyNotice() : showConnect("change")))
+);
+els.mDisconnect.addEventListener(
+  "click",
+  menuAction(() => (busyElsewhere() ? busyNotice() : disconnect()))
+);
+els.recHelpBack.addEventListener("click", () => {
+  // Zurück dorthin, wo die Hilfe geöffnet wurde (auch mitten in einer Aufnahme).
+  const back = recHelpReturn;
+  recHelpReturn = "";
+  if (back && back !== "recHelp" && els[back]) show(back);
+  else showHome();
+});
+
+// ── Reiter ──
+els.tabRecord.addEventListener("click", () => showTab("record"));
+els.tabGuides.addEventListener("click", () => showTab("guides"));
+els.tabAutos.addEventListener("click", () => showTab("autos"));
+
+// ── Verbinden (Bildschirm 9) ──
+els.connectApp.addEventListener("click", () => openAppTab("/app/settings/erweiterung"));
+els.manualToggle.addEventListener("click", () => setManualOpen(els.manualBox.hidden));
 els.saveCfg.addEventListener("click", saveCfg);
-els.skipConnect.addEventListener("click", () => showStart());
-els.connBtn.addEventListener("click", () => showConnect());
-els.cardGuide.addEventListener("click", () => {
+els.token.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") saveCfg();
+});
+els.connectVideo.addEventListener("click", () => goVideoSetup());
+els.connectBack.addEventListener("click", () => showHome());
+
+// ── Aufnehmen ──
+els.recStart.addEventListener("click", () => {
   if (!hasToken) return;
   startGuide();
 });
-els.cardVideo.addEventListener("click", () => goVideoSetup());
-els.videoBack.addEventListener("click", () => showStart());
+els.siteRow.addEventListener("click", () => showGuides({ site: "page" }));
+
+// ── Video mit Ton ──
+els.videoBack.addEventListener("click", () => showHome());
 els.noAudio.addEventListener("change", updateBeginEnabled);
 els.micRetry.addEventListener("click", micPreflight);
 els.begin.addEventListener("click", begin);
 els.stop.addEventListener("click", stop);
-// Aufnahme-Phasen (Welle 48a): Bereit → Nimmt auf ⇄ Pausiert → Gestoppt (Prüfen).
-if (els.guideStartRec) els.guideStartRec.addEventListener("click", guideStartRecording);
-if (els.guideCancel) els.guideCancel.addEventListener("click", guideDiscardRecording);
-if (els.guidePause) els.guidePause.addEventListener("click", guidePauseRecording);
-if (els.guideResume) els.guideResume.addEventListener("click", guideStartRecording);
+
+// ── Sofort-Anleitung: Nimmt auf ⇄ Pausiert → Prüfen (Welle 48a/50a) ──
+els.guidePause.addEventListener("click", guidePauseRecording);
+els.guideResume.addEventListener("click", guideStartRecording);
 els.guideStop.addEventListener("click", guideStopRecording);
-if (els.guideCreate) els.guideCreate.addEventListener("click", finishGuide);
-if (els.guideContinue) els.guideContinue.addEventListener("click", guideStartRecording);
-if (els.guideDiscard) els.guideDiscard.addEventListener("click", guideDiscardRecording);
+els.guideCreate.addEventListener("click", finishGuide);
+els.guideContinue.addEventListener("click", guideStartRecording);
+els.guideDiscard.addEventListener("click", guideDiscardRecording);
 // Titel + Kategorie (Welle 31d): Feldwerte in die Session spiegeln; „＋ Neue Kategorie …"
 // blendet das Namensfeld ein.
-if (els.guideTitle) els.guideTitle.addEventListener("input", guideMetaSave);
-if (els.guideCategory) els.guideCategory.addEventListener("change", onGuideCategoryChange);
-if (els.guideCategoryNew) els.guideCategoryNew.addEventListener("input", guideMetaSave);
+els.guideTitle.addEventListener("input", guideMetaSave);
+els.guideCategory.addEventListener("change", onGuideCategoryChange);
+els.guideCategoryNew.addEventListener("input", guideMetaSave);
 els.again.addEventListener("click", newRecording);
 els.guideAgain.addEventListener("click", newRecording);
-// (targetClear-Listener ist bereits ganz oben in diesem Block verdrahtet.)
-// Live-Führung (Welle 31).
-els.cardGuideRun.addEventListener("click", () => {
-  if (hasToken) showFuehren();
+els.guideRetry.addEventListener("click", () => runGuideUpload());
+els.guideBackReview.addEventListener("click", guideBackToReview);
+
+// ── Reiter „Anleitungen" + Live-Führung (Welle 31/50a) ──
+els.chipSite.addEventListener("click", () => setFuehrenFilter({ site: "page" }));
+els.chipAll.addEventListener("click", () => setFuehrenFilter({ site: "all" }));
+els.chipDrafts.addEventListener("click", () =>
+  setFuehrenFilter({ live: fuehrenFilter.live === "drafts" ? "live" : "drafts" })
+);
+els.guideSearch.addEventListener("input", () => {
+  guidesQuery = (els.guideSearch.value || "").trim().toLowerCase();
+  guidesSelectedId = null;
+  renderGuidesList();
 });
-els.fuehrenBack.addEventListener("click", () => showStart());
-// Filter-Chips (Welle 32, Punkt C): segmentierte Umschalter, Auswahl in der Session.
-if (els.chipSite) els.chipSite.addEventListener("click", () => setFuehrenFilter({ site: "page" }));
-if (els.chipAll) els.chipAll.addEventListener("click", () => setFuehrenFilter({ site: "all" }));
-if (els.chipLive) els.chipLive.addEventListener("click", () => setFuehrenFilter({ live: "live" }));
-if (els.chipDrafts) els.chipDrafts.addEventListener("click", () => setFuehrenFilter({ live: "drafts" }));
+els.guidesEmptyAction.addEventListener("click", onGuidesEmptyAction);
 els.runExit.addEventListener("click", guideExit);
 els.runBack.addEventListener("click", guideGoBack);
 els.runNext.addEventListener("click", guideGoNext);
-els.runDoneList.addEventListener("click", () => showFuehren());
-// „Steply lernen" (Welle 35): Karte im Start-Screen (IMMER, auch unverbunden) + Zurück.
-if (els.cardSteplyLearn) els.cardSteplyLearn.addEventListener("click", () => showSteplyLearn());
-if (els.steplyLearnBack) els.steplyLearnBack.addEventListener("click", () => showStart());
+els.runDoneList.addEventListener("click", () => guideExit());
+// „Steply lernen" (Welle 35): ?-Menü (IMMER, auch unverbunden) + Zurück.
+els.steplyLearnBack.addEventListener("click", () => showHome());
+els.steplyLearnRetry.addEventListener("click", () => {
+  steplyDocsFetchedAt = 0;
+  const p = loadSteplyDocs();
+  renderSteplyLearn();
+  p.then(onListsChanged, onListsChanged);
+});
 
-// Automationen (Welle 36b): Karte (nur mit Token) → Liste → Vorbereitung → Lauf.
-if (els.cardAutomations)
-  els.cardAutomations.addEventListener("click", () => {
-    if (hasToken) showAutomations();
-  });
-if (els.autoListBack) els.autoListBack.addEventListener("click", () => showStart());
-if (els.autoPrepBack) els.autoPrepBack.addEventListener("click", () => showAutomations());
-if (els.autoClearValues) els.autoClearValues.addEventListener("click", onAutoClearValues);
-if (els.autoStart) els.autoStart.addEventListener("click", startAutoRun);
-// Lauf-Ansicht: Steuer-Knöpfe.
-if (els.autoExec) els.autoExec.addEventListener("click", () => execExecuteCurrent());
-if (els.autoSkip) els.autoSkip.addEventListener("click", () => execSkip());
-if (els.autoPause) els.autoPause.addEventListener("click", () => execPauseAuto());
-if (els.autoResume) els.autoResume.addEventListener("click", () => execResumeAuto());
-if (els.autoContinue) els.autoContinue.addEventListener("click", () => execContinueAfterMiss());
-if (els.autoCancel) els.autoCancel.addEventListener("click", () => execAbort());
-if (els.autoExit)
-  els.autoExit.addEventListener("click", () => {
-    if (exec.running) execAbort();
-    else showAutomations();
-  });
-if (els.autoDoneList) els.autoDoneList.addEventListener("click", () => showAutomations());
+// ── Automationen (Welle 36b): Reiter → Vorbereitung → Lauf ──
+els.autoListRetry.addEventListener("click", () => {
+  autoListError = false;
+  loadAutomations();
+  renderAutoList();
+});
+els.autoPrepBack.addEventListener("click", () => showAutomations());
+els.autoClearValues.addEventListener("click", onAutoClearValues);
+els.autoStart.addEventListener("click", startAutoRun);
+// Lauf-Ansicht: Steuer-Knöpfe (genau EIN „Abbrechen").
+els.autoExec.addEventListener("click", () => execExecuteCurrent());
+els.autoSkip.addEventListener("click", () => execSkip());
+els.autoPause.addEventListener("click", () => execPauseAuto());
+els.autoResume.addEventListener("click", () => execResumeAuto());
+els.autoContinue.addEventListener("click", () => execContinueAfterMiss());
+els.autoCancel.addEventListener("click", () => execAbort());
+els.autoDoneList.addEventListener("click", () => showAutomations());
 // Halbautomatik: Enter löst „Ausführen" aus (nur im wartenden Zustand).
 document.addEventListener("keydown", (e) => {
   if (els.autoRun.hidden) return;
@@ -6090,24 +6709,29 @@ window.addEventListener("pagehide", () => {
     // Klemmende/abgebrochene Aufnahme verwerfen, BEVOR wir irgendetwas anzeigen.
     await reconcile();
     await loadConfig();
-    // Aufnahme-Anker (Welle 27): Ziel laden (abgelaufene >30 min werden verworfen) + Banner.
-    await loadPendingTarget();
+    // Alles, was der erste Bildschirm braucht, LOKAL und parallel lesen (Welle 50a): gemerkter
+    // Kontoname, zuletzt bekannte Anleitungs-Listen, Aufnahme-Anker (abgelaufene >30 min werden
+    // verworfen) und die URL des aktiven Tabs. Kein Netz — der Start-Screen steht sofort.
+    await Promise.all([
+      loadAccountCache(),
+      loadListCaches(),
+      loadPendingTarget(),
+      currentActiveUrl().then((u) => {
+        activeUrl = u;
+      }),
+    ]);
+    computeSiteMatches();
+    renderHeader();
     // Live-Führung (Welle 31): eine laufende Führung nach Panel-Schließen fortsetzen.
     const resumedGuide = await guideMaybeResume();
-    if (!resumedGuide) {
-      if (hasToken) {
-        showStart();
-      } else {
-        showConnect();
-      }
-    }
-    // Nebenlaeufig, nicht blockierend: Kontoname anzeigen + auf neue Version pruefen.
-    fetchAccountName();
+    if (!resumedGuide) showHome("record");
+    // Nebenläufig, nicht blockierend: Kontoname (EINMAL) + Update-Prüfung.
+    if (hasToken) fetchAccountName();
     checkForUpdate();
   } catch (err) {
     try {
       setStatus(
-        "Die Seitenleiste konnte nicht vollständig starten — Extension bitte neu laden.",
+        "Die Seitenleiste konnte nicht vollständig starten – bitte die Steply-Erweiterung neu laden.",
         "error",
       );
     } catch (e) {

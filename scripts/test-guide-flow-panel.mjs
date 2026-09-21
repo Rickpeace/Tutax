@@ -1,8 +1,9 @@
-// Headless-Beweis des Sofort-Aufnahme-Ablaufs im Panel (Welle 48a), OHNE Netz/Server.
+// Headless-Beweis des Sofort-Aufnahme-Ablaufs im Panel (Welle 48a, Welle 50a), OHNE Netz/Server.
 // Laedt die ECHTE extension/panel.html + panel.js in echtem Chromium mit einem minimalen
 // `chrome`-Stub (runtime/storage/tabs/windows/downloads) und prueft den Zustandsautomaten:
 //   1) Versoehnung: klemmendes rec beim Oeffnen wird verworfen (Hinweis sichtbar).
-//   2) Karte -> „Bereit": KEIN rec im Storage, Schritt-Nachrichten werden ignoriert.
+//   2) Start-Screen (seit Welle 50a der fruehere „Bereit"-Zustand): KEIN rec im Storage,
+//      Schritt-Nachrichten werden ignoriert — nichts nimmt vor dem Klick auf „Aufnahme starten" auf.
 //   3) Start -> rec gesetzt, Schritt wird angenommen; Pause -> rec weg, Schritt ignoriert,
 //      Timer steht; Fortsetzen -> Timer zaehlt ohne Sprung weiter.
 //   4) Stopp mit einem Schritt „unterwegs" -> der Schritt geht NICHT verloren.
@@ -269,42 +270,32 @@ try {
   ok(s.rec === undefined, "Versöhnung: klemmendes rec beim Öffnen verworfen");
   ok(await vis("interruptedHint"), "Versöhnung: Hinweis „unterbrochene Aufnahme“ sichtbar");
 
-  // ---- 2) Bereit ----
-  await click("cardGuide");
+  // ---- 2) Start-Screen = „Bereit": vor dem Klick nimmt NICHTS auf ----
   s = await st();
-  ok(s.phase === "ready", "Karte → Phase „ready“");
-  ok(s.rec === undefined, "Bereit: KEIN rec im Storage");
-  ok(await vis("guideStartRec"), "Bereit: „Aufnahme starten“ sichtbar");
-  ok(await vis("guideCancel"), "Bereit: „Abbrechen“ sichtbar");
-  ok(!(await vis("guideStop")) && !(await vis("guidePause")), "Bereit: kein Pause/Stopp");
-  ok(await vis("guideReadyHint"), "Bereit: Hinweis „Öffnen Sie die Seite …“ sichtbar");
-  ok(!(await vis("guideTimer")), "Bereit: Timer ausgeblendet");
-  ok(await vis("guideTitle"), "Bereit: Titel-Feld sichtbar");
-  ok(
-    (await page.textContent("#guideBadgeText")).trim() === "Bereit",
-    "Bereit: Badge „Bereit“"
-  );
-  await sendStep(TAB1, "Ignoriert (Bereit)");
+  ok(s.phase === "idle", "Start-Screen: Phase „idle“ (keine Aufnahme)");
+  ok(s.rec === undefined, "Start-Screen: KEIN rec im Storage");
+  ok(await vis("recStart"), "Start-Screen: „Aufnahme starten“ sichtbar");
+  ok(!(await vis("guideStop")) && !(await vis("guidePause")), "Start-Screen: kein Pause/Fertig");
+  ok(!(await vis("guideTimer")), "Start-Screen: kein Timer");
+  await sendStep(TAB1, "Ignoriert (Start-Screen)");
   await sleep(800);
-  ok((await st()).steps === 0, "Bereit: Schritt-Nachricht wird ignoriert");
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "1-bereit.png"), fullPage: true });
-
-  // Abbrechen aus „Bereit" -> Start-Screen, ohne Rueckfrage.
-  const dBefore = dialogs;
-  await click("guideCancel");
-  s = await st();
-  ok(s.phase === "idle" && (await vis("cardGuide")), "Abbrechen (Bereit) → Start-Screen");
-  ok(dialogs === dBefore, "Abbrechen ohne Schritte: keine Rückfrage");
+  ok((await st()).steps === 0 && (await st()).rec === undefined, "Start-Screen: Schritt-Nachricht wird ignoriert");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "1-start.png"), fullPage: true });
 
   // ---- 3) Start / Schritt / Pause / Fortsetzen ----
-  await click("cardGuide");
-  await click("guideStartRec");
+  await click("recStart");
   await page.waitForFunction(() => !!window.__T.local.rec, null, { timeout: 2000 });
   s = await st();
-  ok(s.phase === "recording" && s.active, "Start → Phase „recording“, guideActive");
+  ok(s.phase === "recording" && s.active, "Aufnahme starten → Phase „recording“, guideActive");
   ok(s.rec && s.rec.mode === "guide", "Start: rec {mode:'guide'} gesetzt");
-  ok(await vis("guidePause") && (await vis("guideStop")), "Nimmt auf: Pause + Stopp sichtbar");
-  ok(!(await vis("guideStartRec")) && !(await vis("guideCreate")), "Nimmt auf: kein Start/Erstellen");
+  ok(await vis("guidePause") && (await vis("guideStop")), "Nimmt auf: Pause + Fertig sichtbar");
+  ok(!(await vis("recStart")) && !(await vis("guideCreate")), "Nimmt auf: kein Start/Erstellen");
+  ok(!(await vis("tabs")), "Nimmt auf: keine Reiter");
+  ok(!(await vis("guideTitle")), "Nimmt auf: Titel/Kategorie erst beim Prüfen");
+  ok(
+    (await page.textContent("#guideBadgeText")).trim() === "Aufnahme läuft",
+    "Nimmt auf: Steuerleiste „Aufnahme läuft“"
+  );
   await sendStep(TAB1, "Klicken Sie auf „Anmelden“");
   ok(await waitSteps(1), "Nimmt auf: Schritt wird angenommen (1)");
   await sendStep(TAB1, "Klicken Sie auf „Belege“");
@@ -393,9 +384,11 @@ try {
   ok(await vis("guideContinue") && (await vis("guideDiscard")), "Gestoppt: Weiter aufnehmen + Verwerfen");
   ok((await page.$$("#guideList .guide-item")).length === 4, "Gestoppt: Liste mit 4 Schritten sichtbar");
   ok(
-    /4\s*Schritte aufgenommen – prüfen und erstellen/.test(await page.textContent("#guideCountLine")),
-    "Gestoppt: „4 Schritte aufgenommen – prüfen und erstellen“"
+    /4\s*Schritte aufgenommen/.test(await page.textContent("#guideCountLine")) && (await vis("guideCountLine")),
+    "Gestoppt: Prüfen-Kopf „4 Schritte aufgenommen“"
   );
+  ok(await vis("guideTitle"), "Gestoppt: Titel-Feld sichtbar (Prüfen)");
+  ok(!(await vis("guidePause")) && !(await vis("guideStop")), "Gestoppt: keine Aufnahme-Steuerleiste");
   await page.click("#guideList .guide-item:last-child .rm");
   ok((await st()).steps === 3, "Gestoppt: Schritt per ✕ entfernbar (3)");
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "4-gestoppt.png"), fullPage: true });
@@ -413,8 +406,7 @@ try {
   ok(s.phase === "idle" && s.steps === 0 && s.rec === undefined, "Verwerfen → Start-Screen, alles leer");
 
   // 0 Schritte -> „Anleitung erstellen" deaktiviert.
-  await click("cardGuide");
-  await click("guideStartRec");
+  await click("recStart");
   await click("guideStop");
   await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
   ok(await page.isDisabled("#guideCreate"), "0 Schritte: „Anleitung erstellen“ deaktiviert");
@@ -425,8 +417,7 @@ try {
   ok(dialogs === dBefore3 && (await st()).phase === "idle", "Verwerfen ohne Schritte: ohne Rückfrage");
 
   // ---- 6) Popups ----
-  await click("cardGuide");
-  await click("guideStartRec");
+  await click("recStart");
   await sendStep(TAB_FOREIGN, "Private Mail (fremdes Fenster)");
   await sleep(1300);
   ok((await st()).steps === 0, "Popup: Schritt aus fremdem Fenster wird verworfen");
@@ -484,8 +475,7 @@ try {
   ok((await st()).extra.length === 0, "Popup: Menge nach Verwerfen leer");
 
   // ---- 7) Hinweis „kann nicht aufnehmen" ----
-  await click("cardGuide");
-  await click("guideStartRec");
+  await click("recStart");
   await sleep(300);
   ok(!(await vis("guideCaptureHint")), "Hinweis: aufnehmbarer Tab → kein Hinweis");
   const activate = (id, url) =>
