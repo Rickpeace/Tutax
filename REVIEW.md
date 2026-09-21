@@ -295,6 +295,15 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 49 (21.09.2026):** 📚 **BIBLIOTHEK NEU** — Richard fand die Bibliothek
+unübersichtlich; Auswahl per anklickbarer Varianten-Vorschau (Artifact). Umgesetzt: Karte mit
+TITEL + Website im Kategorie-Farbfeld (keine Screenshot-Vorschau mehr — sah zufällig aus, half
+nicht beim Wiederfinden), nur „Intern" wird markiert (kein „Kunde"-Etikett), EIN Status-Schalter
+statt Etikett + Schalter, Umschalter Karten/Liste (localStorage `steply-library-view`), Liste nach
+Kategorie gruppiert mit Spalten Website/Schritte/Geändert/Status. Eine Komponente (TutorialCard,
+layout card|row) teilt Menü/Dialoge/Aufräum-Modus. page.tsx signiert keine Bild-URLs mehr.
+KI-Titel bewusst NICHT (Ersteller benennen selbst). Beweis: test-library-views (echter Login).
+Offen: Standard-Anleitungen darunter noch im alten Stil („Auf Hilfe-Seite"-Schalter).
 **Opus Welle 48 a/b/c (21.09.2026, v2.17.0):** ⚡ **SOFORT-AUFNAHME VOLLSTÄNDIG** — Richards
 Fund: Google-Suche (tippen + Enter) wurde nicht aufgenommen (Feld schon beim Laden fokussiert →
 kein focusin; Enter navigiert ohne blur). Daraus Lückenanalyse 1–11 und Umsetzung: (Basis) Feld
