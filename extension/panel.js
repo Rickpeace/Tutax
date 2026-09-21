@@ -2085,7 +2085,7 @@ function guideUploadErrorText(msg) {
     return "Steply ist gerade nicht erreichbar. Prüfen Sie die Internetverbindung und versuchen Sie es erneut. Ihre Schritte bleiben erhalten.";
   }
   if (/\b401\b|Token/i.test(m)) {
-    return "Die Verbindung zu Steply ist nicht mehr gültig. Verbinden Sie die Steply-Erweiterung neu (Avatar → Verbindung ändern). Ihre Schritte bleiben erhalten.";
+    return "Die Verbindung zu Steply ist nicht mehr gültig. Öffnen Sie in Steply „Einstellungen → Steply-Erweiterung“ und verbinden Sie neu – danach hier „Erneut versuchen“. Ihre Schritte bleiben erhalten.";
   }
   return "Beim Hochladen ist etwas schiefgelaufen. Ihre Schritte bleiben erhalten – versuchen Sie es gleich noch einmal.";
 }
@@ -2459,7 +2459,8 @@ function fetchAccountTutorials() {
   if (accountListFetch) return accountListFetch;
   const token = cfg.token;
   siteMatchFetchedAt = Date.now();
-  accountListFetch = (async () => {
+  let self = null;
+  self = accountListFetch = (async () => {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 8000);
@@ -2469,7 +2470,7 @@ function fetchAccountTutorials() {
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (token !== cfg.token) return siteTutorials; // Token wechselte unterwegs → verwerfen
+      if (token !== cfg.token) return null; // Token wechselte unterwegs → verwerfen (neuer Abruf folgt)
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json().catch(() => ({}));
       siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
@@ -2488,8 +2489,9 @@ function fetchAccountTutorials() {
       siteTutorialsError = true;
       return siteTutorials;
     } finally {
-      accountListFetch = null;
-      onListsChanged();
+      // Nur den EIGENEN Abruf austragen — nach einem Kontowechsel läuft evtl. schon der neue.
+      if (accountListFetch === self) accountListFetch = null;
+      if (token === cfg.token) onListsChanged();
     }
   })();
   return accountListFetch;
@@ -2509,7 +2511,9 @@ function refreshLists(force) {
     jobs.push(fetchAccountTutorials());
   }
   if (force) steplyDocsFetchedAt = 0;
-  if (!steplyDocs || Date.now() - steplyDocsFetchedAt >= STEPLY_DOC_TTL) {
+  const docsAge = Date.now() - steplyDocsFetchedAt;
+  // Ohne Liste (offline/Fehler) nicht bei JEDEM Tab-Wechsel neu fragen: kurze Pause nach dem Versuch.
+  if (steplyDocs ? docsAge >= STEPLY_DOC_TTL : docsAge >= STEPLY_DOC_RETRY) {
     jobs.push(loadSteplyDocs().then(onListsChanged, onListsChanged));
   }
   return Promise.all(jobs);
@@ -2603,6 +2607,7 @@ async function refreshSiteMatch() {
 const STEPLY_DOC_TTL = 15 * 60 * 1000; // 15 min
 let steplyDocs = null; // normalisierte Liste oder null (nicht verfügbar)
 let steplyDocsFetchedAt = 0; // Zeitpunkt des letzten Fetch-VERSUCHS
+const STEPLY_DOC_RETRY = 60 * 1000; // ohne Liste: frühestens nach 1 min erneut versuchen
 let steplyDocsError = false;
 let steplyDocsFetch = null; // laufender Abruf (Dedupe)
 
@@ -2618,6 +2623,9 @@ function normalizeDocs(list) {
 function loadSteplyDocs() {
   const now = Date.now();
   if (steplyDocs && now - steplyDocsFetchedAt < STEPLY_DOC_TTL) return Promise.resolve(steplyDocs);
+  if (!steplyDocs && steplyDocsFetchedAt && now - steplyDocsFetchedAt < STEPLY_DOC_RETRY) {
+    return Promise.resolve(null);
+  }
   if (steplyDocsFetch) return steplyDocsFetch;
   steplyDocsFetchedAt = now;
   steplyDocsFetch = (async () => {
@@ -3290,8 +3298,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
       // Anderes Konto (oder getrennt): nichts vom alten Konto weiter anzeigen.
       accountName = "";
       accountFetch = null;
+      accountListFetch = null; // laufenden Abruf des alten Kontos nicht wiederverwenden
       siteTutorials = null;
       siteTutorialsError = false;
+      // Gespeicherte Liste des alten Kontos verwerfen (der Service-Worker schreibt sie ohne fp).
+      try {
+        chrome.storage.local.remove("badgeCache");
+      } catch (err) {
+        /* egal */
+      }
       autoListData = null;
       computeSiteMatches();
     }
@@ -5914,21 +5929,31 @@ async function startAutoRun() {
     return;
   }
 
-  // Merken (lokal, nur Häkchen-Felder). Werte verlassen den Browser nie.
-  await saveAutoValues(exec.automation.id, toRemember);
-  els.autoStart.disabled = true; // Doppelstart-Schutz (Knopf ist nach dem Lauf wieder frei)
-
-  // Tab binden + ggf. zur Startseite bringen.
-  exec.tabId = await guideActiveTabId();
+  // Doppelstart-Schutz VOR dem ersten await (sonst startet ein schneller Doppelklick zwei Läufe).
+  if (els.autoStart.disabled) return;
+  els.autoStart.disabled = true;
   try {
-    chrome.runtime.sendMessage({ type: "steply-ensure-content" });
-  } catch (err) {
-    /* egal */
-  }
-  await execEnsureStartTab(exec.plan[0]);
+    // Merken (lokal, nur Häkchen-Felder). Werte verlassen den Browser nie.
+    await saveAutoValues(exec.automation.id, toRemember);
 
-  // Server-Lauf registrieren (best effort).
-  exec.runId = await execPostStart();
+    // Tab binden + ggf. zur Startseite bringen.
+    exec.tabId = await guideActiveTabId();
+    try {
+      chrome.runtime.sendMessage({ type: "steply-ensure-content" });
+    } catch (err) {
+      /* egal */
+    }
+    await execEnsureStartTab(exec.plan[0]);
+
+    // Server-Lauf registrieren (best effort).
+    exec.runId = await execPostStart();
+  } catch (err) {
+    // Start scheiterte (Tab weg o. ä.) → Knopf wieder freigeben, ehrlich melden.
+    els.autoStart.disabled = false;
+    els.autoPrepHint.textContent = "Die Automation konnte nicht starten. Bitte versuchen Sie es erneut.";
+    els.autoPrepHint.className = "status status-error";
+    return;
+  }
 
   exec.index = 0;
   exec.running = true;
