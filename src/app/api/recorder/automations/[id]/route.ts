@@ -81,12 +81,20 @@ export async function GET(
     );
   }
 
-  const { data: stepsData } = await admin
+  const { data: stepsData, error: stepsErr } = await admin
     .from("automation_steps")
     .select("id, position, title, action, selector, page_url, param_key, image_path, highlights, file_meta, condition, jump, interaction")
     .eq("automation_id", id)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
+  // Nie still „0 Schritte" liefern (z. B. fehlende Spalte vor einer Migration) — laut scheitern.
+  if (stepsErr) {
+    console.error("recorder/automations: Schritte nicht ladbar:", stepsErr.message);
+    return NextResponse.json(
+      { error: "Schritte konnten nicht geladen werden." },
+      { status: 500, headers: RECORDER_ME_CORS },
+    );
+  }
   const steps = stepsData ?? [];
 
   // Referenz-Screenshots liegen im PRIVATEN Bucket → signierte URLs (1 h), parallel.

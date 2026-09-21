@@ -295,6 +295,38 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 48 a/b/c (21.09.2026, v2.17.0):** ⚡ **SOFORT-AUFNAHME VOLLSTÄNDIG** — Richards
+Fund: Google-Suche (tippen + Enter) wurde nicht aufgenommen (Feld schon beim Laden fokussiert →
+kein focusin; Enter navigiert ohne blur). Daraus Lückenanalyse 1–11 und Umsetzung: (Basis) Feld
+beim Start/beim Tippen übernehmen, Enter meldet den Schritt sofort; Vertrag `step.interaction`
+{enter, variant right|double|drag|key, key, drop/dropLabel, hover/hoverLabel, frame} +
+`selector.shadow`, Migration 0036 (`interaction jsonb` an steps + automation_steps). (a) Panel:
+Bereit → Aufnahme starten → Pause/Fortsetzen → Stopp → Prüfen → Erstellen/Weiter/Verwerfen
+(vorher: Aufnahme sofort beim Kartenklick, kein Stopp ohne Upload); Popups (opener-Kette) werden
+mit aufgenommen, fremde Fenster nicht; Hinweis bei nicht aufnehmbaren Seiten (Ping). (b)
+Erfassung: iframes (all_frames, Geometrie per postMessage-Kette nach oben, Panel setzt Tab-URL),
+Shadow DOM (composedPath, guide-resolve steigt über `shadow` ab), ARIA-Hover-Menüs, Enter in
+Chat-Feldern (contenteditable/textarea: Probe 400 ms, sonst retract), Doppelklick/Ziehen (patch),
+Rechtsklick nur bei eigenem Kontextmenü, Tastenkürzel (ohne Textbearbeitung/AltGr), Datei-Drop.
+(c) Speichern/Texte/Abspielen: Vorlagen-Texte je Art („Doppelklicken Sie …", „Drücken Sie
+Strg+S"), KI-Feinschliff kennt die Art, Führung schaltet auf dem passenden Ereignis weiter
+(Hover-Phase zeigt erst den Auslöser), Automation: fill+Enter (Seite schickt selbst ab oder
+requestSubmit), contextmenu/dblclick/DnD/Tasten, Hover-Vorlauf, Frame-Filter (nur passender
+Frame/nur Hauptfenster antwortet); Chips im Automations-Detail; duplicate/fork/Snapshot tragen
+interaction. Nebenfund behoben: role=combobox (Google-Suchfeld) wurde als „select" konvertiert.
+Nacharbeit (Haupt-Session): offene Eingabe bei Pause/Stopp wird gemeldet, Chat-textarea-Enter.
+Unabhängige QA-Prüfung (Befunde behoben, Beweis test-welle48-review-fixes): gleichartige
+Geschwister-iframes (Kartenfelder) → frame.nth, nur EIN Frame führt aus; about:blank-Editor-Frames
+abspielbar; Strg+Z auf QWERTZ (key statt code); Enter schickt nur ab, wo ein echtes Enter es täte
+(HTML implicit submission); Bedingungen/Sprünge von iframe-Schritten im richtigen Frame;
+Seiten-Tastenkürzel ohne Ziel ausführbar (+ bei Konvertierung behalten); Hover-Führung max. 30 s;
+Nachträge aus Popups + kurz nach Pause/Stopp angenommen; zweites Enter im selben Feld; kein Hover-
+Fehlalarm in per Klick geöffneten Mehrfach-Dropdowns; iframe-Geometrie über PRIVATEN MessageChannel
+(rec.nonce) statt offenem postMessage; Schritt-Abfragen scheitern laut statt still „0 Schritte".
+**Rollout-Pflicht: Migration 0036 VOR dem Vercel-Deploy** (sonst Lesefehler in Führung/Automationen).
+Tests: test-guide-enter, -capture-plus, -flow-panel, -guide-interaction, -exec-interaction-e2e
+(neu) + alle bestehenden E2E grün; Build + Lint grün. Grenzen: geschlossene Shadow-Roots, reine
+CSS-:hover-Menüs (Automation: ehrlicher Miss), Uploads in iframes, Canvas-Apps.
 **Opus Welle 47 + Fable (07.07., v2.16.0):** ↪️ **BEDINGTER SPRUNG / Block-Überspringen**
 — Richards Kernbedarf: eine Automation soll ein- UND ausgeloggt laufen. Das per-Schritt-„?"
 (Welle 42) reichte nicht, weil jeder Login-Schritt SEINE Login-/Google-Seite als page_url

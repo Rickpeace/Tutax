@@ -212,8 +212,16 @@ export function validateInteraction(raw: unknown, action: GuideAction): StepInte
     if (hl) out.hoverLabel = hl;
   }
   if (r.frame && typeof r.frame === "object" && !Array.isArray(r.frame)) {
-    const url = cleanSelectorString((r.frame as Record<string, unknown>).url, 500);
-    if (url && /^https?:\/\//i.test(url)) out.frame = { url };
+    const fr = r.frame as Record<string, unknown>;
+    const url = cleanSelectorString(fr.url, 500);
+    // about:blank/about:srcdoc = Rich-Text-Editor-Rahmen (TinyMCE u. ä.) — ohne eigene Adresse.
+    if (url && (/^https?:\/\//i.test(url) || /^about:(blank|srcdoc)$/i.test(url))) {
+      out.frame = { url };
+      // nth: Position unter gleichartigen Geschwister-Frames (Kartenfelder u. ä.), 0..50.
+      if (typeof fr.nth === "number" && Number.isFinite(fr.nth) && fr.nth >= 0 && fr.nth <= 50) {
+        out.frame.nth = Math.floor(fr.nth);
+      }
+    }
   }
   return Object.keys(out).length ? out : undefined;
 }

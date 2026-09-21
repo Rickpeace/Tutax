@@ -295,12 +295,14 @@ export async function convertTutorialToAutomation(
   }
 
   // 2) Schritte + Branches laden.
-  const { data: stepsData } = await admin
+  const { data: stepsData, error: stepsErr } = await admin
     .from("steps")
     .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition, jump, interaction")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
+  // Nie still „zu wenige Schritte" melden, wenn in Wahrheit die Abfrage scheiterte.
+  if (stepsErr) throw new Error("Schritte konnten nicht geladen werden: " + stepsErr.message);
   const steps = stepsData ?? [];
   const stepIds = steps.map((s) => s.id);
 
@@ -317,8 +319,13 @@ export async function convertTutorialToAutomation(
   const path = walkLinearPath(steps, branches, tut.root_step_id);
 
   // 4) Nur Schritte MIT Selektor sind ausführbar; Hinweis-Schritte (ohne Selektor)
-  //    werden übersprungen. Bleiben <2 übrig → Fehler.
-  const executable = path.filter((s) => s.selector != null);
+  //    werden übersprungen. Ausnahme (Welle 48): Tastenkürzel auf der Seite brauchen kein
+  //    Ziel-Element. Bleiben <2 übrig → Fehler.
+  const isPageShortcut = (s: StepRow) => {
+    const it = s.interaction as { variant?: unknown; key?: unknown } | null;
+    return !!it && typeof it === "object" && it.variant === "key" && typeof it.key === "string" && !!it.key;
+  };
+  const executable = path.filter((s) => s.selector != null || isPageShortcut(s));
   if (executable.length < 2) throw new Error(AUTOMATION_ERR_TOO_FEW);
 
   // 5) Schritte in automation_steps + Parameter ableiten.

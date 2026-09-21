@@ -173,7 +173,7 @@
         urlMatch = P.evalUrlCondition(curUrl, cond);
       } else if (cond.kind === "element") {
         elementFound =
-          typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, cond) : false;
+          typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, cond, (planStep.interaction && planStep.interaction.frame) || null) : false;
       }
       return P.shouldRunStep(cond, { urlMatch: urlMatch, elementFound: elementFound });
     }
@@ -275,7 +275,7 @@
             jUrlMatch = P.evalUrlCondition(jCurUrl, jump.when);
           } else if (jump.when.kind === "element") {
             jElementFound =
-              typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, jump.when) : false;
+              typeof deps.evalCondition === "function" ? await deps.evalCondition(tabId, jump.when, (plan[index] && plan[index].interaction && plan[index].interaction.frame) || null) : false;
           }
           if (!running) return;
           if (P.shouldRunStep(jump.when, { urlMatch: jUrlMatch, elementFound: jElementFound })) {

@@ -74,7 +74,7 @@ const STUB = `<script>
       onMessage: { addListener: function () {} },
     },
     storage: {
-      local: { get: function (key, cb) { cb({ rec: { startedAt: Date.now(), mode: "guide" } }); } },
+      local: { get: function (key, cb) { cb({ rec: { startedAt: Date.now(), mode: "guide", nonce: "testnonce123" } }); } },
       onChanged: { addListener: function () {} },
     },
     tabs: { sendMessage: function () {} },

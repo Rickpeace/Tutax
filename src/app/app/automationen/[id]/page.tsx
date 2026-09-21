@@ -31,7 +31,7 @@ export default async function AutomationDetailPage({
     .maybeSingle();
   if (!automation) notFound();
 
-  const [{ data: stepsData }, { data: runsData }] = await Promise.all([
+  const [{ data: stepsData, error: stepsErr }, { data: runsData }] = await Promise.all([
     supabase
       .from("automation_steps")
       .select("id, position, title, action, param_key, image_path, highlights, file_meta, condition, jump, interaction")
@@ -44,6 +44,8 @@ export default async function AutomationDetailPage({
       .order("started_at", { ascending: false })
       .limit(10),
   ]);
+  // Nie still „0 Schritte" zeigen (z. B. fehlende Spalte vor einer Migration) — laut scheitern.
+  if (stepsErr) throw new Error("Schritte der Automation konnten nicht geladen werden: " + stepsErr.message);
 
   const paramList: AutomationParam[] = Array.isArray(automation.params)
     ? (automation.params as AutomationParam[])

@@ -99,7 +99,7 @@ export type StepInteraction = {
   dropLabel?: string;
   hover?: InteractionSelector; // vorher mit der Maus über dieses Element (Menü öffnen)
   hoverLabel?: string;
-  frame?: { url: string }; // Schritt liegt in einem iframe (origin+pathname)
+  frame?: { url: string; nth?: number }; // Schritt liegt in einem iframe (origin+pathname; nth = Position unter gleichartigen Geschwistern)
 };
 
 export type Step = {

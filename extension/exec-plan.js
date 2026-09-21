@@ -142,7 +142,11 @@
     }
     if (raw.frame && typeof raw.frame === "object" && !Array.isArray(raw.frame)) {
       var fu = cleanStr(raw.frame.url, 500);
-      if (fu && /^https?:\/\//i.test(fu)) out.frame = { url: fu };
+      if (fu && (/^https?:\/\//i.test(fu) || /^about:(blank|srcdoc)$/i.test(fu))) {
+        out.frame = { url: fu };
+        var fn = raw.frame.nth;
+        if (typeof fn === "number" && isFinite(fn) && fn >= 0 && fn <= 50) out.frame.nth = Math.floor(fn);
+      }
     }
     for (var k in out) {
       if (Object.prototype.hasOwnProperty.call(out, k)) return out;

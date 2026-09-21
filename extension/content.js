@@ -1104,6 +1104,30 @@
       return "";
     }
   }
+  // Position dieses Frames unter den GLEICHARTIGEN Geschwister-Frames (gleiche Herkunft + Pfad),
+  // z. B. Kartennummer/Ablauf/CVC als drei iframes derselben Seite. Nur gleich-herkuenftige
+  // Geschwister sind lesbar — genau die koennen verwechselt werden. Beim Abspielen reagiert nur
+  // der Frame mit derselben Nummer (sonst fuehrten alle gleichzeitig aus).
+  function frameNth() {
+    try {
+      const p = window.parent;
+      if (!p || p === window) return 0;
+      const myPath = frameNormPath(location.pathname);
+      let n = 0;
+      for (let i = 0; i < p.frames.length; i++) {
+        const w = p.frames[i];
+        if (w === window) return n;
+        try {
+          if (w.location.origin === location.origin && frameNormPath(w.location.pathname) === myPath) n++;
+        } catch (err) {
+          /* fremde Herkunft -> kann nicht verwechselt werden */
+        }
+      }
+    } catch (err) {
+      /* egal */
+    }
+    return 0;
+  }
   function randomKey() {
     let k = "";
     try {
@@ -1149,7 +1173,7 @@
       // Fenster. Markierung darum vorerst leer; die echte Lage reicht die Frame-Kette per
       // postMessage nach oben (onFrameGeo), das Hauptfenster meldet sie als steply-frame-geo.
       step.rect = { x: 0, y: 0, w: 0, h: 0 };
-      inter.frame = { url: frameUrl() };
+      inter.frame = { url: frameUrl(), nth: frameNth() };
       step.frameKey = randomKey();
       framePx = geo.px;
     } else {
@@ -1195,21 +1219,61 @@
   // und reicht weiter; das Hauptfenster normiert auf seinen Viewport und meldet ans Panel.
   // SICHERHEIT: die Nachricht aendert NUR die Markierungsposition eines Schritts mit passendem
   // Zufalls-key (nie Inhalte); nur Zahlen, ungueltige verworfen; nur von echten Kind-Frames.
+  // ---- Geo-Kanal (Welle 48, Datenschutz) ----------------------------------------------------
+  // Die Klick-Geometrie eines iframes reist NICHT per offenem window.postMessage nach oben (das
+  // saehen die Skripte der einbettenden Seite — z. B. wo im Bank-iframe geklickt wurde — und
+  // koennten es faelschen), sondern ueber einen PRIVATEN MessageChannel zwischen den Content-
+  // Scripts: Das Kind bittet per „hello" (ohne Inhalt) um einen Kanal; das Eltern-Content-Script
+  // schickt einen Port DIREKT an das Kind-Fenster (fuer die Eltern-Seite unsichtbar), belegt mit
+  // dem Aufnahme-Geheimnis rec.nonce aus chrome.storage (fuer Seiten-Skripte unlesbar). Das Kind
+  // nimmt nur einen Port mit passendem nonce an; Geo geht nur ueber diesen Port.
+  let recNonce = "";
+  let geoPort = null; // Kind: Port zum Eltern-Content-Script
+  let geoQueue = []; // Kind: Geo-Nachrichten, bis der Port da ist
+  let geoHelloAt = 0;
   function postFrameGeo(key, px, sensitivePx) {
+    const msg = {
+      key,
+      rect: { left: px.left, top: px.top, width: px.width, height: px.height },
+      sensitive: sensitivePx || [],
+    };
+    if (geoPort) {
+      try {
+        geoPort.postMessage(msg);
+      } catch (err) {
+        /* Port tot -> Markierung bleibt leer */
+      }
+      return;
+    }
+    geoQueue.push(msg);
+    if (geoQueue.length > 20) geoQueue.shift();
+    const now = Date.now();
+    if (now - geoHelloAt < 1000) return;
+    geoHelloAt = now;
     try {
-      window.parent.postMessage(
-        {
-          __steplyFrameGeo: 1,
-          key,
-          rect: { left: px.left, top: px.top, width: px.width, height: px.height },
-          sensitive: sensitivePx || [],
-        },
-        "*"
-      );
+      window.parent.postMessage({ __steplyGeoHello: 1 }, "*");
     } catch (err) {
       /* Eltern-Fenster nicht erreichbar -> Markierung bleibt leer */
     }
   }
+  // Kind: Port vom Eltern-Content-Script annehmen (nur vom echten Eltern-Fenster + nonce).
+  function onGeoPort(event) {
+    const d = event.data;
+    if (!d || typeof d !== "object" || d.__steplyGeoPort !== 1) return;
+    if (IS_TOP || event.source !== window.parent) return;
+    if (!recNonce || d.nonce !== recNonce || !event.ports || !event.ports[0]) return;
+    geoPort = event.ports[0];
+    const q = geoQueue;
+    geoQueue = [];
+    for (const m of q) {
+      try {
+        geoPort.postMessage(m);
+      } catch (err) {
+        /* egal */
+      }
+    }
+  }
+  window.addEventListener("message", onGeoPort);
 
   function cleanPx(r) {
     if (!r || typeof r !== "object") return null;
@@ -1298,19 +1362,40 @@
     return { left: l, top: t, width: Math.max(0, rr - l), height: Math.max(0, bb - t) };
   }
 
-  function onFrameGeo(event) {
+  // Eltern: ein Kind-Frame bittet um einen Kanal → Port DIREKT an dieses Kind-Fenster schicken.
+  function onGeoHello(event) {
     const d = event.data;
-    if (!d || typeof d !== "object" || d.__steplyFrameGeo !== 1) return;
-    if (!recording || mode !== "guide") return;
+    if (!d || typeof d !== "object" || d.__steplyGeoHello !== 1) return;
+    if (!recording || mode !== "guide" || !recNonce) return;
     if (!event.source || event.source === window) return;
+    const frame = findFrameElement(event.source);
+    if (!frame) return; // nur echte Kind-Frames DIESES Dokuments
+    let ch;
+    try {
+      ch = new MessageChannel();
+    } catch (err) {
+      return;
+    }
+    ch.port1.onmessage = (e) => onFrameGeo(e.data, frame);
+    try {
+      event.source.postMessage({ __steplyGeoPort: 1, nonce: recNonce }, "*", [ch.port2]);
+    } catch (err) {
+      /* Kind weg */
+    }
+  }
+  window.addEventListener("message", onGeoHello);
+
+  // Eltern: Geo aus dem privaten Kanal eines Kind-Frames umrechnen und weiterreichen.
+  function onFrameGeo(d, frame) {
+    if (!d || typeof d !== "object") return;
+    if (!recording || mode !== "guide") return;
+    if (!frame || !frame.isConnected) return;
     const key = typeof d.key === "string" && /^[a-z0-9]{8,40}$/.test(d.key) ? d.key : "";
     const rect = cleanPx(d.rect);
     if (!key || !rect) return;
     const sens = Array.isArray(d.sensitive)
       ? d.sensitive.slice(0, MAX_SENSITIVE).map(cleanPx).filter(Boolean)
       : [];
-    const frame = findFrameElement(event.source);
-    if (!frame) return; // nur echte Kind-Frames DIESES Dokuments
     let box;
     try {
       box = frameContentBox(frame);
@@ -1335,7 +1420,6 @@
       .slice(0, MAX_SENSITIVE);
     sendToPanel({ type: "steply-frame-geo", key, rect: norm(outRect), sensitive });
   }
-  window.addEventListener("message", onFrameGeo);
 
   // Ist ein editierbares Feld mit GEAENDERTEM Wert fokussiert, ZUERST den Eingabe-Schritt
   // senden und das Feld abrechnen (settled) - damit ein direkt folgender Klick DAHINTER
@@ -1446,9 +1530,16 @@
       if (trig === el || el.contains(trig)) return null;
       // Eingabe-Ausloeser (Autocomplete-Combobox) oeffnen per Tippen, nicht per Hover.
       if (editableInfo(trig).editable) return null;
-      // (b) per Klick geoeffnet?
-      const lc = lastClickStep;
-      if (lc && lc.el && (lc.el === trig || lc.el.contains(trig))) return null;
+      // (b) per Klick geoeffnet? Nicht nur der letzte Klick: in einem Mehrfach-Dropdown folgen
+      // auf den Oeffnen-Klick mehrere Auswahl-Klicks, das Menue bleibt offen.
+      const tNow = Date.now();
+      if (
+        recentClicks.some(
+          (c) => tNow - c.at <= CLICK_OPENED_MS && c.el && (c.el === trig || c.el.contains(trig))
+        )
+      ) {
+        return null;
+      }
       // (c) kuerzlich unter dem Zeiger?
       const now = Date.now();
       const hovered = hoverSeen.some(
@@ -1470,6 +1561,8 @@
   const DOUBLE_MS = 500;
   const DRAG_MIN_PX = 40;
   let lastClickStep = null; // { el, ts, at, doubled } — letzter per Zeiger erfasster Klick
+  const CLICK_OPENED_MS = 60000; // so lange gilt ein Menue als „per Klick geoeffnet"
+  let recentClicks = []; // [{ el, at }] — die letzten Klick-Schritte (Hover-Erkennung (b))
   let pendingDown = null; // pointerdown wartet auf mousedown.detail (Doppelklick?)
   let dragProbe = null; // { el, ts, x, y } — pointerdown eines Klick-Schritts (fuer Ziehen)
 
@@ -1482,6 +1575,8 @@
     }
     const ts = emitStep(el, "click", opts);
     lastClickStep = { el, ts, at: Date.now(), doubled: false };
+    recentClicks.push({ el, at: lastClickStep.at });
+    if (recentClicks.length > 12) recentClicks.shift();
     dragProbe = { el, ts, x, y };
     return ts;
   }
@@ -1780,7 +1875,18 @@
   function onInput(event) {
     if (!recording || mode !== "guide") return;
     const target = realTarget(event);
-    if (focusedEditable && focusedEditable.el === target) return;
+    if (focusedEditable && focusedEditable.el === target) {
+      const fe = focusedEditable;
+      if (fe.settled && typeof fe.settledValue === "string") {
+        const now = fieldSnapshot(fe.el, fe.kind);
+        if (now !== fe.settledValue) {
+          fe.startValue = fe.settledValue;
+          fe.settled = false;
+          fe.settledValue = undefined;
+        }
+      }
+      return;
+    }
     // contenteditable: input feuert am Editier-Wurzelelement; innere Knoten zaehlen mit.
     if (focusedEditable && focusedEditable.el && focusedEditable.el.contains &&
         focusedEditable.el.contains(target)) return;
@@ -1859,10 +1965,13 @@
     }
   })();
 
-  // Haupttaste in Anzeige-Form: Buchstaben/Ziffern ueber event.code (layout-/Shift-fest),
-  // sonst benannte Tasten (F5, Enter, Delete, …); Space als „Space".
+  // Haupttaste in Anzeige-Form: Buchstaben/Ziffern bevorzugt ueber event.key (die BESCHRIFTETE
+  // Taste — auf deutscher QWERTZ-Tastatur ist Strg+Z code „KeyY"!), sonst ueber event.code
+  // (Shift-/Option-Sonderzeichen), sonst benannte Tasten (F5, Enter, Delete, …); Space als „Space".
   function shortcutKeyName(event) {
     const code = event.code || "";
+    const key = event.key || "";
+    if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase();
     let m = /^Key([A-Z])$/.exec(code);
     if (m) return m[1];
     m = /^Digit(\d)$/.exec(code);
@@ -1937,6 +2046,9 @@
     if (!fe || fe.settled) return;
     if (enterSubmits(fe)) {
       fe.settled = true;
+      // Wert beim Absenden merken: tippt man danach weiter (zweite Suche im selben Feld),
+      // oeffnet onInput das Feld wieder (sonst ginge das zweite Enter verloren).
+      fe.settledValue = fieldSnapshot(fe.el, fe.kind);
       emitStep(fe.el, "type", { interaction: { enter: true } });
       return;
     }
@@ -2084,6 +2196,8 @@
   }
   function frameUrlIsThisFrame(url) {
     try {
+      // about:blank/about:srcdoc-Frames (Rich-Text-Editoren wie TinyMCE) haben keine Herkunft.
+      if (/^about:/i.test(url)) return String(location.href || "").split(/[?#]/)[0] === url;
       const u = new URL(url);
       return (
         u.origin.toLowerCase() === String(location.origin).toLowerCase() &&
@@ -2102,7 +2216,10 @@
     const url = it && it.frame && typeof it.frame.url === "string" ? it.frame.url : "";
     if (!url) return IS_TOP;
     if (IS_TOP) return false;
-    return frameUrlIsThisFrame(url);
+    if (!frameUrlIsThisFrame(url)) return false;
+    // Gleichartige Geschwister-Frames: nur der mit derselben Nummer (s. frameNth).
+    const nth = it.frame.nth;
+    return typeof nth === "number" ? frameNth() === nth : true;
   }
 
   // Tastenkuerzel „Ctrl+Shift+S" → { key, code, keyCode, ctrlKey, altKey, shiftKey, metaKey }.
@@ -2867,6 +2984,8 @@
   }
   var RESOLVE_OPTS = { isVisible: resolveElIsVisible };
 
+  const GUIDE_HOVER_MAX_WAIT = 30000; // Hover-Phase: 30 s, bis der Menuepunkt erscheint
+
   // Einen Schritt anzeigen: Element aufloesen, dann bis ~5s SPA-tolerant nachversuchen
   // (MutationObserver + 250ms-Fallback-Tick), sonst found:false + Grund melden (Welle 33, Fix 3).
   function showGuideStep(step) {
@@ -2902,10 +3021,11 @@
       }
       if (!h || !h.el || !resolveElIsVisible(h.el)) return;
       hoverShown = true;
-      if (guideSearchTimeout) {
-        clearTimeout(guideSearchTimeout); // der Mensch braucht Zeit fuers Menue — kein Miss
-        guideSearchTimeout = null;
-      }
+      // Der Mensch braucht Zeit fuers Menue — Frist deutlich laenger, aber NICHT endlos: fehlt
+      // der Menuepunkt (umbenannt/entfernt), meldet die Fuehrung ehrlich „nicht gefunden" und
+      // das Panel zeigt den Screenshot-Hinweis (statt ewig „Mit der Maus über …").
+      if (guideSearchTimeout) clearTimeout(guideSearchTimeout);
+      guideSearchTimeout = setTimeout(finishMiss, GUIDE_HOVER_MAX_WAIT);
       guideAttachHover(h.el, step);
     };
 
@@ -3585,14 +3705,48 @@
     }
     let submitted = pageSubmitted;
     if (!submitted && free && form) {
-      try {
-        form.requestSubmit();
-        submitted = true;
-      } catch (err) {
-        submitted = false;
+      // Nur dort abschicken, wo ein ECHTES Enter es auch taete (HTML „implicit submission"):
+      // Standard-Absendeknopf vorhanden, oder genau EIN Textfeld im Formular. Sonst (z. B.
+      // Formular nur mit type=button-Speichern) haette der Mensch mit Enter nichts ausgeloest.
+      const how = execImplicitSubmit(el, form);
+      if (how) {
+        try {
+          if (how.button) form.requestSubmit(how.button);
+          else form.requestSubmit();
+          submitted = true;
+        } catch (err) {
+          submitted = false;
+        }
       }
     }
     return submitted && execFormNeedsVerify(form);
+  }
+
+  const EXEC_IMPLICIT_TYPES =
+    /^(text|search|url|tel|email|password|date|month|week|time|datetime-local|number)$/;
+  // null = Enter schickt NICHT ab; {button} = ueber diesen Standardknopf; {} = ohne Knopf.
+  function execImplicitSubmit(el, form) {
+    if ((el.tagName || "").toLowerCase() !== "input") return null; // textarea/rich: nie
+    try {
+      const els = Array.from(form.elements || []);
+      const btn = els.find((b) => {
+        const tag = (b.tagName || "").toLowerCase();
+        const type = ((b.getAttribute && b.getAttribute("type")) || "").toLowerCase();
+        return (
+          (tag === "button" && (type === "" || type === "submit")) ||
+          (tag === "input" && (type === "submit" || type === "image"))
+        );
+      });
+      if (btn) return btn.disabled ? null : { button: btn };
+      const blocking = els.filter((f) => {
+        if ((f.tagName || "").toLowerCase() !== "input") return false;
+        const type = ((f.getAttribute && f.getAttribute("type")) || "text").toLowerCase();
+        return EXEC_IMPLICIT_TYPES.test(type);
+      });
+      return blocking.length === 1 ? {} : null;
+    } catch (err) {
+      return null;
+    }
   }
 
   function execCenter(el) {
@@ -4255,6 +4409,14 @@
       execRunUpload(step, token);
       return;
     }
+    // Tastenkuerzel ohne fokussiertes Element (z. B. Strg+S auf der Seite): kein Ziel noetig —
+    // die Tasten gehen ans aktive Element bzw. die Seite.
+    const keyIt = interactionOf(step);
+    if (step && !step.selector && keyIt && keyIt.variant === "key" && keyIt.key) {
+      const r = execKeyPress(null, keyIt.key);
+      execSendResult(token, r.ok, r.ok ? undefined : r.reason);
+      return;
+    }
     if (!step || !step.selector) {
       execSendResult(token, false, "no-selector");
       return;
@@ -4407,7 +4569,10 @@
     if (!msg) return false;
     // all_frames (Welle 48): Antworten (refetch, file-*, has-password, eval-condition) gibt NUR
     // das Hauptfenster. iframes schweigen ohne sendResponse → Chrome nimmt die Antwort von oben.
-    if (!IS_TOP) return false;
+    // Ausnahme: eine Bedingung eines iframe-Schritts (msg.frame) beantwortet NUR dieser Frame.
+    if (msg.type === "steply-eval-condition" && msg.frame) {
+      if (!stepIsForThisFrame({ interaction: { frame: msg.frame } })) return false;
+    } else if (!IS_TOP) return false;
     if (msg.type === "steply-exec-refetch") {
       (async () => {
         try {
@@ -4544,6 +4709,13 @@
       startEpoch = rec.startedAt;
       mode = rec.mode === "guide" ? "guide" : "video";
       recording = true;
+      // Neues Geheimnis = neue Sitzung → alten Geo-Kanal verwerfen.
+      const nonce = typeof rec.nonce === "string" ? rec.nonce : "";
+      if (nonce !== recNonce) {
+        recNonce = nonce;
+        geoPort = null;
+        geoQueue = [];
+      }
       // Ist beim Start schon ein Feld fokussiert (Google-Suchfeld, auch in Shadow-Roots),
       // gleich uebernehmen.
       const active = deepActiveElement();

@@ -60,7 +60,7 @@ export async function GET(
     );
   }
 
-  const { data: stepsData } = await admin
+  const { data: stepsData, error: stepsErr } = await admin
     .from("steps")
     .select(
       "id, title, body, image_path, image_width, image_height, highlights, selector, page_url, is_decision, position, interaction",
@@ -68,6 +68,14 @@ export async function GET(
     .eq("tutorial_id", id)
     .order("position", { ascending: true })
     .returns<GuideStepRow[]>();
+  // Nie still „0 Schritte" liefern (z. B. fehlende Spalte vor einer Migration) — laut scheitern.
+  if (stepsErr) {
+    console.error("recorder/tutorials: Schritte nicht ladbar:", stepsErr.message);
+    return NextResponse.json(
+      { error: "Schritte konnten nicht geladen werden." },
+      { status: 500, headers: RECORDER_ME_CORS },
+    );
+  }
   const steps = stepsData ?? [];
   const stepIds = steps.map((s) => s.id);
 

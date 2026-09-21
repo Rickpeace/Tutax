@@ -1092,6 +1092,17 @@ function notifyAppTabs() {
 // ============================================================================
 
 let guidePhase = "idle"; // "idle" | "ready" | "recording" | "paused" | "stopped"
+let guideNonce = ""; // je Aufnahme-Sitzung (bleibt über Pause/Fortsetzen gleich)
+function guideRecNonce() {
+  if (!guideNonce) {
+    try {
+      guideNonce = crypto.randomUUID().replace(/-/g, "");
+    } catch (err) {
+      guideNonce = String(Math.random()).slice(2) + String(Date.now());
+    }
+  }
+  return guideNonce;
+}
 let guidePausedMs = 0; // Summe der pausierten/gestoppten Zeit (zählt nicht zur Aufnahmedauer)
 let guidePauseAt = 0; // Beginn der aktuellen Pause/des Stopps (0 = läuft)
 let guideSeq = 0; // Übergangs-Token: ein späteres Fortsetzen macht ein laufendes Anhalten ungültig
@@ -1179,7 +1190,11 @@ async function guideStartRecording() {
   renderGuidePhase();
   guideEnsureContent();
   try {
-    await chrome.storage.local.set({ rec: { startedAt: startEpoch, mode: "guide" } });
+    // nonce (Welle 48): Geheimnis der Content-Scripts fuer den privaten iframe-Geometrie-Kanal
+    // (Seiten-Skripte koennen chrome.storage nicht lesen, s. content.js „Geo-Kanal").
+    await chrome.storage.local.set({
+      rec: { startedAt: startEpoch, mode: "guide", nonce: guideRecNonce() },
+    });
   } catch (err) {
     console.warn("Steply: Aufnahmezustand (guide) nicht gesetzt:", err);
   }
@@ -2654,8 +2669,10 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   ) {
     return;
   }
-  if (!guideActive) return;
-  if (!fromPanelWindow(sender)) return;
+  // Nachträge ändern nur BESTEHENDE Schritte → auch kurz nach Pause/Stopp noch annehmen (der
+  // Chat-Enter-Rückzug kommt z. B. erst 400 ms später). Popups wie bei den Schritten selbst.
+  if (!guideActive && guidePhase !== "paused" && guidePhase !== "stopped") return;
+  if (!guideAcceptsSender(sender)) return;
   const res = guideApplyAmend(
     guideSteps,
     guideQueue,
@@ -2706,6 +2723,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // ============================================================================
 
 function resetGuide() {
+  guideNonce = ""; // neue Sitzung → neues Kanal-Geheimnis
   guideSteps.forEach((s) => {
     if (s.thumbUrl) {
       try {
@@ -3300,7 +3318,8 @@ function probePasswordField(tabId) {
 // Fragt content.js (steply-eval-condition) und liefert das ROHE „gefunden+sichtbar" (met) —
 // negate wendet der Aufrufer via SteplyExecPlan.shouldRunStep an. content.js baut selbst eine
 // ~300 ms Gnadenfrist ein → hier großzügiger Timeout (2,5 s). Kein Tab / Fehler → false.
-function execEvalElementCondition(tabId, cond) {
+// frame (Welle 48): Bedingung eines iframe-Schritts im passenden Frame prüfen (nicht oben).
+function execEvalElementCondition(tabId, cond, frame) {
   return new Promise((resolve) => {
     if (tabId == null || !cond) {
       resolve(false);
@@ -3315,7 +3334,7 @@ function execEvalElementCondition(tabId, cond) {
     };
     const timer = setTimeout(() => done(false), 2500);
     try {
-      const p = chrome.tabs.sendMessage(tabId, { type: "steply-eval-condition", cond: cond });
+      const p = chrome.tabs.sendMessage(tabId, { type: "steply-eval-condition", cond: cond, frame: frame || null });
       if (p && p.then) {
         p.then((res) => done(!!(res && res.met)), () => done(false));
       } else {
@@ -3340,7 +3359,7 @@ async function execStepConditionMet(planStep) {
     const curUrl = await tabUrlById(exec.tabId);
     urlMatch = SteplyExecPlan.evalUrlCondition(curUrl, cond);
   } else if (cond.kind === "element") {
-    elementFound = await execEvalElementCondition(exec.tabId, cond);
+    elementFound = await execEvalElementCondition(exec.tabId, cond, (planStep && planStep.interaction && planStep.interaction.frame) || null);
   }
   return SteplyExecPlan.shouldRunStep(cond, { urlMatch: urlMatch, elementFound: elementFound });
 }
@@ -4976,7 +4995,7 @@ async function execTryJump(planStep) {
     const curUrl = await tabUrlById(exec.tabId);
     urlMatch = SteplyExecPlan.evalUrlCondition(curUrl, jump.when);
   } else if (jump.when.kind === "element") {
-    elementFound = await execEvalElementCondition(exec.tabId, jump.when);
+    elementFound = await execEvalElementCondition(exec.tabId, jump.when, (planStep && planStep.interaction && planStep.interaction.frame) || null);
   }
   if (!exec.running) return false;
   // „when erfüllt?" via der GETEILTEN negate-Autorität (W42). Erfüllt → springen.

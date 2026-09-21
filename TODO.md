@@ -4,11 +4,23 @@
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
-- [ ] **EINGABE + ENTER testen (Extension → v2.16.1, 21.09.2026):** Sofort-Anleitung
-  starten → google.de → Suchbegriff tippen → Enter → Treffer anklicken. Erwartet: ein
-  Schritt „Suche“ (Screenshot mit ausgefülltem Suchfeld, Text „…und bestätigen Sie mit
-  Enter“), danach der Klick-Schritt. Vorher ging die Eingabe komplett verloren (Feld war
-  schon beim Laden fokussiert + Enter navigiert ohne blur). Beweis: `node scripts/test-guide-enter.mjs`.
+- [ ] **SOFORT-AUFNAHME Welle 48 testen (Extension → v2.17.0, 21.09.2026; erst nach
+  Migration 0036 + Deploy):**
+  1. Ablauf: Karte „Sofort-Anleitung“ → „Bereit“ (nimmt noch NICHT auf) → „Aufnahme starten“
+     → ein paar Klicks → „Pause“ → woanders hinklicken (kein Schritt) → „Fortsetzen“ →
+     „Stopp“ → Liste prüfen → „Anleitung erstellen“.
+  2. Google: Suchbegriff tippen → Enter → Treffer klicken. Schritt „Suche“ mit Text
+     „…bestätigen Sie mit Enter“. Danach „Als Automation nutzen“ → Lauf schickt die Suche ab.
+  3. „Mit Google anmelden“-Popup auf einer Seite: Klicks im Popup landen in der Aufnahme.
+  4. Seite mit iframe (z. B. eingebettetes Formular/Portal): Klick im iframe → Markierung
+     sitzt an der richtigen Stelle.
+  5. Doppelklick (Datei öffnen), Rechtsklick mit eigenem Menü (z. B. Google Drive), Ziehen
+     (z. B. Trello-Karte), Strg+S — jeweils ein Schritt mit passendem Text.
+  6. Menü, das sich beim Drüberfahren öffnet → Text „Fahren Sie mit der Maus über …“.
+  7. Chat (Teams/ChatGPT): Nachricht tippen + Enter → ein Schritt; Enter in einem normalen
+     mehrzeiligen Feld → KEIN Extra-Schritt.
+  8. chrome://-Seite oder PDF im Browser während der Aufnahme → Hinweis im Panel.
+  Beweise lokal: test-guide-enter, -capture-plus, -flow-panel, -exec-interaction-e2e.
 
 - [ ] **DATEI-BRÜCKE testen (Extension → v2.10.0):** Der Steuerberater-Kernfall.
   Sofort-Aufnahme: im Abrechnungsportal Beleg-Download klicken (Schritt bekommt 📥)
