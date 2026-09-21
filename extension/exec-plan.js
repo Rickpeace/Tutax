@@ -23,7 +23,8 @@
   // automation: { id, title, site_domains, params: [{key,label,type:'text'|'secret',required}] }
   // steps:      [{ id, position, title, action, selector, page_url, param_key, imageUrl, highlights? }]
   // values:     { [paramKey]: string }   (lokal; NIE geloggt)
-  // → [{ index, total, title, action, selector, page_url, param_key, imageUrl, highlights, value? }]
+  // → [{ index, total, title, action, selector, page_url, param_key, imageUrl, highlights, value?,
+  //      file_meta?, condition?, jump?, interaction? }]
   function buildRunPlan(automation, steps, values) {
     var vals = values && typeof values === "object" ? values : {};
     var params = automation && Array.isArray(automation.params) ? automation.params : [];
@@ -84,12 +85,110 @@
       // Navigation, damit der Lauf einen Login-Block gar nicht erst anfährt.
       var pj = parseJump(s0.jump, action.position);
       if (pj) action.jump = pj;
+      // Erweiterte Interaktion (Welle 48): Enter nach Eingabe, Rechts-/Doppelklick, Ziehen,
+      // Tastenkürzel, Hover-Menü, iframe — tolerant geprüft (spiegelt guide.ts validateInteraction)
+      // und bis in die steply-exec-step-Nachricht durchgereicht (content.js führt es aus).
+      var pi = parseInteraction(s0.interaction, action.action);
+      if (pi) {
+        action.interaction = pi;
+        // Schritt in einem iframe, dessen page_url auf das iframe SELBST zeigt (je nach Aufnahme
+        // möglich): NIE den Tab dorthin navigieren (das iframe stünde sonst allein im Tab und
+        // der Frame-Filter passte nicht mehr) → auf der aktuellen Seite bleiben.
+        if (pi.frame && action.page_url && samePage(action.page_url, pi.frame.url)) action.page_url = "";
+      }
       // Wert nur setzen, wenn der Schritt einen Parameter referenziert und ein Wert vorliegt.
       if (s0.param_key && Object.prototype.hasOwnProperty.call(vals, s0.param_key)) {
         action.value = vals[s0.param_key];
       }
       return action;
     });
+  }
+
+  // ── parseInteraction (Welle 48) ─────────────────────────────────────────────
+  // Vertrag s. extension/content.js „INTERACTION-Vertrag". TOLERANT (wirft NIE): nur bekannte
+  // Schlüssel überleben, Strings gekappt, kaputt/leer → null. enter nur bei Eingabe-Aktionen
+  // (fill; „type" = Aufnahme-Form), variant nur bei Klick-Aktionen. NIE Feldinhalte.
+  var INTERACTION_VARIANTS = { right: 1, double: 1, drag: 1, key: 1 };
+  function parseInteraction(raw, action) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    var out = {};
+    var isInput = action === "fill" || action === "type";
+    var isClick = action == null || action === "click";
+    if (raw.enter === true && isInput) out.enter = true;
+    if (isClick && typeof raw.variant === "string" && INTERACTION_VARIANTS[raw.variant] === 1) {
+      if (raw.variant === "key") {
+        var key = cleanStr(raw.key, 40);
+        if (key) {
+          out.variant = "key";
+          out.key = key;
+        }
+      } else if (raw.variant === "drag") {
+        var drop = parseSel(raw.drop);
+        if (drop) {
+          out.variant = "drag";
+          out.drop = drop;
+          var dl = cleanStr(raw.dropLabel, 60);
+          if (dl) out.dropLabel = dl;
+        }
+      } else {
+        out.variant = raw.variant;
+      }
+    }
+    var hover = parseSel(raw.hover);
+    if (hover) {
+      out.hover = hover;
+      var hl = cleanStr(raw.hoverLabel, 60);
+      if (hl) out.hoverLabel = hl;
+    }
+    if (raw.frame && typeof raw.frame === "object" && !Array.isArray(raw.frame)) {
+      var fu = cleanStr(raw.frame.url, 500);
+      if (fu && /^https?:\/\//i.test(fu)) out.frame = { url: fu };
+    }
+    for (var k in out) {
+      if (Object.prototype.hasOwnProperty.call(out, k)) return out;
+    }
+    return null;
+  }
+
+  // Selektor-Form {css,text,role,shadow?} tolerant übernehmen (wie guide.ts validateSelector).
+  function parseSel(sel) {
+    if (!sel || typeof sel !== "object" || Array.isArray(sel)) return null;
+    var out = {};
+    var css = cleanStr(sel.css, 400);
+    var text = cleanStr(sel.text, 80);
+    var role = cleanStr(sel.role, 40);
+    if (css) out.css = css;
+    if (text) out.text = text;
+    if (role) out.role = role.toLowerCase();
+    if (Array.isArray(sel.shadow)) {
+      var hosts = [];
+      for (var i = 0; i < sel.shadow.length && i < 5; i++) {
+        var h = cleanStr(sel.shadow[i], 400);
+        if (!h) {
+          hosts = null;
+          break;
+        }
+        hosts.push(h);
+      }
+      if (hosts && hosts.length) out.shadow = hosts;
+    }
+    return out.css || out.text || out.role ? out : null;
+  }
+
+  function cleanStr(v, max) {
+    if (typeof v !== "string") return "";
+    return v.replace(/\s+/g, " ").trim().slice(0, max);
+  }
+
+  // Gleiche Seite = gleicher Origin + Pfad (Query/Hash zählen nicht). Unlesbar → false.
+  function samePage(a, b) {
+    try {
+      var x = new URL(a);
+      var y = new URL(b);
+      return x.origin.toLowerCase() === y.origin.toLowerCase() && normPath(x.pathname) === normPath(y.pathname);
+    } catch (e) {
+      return false;
+    }
   }
 
   function numOr(n, fallback) {
@@ -648,6 +747,8 @@
     // Bedingter Sprung / Block-Überspringen (Welle 47)
     parseJump: parseJump,
     jumpTargetIndex: jumpTargetIndex,
+    // Erweiterte Interaktion (Welle 48)
+    parseInteraction: parseInteraction,
   };
 
   // UMD-artig: Node (CommonJS, für den Test) ODER classic panel-script (globaler Namespace).

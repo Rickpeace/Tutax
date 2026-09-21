@@ -375,6 +375,8 @@ function sendStep(tabId, planStep, extra) {
         index: planStep.index,
         total: planStep.total,
         fileId: extra && extra.fileId != null ? extra.fileId : undefined,
+        // Erweiterte Interaktion (Welle 48) aus dem Plan — spiegelt panel.js execSendStep.
+        interaction: planStep.interaction || undefined,
       },
     });
   });

@@ -23,6 +23,7 @@ import {
   type GuideTarget,
 } from "@/lib/guide";
 import { refineGuideSteps } from "@/lib/guide-ai";
+import { describeInteractionForAi } from "@/lib/interaction-text";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 
@@ -76,7 +77,14 @@ async function quotaReached(
 }
 
 // Eine gespeicherte Step-Zeile (Rückgabe an den KI-Feinschliff, der nur über NEUE Schritte läuft).
-type SavedStep = { id: string; title: string; bodyText: string; label: string; action: "click" | "type" };
+type SavedStep = {
+  id: string;
+  title: string;
+  bodyText: string;
+  label: string;
+  action: "click" | "type";
+  interaction: string | null; // Welle 48: Art der Bedienung in Worten (KI darf sie nicht wegformulieren)
+};
 
 /**
  * Baut die DB-Zeilen für die (neuen) Schritte — identisch für den Neu-Tutorial- und den
@@ -108,6 +116,10 @@ function buildStepRows(steps: GuideStepInput[], tutorialId: string, posBase: num
     // jump (Welle 47, bedingter Sprung/Block-Überspringen): {when, to_position} — vom Menschen
     // ignoriert, vom Automations-Lauf ausgewertet. Fehlt bei normalen Schritten -> null.
     jump: s.jump ?? null,
+    // interaction (Welle 48): Enter/Rechtsklick/Doppelklick/Ziehen/Kürzel/Hover/iframe — Text,
+    // Live-Führung und Automations-Lauf werten es aus. NUR mitschicken, wenn vorhanden: so
+    // bleiben normale Aufnahmen auch dann heil, falls Migration 0036 noch fehlt.
+    ...(s.interaction ? { interaction: s.interaction } : {}),
     position: posBase + i + 1,
     is_decision: false,
   }));
@@ -222,6 +234,7 @@ function refineInput(steps: GuideStepInput[], rows: { id: string }[]): SavedStep
     bodyText: templateBodyText(steps[i], i > 0 ? steps[i - 1] : null),
     label: steps[i].label,
     action: steps[i].action,
+    interaction: describeInteractionForAi(steps[i].interaction),
   }));
 }
 

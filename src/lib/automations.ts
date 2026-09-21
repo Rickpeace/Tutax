@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { StepInteraction } from "@/lib/types";
 
 // Automationen (Welle 36): Kern-Logik, die aus einer Sofort-Aufnahme (Tutorial mit
 // Selektoren) einen ausführbaren Ablauf-SNAPSHOT macht. Tipp-Schritte werden zu
@@ -133,6 +134,9 @@ type StepRow = {
   // Bedingter Sprung (Welle 47): {when, to_position} | null. 1:1 in den Snapshot kopiert. Da der
   // lineare Pfad die Positionen beibehält, bleibt to_position gültig.
   jump: unknown;
+  // Erweiterte Interaktion (Welle 48): {enter|variant|key|drop|hover|frame} | null. 1:1 in den
+  // Snapshot kopiert; bestimmt außerdem die Aktion (enter → fill, variant → click).
+  interaction: unknown;
 };
 
 type BranchRow = {
@@ -141,6 +145,19 @@ type BranchRow = {
   target_step_id: string | null;
   position: number;
 };
+
+/**
+ * Welle 48: Die erweiterte Interaktion legt die Aktion fest, wo die ARIA-Rolle täuscht —
+ * Googles Suchfeld ist ein textarea mit role=combobox (actionForRole → „select", falsch!). Eine
+ * Eingabe mit Enter ist IMMER „fill"; Rechts-/Doppelklick, Ziehen, Tastenkürzel sind Klick-
+ * Varianten („click" + interaction.variant). null = keine Aussage → Rolle entscheidet.
+ */
+export function actionForInteraction(i: StepInteraction | null | undefined): AutomationAction | null {
+  if (!i) return null;
+  if (i.enter === true) return "fill";
+  if (i.variant) return "click";
+  return null;
+}
 
 /** Aktion aus der ARIA-Rolle des Selektors ableiten (Fallback: click). */
 export function actionForRole(role: string | null | undefined): AutomationAction {
@@ -280,7 +297,7 @@ export async function convertTutorialToAutomation(
   // 2) Schritte + Branches laden.
   const { data: stepsData } = await admin
     .from("steps")
-    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition, jump")
+    .select("id, title, image_path, highlights, selector, page_url, is_decision, position, file_meta, condition, jump, interaction")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true })
     .returns<StepRow[]>();
@@ -317,12 +334,16 @@ export async function convertTutorialToAutomation(
     const fileLink = fileLinks[i];
     // Datei-Brücke: ein Upload-Feld wird zur 'upload'-Aktion (kein Parameter); ein Download-
     // Klick bleibt 'click'. Sonst wie bisher aus der ARIA-Rolle abgeleitet.
+    const interaction =
+      s.interaction && typeof s.interaction === "object" && !Array.isArray(s.interaction)
+        ? (s.interaction as StepInteraction)
+        : null;
     const action: AutomationAction =
       fileLink?.role === "upload"
         ? "upload"
         : fileLink?.role === "download"
           ? "click"
-          : actionForRole(s.selector?.role);
+          : actionForInteraction(interaction) ?? actionForRole(s.selector?.role);
     let paramKey: string | null = null;
 
     // fill/select brauchen einen Wert → Parameter. toggle wird nur „angehakt“ (kein Param).
@@ -368,6 +389,9 @@ export async function convertTutorialToAutomation(
       // behält die Reihenfolge → to_position bleibt sinnvoll (in der Regel wird der Sprung ohnehin
       // erst NACH der Umwandlung im Automations-Detail gesetzt).
       jump: s.jump ?? null,
+      // Erweiterte Interaktion (Welle 48): 1:1 in den Snapshot (Spalte per 0036). Nur wenn
+      // vorhanden — der Lauf führt Enter/Rechtsklick/Doppelklick/Ziehen/Kürzel/Hover/iframe aus.
+      ...(interaction ? { interaction } : {}),
     };
   });
 

@@ -65,7 +65,7 @@
   // Marker. Wert = die Versionsnummer aus dem Manifest (die App zeigt „Installiert (vX)").
   try {
     const setMarker = () => {
-      if (document.documentElement && chrome.runtime && chrome.runtime.getManifest) {
+      if (IS_TOP && document.documentElement && chrome.runtime && chrome.runtime.getManifest) {
         document.documentElement.setAttribute(
           "data-steply-recorder",
           chrome.runtime.getManifest().version
@@ -103,7 +103,7 @@
     }
   }
   window.addEventListener("message", (event) => {
-    if (event.source !== window) return;
+    if (!IS_TOP || event.source !== window) return; // App-Seiten-Brücke nur im Hauptfenster
     if (event.origin !== location.origin) return;
     const d = event.data;
     if (!d || d.__steply !== true || d.type !== "steply-pair") return;
@@ -139,7 +139,7 @@
   // SYNCHRON im onMessage-Handler auf - die Klick-Geste der Seite reicht dafuer durch
   // (Chrome >= 116), solange dazwischen nichts awaited wird.
   window.addEventListener("message", (event) => {
-    if (event.source !== window) return;
+    if (!IS_TOP || event.source !== window) return; // App-Seiten-Brücke nur im Hauptfenster
     if (event.origin !== location.origin) return;
     const d = event.data;
     if (!d || d.__steply !== true || d.type !== "steply-open-panel") return;
@@ -161,7 +161,7 @@
     return typeof v === "string" ? v.slice(0, 100).trim() : "";
   }
   window.addEventListener("message", (event) => {
-    if (event.source !== window) return;
+    if (!IS_TOP || event.source !== window) return; // App-Seiten-Brücke nur im Hauptfenster
     if (event.origin !== location.origin) return;
     const d = event.data;
     if (!d || d.__steply !== true || d.type !== "steply-record-into") return;
@@ -2041,7 +2041,11 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "steply-guide-captured" && recording && mode === "guide") {
+      // all_frames (Welle 48): die Nachricht erreicht JEDEN Frame des Tabs. Pulsen darf nur der
+      // Frame, der den Schritt gerade erfasst hat — lastClickPx wird darum nach dem Puls
+      // VERBRAUCHT (sonst pulste ein anderer Frame spaeter mit einem alten Rechteck).
       showCapturePulse();
+      lastClickPx = null;
     }
   });
 
@@ -2050,6 +2054,7 @@
   // (die App lauscht via ContentUpdatedRefresh; auf fremden Seiten verpufft es einfach).
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg || msg.type !== "steply-content-updated") return;
+    if (!IS_TOP) return; // App-Seiten-Signal nur im Hauptfenster (Welle 48, all_frames)
     try {
       window.postMessage(
         { __steply: true, type: "steply-content-updated" },
@@ -2059,6 +2064,179 @@
       /* egal */
     }
   });
+
+  // ============================================================================
+  // FRAME-ZUSTAENDIGKEIT + INTERAKTION (Welle 48)
+  //
+  // Seit all_frames laeuft dieses Script in JEDEM Frame eines Tabs, und chrome.tabs.sendMessage
+  // erreicht ALLE Frames. Damit ein Schritt genau EINMAL ausgefuehrt/gezeigt wird:
+  //   • Schritt MIT interaction.frame.url → nur der iframe, dessen origin+pathname passt.
+  //   • Schritt OHNE frame                → nur das Hauptfenster (IS_TOP).
+  // Nachrichten mit Antwort (has-password, eval-condition, refetch, file-*) beantwortet NUR das
+  // Hauptfenster; iframes geben false zurueck (kein sendResponse) — Chrome nimmt dann die
+  // Antwort des Hauptfensters.
+  // ============================================================================
+  function frameNormPath(p) {
+    const s = String(p || "").replace(/\/+$/, "");
+    return s || "/";
+  }
+  function frameUrlIsThisFrame(url) {
+    try {
+      const u = new URL(url);
+      return (
+        u.origin.toLowerCase() === String(location.origin).toLowerCase() &&
+        frameNormPath(u.pathname) === frameNormPath(location.pathname)
+      );
+    } catch (err) {
+      return false;
+    }
+  }
+  function interactionOf(step) {
+    const it = step && step.interaction;
+    return it && typeof it === "object" && !Array.isArray(it) ? it : null;
+  }
+  function stepIsForThisFrame(step) {
+    const it = interactionOf(step);
+    const url = it && it.frame && typeof it.frame.url === "string" ? it.frame.url : "";
+    if (!url) return IS_TOP;
+    if (IS_TOP) return false;
+    return frameUrlIsThisFrame(url);
+  }
+
+  // Tastenkuerzel „Ctrl+Shift+S" → { key, code, keyCode, ctrlKey, altKey, shiftKey, metaKey }.
+  // Aufgenommen wird die neutrale Form (Ctrl/Alt/Shift/Meta+Taste); deutsche Namen werden toleriert.
+  const KEY_MODS = {
+    ctrl: "ctrlKey",
+    control: "ctrlKey",
+    strg: "ctrlKey",
+    alt: "altKey",
+    altgraph: "altKey",
+    shift: "shiftKey",
+    umschalt: "shiftKey",
+    meta: "metaKey",
+    cmd: "metaKey",
+    command: "metaKey",
+    win: "metaKey",
+    os: "metaKey",
+  };
+  const KEY_NAMES = {
+    esc: "Escape",
+    escape: "Escape",
+    del: "Delete",
+    delete: "Delete",
+    entf: "Delete",
+    backspace: "Backspace",
+    space: " ",
+    spacebar: " ",
+    leertaste: " ",
+    enter: "Enter",
+    return: "Enter",
+    tab: "Tab",
+    arrowup: "ArrowUp",
+    arrowdown: "ArrowDown",
+    arrowleft: "ArrowLeft",
+    arrowright: "ArrowRight",
+    home: "Home",
+    pos1: "Home",
+    end: "End",
+    ende: "End",
+    pageup: "PageUp",
+    pagedown: "PageDown",
+    insert: "Insert",
+    einfg: "Insert",
+  };
+  const KEY_CODES = {
+    Enter: 13,
+    Escape: 27,
+    Tab: 9,
+    Delete: 46,
+    Backspace: 8,
+    " ": 32,
+    ArrowLeft: 37,
+    ArrowUp: 38,
+    ArrowRight: 39,
+    ArrowDown: 40,
+    Home: 36,
+    End: 35,
+    PageUp: 33,
+    PageDown: 34,
+    Insert: 45,
+  };
+  function parseKeyCombo(combo) {
+    const raw = String(combo || "").trim();
+    if (!raw) return null;
+    const out = { key: "", code: "", keyCode: 0, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+    const parts = raw.split("+");
+    let keyTok = "";
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i].trim();
+      if (!p) {
+        if (i === parts.length - 1) keyTok = "+"; // „Ctrl++"
+        continue;
+      }
+      const mod = KEY_MODS[p.toLowerCase()];
+      if (mod && i < parts.length - 1) out[mod] = true;
+      else keyTok = p;
+    }
+    if (!keyTok) return null;
+    if (keyTok.length === 1) {
+      const up = keyTok.toUpperCase();
+      out.key = out.shiftKey ? up : keyTok.toLowerCase();
+      if (/[A-Z]/.test(up)) {
+        out.code = "Key" + up;
+        out.keyCode = up.charCodeAt(0);
+      } else if (/[0-9]/.test(up)) {
+        out.code = "Digit" + up;
+        out.keyCode = up.charCodeAt(0);
+      }
+    } else {
+      const fn = /^f([1-9]|1[0-2])$/i.exec(keyTok);
+      if (fn) {
+        out.key = out.code = "F" + fn[1];
+        out.keyCode = 111 + Number(fn[1]);
+      } else {
+        out.key = KEY_NAMES[keyTok.toLowerCase()] || keyTok;
+        out.code = out.key === " " ? "Space" : out.key;
+        out.keyCode = KEY_CODES[out.key] || 0;
+      }
+    }
+    return out;
+  }
+  // Passt ein echtes keydown zur Kombination? Modifier exakt, Taste per key ODER code.
+  function keyComboMatches(ev, combo) {
+    if (!ev || !combo) return false;
+    if (!!ev.ctrlKey !== combo.ctrlKey || !!ev.altKey !== combo.altKey || !!ev.metaKey !== combo.metaKey) {
+      return false;
+    }
+    // Shift nur bei Nicht-Buchstaben-Tasten streng (bei Buchstaben steckt es auch im key).
+    if (combo.key.length !== 1 && !!ev.shiftKey !== combo.shiftKey) return false;
+    const k = String(ev.key || "");
+    if (k && k.toLowerCase() === combo.key.toLowerCase()) return true;
+    return !!(combo.code && ev.code === combo.code);
+  }
+  // Deutsche Anzeige fuer den Hinweis im Overlay („Strg+S").
+  function keyDisplayDe(combo) {
+    const map = {
+      ctrl: "Strg",
+      control: "Strg",
+      shift: "Umschalt",
+      meta: "Cmd",
+      escape: "Esc",
+      delete: "Entf",
+      space: "Leertaste",
+    };
+    return String(combo || "")
+      .split("+")
+      .map((p) => {
+        const t = p.trim();
+        return map[t.toLowerCase()] || (t.length === 1 ? t.toUpperCase() : t);
+      })
+      .join("+");
+  }
+  function interactionLabel(text) {
+    const t = String(text || "").replace(/\s+/g, " ").trim();
+    return t.length > 40 ? t.slice(0, 39) + "…" : t;
+  }
 
   // ============================================================================
   // LIVE-FUEHRUNG (Welle 31): Overlay auf der ECHTEN Seite (Tango/WalkMe-Prinzip).
@@ -2087,6 +2265,11 @@
   let guideRafPending = false; // Reposition-Drossel (requestAnimationFrame)
   let guideAdvanceModeCur = "click"; // wie das Ziel „weiter" ausloest (s. guideAdvanceMode)
   let guideFieldListeners = null; // { el, onChange, onBlur, onKeydown } fuer Eingabe-Ziele
+  // Welle 48: Varianten-Listener (contextmenu/dblclick/drop/keydown/Zeiger-Ziehen) auf document —
+  // [{ type, fn }], restlos in guideCleanup entfernt. guideHoverPhase: Overlay zeigt gerade den
+  // HOVER-Ausloeser (Menue noch zu) statt des eigentlichen Ziels.
+  let guideVariantListeners = [];
+  let guideHoverPhase = false;
   let guideAdvanced = false; // Doppel-„weiter"-Schutz (Enter + blur / mehrere pointerdown)
   let guideTargetLost = false; // Ziel verschwand (SPA/0x0) -> Overlay versteckt, found:false EINMAL
   // Stille Wiederaufnahme (Hotfix 06.07.): SPAs/PPR ersetzen oder verstecken Knoten waehrend
@@ -2253,6 +2436,8 @@
       guideReacquireTimer = null;
     }
     document.removeEventListener("pointerdown", onGuidePointerDown, true);
+    guideRemoveVariantListeners();
+    guideHoverPhase = false;
     window.removeEventListener("scroll", guideReposition, true);
     window.removeEventListener("resize", guideReposition, true);
     if (guideFieldListeners) {
@@ -2286,7 +2471,9 @@
   // Checkbox/Select schalten ueber ihre eigenen Listener (s. attachGuideFieldListeners) weiter.
   // Capture-Phase, damit es auch feuert, wenn die Seite stopPropagation nutzt bzw. navigiert.
   function onGuidePointerDown(event) {
-    if (!guideTargetEl || guideAdvanceModeCur !== "click") return;
+    // Welle 48: im Hover-Schritt schaltet der Ausloeser NIE weiter; Varianten (Rechtsklick,
+    // Doppelklick, Ziehen, Kuerzel) haben eigene Listener (guideAttachVariantListeners).
+    if (!guideTargetEl || guideAdvanceModeCur !== "click" || guideHoverPhase) return;
     const t = event.target;
     if (t === guideTargetEl || (guideTargetEl.contains && guideTargetEl.contains(t))) {
       guideAdvance();
@@ -2364,7 +2551,7 @@
     });
   }
 
-  function buildGuideOverlay(step) {
+  function buildGuideOverlay(step, hint) {
     const container = document.createElement("div");
     container.id = GUIDE_OVERLAY_ID;
     const cs = container.style;
@@ -2404,7 +2591,8 @@
     bst.boxShadow = "0 0 0 2px rgba(255,255,255,0.85), 0 2px 8px rgba(0,0,0,0.35)";
     bst.whiteSpace = "nowrap";
     bst.letterSpacing = "0.02em";
-    badge.textContent = (step.index || 1) + "/" + (step.total || 1);
+    // Welle 48: kurzer Bedien-Hinweis hinter der Schritt-Nummer („3/12 · Rechtsklick").
+    badge.textContent = (step.index || 1) + "/" + (step.total || 1) + (hint ? " · " + hint : "");
     container.appendChild(badge);
 
     (document.documentElement || document.body).appendChild(container);
@@ -2466,18 +2654,162 @@
     }
   }
 
+  // ── Welle 48: erweiterte Interaktion in der Fuehrung ──────────────────────────────────
+  // Welche „weiter"-Erkennung braucht der Schritt? null = die bisherige (Klick/Feld).
+  function guideVariantMode(step) {
+    const it = interactionOf(step);
+    const v = it && it.variant;
+    if (v === "right" || v === "double") return v;
+    if (v === "drag" && it.drop) return "drag";
+    if (v === "key" && parseKeyCombo(it.key)) return "key";
+    return null;
+  }
+
+  // Kurzer Hinweis im Badge. Ohne Besonderheit → "" (Badge bleibt „3/12" wie bisher).
+  function guideHintFor(step) {
+    const it = interactionOf(step);
+    if (!it) return "";
+    if (it.variant === "right") return "Rechtsklick";
+    if (it.variant === "double") return "Doppelklick";
+    if (it.variant === "drag") {
+      const d = interactionLabel(it.dropLabel || (it.drop && it.drop.text));
+      return d ? "Ziehen auf „" + d + "“" : "Ziehen";
+    }
+    if (it.variant === "key" && it.key) return keyDisplayDe(it.key) + " drücken";
+    if (it.enter) return "Eingeben + Enter";
+    return "";
+  }
+  function guideHoverHint(step) {
+    const it = interactionOf(step);
+    const h = interactionLabel(it && (it.hoverLabel || (it.hover && it.hover.text)));
+    return h ? "Mit der Maus über „" + h + "“ fahren" : "Mit der Maus hierüber fahren";
+  }
+
+  function guideRemoveVariantListeners() {
+    for (const l of guideVariantListeners) {
+      try {
+        document.removeEventListener(l.type, l.fn, true);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    guideVariantListeners = [];
+  }
+  function guideOnDoc(type, fn) {
+    document.addEventListener(type, fn, true);
+    guideVariantListeners.push({ type: type, fn: fn });
+  }
+  function guideInside(root, node) {
+    return !!(root && node && (root === node || (root.contains && root.contains(node))));
+  }
+
+  // „weiter" genau beim passenden Ereignis: contextmenu (Rechtsklick), dblclick (Doppelklick),
+  // drop auf das Ablage-Ziel bzw. Zeiger-Ziehen dorthin (Ziehen), keydown mit der Kombination
+  // (Kuerzel). Capture-Phase auf document — feuert auch, wenn die Seite stopPropagation nutzt.
+  function guideAttachVariantListeners(step, variantMode) {
+    guideRemoveVariantListeners();
+    const it = interactionOf(step) || {};
+    if (variantMode === "right") {
+      guideOnDoc("contextmenu", (e) => {
+        if (guideInside(guideTargetEl, e.target)) guideAdvance();
+      });
+      return;
+    }
+    if (variantMode === "double") {
+      guideOnDoc("dblclick", (e) => {
+        if (guideInside(guideTargetEl, e.target)) guideAdvance();
+      });
+      return;
+    }
+    if (variantMode === "key") {
+      const combo = parseKeyCombo(it.key);
+      guideOnDoc("keydown", (e) => {
+        if (keyComboMatches(e, combo)) guideAdvance();
+      });
+      return;
+    }
+    if (variantMode === "drag") {
+      const resolver =
+        (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
+      const dropEl = () => {
+        try {
+          const r = resolver ? resolver(document, it.drop, RESOLVE_OPTS) : null;
+          return r && r.el ? r.el : null;
+        } catch (err) {
+          return null;
+        }
+      };
+      let started = false;
+      let downAt = null;
+      guideOnDoc("dragstart", (e) => {
+        if (guideInside(guideTargetEl, e.target)) started = true;
+      });
+      guideOnDoc("drop", (e) => {
+        if (!started) return;
+        const d = dropEl();
+        if (!d || guideInside(d, e.target)) guideAdvance();
+      });
+      // Zeiger-basiertes Ziehen (Bibliotheken ohne HTML5-DnD): gedrueckt auf dem Element,
+      // losgelassen deutlich entfernt UEBER dem Ablage-Ziel.
+      guideOnDoc("pointerdown", (e) => {
+        downAt = guideInside(guideTargetEl, e.target) ? { x: e.clientX, y: e.clientY } : null;
+      });
+      guideOnDoc("pointerup", (e) => {
+        if (!downAt) return;
+        const moved = Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y);
+        downAt = null;
+        if (moved < 24) return;
+        const d = dropEl();
+        let under = null;
+        try {
+          under = document.elementFromPoint(e.clientX, e.clientY);
+        } catch (err) {
+          under = null;
+        }
+        if (d && guideInside(d, under)) guideAdvance();
+      });
+    }
+  }
+
+  // HOVER-Phase: das eigentliche Ziel ist noch versteckt (Menue zu) → den Ausloeser markieren
+  // mit „Mit der Maus über „H“ fahren". KEIN „weiter" von hier; die Suche nach dem Ziel laeuft
+  // weiter (showGuideStep) und wechselt, sobald es sichtbar ist.
+  function guideAttachHover(el, step) {
+    guideTargetEl = el;
+    guideHoverPhase = true;
+    guideAdvanceModeCur = "hover";
+    buildGuideOverlay(step, guideHoverHint(step));
+    guideReposition();
+    window.addEventListener("scroll", guideReposition, true);
+    window.addEventListener("resize", guideReposition, true);
+    try {
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    } catch (err) {
+      /* egal */
+    }
+    setTimeout(guideReposition, 320);
+    try {
+      chrome.runtime.sendMessage({ type: "steply-guide-status", found: true, phase: "hover" });
+    } catch (err) {
+      /* egal */
+    }
+  }
+
   // Ziel gefunden: Overlay bauen, verankern, in Sicht scrollen, Listener setzen.
   function guideAttach(el, step) {
     guideTargetEl = el;
-    guideAdvanceModeCur = guideAdvanceMode(el);
-    buildGuideOverlay(step);
+    // Welle 48: Rechtsklick/Doppelklick/Ziehen/Kuerzel schalten ueber IHR Ereignis weiter.
+    const variantMode = guideVariantMode(step);
+    guideAdvanceModeCur = variantMode || guideAdvanceMode(el);
+    buildGuideOverlay(step, guideHintFor(step));
     guideReposition();
     window.addEventListener("scroll", guideReposition, true);
     window.addEventListener("resize", guideReposition, true);
     document.addEventListener("pointerdown", onGuidePointerDown, true);
     // Eingabe-Ziele (Textfeld/Checkbox/Select) schalten NICHT bei pointerdown weiter, sondern
     // erst nach Eingabe (Enter/blur/change) — s. attachGuideFieldListeners.
-    attachGuideFieldListeners(el, guideAdvanceModeCur);
+    if (variantMode) guideAttachVariantListeners(step, variantMode);
+    else attachGuideFieldListeners(el, guideAdvanceModeCur);
     try {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
     } catch (err) {
@@ -2554,6 +2886,26 @@
     const MAX_WAIT = 5000;
     let lastReason = "timeout"; // wenn nie ein definitiver Grund kam: schlicht „nicht rechtzeitig"
     let done = false;
+    // Welle 48 (Hover-Menue): ist das Ziel (noch) nicht sichtbar, aber ein Hover-Ausloeser
+    // bekannt, markieren wir ERST den Ausloeser („Mit der Maus über „H“ fahren") und suchen
+    // OHNE Zeitlimit weiter — sobald der Mensch das Menue oeffnet, wechselt das Overlay aufs Ziel.
+    const hoverSel = (interactionOf(step) || {}).hover || null;
+    let hoverShown = false;
+    const tryHover = () => {
+      let h = null;
+      try {
+        h = resolver(document, hoverSel, RESOLVE_OPTS);
+      } catch (err) {
+        h = null;
+      }
+      if (!h || !h.el || !resolveElIsVisible(h.el)) return;
+      hoverShown = true;
+      if (guideSearchTimeout) {
+        clearTimeout(guideSearchTimeout); // der Mensch braucht Zeit fuers Menue — kein Miss
+        guideSearchTimeout = null;
+      }
+      guideAttachHover(h.el, step);
+    };
 
     const finishMiss = () => {
       if (done) return;
@@ -2587,14 +2939,18 @@
         }
         if (!rr || (rr.width <= 0 && rr.height <= 0)) {
           lastReason = "target-hidden";
+          if (hoverSel && !hoverShown) tryHover();
           return false;
         }
         done = true;
         guideStopSearch();
+        // Aus der Hover-Phase: Ausloeser-Overlay abbauen, dann das echte Ziel markieren.
+        if (hoverShown) guideCleanup();
         guideAttach(res.el, step);
         return true;
       }
       if (res && res.reason) lastReason = res.reason;
+      if (hoverSel && !hoverShown) tryHover();
       return false;
     };
 
@@ -2621,13 +2977,20 @@
     }
     // Fallback-Tick fuer Aenderungen, die keine DOM-Mutation ausloesen (spaetes Layout u. ae.).
     guideSearchTick = setInterval(tryResolve, 250);
-    guideSearchTimeout = setTimeout(finishMiss, MAX_WAIT);
+    if (!hoverShown) guideSearchTimeout = setTimeout(finishMiss, MAX_WAIT);
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
     if (msg.type === "steply-guide-show") {
       guideNoteSignal();
+      // all_frames (Welle 48): nur der zustaendige Frame zeigt den Schritt. Alle anderen raeumen
+      // ein evtl. eigenes Overlay des VORIGEN Schritts ab (der lag z. B. im iframe) und schweigen.
+      if (!stepIsForThisFrame(msg.step)) {
+        guideCurrentStep = null;
+        guideCleanup();
+        return;
+      }
       showGuideStep(msg.step);
       guideStartWatchdog();
       return;
@@ -2686,6 +3049,10 @@
   let execSearchTimeout = null;
   let execLastSignalAt = 0;
   let execWatchdog = null;
+  // Welle 48: laufende Nummer des aktuellen Schritts. Asynchrone Phasen (Hover-Menue oeffnen,
+  // Ablage-Ziel suchen) pruefen sie nach jedem await — kam inzwischen ein neuer Schritt, ein
+  // Hide oder gehoert der Schritt einem anderen Frame, brechen sie still ab (nie doppelt handeln).
+  let execRunSeq = 0;
 
   function execWait(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -2778,6 +3145,7 @@
   }
 
   function execCleanup() {
+    execRunSeq++; // laufende Hover-/Zieh-Phase abbrechen
     execStopSearch();
     execStopWatchdog();
     if (execTidyTimer) {
@@ -3098,7 +3466,9 @@
 
   // React-sicheres Befüllen: nativen value-Setter nutzen (React hört auf den echten Setter),
   // dann input + change dispatchen, dann blur. Der WERT wird NIE geloggt.
-  function execFill(el, value) {
+  // enter (Welle 48): statt blur Enter drücken wie ein Mensch — MIT Fokus im Feld (Google-Suche
+  // reagiert nur mit Fokus); s. execEnterSubmit. submitted meldet eine Formular-Übermittlung.
+  function execFill(el, value, enter) {
     const v = value == null ? "" : String(value);
     try {
       if (el.isContentEditable === true) {
@@ -3110,6 +3480,7 @@
         el.textContent = v;
         el.dispatchEvent(new Event("input", { bubbles: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
+        if (enter) return { ok: true, submitted: execEnterSubmit(el) };
         try {
           el.blur();
         } catch (e) {
@@ -3135,6 +3506,7 @@
       else el.value = v;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
+      if (enter) return { ok: true, submitted: execEnterSubmit(el) };
       try {
         el.blur();
       } catch (e) {
@@ -3144,6 +3516,313 @@
     } catch (err) {
       return { ok: false, reason: "fill-error" };
     }
+  }
+
+  // ── Welle 48: erweiterte Interaktion beim Abspielen ────────────────────────────────────
+  function execFormOf(el) {
+    try {
+      const f = (el && el.form) || (el && el.closest ? el.closest("form") : null);
+      return f && typeof f.requestSubmit === "function" ? f : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Soll das Panel die Übermittlung prüfen (submit-bounced-Netz, Welle 38)? Nur bei Formularen,
+  // die eine Anmeldung/Aktion POSTEN (method=post) oder React-Form-Actions (action="javascript:…").
+  // Eine GET-Suche landet legitim wieder auf demselben Pfad (/search → /search) — kein „Bounce".
+  function execFormNeedsVerify(form) {
+    if (!form) return false;
+    try {
+      const method = String(form.getAttribute("method") || form.method || "").toLowerCase();
+      const action = String(form.getAttribute("action") || "");
+      return method === "post" || /^javascript:/i.test(action);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Enter wie ein Mensch: keydown → (keypress, falls nicht abgefangen) → keyup, bubbles +
+  // cancelable. Rückgabe true = die Seite hat das keydown NICHT abgefangen (defaultPrevented false).
+  function execPressEnter(el) {
+    const init = {
+      key: "Enter",
+      code: "Enter",
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+    };
+    const free = el.dispatchEvent(new KeyboardEvent("keydown", init));
+    let pressFree = true;
+    if (free) pressFree = el.dispatchEvent(new KeyboardEvent("keypress", Object.assign({ charCode: 13 }, init)));
+    el.dispatchEvent(new KeyboardEvent("keyup", init));
+    return free && pressFree;
+  }
+
+  // Eingabe mit Enter abschicken. Die Seite darf selbst abschicken (Google: keydown-Handler ruft
+  // requestSubmit) — das erkennen wir am submit-Ereignis und schicken dann NICHT noch einmal ab.
+  // Hat die Seite Enter nicht abgefangen und liegt das Feld in einem <form>, übernehmen wir die
+  // implizite Übermittlung des Browsers: form.requestSubmit(). Rückgabe: soll geprüft werden?
+  function execEnterSubmit(el) {
+    const form = execFormOf(el);
+    let pageSubmitted = false;
+    const onSubmit = () => {
+      pageSubmitted = true;
+    };
+    if (form) form.addEventListener("submit", onSubmit, true);
+    let free = true;
+    try {
+      free = execPressEnter(el);
+    } catch (err) {
+      free = true;
+    } finally {
+      if (form) form.removeEventListener("submit", onSubmit, true);
+    }
+    let submitted = pageSubmitted;
+    if (!submitted && free && form) {
+      try {
+        form.requestSubmit();
+        submitted = true;
+      } catch (err) {
+        submitted = false;
+      }
+    }
+    return submitted && execFormNeedsVerify(form);
+  }
+
+  function execCenter(el) {
+    const r = execRectOf(el);
+    return { x: r.cx, y: r.cy };
+  }
+
+  // Maus-/Zeiger-Ereignis am Punkt (PointerEvent, wo moeglich; sonst MouseEvent).
+  function execMouse(el, type, x, y, extra) {
+    const init = Object.assign(
+      { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, buttons: 0 },
+      extra || {}
+    );
+    const isPointer = type.indexOf("pointer") === 0;
+    try {
+      if (isPointer && typeof PointerEvent === "function") {
+        return el.dispatchEvent(new PointerEvent(type, Object.assign({ pointerId: 1, pointerType: "mouse", isPrimary: true }, init)));
+      }
+      return el.dispatchEvent(new MouseEvent(type, init));
+    } catch (err) {
+      try {
+        return el.dispatchEvent(new MouseEvent(type, init));
+      } catch (e) {
+        return true;
+      }
+    }
+  }
+
+  // Rechtsklick: Zeiger-Sequenz mit rechter Taste + contextmenu am Element-Mittelpunkt.
+  function execContextClick(el) {
+    try {
+      const c = execCenter(el);
+      execMouse(el, "pointerdown", c.x, c.y, { button: 2, buttons: 2 });
+      execMouse(el, "mousedown", c.x, c.y, { button: 2, buttons: 2 });
+      execMouse(el, "pointerup", c.x, c.y, { button: 2 });
+      execMouse(el, "mouseup", c.x, c.y, { button: 2 });
+      el.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          clientX: c.x,
+          clientY: c.y,
+          button: 2,
+          buttons: 2,
+        })
+      );
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "contextmenu-error" };
+    }
+  }
+
+  // Doppelklick: zwei vollstaendige Klicks (detail 1, 2) + dblclick (detail 2).
+  function execDoubleClick(el) {
+    try {
+      const c = execCenter(el);
+      for (let n = 1; n <= 2; n++) {
+        execMouse(el, "pointerdown", c.x, c.y, { buttons: 1, detail: n });
+        execMouse(el, "mousedown", c.x, c.y, { buttons: 1, detail: n });
+        execMouse(el, "pointerup", c.x, c.y, { detail: n });
+        execMouse(el, "mouseup", c.x, c.y, { detail: n });
+        execMouse(el, "click", c.x, c.y, { detail: n });
+      }
+      execMouse(el, "dblclick", c.x, c.y, { detail: 2 });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "dblclick-error" };
+    }
+  }
+
+  // Tastenkuerzel: Ziel fokussieren (ohne Klick), dann keydown/keyup mit den Modifiern an das
+  // fokussierte Element (sonst body) — dort, wo auch ein Mensch tippen wuerde.
+  function execKeyPress(el, combo) {
+    const k = parseKeyCombo(combo);
+    if (!k) return { ok: false, reason: "key-invalid" };
+    try {
+      if (el && typeof el.focus === "function" && document.activeElement !== el) {
+        el.focus({ preventScroll: true });
+      }
+    } catch (err) {
+      /* nicht fokussierbar — dann eben aufs aktive Element */
+    }
+    const tgt = document.activeElement || document.body;
+    const init = {
+      key: k.key,
+      code: k.code,
+      keyCode: k.keyCode,
+      which: k.keyCode,
+      ctrlKey: k.ctrlKey,
+      altKey: k.altKey,
+      shiftKey: k.shiftKey,
+      metaKey: k.metaKey,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+    };
+    try {
+      tgt.dispatchEvent(new KeyboardEvent("keydown", init));
+      tgt.dispatchEvent(new KeyboardEvent("keyup", init));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "key-error" };
+    }
+  }
+
+  // Ziehen (HTML5-DnD + Zeiger-Sequenz): vom Element zum Ablage-Ziel, die sichtbare Maus reist mit.
+  async function execDrag(src, dst, seq) {
+    const a = execCenter(src);
+    let dt = null;
+    try {
+      dt = new DataTransfer();
+    } catch (err) {
+      dt = null;
+    }
+    const drag = (el, type, x, y) => {
+      let ev;
+      try {
+        ev = new DragEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: x,
+          clientY: y,
+          dataTransfer: dt,
+        });
+      } catch (err) {
+        ev = new Event(type, { bubbles: true, cancelable: true });
+        try {
+          Object.defineProperty(ev, "dataTransfer", { value: dt });
+        } catch (e) {
+          /* egal */
+        }
+      }
+      return el.dispatchEvent(ev);
+    };
+    execMouse(src, "pointerover", a.x, a.y);
+    execMouse(src, "pointerdown", a.x, a.y, { buttons: 1 });
+    execMouse(src, "mousedown", a.x, a.y, { buttons: 1 });
+    drag(src, "dragstart", a.x, a.y);
+    execMouse(src, "pointermove", a.x + 6, a.y + 6, { buttons: 1 });
+    execMouse(src, "mousemove", a.x + 6, a.y + 6, { buttons: 1 });
+    drag(src, "drag", a.x + 6, a.y + 6);
+    // Ziel erst JETZT messen (die Seite kann beim Aufnehmen umbauen) und die Maus hinfahren.
+    let b = execCenter(dst);
+    await execAnimateCursorTo(b.x, b.y);
+    if (seq !== execRunSeq) return { ok: false, reason: "aborted" };
+    b = execCenter(dst);
+    execMouse(dst, "pointermove", b.x, b.y, { buttons: 1 });
+    execMouse(dst, "mousemove", b.x, b.y, { buttons: 1 });
+    execMouse(dst, "pointerover", b.x, b.y, { buttons: 1 });
+    execMouse(dst, "mouseover", b.x, b.y, { buttons: 1 });
+    drag(dst, "dragenter", b.x, b.y);
+    drag(dst, "dragover", b.x, b.y);
+    drag(dst, "drop", b.x, b.y);
+    drag(src, "dragend", b.x, b.y);
+    execMouse(dst, "pointerup", b.x, b.y);
+    execMouse(dst, "mouseup", b.x, b.y);
+    return { ok: true };
+  }
+
+  // Hover: die Ereignisse, mit denen Seiten Menues oeffnen (pointerover/mouseover bubbeln —
+  // React hoert darauf; mouseenter/pointerenter direkt am Element; dazu eine Bewegung).
+  function execHoverEvents(el) {
+    const c = execCenter(el);
+    execMouse(el, "pointerover", c.x, c.y);
+    execMouse(el, "pointerenter", c.x, c.y, { bubbles: false });
+    execMouse(el, "mouseover", c.x, c.y);
+    execMouse(el, "mouseenter", c.x, c.y, { bubbles: false });
+    execMouse(el, "pointermove", c.x, c.y);
+    execMouse(el, "mousemove", c.x, c.y);
+  }
+
+  // Element per Selektor aufloesen und bis maxMs warten, bis es SICHTBAR ist (100-ms-Takt).
+  // null = nicht (rechtzeitig) sichtbar oder der Schritt wurde abgeloest (seq).
+  async function execWaitVisible(sel, maxMs, seq) {
+    const resolver =
+      (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
+    if (!resolver || !sel) return null;
+    const t0 = Date.now();
+    for (;;) {
+      if (seq !== execRunSeq) return null;
+      let res = null;
+      try {
+        res = resolver(document, sel, RESOLVE_OPTS);
+      } catch (err) {
+        res = null;
+      }
+      if (res && res.el && resolveElIsVisible(res.el)) return res.el;
+      if (Date.now() - t0 >= maxMs) return null;
+      await execWait(100);
+    }
+  }
+
+  // Hover-Schritt: erst den Ausloeser aufloesen, Maus hinfahren, Hover-Ereignisse senden, dann
+  // bis 1,5 s warten, bis das Ziel sichtbar wird. Klappt es nicht → ehrlicher Miss (nie raten).
+  async function execRunHover(step, token, seq) {
+    const it = interactionOf(step) || {};
+    // Menue schon offen (Ziel sichtbar)? Dann direkt handeln.
+    let target = await execWaitVisible(step.selector, 0, seq);
+    if (seq !== execRunSeq) return;
+    if (!target) {
+      const trigger = await execWaitVisible(it.hover, 5000, seq);
+      if (seq !== execRunSeq) return;
+      if (!trigger) {
+        execSendResult(token, false, "hover-not-found");
+        return;
+      }
+      execEnsureCursor();
+      try {
+        trigger.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      } catch (err) {
+        /* egal */
+      }
+      await execWait(180);
+      if (seq !== execRunSeq) return;
+      const tr = execRectOf(trigger);
+      execShowFrame(tr);
+      await execAnimateCursorTo(tr.cx, tr.cy);
+      if (seq !== execRunSeq) return;
+      execHoverEvents(trigger);
+      target = await execWaitVisible(step.selector, 1500, seq);
+      if (seq !== execRunSeq) return;
+      if (!target) {
+        execSendResult(token, false, "hover-menu-closed");
+        execScheduleTidy();
+        return;
+      }
+    }
+    execPerform(target, step, token, seq);
   }
 
   // Option per value ODER sichtbarem Text wählen (beides versuchen). Nicht gefunden ⇒ Miss
@@ -3183,9 +3862,14 @@
 
   function execDoAction(el, step) {
     const action = step && step.action;
-    if (action === "fill") return execFill(el, step.value);
+    const it = interactionOf(step) || {};
+    if (action === "fill") return execFill(el, step.value, it.enter === true);
     if (action === "select") return execSelect(el, step.value);
     if (action === "toggle") return execToggle(el);
+    // Klick-Varianten (Welle 48). Ziehen laeuft asynchron in execPerform (Maus reist mit).
+    if (it.variant === "right") return execContextClick(el);
+    if (it.variant === "double") return execDoubleClick(el);
+    if (it.variant === "key") return execKeyPress(el, it.key);
     return execClick(el); // Default: click
   }
 
@@ -3252,7 +3936,10 @@
     }
   }
 
-  async function execPerform(el, step, token) {
+  async function execPerform(el, step, token, seq) {
+    const runSeq = typeof seq === "number" ? seq : execRunSeq;
+    const it = interactionOf(step) || {};
+    const variant = step && step.action === "click" ? it.variant : undefined;
     execEnsureCursor();
     try {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
@@ -3268,14 +3955,45 @@
     execShowFrame(rect);
     await execAnimateCursorTo(rect.cx, rect.cy);
     await execWait(EXEC_CURSOR_DWELL_MS); // kurz auf dem Ziel verweilen (Welle 37, Fix 3), dann handeln
+    if (runSeq !== execRunSeq) return; // inzwischen abgeloest (neuer Schritt/Hide/anderer Frame)
     // Submit-Klicks erst NACH der React-Hydration ausloesen (sonst nativer Voll-Reload).
     let wasSubmit = false;
-    if (step && step.action === "click") {
+    if (step && step.action === "click" && !variant) {
       const form = execFormForSubmit(el);
       if (form) {
         wasSubmit = true;
         await execWaitHydration(form);
       }
+    }
+    // Eingabe + Enter (Welle 48): Enter schickt i. d. R. ein Formular ab → ebenfalls erst nach
+    // der Hydration (sonst nativer Voll-Reload statt React-Action).
+    if (step && step.action === "fill" && it.enter === true) {
+      const form = execFormOf(el);
+      if (form) await execWaitHydration(form);
+    }
+    if (runSeq !== execRunSeq) return;
+    // Ziehen (Welle 48): Ablage-Ziel aufloesen (bis 3 s), dann die Zieh-Sequenz mit reisender Maus.
+    if (variant === "drag") {
+      const dropEl = await execWaitVisible(it.drop, 3000, runSeq);
+      if (runSeq !== execRunSeq) return;
+      if (!dropEl) {
+        execSendResult(token, false, "drop-not-found");
+        execScheduleTidy();
+        return;
+      }
+      execClickPulse(rect.cx, rect.cy);
+      let dres;
+      try {
+        dres = await execDrag(el, dropEl, runSeq);
+      } catch (err) {
+        dres = { ok: false, reason: "drag-error" };
+      }
+      if (runSeq !== execRunSeq) return;
+      const b = execRectOf(dropEl);
+      execClickPulse(b.cx, b.cy);
+      execSendResult(token, dres && dres.ok, dres && dres.reason, false);
+      execScheduleTidy();
+      return;
     }
     execClickPulse(rect.cx, rect.cy); // „Klick-Puls" beim Ausführen
     let result;
@@ -3284,6 +4002,7 @@
     } catch (err) {
       result = { ok: false, reason: "action-error" };
     }
+    if (result && result.submitted) wasSubmit = true; // Eingabe + Enter hat abgeschickt
     // WICHTIG bei navigierenden Klicks: das Ergebnis SYNCHRON nach der Aktion senden — die
     // Nachricht ist dann beim Browser, bevor eine Navigation die Seite abbaut (Muster wie
     // steply-guide-advance). submitted meldet dem Panel, dass es das Übermittlungs-Ergebnis
@@ -3522,6 +4241,7 @@
   // Einen Ausführ-Schritt bearbeiten: Element auflösen (bis 5s, MutationObserver + Tick),
   // sonst Miss + Grund melden. NIEMALS bei Miss klicken (Sicherheit).
   function execRunStep(step, token) {
+    const seq = ++execRunSeq; // neuer Schritt → laufende Hover-/Zieh-Phasen des alten abbrechen
     execStopSearch();
     if (execTidyTimer) {
       clearTimeout(execTidyTimer); // neuer Schritt baut die Buehne selbst neu auf
@@ -3541,6 +4261,14 @@
       (globalThis.SteplyGuideResolve && globalThis.SteplyGuideResolve.resolveSelector) || null;
     if (!resolver) {
       execSendResult(token, false, "no-resolver");
+      return;
+    }
+    // Hover-Menue (Welle 48): erst den Ausloeser „ueberfahren", dann das Ziel (eigener Pfad).
+    const hit = interactionOf(step);
+    if (hit && hit.hover) {
+      execRunHover(step, token, seq).catch(() => {
+        if (seq === execRunSeq) execSendResult(token, false, "hover-error");
+      });
       return;
     }
     const MAX_WAIT = 5000;
@@ -3576,7 +4304,7 @@
         }
         done = true;
         execStopSearch();
-        execPerform(res.el, step, token);
+        execPerform(res.el, step, token, seq);
         return true;
       }
       if (res && res.reason) lastReason = res.reason;
@@ -3610,6 +4338,26 @@
     execLastSignalAt = Date.now();
   }
 
+  // Welle 48: dieser Frame ist fuer den aktuellen Schritt NICHT zustaendig. Wie execCleanup, aber
+  // OHNE die getragenen Dateien zu vergessen (die braucht das Hauptfenster evtl. spaeter noch).
+  function execYield() {
+    execRunSeq++;
+    execStopSearch();
+    if (execTidyTimer) {
+      clearTimeout(execTidyTimer);
+      execTidyTimer = null;
+    }
+    execRemoveFrame();
+    if (execCursorEl && execCursorEl.parentNode) {
+      try {
+        execCursorEl.parentNode.removeChild(execCursorEl);
+      } catch (err) {
+        /* egal */
+      }
+    }
+    execCursorEl = null;
+  }
+
   function execStartWatchdog() {
     if (execWatchdog) return;
     execWatchdog = setInterval(() => {
@@ -3628,6 +4376,13 @@
     if (!msg) return;
     if (msg.type === "steply-exec-step") {
       execNoteSignal();
+      // all_frames (Welle 48): genau EIN Frame fuehrt aus (s. stepIsForThisFrame) — sonst kaemen
+      // mehrere steply-exec-result zurueck. Nicht zustaendig → eigene Buehne des vorigen
+      // Schritts abraeumen (Maus/Rahmen), laufende Phasen abbrechen, schweigen.
+      if (!stepIsForThisFrame(msg.step)) {
+        execYield();
+        return;
+      }
       execRunStep(msg.step, msg.token);
       execStartWatchdog();
       return;
@@ -3648,6 +4403,9 @@
   // Cookies greifen; das Ergebnis geht NUR zurück ins Panel (Extension-Speicher), nie an Steply.
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg) return false;
+    // all_frames (Welle 48): Antworten (refetch, file-*, has-password, eval-condition) gibt NUR
+    // das Hauptfenster. iframes schweigen ohne sendResponse → Chrome nimmt die Antwort von oben.
+    if (!IS_TOP) return false;
     if (msg.type === "steply-exec-refetch") {
       (async () => {
         try {

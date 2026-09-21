@@ -132,6 +132,8 @@ export async function forkTemplate(templateId: string) {
         highlights: s.highlights,
         position: s.position,
         is_decision: s.is_decision,
+        // Welle 48: Art der Bedienung (Rechtsklick/Enter/…) gehört zum Schritt — mitkopieren.
+        ...(s.interaction ? { interaction: s.interaction } : {}),
       });
     }
     await supabase.from("steps").insert(stepRows);

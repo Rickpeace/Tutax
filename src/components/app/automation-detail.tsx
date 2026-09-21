@@ -23,7 +23,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { signedImageUrl } from "@/lib/upload";
-import type { Highlight, StepCondition, StepJump } from "@/lib/types";
+import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
+import { interactionChips } from "@/lib/interaction-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -68,6 +69,9 @@ export type AutomationStepView = {
   // Bedingter Sprung / Block-Überspringen (Welle 47): {when, to_position} | null. Trifft `when`
   // zu (z. B. „Anmelden" fehlt = eingeloggt), springt der Lauf VORWÄRTS und überspringt den Block.
   jump: StepJump | null;
+  // Erweiterte Interaktion (Welle 48): Enter/Rechtsklick/Doppelklick/Ziehen/Kürzel/Menü/iframe.
+  // Nur Anzeige (kleine Chips); der Lauf führt sie aus. null = normaler Schritt.
+  interaction: StepInteraction | null;
 };
 
 export type AutomationRunView = {
@@ -707,6 +711,16 @@ export function AutomationDetail({
                   <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2">
                     <meta.Icon className="size-3" /> {meta.label}
                   </span>
+                  {/* Erweiterte Interaktion (Welle 48): „↵ Enter", „Rechtsklick", „Strg+S", „Menü: …". */}
+                  {interactionChips(s.interaction).map((chip) => (
+                    <span
+                      key={chip}
+                      className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-[3px] text-[11px] font-extrabold text-ink-2"
+                      title="So wird dieser Schritt beim automatischen Ausführen bedient."
+                    >
+                      {chip}
+                    </span>
+                  ))}
                   {s.imagePath && (
                     <ChevronDown
                       className={`size-4 shrink-0 text-faint transition-transform ${

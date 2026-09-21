@@ -177,8 +177,10 @@ try {
 
 // ---------- 6) Server: enter wird validiert + landet im Vorlagen-Text ----------
 try {
-  // server-only ist in reinem Node nicht aufloesbar (Next aliased es) -> stubben.
-  const loader = `export async function resolve(s,c,n){if(s==='server-only'||s==='client-only'){return {url:'data:text/javascript,',shortCircuit:true};}return n(s,c);}`;
+  // server-only ist in reinem Node nicht aufloesbar (Next aliased es) -> stubben. Der Pfad-Alias
+  // „@/…" (tsconfig paths) wird auf src/….ts abgebildet (guide.ts nutzt @/lib/interaction-text).
+  const srcBase = JSON.stringify(new URL("../src/", import.meta.url).href);
+  const loader = `export async function resolve(s,c,n){if(s==='server-only'||s==='client-only'){return {url:'data:text/javascript,',shortCircuit:true};}if(s.startsWith('@/')){return n(new URL(s.slice(2)+'.ts',${srcBase}).href,c);}return n(s,c);}`;
   register("data:text/javascript," + encodeURIComponent(loader), import.meta.url);
   const { validateGuideSteps, templateBodyText } = await import("../src/lib/guide.ts");
   const base = { path: "acc/x.webp", label: "Suche", rect: { x: 0, y: 0, w: 0.1, h: 0.1 }, url: "https://www.google.com/", title: "Google", w: 100, h: 100 };

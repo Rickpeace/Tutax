@@ -18,6 +18,9 @@ type RoughStep = {
   bodyText: string; // Vorlagen-Fließtext (ein Absatz)
   label: string; // wörtliches Label des geklickten Elements ("" wenn keins)
   action: "click" | "type";
+  // Welle 48: Art der Interaktion in Worten (Rechtsklick/Doppelklick/Ziehen/Kürzel/Enter/Menü),
+  // damit die KI sie NICHT wegformuliert. Fehlt bei normalen Klicks/Eingaben.
+  interaction?: string | null;
 };
 
 const SYSTEM =
@@ -31,13 +34,18 @@ const SYSTEM =
   "immer paarig schließen. Anhängsel wie Laufzeiten („19 minutes“) oder Datumsangaben " +
   "lässt du weg. KEINE Emojis. Titel höchstens 60 Zeichen. Der Fließtext darf den Titel " +
   "NICHT wortgleich wiederholen — ein bis zwei kurze Sätze mit echter Orientierung " +
-  "(wo das Element liegt, woran man es erkennt); sonst lieber ein knapper Satz.";
+  "(wo das Element liegt, woran man es erkennt); sonst lieber ein knapper Satz. " +
+  "Hat ein Schritt eine „interaktion“ (Rechtsklick, Doppelklick, Ziehen, Tastenkürzel, " +
+  "Enter, vorher mit der Maus über ein Menü fahren), MUSS diese Art der Bedienung in Titel " +
+  "oder Text erhalten bleiben — mach daraus NIE einen einfachen Klick. Tastenkürzel " +
+  "schreibst du mit deutscher Beschriftung (Strg statt Ctrl) genau wie vorgegeben.";
 
 function buildUser(steps: RoughStep[]): string {
   const list = steps.map((s, i) => ({
     n: i + 1,
     aktion: s.action,
     label: s.label || null,
+    ...(s.interaction ? { interaktion: s.interaction } : {}),
     titel_vorlage: s.title,
     text_vorlage: s.bodyText,
   }));

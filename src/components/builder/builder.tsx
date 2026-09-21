@@ -67,6 +67,7 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     selector: null,
     condition: null,
     jump: null,
+    interaction: null,
     position,
     is_decision: false,
     video_time: null,

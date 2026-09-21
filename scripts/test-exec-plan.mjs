@@ -6,7 +6,7 @@
 // Nutzung:  node scripts/test-exec-plan.mjs
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep, pickTabForStep, parseJump, jumpTargetIndex } = require("../extension/exec-plan.js");
+const { buildRunPlan, needsNavigation, redactDetail, submitOutcome, submitBounced, linkFileSteps, planFileChunks, fileCapDecision, resyncTarget, looksLikeLoginUrl, skipCrossesNeededDownload, skipCrossesLogin, nextFireTime, parseCondition, evalUrlCondition, shouldRunStep, pickTabForStep, parseJump, jumpTargetIndex, parseInteraction } = require("../extension/exec-plan.js");
 
 let failed = false;
 const ok = (c, m) => {
@@ -641,5 +641,51 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
     "pickTabForStep: ohne preferTabId unverändert (Rückwärtskompatibilität)");
 }
 
-console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep/parseJump/jumpTargetIndex verifiziert.");
+// ══════════ parseInteraction + Durchreichen im Plan (Welle 48) ══════════
+{
+  // Tolerant: nur bekannte Schluessel, kaputt → null, enter nur bei Eingabe, variant nur bei Klick.
+  ok(parseInteraction(null, "click") === null && parseInteraction([], "click") === null && parseInteraction("x", "fill") === null,
+    "parseInteraction: kein Objekt → null");
+  ok(JSON.stringify(parseInteraction({ enter: true }, "fill")) === '{"enter":true}', "parseInteraction: enter bei fill");
+  ok(parseInteraction({ enter: true }, "click") === null, "parseInteraction: enter bei Klick verworfen");
+  ok(parseInteraction({ enter: "ja" }, "fill") === null, "parseInteraction: enter nur als echtes true");
+  ok(parseInteraction({ variant: "right" }, "click").variant === "right", "parseInteraction: variant right");
+  ok(parseInteraction({ variant: "double" }, "fill") === null, "parseInteraction: variant bei fill verworfen");
+  ok(parseInteraction({ variant: "hack" }, "click") === null, "parseInteraction: unbekannte variant verworfen");
+  ok(parseInteraction({ variant: "key" }, "click") === null, "parseInteraction: key ohne Kombination verworfen");
+  const k = parseInteraction({ variant: "key", key: "  Ctrl+S  " }, "click");
+  ok(k && k.variant === "key" && k.key === "Ctrl+S", "parseInteraction: key getrimmt");
+  ok(parseInteraction({ variant: "drag" }, "click") === null, "parseInteraction: drag ohne drop verworfen");
+  const d = parseInteraction({ variant: "drag", drop: { css: "#ziel", role: "LISTITEM", evil: 1 }, dropLabel: "Erledigt" }, "click");
+  ok(d && d.drop.css === "#ziel" && d.drop.role === "listitem" && !("evil" in d.drop) && d.dropLabel === "Erledigt",
+    "parseInteraction: drag mit drop-Selektor (Rolle normalisiert, Fremdfelder weg)");
+  const h = parseInteraction({ hover: { text: "Datei", shadow: ["app-shell", "x-menu"] }, hoverLabel: "Datei" }, "click");
+  ok(h && h.hover.text === "Datei" && h.hover.shadow.length === 2 && h.hoverLabel === "Datei", "parseInteraction: hover inkl. shadow");
+  ok(parseInteraction({ hover: { shadow: ["a", 5], css: "#m" } }, "click").hover.shadow === undefined,
+    "parseInteraction: kaputte shadow-Kette verworfen, css bleibt");
+  ok(parseInteraction({ frame: { url: "javascript:alert(1)" } }, "click") === null, "parseInteraction: frame nur http(s)");
+  ok(parseInteraction({ frame: { url: "https://pay.example/frame" } }, "click").frame.url === "https://pay.example/frame",
+    "parseInteraction: frame.url uebernommen");
+  ok(!("value" in (parseInteraction({ enter: true, value: "geheim" }, "fill") || {})), "parseInteraction: NIE Feldwerte");
+
+  // Reiseweg: API-Schritt → buildRunPlan → action.interaction (fuer steply-exec-step).
+  const plan = buildRunPlan(
+    { id: "a", params: [{ key: "q", label: "Suche", type: "text", required: true }] },
+    [
+      { id: "1", position: 1, title: "Suche", action: "fill", selector: { css: "textarea[name=q]" }, page_url: "https://www.google.com/", param_key: "q", interaction: { enter: true } },
+      { id: "2", position: 2, title: "Menue", action: "click", selector: { text: "Speichern" }, page_url: "https://app.example/doc", interaction: { hover: { text: "Datei" }, variant: "right" } },
+      { id: "3", position: 3, title: "Rahmen", action: "click", selector: { css: "#pay" }, page_url: "https://pay.example/frame?x=1", interaction: { frame: { url: "https://pay.example/frame" } } },
+      { id: "4", position: 4, title: "Rahmen2", action: "click", selector: { css: "#pay" }, page_url: "https://shop.example/checkout", interaction: { frame: { url: "https://pay.example/frame" } } },
+      { id: "5", position: 5, title: "Normal", action: "click", selector: { css: "#x" }, page_url: "https://shop.example/checkout" },
+    ],
+    { q: "steply" },
+  );
+  ok(plan[0].interaction && plan[0].interaction.enter === true && plan[0].value === "steply", "buildRunPlan: enter reist mit (Wert getrennt)");
+  ok(plan[1].interaction.variant === "right" && plan[1].interaction.hover.text === "Datei", "buildRunPlan: hover + variant reisen mit");
+  ok(plan[2].interaction.frame && plan[2].page_url === "", "buildRunPlan: page_url = iframe-URL → nicht dorthin navigieren");
+  ok(plan[3].page_url === "https://shop.example/checkout", "buildRunPlan: page_url der Hauptseite bleibt bei frame-Schritt");
+  ok(!("interaction" in plan[4]), "buildRunPlan: ohne interaction kein Feld (Bestand unveraendert)");
+}
+
+console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep/parseJump/jumpTargetIndex/parseInteraction verifiziert.");
 process.exitCode = failed ? 1 : 0;

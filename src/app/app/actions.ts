@@ -213,6 +213,9 @@ export async function duplicateTutorial(id: string) {
           highlights: s.highlights,
           position: s.position,
           is_decision: s.is_decision,
+          // Welle 48: Art der Bedienung (Rechtsklick/Enter/…) gehört zum Schritt-Text — mitkopieren.
+          // Nur wenn vorhanden (bleibt heil, falls Migration 0036 noch fehlt).
+          ...(s.interaction ? { interaction: s.interaction } : {}),
         })
         .select("id")
         .single();
