@@ -50,6 +50,12 @@
   //   hover:   {css,text,role}, hoverLabel    vorher mit der Maus ueber dieses Element (Menue)
   //   frame:   {url}                          Schritt liegt in einem iframe (origin+pathname)
   // NIE Feldinhalte. Unbekannte Schluessel verwirft der Server.
+  // Selektor-Erweiterung: selector.shadow = [hostCss, …] (Shadow-Host-Pfade aussen -> innen);
+  // css/text/role gelten dann im innersten Shadow-Root (Aufloesung: guide-resolve.js).
+  // Panel-intern (nicht hochgeladen): step.frameKey — Zufalls-Kennung eines iframe-Schritts, zu
+  // der das Hauptfenster per steply-frame-geo die echte Markierungs-Lage nachreicht.
+  // Erfassung (Welle 48b): Enter (Feld / contenteditable-Chat), Rechtsklick, Doppelklick (patch),
+  // Ziehen (HTML5 + Zeiger, patch), Tastenkuerzel, Hover-Menues (ARIA), iframes, Shadow DOM.
 
   // ---- Erkennungs-Marker fuer App-Seiten (Welle 25) ------------------------
   // FRUEH (document_start) ein DOM-Attribut setzen, damit App-Seiten erkennen, dass die
@@ -196,6 +202,138 @@
     return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
   }
 
+  // ---- Shadow DOM (Welle 48): Web-Komponenten (Salesforce, Microsoft, SAP UI5 …) ----------
+  // Listener an `document` sehen bei OFFENEN Shadow-Roots nur den Host als event.target. Das
+  // echte Ziel ist composedPath()[0]. Geschlossene Roots bleiben unsichtbar (dann eben der Host).
+  function realTarget(event) {
+    let t = null;
+    try {
+      const path = event.composedPath ? event.composedPath() : null;
+      t = path && path.length ? path[0] : null;
+    } catch (err) {
+      t = null;
+    }
+    if (!t) t = event.target;
+    if (t && t.nodeType === 3) t = t.parentElement || flatParent(t);
+    return t && t.nodeType === 1 ? t : event.target;
+  }
+
+  // Eltern im „flachen" Baum: zugewiesener <slot> > DOM-Eltern > Shadow-Host. So gehen
+  // closest-artige Suchen ueber Shadow-Grenzen nach oben (Text im Slot -> Button im Root).
+  function flatParent(n) {
+    if (!n) return null;
+    try {
+      if (n.assignedSlot) return n.assignedSlot;
+    } catch (err) {
+      /* egal */
+    }
+    if (n.parentElement) return n.parentElement;
+    const p = n.parentNode;
+    return p && p.nodeType === 11 && p.host ? p.host : null;
+  }
+
+  // closest() ueber Shadow-Grenzen hinweg (flacher Baum).
+  function closestDeep(el, sel) {
+    let n = el;
+    for (let i = 0; n && i < 400; i++) {
+      if (n.nodeType === 1) {
+        try {
+          if (n.matches(sel)) return n;
+        } catch (err) {
+          return null;
+        }
+      }
+      n = flatParent(n);
+    }
+    return null;
+  }
+
+  // Der Shadow-Root, in dem el liegt (null im normalen Dokument).
+  function shadowRootOf(el) {
+    try {
+      const r = el && el.getRootNode ? el.getRootNode() : null;
+      return r && r.nodeType === 11 && r.host ? r : null;
+    } catch (err) {
+      return null;
+    }
+  }
+  // Such-Scope fuer id-/label-Referenzen: der eigene Root (ids gelten nur darin).
+  function scopeOf(el) {
+    return shadowRootOf(el) || document;
+  }
+
+  // `change` ist NICHT composed — Aenderungen in Shadow-Roots erreichen den document-Listener
+  // nie. Fokuswechsel INNERHALB eines Roots (Feld -> Feld im selben Formular) ebenfalls nicht
+  // (nach dem Retargeting waeren target und relatedTarget beide der Host -> Weitergabe stoppt).
+  // Darum je beruehrtem Root EINMAL dieselben Listener direkt am Root anmelden. Kreuzt ein
+  // Fokuswechsel die Grenze, feuern Root- UND document-Listener — die Handler sind dagegen
+  // idempotent (focusout raeumt focusedEditable beim ersten Aufruf ab).
+  const watchedRoots = new WeakSet();
+  function watchShadowRoots(el) {
+    let r = shadowRootOf(el);
+    for (let i = 0; r && i < 10; i++) {
+      if (!watchedRoots.has(r)) {
+        watchedRoots.add(r);
+        try {
+          r.addEventListener("change", onChange, true);
+          r.addEventListener("focusin", onFocusIn, true);
+          r.addEventListener("focusout", onFocusOut, true);
+        } catch (err) {
+          /* egal */
+        }
+      }
+      r = shadowRootOf(r.host);
+    }
+  }
+
+  // Fokussiertes Element auch in (offenen) Shadow-Roots.
+  function deepActiveElement() {
+    let a = document.activeElement;
+    for (let i = 0; a && a.shadowRoot && a.shadowRoot.activeElement && i < 10; i++) {
+      a = a.shadowRoot.activeElement;
+    }
+    return a;
+  }
+
+  // Sichtbarer Text im flachen Baum (Slots aufgeloest). innerText eines Elements IM Shadow-Root
+  // enthaelt den per <slot> projizierten Light-DOM-Text NICHT (<button><slot></slot></button>
+  // -> ""). Kurz gekappt; nur fuer Labels.
+  function flatText(node, depth) {
+    if (!node || depth > 12) return "";
+    if (node.nodeType === 3) return node.nodeValue || "";
+    if (node.nodeType !== 1 && node.nodeType !== 11) return "";
+    if (node.nodeType === 1) {
+      const tag = node.tagName;
+      if (tag === "STYLE" || tag === "SCRIPT" || tag === "TEMPLATE" || tag === "NOSCRIPT") return "";
+      try {
+        const cs = getComputedStyle(node);
+        if (cs && (cs.display === "none" || cs.visibility === "hidden")) return "";
+      } catch (err) {
+        /* egal */
+      }
+      if (tag === "SLOT") {
+        let assigned = [];
+        try {
+          assigned = node.assignedNodes({ flatten: true });
+        } catch (err) {
+          assigned = [];
+        }
+        if (assigned.length) {
+          let s = "";
+          for (const a of assigned) s += " " + flatText(a, depth + 1);
+          return s;
+        }
+      }
+    }
+    let out = "";
+    const kids = node.nodeType === 1 && node.shadowRoot ? node.shadowRoot.childNodes : node.childNodes;
+    for (const k of kids) {
+      out += " " + flatText(k, depth + 1);
+      if (out.length > 240) break;
+    }
+    return out;
+  }
+
   // Interaktive Elemente (fuer Klick-Aufloesung UND Dead-Click-Filter). Deckt neben den
   // nativen Widgets auch ARIA-Rollen ab (Checkbox/Switch/Slider/Tab/Option/Combobox).
   const INTERACTIVE_SELECTOR =
@@ -208,7 +346,7 @@
   // interaktive Element in der Ahnenkette, sonst das Ziel selbst.
   function clickableFor(target) {
     if (!target || target.nodeType !== 1) return null;
-    const clickable = target.closest(INTERACTIVE_SELECTOR);
+    const clickable = closestDeep(target, INTERACTIVE_SELECTOR);
     return clickable || target;
   }
 
@@ -221,19 +359,15 @@
   // nicht der innere Span).
   function interactiveFor(target) {
     if (!target || target.nodeType !== 1) return null;
-    let hit = null;
-    try {
-      hit = target.closest(INTERACTIVE_SELECTOR);
-    } catch (err) {
-      hit = null;
-    }
+    // Ueber Shadow-Grenzen/Slots hinweg (closestDeep/flatParent), Welle 48.
+    const hit = closestDeep(target, INTERACTIVE_SELECTOR);
     if (hit) return hit;
     let n = target;
     for (let i = 0; n && n.nodeType === 1 && i < 8; i++) {
       if (n.isContentEditable === true) return n;
       const ti = n.getAttribute && n.getAttribute("tabindex");
       if (ti != null && parseInt(ti, 10) >= 0) return n;
-      n = n.parentElement;
+      n = flatParent(n);
     }
     let cur = null;
     try {
@@ -242,7 +376,7 @@
       cur = null;
     }
     if (cur) {
-      let p = cur.parentElement;
+      let p = flatParent(cur);
       let guard = 0;
       while (p && p !== document.body && p !== document.documentElement && guard < 8) {
         let c = "";
@@ -253,7 +387,7 @@
         }
         if (c !== "pointer") break;
         cur = p;
-        p = p.parentElement;
+        p = flatParent(p);
         guard++;
       }
       return cur;
@@ -347,6 +481,11 @@
       txt = "";
     }
     txt = txt.replace(/\s+/g, " ").trim();
+    // Shadow DOM (Welle 48): innerText kennt projizierten Slot-Text nicht -> flacher Baum.
+    if (shadowRootOf(el) || el.shadowRoot) {
+      const flat = flatText(el, 0).replace(/\s+/g, " ").trim();
+      if (flat && flat.length > txt.length && !looksLikeCode(flat)) return flat;
+    }
     if (txt && !looksLikeCode(txt)) return txt;
     const walked = textFromWalker(el);
     if (walked && !looksLikeCode(walked)) return walked;
@@ -361,8 +500,9 @@
     const labelledby = el.getAttribute("aria-labelledby");
     if (labelledby) {
       let acc = "";
+      const scope = scopeOf(el);
       for (const id of labelledby.split(/\s+/)) {
-        const ref = id && document.getElementById(id);
+        const ref = id && scope.getElementById && scope.getElementById(id);
         if (ref) {
           const t = visibleText(ref);
           if (t) acc += (acc ? " " : "") + t;
@@ -389,7 +529,7 @@
     }
     if (el.id) {
       try {
-        const lbls = document.querySelectorAll('label[for="' + cssEscapeAttr(el.id) + '"]');
+        const lbls = scopeOf(el).querySelectorAll('label[for="' + cssEscapeAttr(el.id) + '"]');
         for (const l of lbls) {
           const t = visibleText(l);
           if (t) return t;
@@ -418,7 +558,8 @@
     }
     const forId = el.getAttribute && el.getAttribute("for");
     if (forId) {
-      const byId = document.getElementById(forId);
+      const scope = scopeOf(el);
+      const byId = scope.getElementById ? scope.getElementById(forId) : null;
       if (byId) return byId;
     }
     const inner =
@@ -608,9 +749,10 @@
     if (/^[A-Za-z]+[-_][0-9a-f]{6,}$/i.test(id)) return false; // Praefix + Hash
     return true;
   }
-  function isUnique(sel) {
+  // scope: document oder der Shadow-Root des Elements (Eindeutigkeit gilt im eigenen Root).
+  function isUniqueIn(sel, scope) {
     try {
-      return document.querySelectorAll(sel).length === 1;
+      return (scope || document).querySelectorAll(sel).length === 1;
     } catch (err) {
       return false;
     }
@@ -626,7 +768,10 @@
         break; // stabile id ist ein guter Anker -> Pfad hier verankern
       }
       let seg = tag;
-      const parent = node.parentElement;
+      // Oberstes Element eines Shadow-Roots: Geschwister sind die Kinder des Roots.
+      const parent =
+        node.parentElement ||
+        (node.parentNode && node.parentNode.nodeType === 11 ? node.parentNode : null);
       if (parent) {
         const same = Array.prototype.filter.call(parent.children, (c) => c.tagName === node.tagName);
         if (same.length > 1) seg += ":nth-of-type(" + (same.indexOf(node) + 1) + ")";
@@ -641,6 +786,8 @@
   function cssPathFor(el) {
     if (!el || el.nodeType !== 1) return "";
     const tag = el.tagName.toLowerCase();
+    const scope = scopeOf(el); // Shadow-Root des Elements oder document
+    const isUnique = (sel) => isUniqueIn(sel, scope);
     const cap = (s) => (s && s.length <= 400 ? s : "");
     if (el.id && isStableId(el.id)) {
       const sel = "#" + cssEscape(el.id);
@@ -691,11 +838,31 @@
     if (tag === "nav") return "navigation";
     return "";
   }
+  // Shadow-Host-Pfade von aussen nach innen (Vertrag: selector.shadow). Jeder Pfad ist in
+  // SEINEM Root eindeutig gebaut (cssPathFor nutzt scopeOf). null, wenn ein Host keinen Pfad
+  // bekommt oder die Tiefe die Server-Kappe (5) sprengt — dann ist css unbrauchbar.
+  const SHADOW_DEPTH_MAX = 5;
+  function shadowHostPath(el) {
+    const hosts = [];
+    let r = shadowRootOf(el);
+    while (r) {
+      if (hosts.length >= SHADOW_DEPTH_MAX) return null;
+      const hp = cssPathFor(r.host);
+      if (!hp) return null;
+      hosts.unshift(hp);
+      r = shadowRootOf(r.host);
+    }
+    return hosts;
+  }
   function selectorFor(el) {
     if (!el || el.nodeType !== 1) return undefined;
     const out = {};
-    const css = cssPathFor(el);
+    // Shadow DOM (Welle 48): css gilt dann relativ zum innersten Root, shadow = Host-Kette.
+    const inShadow = !!shadowRootOf(el);
+    const hosts = inShadow ? shadowHostPath(el) : null;
+    const css = !inShadow || hosts ? cssPathFor(el) : "";
     if (css) out.css = css;
+    if (css && hosts && hosts.length) out.shadow = hosts;
     // Text-Gegenprobe fuer die Live-Fuehrung: Eingabefelder (input/textarea/select/
     // contenteditable) haben KEINEN sichtbaren textContent — als `text` daher das zugehoerige
     // LABEL erfassen (dieselbe Kette wie labelFor: <label>/aria/Ueberschrift/placeholder/name).
@@ -727,6 +894,9 @@
     // Nur im Video-Modus Klick-Zeitstempel senden (im guide-Modus laeuft die Erfassung
     // ueber pointerdown, s. u.).
     if (!recording || mode !== "video") return;
+    // Video-Modus: Klick-Koordinaten gelten fuer das Hauptfenster. In iframes (all_frames,
+    // Welle 48) waeren sie relativ zum iframe -> dort wie frueher (kein Script) nichts senden.
+    if (!IS_TOP) return;
 
     const w = window.innerWidth || document.documentElement.clientWidth || 1;
     const h = window.innerHeight || document.documentElement.clientHeight || 1;
@@ -756,9 +926,24 @@
   document.addEventListener("click", onClick, true);
 
   // Rect (0..1, TANGO-Trick fuer pixelgenaue Markierung) + Pixel-Lage eines Elements.
-  function rectOf(el) {
+  // Pixel-Box (Viewport dieses Fensters) -> 0..1 normiert, geklemmt (Hauptfenster; die
+  // iframe-Umrechnung nutzt dieselbe Normierung, s. onFrameGeo).
+  function normRect(left, top, width, height) {
     const w = window.innerWidth || document.documentElement.clientWidth || 1;
     const h = window.innerHeight || document.documentElement.clientHeight || 1;
+    const clamp = (n) => Math.min(1, Math.max(0, n));
+    const round = (n) => Math.round(n * 10000) / 10000;
+    const rect = {
+      x: round(clamp(left / w)),
+      y: round(clamp(top / h)),
+      w: round(clamp(width / w)),
+      h: round(clamp(height / h)),
+    };
+    if (rect.x + rect.w > 1) rect.w = round(1 - rect.x);
+    if (rect.y + rect.h > 1) rect.h = round(1 - rect.y);
+    return rect;
+  }
+  function rectOf(el) {
     const px = { left: 0, top: 0, width: 0, height: 0, cx: 0, cy: 0 };
     let rect = { x: 0, y: 0, w: 0, h: 0 };
     try {
@@ -766,16 +951,7 @@
       if (r && r.width >= 0 && r.height >= 0) {
         px.left = r.left; px.top = r.top; px.width = r.width; px.height = r.height;
         px.cx = r.left + r.width / 2; px.cy = r.top + r.height / 2;
-        const clamp = (n) => Math.min(1, Math.max(0, n));
-        const round = (n) => Math.round(n * 10000) / 10000;
-        rect = {
-          x: round(clamp(r.left / w)),
-          y: round(clamp(r.top / h)),
-          w: round(clamp(r.width / w)),
-          h: round(clamp(r.height / h)),
-        };
-        if (rect.x + rect.w > 1) rect.w = round(1 - rect.x);
-        if (rect.y + rect.h > 1) rect.h = round(1 - rect.y);
+        rect = normRect(r.left, r.top, r.width, r.height);
       }
     } catch (err) {
       // Bounding-Box nicht ermittelbar -> leeres Rechteck (Markierung entfaellt still).
@@ -840,17 +1016,19 @@
 
   // Alle sichtbaren sensiblen Elemente -> normalisierte Rechtecke (0..1), groesste zuerst,
   // Kappe 10. Reine Geometrie; wirft nie (im Zweifel leere Liste).
-  function collectSensitiveRects() {
+  // asPx (Welle 48, iframes): statt normierter Rechtecke die PIXEL-Boxen dieses Fensters
+  // ({left,top,width,height}) — das Hauptfenster rechnet sie auf seinen Viewport um.
+  function collectSensitiveRects(asPx) {
     const seen = new Set();
     const rects = [];
     const add = (el) => {
       if (!el || el.nodeType !== 1 || seen.has(el)) return;
       seen.add(el);
       if (!isVisibleForRedaction(el)) return;
-      const { rect } = rectOf(el);
+      const { rect, px } = rectOf(el);
       const area = rect.w * rect.h;
       if (!(area > 0)) return;
-      rects.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, area });
+      rects.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, area, px });
     };
     try {
       // 1) Passwortfelder IMMER.
@@ -865,37 +1043,126 @@
       /* im Zweifel lieber nichts erfassen als einen Fehler werfen */
     }
     rects.sort((a, b) => b.area - a.area);
+    if (asPx) {
+      return rects.slice(0, MAX_SENSITIVE).map((r) => ({
+        left: r.px.left, top: r.px.top, width: r.px.width, height: r.px.height,
+      }));
+    }
     return rects.slice(0, MAX_SENSITIVE).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }));
   }
 
-  // Einen Schritt (Klick oder Eingabe) an das Panel senden. Die Seitenleiste macht darauf
-  // SOFORT einen Screenshot. Der Klick-Puls (lastClickPx) wird erst NACH der Bestaetigung
-  // gezeichnet, damit er nie mit im Bild landet. cx/cy optional (Fallback-Kreis).
-  function emitStep(el, action, cx, cy, enter) {
+  // ============================================================================
+  // SOFORT-ANLEITUNG: Schritte senden + Nachtraege (Welle 48)
+  //
+  // Nachrichten an das Panel (alle ueber chrome.runtime.sendMessage, NIE Feldinhalte):
+  //   steply-guide-step    {step}                   neuer Schritt -> Panel macht SOFORT Screenshot
+  //   steply-guide-patch   {ts, interaction}        interaction in den Schritt ts mergen
+  //                                                 (Doppelklick, Ziehen & Ablegen)
+  //   steply-guide-retract {ts}                     Schritt ts wieder entfernen (Rechtsklick ohne
+  //                                                 eigenes Menue, Enter = Zeilenumbruch, Drag ohne Drop)
+  //   steply-frame-geo     {key, rect, sensitive}   (nur Hauptfenster) echte Lage eines Schritts
+  //                                                 aus einem iframe (step.frameKey === key)
+  // ============================================================================
+
+  // Schritt-Kennung: Date.now(), aber je Script-Instanz STRENG monoton — patch/retract
+  // adressieren Schritte ueber ts, zwei Schritte derselben Millisekunde duerfen nicht kollidieren.
+  let lastTs = 0;
+  function nextTs() {
+    const now = Date.now();
+    lastTs = now > lastTs ? now : lastTs + 1;
+    return lastTs;
+  }
+
+  function sendToPanel(msg) {
+    try {
+      const p = chrome.runtime.sendMessage(msg);
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (err) {
+      // Extension-Kontext weg (Reload) -> als beendet betrachten.
+      recording = false;
+    }
+  }
+  function sendPatch(ts, interaction) {
+    if (!ts) return;
+    sendToPanel({ type: "steply-guide-patch", ts, interaction });
+  }
+  function sendRetract(ts) {
+    if (!ts) return;
+    sendToPanel({ type: "steply-guide-retract", ts });
+  }
+
+  // iframe-Kennung fuer den Vertrag (interaction.frame.url): origin + pathname, ohne Query/Hash
+  // (Tokens!). about:srcdoc/about:blank-Frames haben keine http-URL -> der Server verwirft frame
+  // dann; die Markierungs-Umrechnung (frameKey) funktioniert trotzdem.
+  function frameUrl() {
+    try {
+      if (/^https?:$/.test(location.protocol)) {
+        return (location.origin + location.pathname).slice(0, 500);
+      }
+      return String(location.href || "").split(/[?#]/)[0].slice(0, 500);
+    } catch (err) {
+      return "";
+    }
+  }
+  function randomKey() {
+    let k = "";
+    try {
+      const a = new Uint32Array(4);
+      crypto.getRandomValues(a);
+      for (const n of a) k += n.toString(36);
+    } catch (err) {
+      k = "";
+    }
+    while (k.length < 16) k += Math.random().toString(36).slice(2);
+    return k.slice(0, 24);
+  }
+
+  // Einen Schritt an das Panel senden. Die Seitenleiste macht darauf SOFORT einen Screenshot.
+  // Der Klick-Puls (lastClickPx) wird erst NACH der Bestaetigung gezeichnet, damit er nie mit
+  // im Bild landet. opts: { cx, cy (Fallback-Kreis), interaction, label (statt labelFor),
+  // extra (zusaetzliche Schritt-Felder, z. B. fileMeta) }. el darf null sein (Tastenkuerzel
+  // ohne Fokus-Element) -> leeres Rechteck. Rueckgabe: ts des Schritts.
+  function emitStep(el, action, opts) {
+    const o = opts || {};
     const geo = rectOf(el);
-    lastClickPx = {
-      left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
-      cx: cx != null ? cx : geo.px.cx, cy: cy != null ? cy : geo.px.cy,
-    };
+    lastClickPx = el
+      ? {
+          left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
+          cx: o.cx != null ? o.cx : geo.px.cx, cy: o.cy != null ? o.cy : geo.px.cy,
+        }
+      : null;
+    const ts = nextTs();
     const step = {
       rect: geo.rect,
-      label: labelFor(el),
+      label: o.label || labelFor(el),
       action: action === "type" ? "type" : "click",
       url: (location && location.href ? location.href : "").slice(0, 500),
       title: truncate(document.title || "", 200),
       selector: selectorFor(el),
-      ts: Date.now(),
+      ts,
     };
-    // Eingabe wurde mit Enter abgeschickt (Google-Suche o. ae.) — s. INTERACTION-Vertrag oben.
-    if (enter === true) step.interaction = { enter: true };
-    // Auto-Schwaerzung (Welle 28): nur GEOMETRIE sichtbarer sensibler Felder, additiv.
-    const sensitive = collectSensitiveRects();
-    if (sensitive.length) step.sensitive = sensitive;
-    try {
-      chrome.runtime.sendMessage({ type: "steply-guide-step", step });
-    } catch (err) {
-      recording = false;
+    if (o.extra) Object.assign(step, o.extra);
+    const inter = o.interaction ? Object.assign({}, o.interaction) : {};
+    let framePx = null;
+    if (!IS_TOP) {
+      // iframe: Rechtecke waeren relativ zum iframe, der Screenshot zeigt aber das ganze
+      // Fenster. Markierung darum vorerst leer; die echte Lage reicht die Frame-Kette per
+      // postMessage nach oben (onFrameGeo), das Hauptfenster meldet sie als steply-frame-geo.
+      step.rect = { x: 0, y: 0, w: 0, h: 0 };
+      inter.frame = { url: frameUrl() };
+      step.frameKey = randomKey();
+      framePx = geo.px;
+    } else {
+      // Auto-Schwaerzung (Welle 28): nur GEOMETRIE sichtbarer sensibler Felder, additiv.
+      const sensitive = collectSensitiveRects();
+      if (sensitive.length) step.sensitive = sensitive;
     }
+    if (Object.keys(inter).length) step.interaction = inter;
+    sendToPanel({ type: "steply-guide-step", step });
+    if (framePx) {
+      postFrameGeo(step.frameKey, framePx, collectSensitiveRects(true));
+    }
+    return ts;
   }
 
   // SOFORT-ANLEITUNG / Datei-Bruecke (Welle 39): ein Upload-Schritt aus einem file-input.
@@ -903,20 +1170,10 @@
   // traegt den Selektor des INPUTS + foldPrevClick:true, damit das Panel den davor erfassten
   // „Datei auswaehlen"-Klick in DIESEN Schritt faltet (sonst entstuende beim Lauf ein sinnloser
   // Klick, der nur den OS-Dialog oeffnet). Screenshot laeuft wie bei jedem anderen Schritt.
-  function emitUploadStep(inputEl, file) {
-    const geo = rectOf(inputEl);
-    lastClickPx = {
-      left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
-      cx: geo.px.cx, cy: geo.px.cy,
-    };
-    const step = {
-      rect: geo.rect,
-      label: file && file.name ? clampLabel(file.name, 60) : "Datei",
-      action: "click",
-      url: (location && location.href ? location.href : "").slice(0, 500),
-      title: truncate(document.title || "", 200),
-      selector: selectorFor(inputEl),
-      ts: Date.now(),
+  // fold=false (Welle 48): Datei per Drag & Drop aus dem Explorer auf eine Drop-Zone — davor gab
+  // es KEINEN „Datei auswaehlen"-Klick, also nichts falten (sonst verschwaende ein echter Schritt).
+  function emitUploadStep(inputEl, file, fold) {
+    const extra = {
       // Datei-Bruecke: NUR Metadaten. filename/mime/size lokal ermittelt, gehen NIE an den Server.
       fileMeta: {
         role: "upload",
@@ -924,16 +1181,161 @@
         mime: file && file.type ? String(file.type).slice(0, 120) : "",
         size: file && typeof file.size === "number" ? file.size : 0,
       },
-      foldPrevClick: true,
     };
-    const sensitive = collectSensitiveRects();
-    if (sensitive.length) step.sensitive = sensitive;
+    if (fold !== false) extra.foldPrevClick = true;
+    return emitStep(inputEl, "click", {
+      label: file && file.name ? clampLabel(file.name, 60) : "Datei",
+      extra,
+    });
+  }
+
+  // ---- iframes (Welle 48): Geometrie die Frame-Kette hinauf reichen -----------------------
+  // Der iframe meldet seine Pixel-Box an window.parent; jedes uebergeordnete Content-Script
+  // findet SEIN iframe-Element (contentWindow === event.source), addiert dessen Inhalts-Ursprung
+  // und reicht weiter; das Hauptfenster normiert auf seinen Viewport und meldet ans Panel.
+  // SICHERHEIT: die Nachricht aendert NUR die Markierungsposition eines Schritts mit passendem
+  // Zufalls-key (nie Inhalte); nur Zahlen, ungueltige verworfen; nur von echten Kind-Frames.
+  function postFrameGeo(key, px, sensitivePx) {
     try {
-      chrome.runtime.sendMessage({ type: "steply-guide-step", step });
+      window.parent.postMessage(
+        {
+          __steplyFrameGeo: 1,
+          key,
+          rect: { left: px.left, top: px.top, width: px.width, height: px.height },
+          sensitive: sensitivePx || [],
+        },
+        "*"
+      );
     } catch (err) {
-      recording = false;
+      /* Eltern-Fenster nicht erreichbar -> Markierung bleibt leer */
     }
   }
+
+  function cleanPx(r) {
+    if (!r || typeof r !== "object") return null;
+    const vals = [r.left, r.top, r.width, r.height];
+    for (const n of vals) {
+      if (typeof n !== "number" || !isFinite(n) || Math.abs(n) > 1e6) return null;
+    }
+    if (r.width < 0 || r.height < 0) return null;
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  }
+
+  // Das iframe-Element dieses Dokuments, dessen Fenster die Nachricht schickte. Zuerst die
+  // normalen iframes, nur notfalls (gekappt) auch iframes in offenen Shadow-Roots.
+  function findFrameElement(source) {
+    const scan = (scope) => {
+      let list = [];
+      try {
+        list = scope.querySelectorAll("iframe, frame");
+      } catch (err) {
+        list = [];
+      }
+      for (const f of list) {
+        try {
+          if (f.contentWindow === source) return f;
+        } catch (err) {
+          /* egal */
+        }
+      }
+      return null;
+    };
+    const hit = scan(document);
+    if (hit) return hit;
+    let all = [];
+    try {
+      all = document.querySelectorAll("*");
+    } catch (err) {
+      all = [];
+    }
+    const roots = [];
+    for (let i = 0; i < all.length && roots.length < 100; i++) {
+      if (all[i].shadowRoot) roots.push(all[i].shadowRoot);
+    }
+    for (let i = 0; i < roots.length; i++) {
+      const h = scan(roots[i]);
+      if (h) return h;
+      let inner = [];
+      try {
+        inner = roots[i].querySelectorAll("*");
+      } catch (err) {
+        inner = [];
+      }
+      for (let j = 0; j < inner.length && roots.length < 100; j++) {
+        if (inner[j].shadowRoot) roots.push(inner[j].shadowRoot);
+      }
+    }
+    return null;
+  }
+
+  // Inhalts-Box eines iframes im Viewport dieses Fensters (Rahmen + Padding abgezogen).
+  function frameContentBox(f) {
+    const r = f.getBoundingClientRect();
+    let pl = 0, pt = 0, pr = 0, pb = 0;
+    try {
+      const cs = getComputedStyle(f);
+      pl = parseFloat(cs.paddingLeft) || 0;
+      pt = parseFloat(cs.paddingTop) || 0;
+      pr = parseFloat(cs.paddingRight) || 0;
+      pb = parseFloat(cs.paddingBottom) || 0;
+    } catch (err) {
+      /* ohne Padding */
+    }
+    return {
+      left: r.left + (f.clientLeft || 0) + pl,
+      top: r.top + (f.clientTop || 0) + pt,
+      width: Math.max(0, (f.clientWidth || 0) - pl - pr),
+      height: Math.max(0, (f.clientHeight || 0) - pt - pb),
+    };
+  }
+
+  // In den Eltern-Viewport verschieben und auf die sichtbare iframe-Flaeche beschneiden.
+  function shiftIntoBox(r, box) {
+    const l = Math.max(r.left + box.left, box.left);
+    const t = Math.max(r.top + box.top, box.top);
+    const rr = Math.min(r.left + box.left + r.width, box.left + box.width);
+    const bb = Math.min(r.top + box.top + r.height, box.top + box.height);
+    return { left: l, top: t, width: Math.max(0, rr - l), height: Math.max(0, bb - t) };
+  }
+
+  function onFrameGeo(event) {
+    const d = event.data;
+    if (!d || typeof d !== "object" || d.__steplyFrameGeo !== 1) return;
+    if (!recording || mode !== "guide") return;
+    if (!event.source || event.source === window) return;
+    const key = typeof d.key === "string" && /^[a-z0-9]{8,40}$/.test(d.key) ? d.key : "";
+    const rect = cleanPx(d.rect);
+    if (!key || !rect) return;
+    const sens = Array.isArray(d.sensitive)
+      ? d.sensitive.slice(0, MAX_SENSITIVE).map(cleanPx).filter(Boolean)
+      : [];
+    const frame = findFrameElement(event.source);
+    if (!frame) return; // nur echte Kind-Frames DIESES Dokuments
+    let box;
+    try {
+      box = frameContentBox(frame);
+    } catch (err) {
+      return;
+    }
+    const outRect = shiftIntoBox(rect, box);
+    const outSens = sens
+      .map((r) => shiftIntoBox(r, box))
+      .filter((r) => r.width > 0 && r.height > 0);
+    if (!IS_TOP) {
+      postFrameGeo(key, outRect, outSens);
+      return;
+    }
+    const norm = (r) => normRect(r.left, r.top, r.width, r.height);
+    // Sensible Felder: die des iframes (umgerechnet) + die des Hauptfensters (auch die sind im
+    // Screenshot sichtbar). Kappe wie collectSensitiveRects.
+    const sensitive = outSens
+      .map(norm)
+      .filter((r) => r.w * r.h > 0)
+      .concat(collectSensitiveRects())
+      .slice(0, MAX_SENSITIVE);
+    sendToPanel({ type: "steply-frame-geo", key, rect: norm(outRect), sensitive });
+  }
+  window.addEventListener("message", onFrameGeo);
 
   // Ist ein editierbares Feld mit GEAENDERTEM Wert fokussiert, ZUERST den Eingabe-Schritt
   // senden und das Feld abrechnen (settled) - damit ein direkt folgender Klick DAHINTER
@@ -947,6 +1349,151 @@
     emitStep(fe.el, "type");
     return true;
   }
+  // Wie oben, aber nur, wenn das Ziel NICHT im fokussierten Feld liegt.
+  function flushUnlessInside(target) {
+    const fe = focusedEditable;
+    const inside = !!(
+      fe && fe.el && (target === fe.el || (fe.el.contains && fe.el.contains(target)))
+    );
+    if (!inside) flushPendingInput();
+  }
+
+  // ---- Hover-Menues (Welle 48) -----------------------------------------------------------
+  // Klickt man einen Eintrag in einem per Maus-DRUEBER geoeffneten Menue, braucht die Wiedergabe
+  // vorher ein Hover auf den Ausloeser. Erkennung KONSERVATIV (lieber kein hover als ein falsches):
+  //   (a) ARIA: ein Element mit aria-expanded="true" ist Vorfahre des Ziels (mit Menue-Container
+  //       dazwischen) ODER zeigt per aria-controls / als direktes Geschwister auf ein Menue, in
+  //       dem das Ziel liegt;
+  //   (b) der vorige erfasste Klick-Schritt galt NICHT diesem Ausloeser (sonst per Klick geoeffnet);
+  //   (c) der Mauszeiger war in den letzten 5 s ueber dem Ausloeser (mouseover, nur Referenzen).
+  // Reine CSS-:hover-Menues (ohne ARIA) erkennen wir bewusst NICHT: sicher prüfbar waere das nur
+  // ueber die Stylesheet-Regeln (display/visibility per :hover) — zu teuer und zu fehleranfaellig.
+  const HOVER_TRIGGER_SEL = '[aria-haspopup]:not([aria-haspopup="false"]), [aria-expanded]';
+  const MENU_CONTAINER_SEL = '[role="menu"], [role="menubar"], [role="listbox"], [role="group"], ul, ol';
+  const HOVER_RECENT_MS = 5000;
+  let hoverSeen = []; // [{ el, t }] — die letzten Ausloeser unter dem Zeiger (max. 8)
+
+  function onMouseOver(event) {
+    if (!recording || mode !== "guide") return;
+    const trig = closestDeep(realTarget(event), HOVER_TRIGGER_SEL);
+    if (!trig) return;
+    const now = Date.now();
+    const last = hoverSeen[hoverSeen.length - 1];
+    if (last && last.el === trig) {
+      last.t = now;
+      return;
+    }
+    hoverSeen = hoverSeen.filter((h) => h.el !== trig && now - h.t <= HOVER_RECENT_MS);
+    hoverSeen.push({ el: trig, t: now });
+    if (hoverSeen.length > 8) hoverSeen.shift();
+  }
+  document.addEventListener("mouseover", onMouseOver, true);
+
+  // Hover-Ausloeser fuer ein Klick-Ziel oder null. Rueckgabe { selector, label }.
+  function hoverFor(el) {
+    if (!el || el.nodeType !== 1) return null;
+    try {
+      const chain = [];
+      for (let n = flatParent(el), i = 0; n && i < 60; n = flatParent(n), i++) chain.push(n);
+      const depthOf = (x) => (x === el ? 0 : chain.indexOf(x) + 1); // 0 = el, -: nicht drin
+      let best = null; // { trig, depth } — das dem Ziel naechste Menue gewinnt
+      const consider = (trig, depth) => {
+        if (depth <= 0) return;
+        if (!best || depth < best.depth) best = { trig, depth };
+      };
+      // (a1) Vorfahre mit aria-expanded="true" UND ein Menue-Container zwischen ihm und dem Ziel
+      // (sonst ist es ein Klick auf den Ausloeser selbst).
+      for (let i = 0; i < chain.length; i++) {
+        const n = chain[i];
+        if (n.nodeType !== 1 || !n.getAttribute || n.getAttribute("aria-expanded") !== "true") continue;
+        let menuBetween = false;
+        for (let j = 0; j < i; j++) {
+          if (chain[j].nodeType === 1 && chain[j].matches && chain[j].matches(MENU_CONTAINER_SEL)) {
+            menuBetween = true;
+            break;
+          }
+        }
+        if (menuBetween) consider(n, i + 1);
+        break; // nur der innerste expandierte Vorfahre
+      }
+      // (a2) aria-controls bzw. direktes Geschwister-Menue
+      const scopes = [document];
+      const sr = shadowRootOf(el);
+      if (sr) scopes.push(sr);
+      for (const sc of scopes) {
+        let list = [];
+        try {
+          list = sc.querySelectorAll('[aria-expanded="true"]');
+        } catch (err) {
+          list = [];
+        }
+        for (const t of list) {
+          if (t === el || depthOf(t) > 0) continue;
+          const ctl = t.getAttribute("aria-controls");
+          if (ctl) {
+            const sco = scopeOf(t);
+            for (const id of ctl.split(/\s+/)) {
+              const m = id && sco.getElementById ? sco.getElementById(id) : null;
+              if (m) consider(t, depthOf(m));
+            }
+          }
+          const sib = t.nextElementSibling;
+          if (sib) consider(t, depthOf(sib));
+        }
+      }
+      if (!best) return null;
+      const trig = best.trig;
+      if (trig === el || el.contains(trig)) return null;
+      // Eingabe-Ausloeser (Autocomplete-Combobox) oeffnen per Tippen, nicht per Hover.
+      if (editableInfo(trig).editable) return null;
+      // (b) per Klick geoeffnet?
+      const lc = lastClickStep;
+      if (lc && lc.el && (lc.el === trig || lc.el.contains(trig))) return null;
+      // (c) kuerzlich unter dem Zeiger?
+      const now = Date.now();
+      const hovered = hoverSeen.some(
+        (h) =>
+          now - h.t <= HOVER_RECENT_MS &&
+          h.el &&
+          (h.el === trig || trig.contains(h.el) || h.el.contains(trig))
+      );
+      if (!hovered) return null;
+      const selector = selectorFor(trig);
+      if (!selector) return null;
+      return { selector, label: labelFor(trig) };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // ---- Klick / Doppelklick / Zeiger-Ziehen ------------------------------------------------
+  const DOUBLE_MS = 500;
+  const DRAG_MIN_PX = 40;
+  let lastClickStep = null; // { el, ts, at, doubled } — letzter per Zeiger erfasster Klick
+  let pendingDown = null; // pointerdown wartet auf mousedown.detail (Doppelklick?)
+  let dragProbe = null; // { el, ts, x, y } — pointerdown eines Klick-Schritts (fuer Ziehen)
+
+  function emitClick(el, x, y) {
+    const opts = { cx: x, cy: y };
+    const hover = hoverFor(el);
+    if (hover) {
+      opts.interaction = { hover: hover.selector };
+      if (hover.label) opts.interaction.hoverLabel = hover.label;
+    }
+    const ts = emitStep(el, "click", opts);
+    lastClickStep = { el, ts, at: Date.now(), doubled: false };
+    dragProbe = { el, ts, x, y };
+    return ts;
+  }
+
+  // Zweiter Druck eines Doppelklicks: KEIN neuer Schritt, sondern der erste wird „double".
+  function markDouble(lc) {
+    if (!lc.doubled) {
+      lc.doubled = true;
+      sendPatch(lc.ts, { variant: "double" });
+    }
+    dragProbe = null;
+  }
 
   // SOFORT-ANLEITUNG (guide-Modus): auf pointerdown (Capture-Phase, VOR Klick-Wirkung und
   // Navigation) das geklickte Element erfassen. Ein Klick IN ein editierbares Feld erzeugt
@@ -956,17 +1503,17 @@
     // Nur Haupt-Taste (linksklick / primaerer Zeiger).
     if (typeof event.button === "number" && event.button !== 0) return;
 
-    const target = event.target;
+    const target = realTarget(event);
+    watchShadowRoots(target);
+    dragProbe = null;
+    pendingDown = null;
+    html5Drag = null;
 
     // EVENT-REIHENFOLGE (kritisch): pointerdown(Button) feuert VOR blur(Feld). Klickt man
     // ausserhalb des fokussierten Feldes, erst die Eingabe melden, dann den Klick.
     // Der Flush laeuft VOR dem Dead-Click-Filter: auch ein Klick ins Leere schliesst eine
     // offene Eingabe ab.
-    const fe = focusedEditable;
-    const insideFocused = !!(
-      fe && fe.el && (target === fe.el || (fe.el.contains && fe.el.contains(target)))
-    );
-    if (!insideFocused) flushPendingInput();
+    flushUnlessInside(target);
 
     // DEAD-CLICK-FILTER: Klick auf nicht-interaktive Flaeche (passive Karte, Absatz,
     // Leerraum) erzeugt KEINEN Schritt.
@@ -983,21 +1530,225 @@
     const elType = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
     if (elTag === "input" && elType === "range") return;
 
-    emitStep(el, "click", event.clientX || 0, event.clientY || 0);
+    const x = event.clientX || 0;
+    const y = event.clientY || 0;
+    // DOPPELKLICK: zweiter Druck auf dasselbe Element binnen 500 ms. Chrome liefert an
+    // pointerdown detail=0 — der Klickzaehler kommt erst mit dem mousedown derselben Eingabe
+    // (gleiche Task). Darum kurz aufschieben; kommt kein mousedown (Seite unterdrueckt es per
+    // preventDefault am pointerdown), gilt es nach setTimeout 0 als normaler Klick.
+    const lc = lastClickStep;
+    if (lc && lc.el === el && Date.now() - lc.at <= DOUBLE_MS) {
+      if (event.detail >= 2) {
+        markDouble(lc);
+        return;
+      }
+      const pd = { el, x, y };
+      pendingDown = pd;
+      setTimeout(() => {
+        if (pendingDown !== pd) return;
+        pendingDown = null;
+        emitClick(pd.el, pd.x, pd.y);
+      }, 0);
+      return;
+    }
+    emitClick(el, x, y);
   }
 
   // pointerdown feuert VOR click und VOR der Navigation -> der Screenshot zeigt die Seite
   // im Ausgangszustand (mit dem Element, das gleich geklickt wird).
   document.addEventListener("pointerdown", onPointerDown, true);
 
+  function onMouseDown(event) {
+    const pd = pendingDown;
+    if (!pd) return;
+    pendingDown = null;
+    if (!recording || mode !== "guide") return;
+    const lc = lastClickStep;
+    if (event.button === 0 && event.detail >= 2 && lc && lc.el === pd.el) {
+      markDouble(lc);
+      return;
+    }
+    emitClick(pd.el, pd.x, pd.y);
+  }
+  document.addEventListener("mousedown", onMouseDown, true);
+
+  // Sieht die Quelle nach Zieh-Griff aus? (Sortier-Listen ohne HTML5-DnD.) Konservativ: Cursor
+  // grab/move oder typische Drag-Attribute an der Quelle bzw. bis zu 3 Ebenen darueber, oder
+  // der Zieh-Cursor am body (viele Bibliotheken setzen ihn waehrend des Ziehens).
+  function looksDraggable(el) {
+    const DRAG_CURSOR = /^(grab|grabbing|move|all-scroll|-webkit-grab|-webkit-grabbing)$/;
+    let n = el;
+    for (let i = 0; n && n.nodeType === 1 && i < 4; i++, n = flatParent(n)) {
+      try {
+        if (DRAG_CURSOR.test(getComputedStyle(n).cursor)) return true;
+      } catch (err) {
+        /* egal */
+      }
+      const g = n.getAttribute ? n : null;
+      if (g) {
+        if (g.hasAttribute("aria-grabbed") || g.hasAttribute("data-rbd-drag-handle-draggable-id")) return true;
+        if (g.hasAttribute("data-drag-handle") || g.hasAttribute("data-sortable-handle")) return true;
+        const rd = g.getAttribute("aria-roledescription") || "";
+        if (/drag|zieh|sortier|sortable|verschieb/i.test(rd)) return true;
+      }
+    }
+    try {
+      if (document.body && DRAG_CURSOR.test(getComputedStyle(document.body).cursor)) return true;
+    } catch (err) {
+      /* egal */
+    }
+    return false;
+  }
+
+  // Interaktives Element unter dem Loslass-Punkt, das NICHT zur Quelle gehoert (die gezogene
+  // Kopie liegt oft direkt unter dem Zeiger). Oberstes fremdes Element nicht interaktiv -> null.
+  function dropTargetAt(x, y, srcEl) {
+    let list = [];
+    try {
+      list = document.elementsFromPoint(x, y);
+    } catch (err) {
+      list = [];
+    }
+    for (let e of list) {
+      for (let i = 0; e && e.shadowRoot && i < 5; i++) {
+        let inner = null;
+        try {
+          inner = e.shadowRoot.elementFromPoint(x, y);
+        } catch (err) {
+          inner = null;
+        }
+        if (!inner || inner === e) break;
+        e = inner;
+      }
+      if (!e || e === srcEl || srcEl.contains(e) || e.contains(srcEl)) continue;
+      const it = interactiveFor(e);
+      if (it && it !== srcEl && !srcEl.contains(it) && !it.contains(srcEl)) return it;
+      return null;
+    }
+    return null;
+  }
+
+  // Zeiger-Ziehen OHNE DnD-Events (Sortier-Listen): pointerdown eines Klick-Schritts, pointerup
+  // >40 px entfernt auf einem ANDEREN interaktiven Element -> den Klick-Schritt zu „drag" patchen.
+  // (Ein click-Event kommt erst NACH pointerup — und landet bei Zieh-Gesten am gemeinsamen
+  // Vorfahren; darum entscheiden Distanz + Zieh-Griff + fremdes Ziel.)
+  function onPointerUp(event) {
+    const dp = dragProbe;
+    dragProbe = null;
+    if (!dp || !recording || mode !== "guide") return;
+    if (typeof event.button === "number" && event.button !== 0) return;
+    const x = event.clientX || 0;
+    const y = event.clientY || 0;
+    if (Math.hypot(x - dp.x, y - dp.y) <= DRAG_MIN_PX) return;
+    if (!looksDraggable(dp.el)) return;
+    const dropEl = dropTargetAt(x, y, dp.el);
+    if (!dropEl) return;
+    const drop = selectorFor(dropEl);
+    if (!drop) return;
+    const inter = { variant: "drag", drop };
+    const dl = labelFor(dropEl);
+    if (dl) inter.dropLabel = dl;
+    sendPatch(dp.ts, inter);
+  }
+  document.addEventListener("pointerup", onPointerUp, true);
+
+  // ---- HTML5 Drag & Drop + Datei-Drop (Welle 48) -------------------------------------------
+  const DROP_CONTAINER_SEL =
+    '[aria-dropeffect], [dropzone], [role="listitem"], [role="row"], [role="gridcell"], ' +
+    '[role="list"], [role="listbox"], [role="grid"], [role="tree"], [role="treeitem"], ' +
+    '[role="region"], li, ul, ol, td, tr, section';
+  let html5Drag = null; // { ts, emitted, dropped }
+
+  // dragstart: Quelle merken. Gab es fuer sie schon einen Klick-Schritt (pointerdown), wird
+  // DER beim drop gepatcht; sonst (nicht-interaktive draggable-Kachel) jetzt einen Schritt
+  // senden — und ihn zuruecknehmen, falls nie abgelegt wird (dragend ohne drop).
+  function onDragStart(event) {
+    if (!recording || mode !== "guide") return;
+    const t = realTarget(event);
+    const src = closestDeep(t, '[draggable="true"]') || t;
+    const dp = dragProbe;
+    dragProbe = null;
+    if (dp && dp.el && (dp.el === src || dp.el.contains(src) || src.contains(dp.el))) {
+      html5Drag = { ts: dp.ts, emitted: false, dropped: false };
+      return;
+    }
+    const el = interactiveFor(src) || src;
+    if (!el || el.nodeType !== 1) return;
+    html5Drag = { ts: emitStep(el, "click"), emitted: true, dropped: false };
+  }
+  document.addEventListener("dragstart", onDragStart, true);
+
+  function onDrop(event) {
+    if (!recording || mode !== "guide") return;
+    const t = realTarget(event);
+    const hd = html5Drag;
+    if (!hd) {
+      // Datei aus dem Explorer auf eine Drop-Zone -> Upload-Schritt (Datei-Bruecke, nur Metadaten).
+      let files = null;
+      try {
+        files = event.dataTransfer && event.dataTransfer.files;
+      } catch (err) {
+        files = null;
+      }
+      if (files && files.length) {
+        const zone = interactiveFor(t) || closestDeep(t, DROP_CONTAINER_SEL) || t;
+        if (zone && zone.nodeType === 1) emitUploadStep(zone, files[0], false);
+      }
+      return;
+    }
+    hd.dropped = true;
+    html5Drag = null; // dragend erreicht uns evtl. nie (Quelle beim Ablegen entfernt)
+    const dropEl = interactiveFor(t) || closestDeep(t, DROP_CONTAINER_SEL) || t;
+    const drop = dropEl && dropEl.nodeType === 1 ? selectorFor(dropEl) : undefined;
+    if (!drop) return;
+    const inter = { variant: "drag", drop };
+    const dl = labelFor(dropEl);
+    if (dl) inter.dropLabel = dl;
+    sendPatch(hd.ts, inter);
+  }
+  document.addEventListener("drop", onDrop, true);
+
+  function onDragEnd() {
+    const hd = html5Drag;
+    html5Drag = null;
+    if (hd && hd.emitted && !hd.dropped && recording && mode === "guide") sendRetract(hd.ts);
+  }
+  document.addEventListener("dragend", onDragEnd, true);
+
+  // ---- Rechtsklick (Welle 48) -------------------------------------------------------------
+  // Nur aufnehmbar, wenn die Seite ein EIGENES Kontextmenue zeigt (das Browser-Menue laesst sich
+  // nicht abspielen). Ob sie das tut (preventDefault), wissen wir erst NACH der Auslieferung —
+  // darum SOFORT senden (Screenshot vor dem Menue) und notfalls zuruecknehmen.
+  function onContextMenu(event) {
+    if (!recording || mode !== "guide") return;
+    const target = realTarget(event);
+    watchShadowRoots(target);
+    flushUnlessInside(target);
+    const el = interactiveFor(target) || target;
+    if (!el || el.nodeType !== 1 || el === document.body || el === document.documentElement) return;
+    const ts = emitStep(el, "click", {
+      cx: event.clientX || 0,
+      cy: event.clientY || 0,
+      interaction: { variant: "right" },
+    });
+    setTimeout(() => {
+      if (!event.defaultPrevented) sendRetract(ts);
+    }, 0);
+  }
+  document.addEventListener("contextmenu", onContextMenu, true);
+
   // focusin: Startwert eines editierbaren Feldes merken (bleibt LOKAL, nie ans Panel).
   function onFocusIn(event) {
     if (!recording || mode !== "guide") return;
-    const info = editableInfo(event.target);
+    const target = realTarget(event);
+    watchShadowRoots(target);
+    const info = editableInfo(target);
     if (!info.editable) {
       focusedEditable = null;
       return;
     }
+    // Dasselbe Ereignis kann am Shadow-Root UND am document ankommen -> nicht neu starten.
+    if (focusedEditable && focusedEditable.el === info.control) return;
     focusedEditable = {
       el: info.control,
       kind: info.kind,
@@ -1028,8 +1779,12 @@
   // input: Tippen in ein nicht erfasstes Feld (s. o.) -> jetzt uebernehmen.
   function onInput(event) {
     if (!recording || mode !== "guide") return;
-    if (focusedEditable && focusedEditable.el === event.target) return;
-    adoptEditable(event.target, true);
+    const target = realTarget(event);
+    if (focusedEditable && focusedEditable.el === target) return;
+    // contenteditable: input feuert am Editier-Wurzelelement; innere Knoten zaehlen mit.
+    if (focusedEditable && focusedEditable.el && focusedEditable.el.contains &&
+        focusedEditable.el.contains(target)) return;
+    adoptEditable(target, true);
   }
   document.addEventListener("input", onInput, true);
 
@@ -1051,16 +1806,139 @@
     }
   }
 
-  // keydown Enter: die Seite schickt gleich ab und navigiert weg — blur kommt dann NIE. Den
-  // Eingabe-Schritt darum JETZT melden (Screenshot zeigt noch das ausgefuellte Feld). Auch ein
-  // Enter ohne Aenderung (vorbefuelltes Feld abschicken) ist ein echter Schritt.
+  // ---- Enter in Chat-/Editor-Feldern (contenteditable, Welle 48) ---------------------------
+  // In Chats (Teams, Slack, Tickets) schickt Enter ab, in Editoren ist es ein Zeilenumbruch.
+  // Beides sieht beim keydown gleich aus. Darum: Schritt SOFORT senden (Screenshot zeigt die
+  // getippte Nachricht), nach 400 ms nachsehen: Feld leer oder weg -> war Absenden (bleibt);
+  // Inhalt noch da -> Zeilenumbruch -> Schritt zuruecknehmen, Feld offen lassen (blur meldet
+  // spaeter den normalen Eingabe-Schritt). Gelesen wird NUR die Textlaenge, lokal.
+  const RICH_ENTER_PROBE_MS = 400;
+  function richTextLen(el) {
+    try {
+      return (el.textContent || "").replace(/[\s​-‍﻿]/g, "").length;
+    } catch (err) {
+      return 0;
+    }
+  }
+  function probeRichEnter(fe) {
+    if (fieldSnapshot(fe.el, fe.kind) === fe.startValue) return;
+    fe.settled = true;
+    const el = fe.el;
+    const ts = emitStep(el, "type", { interaction: { enter: true } });
+    setTimeout(() => {
+      if (!recording || mode !== "guide") return;
+      if (!el.isConnected || richTextLen(el) === 0) {
+        // Abgeschickt. Bleibt das Feld fokussiert (naechste Nachricht), neu „scharf" stellen.
+        if (focusedEditable === fe) {
+          fe.startValue = fieldSnapshot(el, fe.kind);
+          fe.settled = false;
+        }
+        return;
+      }
+      sendRetract(ts);
+      if (focusedEditable === fe) fe.settled = false;
+      else emitStep(el, "type"); // Feld schon verlassen: dessen blur ist verpasst -> jetzt melden
+    }, RICH_ENTER_PROBE_MS);
+  }
+
+  // ---- Tastenkuerzel (Welle 48) -----------------------------------------------------------
+  // keydown mit Ctrl/Cmd/Alt + Taste -> Schritt variant "key" mit Anzeige-Form „Ctrl+S".
+  // KEIN Schritt: reine Modifier, Escape/Tab/Pfeile, Wiederholung (gedrueckt halten),
+  // AltGr-Zeichen (Ctrl+Alt+Q = @ auf deutscher Tastatur), Textbearbeitung in Feldern
+  // (Ctrl/Cmd + C/V/X/A/Z/Y, Loeschen/Pos1/Ende), Mac-Option-Sonderzeichen in Feldern.
+  const MODIFIER_KEYS =
+    /^(Control|Shift|Alt|AltGraph|Meta|OS|Win|CapsLock|NumLock|ScrollLock|Fn|FnLock|Hyper|Super|Dead|Process|Unidentified)$/;
+  const NO_STEP_KEYS = /^(Escape|Esc|Tab|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Up|Down|Left|Right)$/;
+  const IS_MAC = (() => {
+    try {
+      return /Mac|iPhone|iPad/i.test((navigator.platform || "") + " " + (navigator.userAgent || ""));
+    } catch (err) {
+      return false;
+    }
+  })();
+
+  // Haupttaste in Anzeige-Form: Buchstaben/Ziffern ueber event.code (layout-/Shift-fest),
+  // sonst benannte Tasten (F5, Enter, Delete, …); Space als „Space".
+  function shortcutKeyName(event) {
+    const code = event.code || "";
+    let m = /^Key([A-Z])$/.exec(code);
+    if (m) return m[1];
+    m = /^Digit(\d)$/.exec(code);
+    if (m) return m[1];
+    const k = event.key || "";
+    if (k === " " || code === "Space") return "Space";
+    if (k.length === 1) return k.toUpperCase();
+    if (/^[A-Za-z][A-Za-z0-9]{0,19}$/.test(k)) return k;
+    return "";
+  }
+
+  function onShortcut(event, target) {
+    if (event.repeat) return;
+    const k = event.key || "";
+    if (!k || MODIFIER_KEYS.test(k) || NO_STEP_KEYS.test(k)) return;
+    try {
+      if (event.getModifierState && event.getModifierState("AltGraph")) return;
+    } catch (err) {
+      /* egal */
+    }
+    if (event.ctrlKey && event.altKey && k.length === 1) return; // AltGr-Zeichen (@ € { …)
+    const primary = event.ctrlKey || event.metaKey;
+    const info = editableInfo(controlForLabel(target));
+    const inEditable = info.editable || !!(target && target.isContentEditable === true);
+    if (inEditable) {
+      if (primary && (/^Key[CVXAZY]$/.test(event.code || "") || /^[cvxazy]$/i.test(k))) return;
+      if (/^(Backspace|Delete|Home|End|PageUp|PageDown)$/.test(k)) return;
+      if (IS_MAC && event.altKey && !primary) return; // Option+Taste = Sonderzeichen
+    }
+    const name = shortcutKeyName(event);
+    if (!name) return;
+    const parts = [];
+    if (event.ctrlKey) parts.push("Ctrl");
+    if (event.metaKey) parts.push(IS_MAC ? "Cmd" : "Meta");
+    if (event.altKey) parts.push("Alt");
+    if (event.shiftKey) parts.push("Shift");
+    parts.push(name);
+    const combo = parts.join("+");
+    // Offene Eingabe zuerst melden (getippt VOR dem Kuerzel) — das Feld bleibt offen, spaeteres
+    // Weitertippen wird beim Verlassen wieder erfasst.
+    const fe = focusedEditable;
+    if (fe && fe.el && !fe.settled) {
+      const now = fieldSnapshot(fe.el, fe.kind);
+      if (now !== fe.startValue) {
+        emitStep(fe.el, "type");
+        fe.startValue = now;
+      }
+    }
+    const active = deepActiveElement();
+    const el =
+      active && active.nodeType === 1 && active !== document.body && active !== document.documentElement
+        ? active
+        : null;
+    emitStep(el, "click", { interaction: { variant: "key", key: combo }, label: el ? "" : combo });
+  }
+
+  // keydown: Tastenkuerzel (s. o.) und Enter. Enter in einem einzeiligen Feld: die Seite
+  // schickt gleich ab und navigiert weg — blur kommt dann NIE. Den Eingabe-Schritt darum JETZT
+  // melden (Screenshot zeigt noch das ausgefuellte Feld). Auch ein Enter ohne Aenderung
+  // (vorbefuelltes Feld abschicken) ist ein echter Schritt. contenteditable: probeRichEnter.
   function onKeyDown(event) {
     if (!recording || mode !== "guide") return;
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-    const fe = adoptEditable(event.target, false);
-    if (!fe || fe.settled || !enterSubmits(fe)) return;
-    fe.settled = true;
-    emitStep(fe.el, "type", null, null, true);
+    if (event.isComposing) return;
+    const target = realTarget(event);
+    watchShadowRoots(target);
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      onShortcut(event, target);
+      return;
+    }
+    if (event.key !== "Enter" || event.shiftKey) return;
+    const fe = adoptEditable(target, false);
+    if (!fe || fe.settled) return;
+    if (enterSubmits(fe)) {
+      fe.settled = true;
+      emitStep(fe.el, "type", { interaction: { enter: true } });
+      return;
+    }
+    if (fe.kind === "rich") probeRichEnter(fe);
   }
   document.addEventListener("keydown", onKeyDown, true);
 
@@ -1069,7 +1947,7 @@
   function onFocusOut(event) {
     if (!recording || mode !== "guide") return;
     const fe = focusedEditable;
-    if (!fe || event.target !== fe.el) return;
+    if (!fe || realTarget(event) !== fe.el) return;
     focusedEditable = null;
     if (fe.settled) return; // bereits per pointerdown-Flush abgerechnet
     const now = fieldSnapshot(fe.el, fe.kind);
@@ -1081,6 +1959,8 @@
   // (sichtbare UI-Auswahl/-Position, kein Getipptes). Range feuert change je Raststufe
   // (Tastatur) bzw. beim Loslassen — pro Element gedrosselt, damit Feinjustieren nicht
   // zehn Schritte erzeugt (der Screenshot zeigt dann die letzte erfasste Position).
+  // Shadow DOM: change ist nicht composed -> watchShadowRoots haengt denselben Listener an
+  // jeden beruehrten Root (event.target ist dort das echte Element).
   let lastRangeStep = { el: null, t: 0 };
   function onChange(event) {
     if (!recording || mode !== "guide") return;
@@ -1118,9 +1998,13 @@
   let lastClickPx = null;
   function showCapturePulse() {
     if (!lastClickPx) return;
+    // Einmal verbrauchen: das Panel stoesst den Puls an ALLE Frames des Tabs an (all_frames,
+    // Welle 48) — nur der Frame, der zuletzt einen Schritt erfasst hat, soll aufleuchten.
+    const px = lastClickPx;
+    lastClickPx = null;
     const pad = 4;
     const el = document.createElement("div");
-    const hasRect = lastClickPx.width > 2 && lastClickPx.height > 2;
+    const hasRect = px.width > 2 && px.height > 2;
     const st = el.style;
     st.position = "fixed";
     st.zIndex = "2147483647";
@@ -1129,14 +2013,14 @@
     st.boxShadow = "0 0 0 4px rgba(239,106,78,0.25)";
     st.borderRadius = hasRect ? "10px" : "50%";
     if (hasRect) {
-      st.left = lastClickPx.left - pad + "px";
-      st.top = lastClickPx.top - pad + "px";
-      st.width = lastClickPx.width + pad * 2 + "px";
-      st.height = lastClickPx.height + pad * 2 + "px";
+      st.left = px.left - pad + "px";
+      st.top = px.top - pad + "px";
+      st.width = px.width + pad * 2 + "px";
+      st.height = px.height + pad * 2 + "px";
     } else {
       // Fallback ohne Element-Box: kleiner Kreis am Klickpunkt.
-      st.left = lastClickPx.cx - 16 + "px";
-      st.top = lastClickPx.cy - 16 + "px";
+      st.left = px.cx - 16 + "px";
+      st.top = px.cy - 16 + "px";
       st.width = "32px";
       st.height = "32px";
     }

@@ -1586,8 +1586,11 @@ async function captureImage(pending) {
 
 // Einen erfassten Schritt (Rohdaten + fertiges Bild) in die Liste aufnehmen. Bei geteiltem
 // Screenshot (Coalesce) bekommt jeder Schritt einen EIGENEN Objekt-URL (sauberes Revoke).
-function addGuideStep(src, img) {
+function addGuideStep(src, img, tabId) {
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
+  // Nachtraege (Welle 48b), die eintrafen, WAEHREND dieser Schritt fotografiert wurde:
+  // zurueckgenommen -> gar nicht aufnehmen; patch/frame-geo -> jetzt einmischen.
+  if (!guideTakePending(src, tabId, guideAmendPending, Date.now())) return;
   const step = {
     rect: src.rect,
     label: src.label || "",
@@ -1608,6 +1611,10 @@ function addGuideStep(src, img) {
     interaction:
       src.interaction && typeof src.interaction === "object" ? src.interaction : null,
     ts: src.ts || Date.now(),
+    // Panel-intern (NICHT hochgeladen): Absender-Tab (patch/retract adressieren tab+ts) und
+    // frameKey eines iframe-Schritts (steply-frame-geo reicht die echte Lage nach).
+    tabId: tabId == null ? null : tabId,
+    frameKey: typeof src.frameKey === "string" ? src.frameKey.slice(0, 40) : null,
     blob: img.blob,
     width: img.width,
     height: img.height,
@@ -1657,7 +1664,7 @@ async function drainGuideQueue() {
       const first = guideQueue.shift();
       const img = await captureImage(first);
       if (!img) continue;
-      addGuideStep(first.step, img);
+      addGuideStep(first.step, img, first.tabId);
       while (
         guideQueue.length &&
         guideActive &&
@@ -1666,7 +1673,7 @@ async function drainGuideQueue() {
       ) {
         const shared = guideQueue.shift();
         pulseTab(shared.tabId);
-        addGuideStep(shared.step, img);
+        addGuideStep(shared.step, img, shared.tabId);
       }
     }
   } finally {
@@ -1707,8 +1714,7 @@ function renderGuideSteps() {
 
     const lbl = document.createElement("span");
     lbl.className = "lbl";
-    lbl.textContent =
-      s.label || (s.action === "type" ? "Eingabe" : "Schritt " + (i + 1));
+    lbl.textContent = guideStepLabel(s, i);
 
     const rm = document.createElement("button");
     rm.className = "rm";
@@ -2452,6 +2458,206 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     guideBusyHint();
   }
   drainGuideQueue();
+});
+
+// ── Nachträge zu Schritten (Welle 48b) ──────────────────────────────────────────────────────
+// content.js schickt nach einem Schritt ggf. noch:
+//   steply-guide-patch   {ts, interaction}      Doppelklick / Ziehen -> in den Schritt mergen
+//   steply-guide-retract {ts}                   Schritt entfernen (Rechtsklick ohne eigenes Menü,
+//                                               Enter = Zeilenumbruch, Ziehen ohne Ablegen)
+//   steply-frame-geo     {key, rect, sensitive} echte Markierungs-Lage eines iframe-Schritts
+// Der Schritt kann dann in der Queue stecken, gerade fotografiert werden (weder Queue noch
+// Liste) oder schon in der Liste sein — alle drei Fälle werden bedient; der mittlere über
+// guideAmendPending, das addGuideStep beim Aufnehmen einlöst. Adressiert wird über
+// Absender-Tab + ts (bzw. Tab + frameKey). SICHERHEIT: Nachträge ändern NUR interaction
+// (bekannte Schlüssel) bzw. die Markierungs-Geometrie — nie Label/Bild/URL.
+const GUIDE_AMEND_TTL = 15000; // ms: so lange warten Nachträge auf „ihren" Schritt
+let guideAmendPending = { patch: new Map(), retract: new Map(), geo: new Map() };
+
+function guideAmendKey(tabId, id) {
+  return String(tabId) + ":" + String(id);
+}
+
+// PUR: eine 0..1-Box prüfen/klemmen (wie der Server). null bei ungültigen Zahlen.
+function guideCleanRect(r) {
+  if (!r || typeof r !== "object") return null;
+  const out = {};
+  for (const k of ["x", "y", "w", "h"]) {
+    const n = r[k];
+    if (typeof n !== "number" || !isFinite(n) || n < -0.001 || n > 1.001) return null;
+    out[k] = Math.min(1, Math.max(0, n));
+  }
+  if (out.x + out.w > 1) out.w = Math.max(0, 1 - out.x);
+  if (out.y + out.h > 1) out.h = Math.max(0, 1 - out.y);
+  return out;
+}
+
+// PUR: Geo-Nachricht prüfen -> { rect, sensitive } oder null.
+function guideCleanGeo(msg) {
+  if (!msg || typeof msg.key !== "string" || !/^[a-z0-9]{8,40}$/.test(msg.key)) return null;
+  const rect = guideCleanRect(msg.rect);
+  if (!rect) return null;
+  const sensitive = Array.isArray(msg.sensitive)
+    ? msg.sensitive.slice(0, 10).map(guideCleanRect).filter((r) => r && r.w * r.h > 0)
+    : [];
+  return { rect, sensitive };
+}
+
+// PUR: interaction-Nachtrag in einen Schritt mergen — nur bekannte Schlüssel (der Server
+// validiert ohnehin streng). frame kommt NIE per patch (nur mit dem Schritt selbst).
+const GUIDE_PATCH_KEYS = ["enter", "variant", "key", "drop", "dropLabel", "hover", "hoverLabel"];
+function guideMergeInteraction(step, patch) {
+  if (!step || !patch || typeof patch !== "object" || Array.isArray(patch)) return false;
+  let changed = false;
+  const inter =
+    step.interaction && typeof step.interaction === "object" ? Object.assign({}, step.interaction) : {};
+  for (const k of GUIDE_PATCH_KEYS) {
+    if (patch[k] === undefined) continue;
+    inter[k] = patch[k];
+    changed = true;
+  }
+  if (changed) step.interaction = inter;
+  return changed;
+}
+
+// PUR: Geo in einen Schritt übernehmen (Roh-Schritt der Queue ODER Listen-Schritt).
+function guideApplyGeo(step, geo) {
+  step.rect = geo.rect;
+  step.sensitive = geo.sensitive.length ? geo.sensitive : null;
+}
+
+// PUR (bis auf die übergebenen Container): einen Nachtrag anwenden.
+//   steps   = Liste der aufgenommenen Schritte ({ ts, tabId, frameKey, interaction, rect, … })
+//   queue   = wartende Einträge ({ step, tabId })
+//   pending = { patch, retract, geo } (Maps) für Schritte, die gerade fotografiert werden
+// Rückgabe: { removed: <Listen-Schritt>|null, changed: bool } (removed/changed -> neu zeichnen).
+function guideApplyAmend(steps, queue, pending, msg, tabId, now) {
+  const res = { removed: null, changed: false };
+  if (!msg || typeof msg !== "object") return res;
+  for (const m of [pending.patch, pending.retract, pending.geo]) {
+    for (const [k, v] of m) if (now - v.at > GUIDE_AMEND_TTL) m.delete(k);
+  }
+  if (msg.type === "steply-frame-geo") {
+    const geo = guideCleanGeo(msg);
+    if (!geo) return res;
+    const qi = queue.find((q) => q.tabId === tabId && q.step && q.step.frameKey === msg.key);
+    if (qi) {
+      guideApplyGeo(qi.step, geo);
+      return res;
+    }
+    const s = steps.find((x) => x.tabId === tabId && x.frameKey === msg.key);
+    if (s) {
+      guideApplyGeo(s, geo);
+      res.changed = true;
+      return res;
+    }
+    pending.geo.set(guideAmendKey(tabId, msg.key), { geo, at: now });
+    return res;
+  }
+  const ts = msg.ts;
+  if (typeof ts !== "number" || !isFinite(ts)) return res;
+  if (msg.type === "steply-guide-patch") {
+    const qi = queue.find((q) => q.tabId === tabId && q.step && q.step.ts === ts);
+    if (qi) {
+      guideMergeInteraction(qi.step, msg.interaction);
+      return res;
+    }
+    const s = steps.find((x) => x.tabId === tabId && x.ts === ts);
+    if (s) {
+      res.changed = guideMergeInteraction(s, msg.interaction);
+      return res;
+    }
+    const key = guideAmendKey(tabId, ts);
+    const prev = pending.patch.get(key);
+    const merged = prev ? Object.assign({}, prev.interaction, msg.interaction) : msg.interaction;
+    pending.patch.set(key, { interaction: merged, at: now });
+    return res;
+  }
+  if (msg.type === "steply-guide-retract") {
+    const qi = queue.findIndex((q) => q.tabId === tabId && q.step && q.step.ts === ts);
+    if (qi >= 0) {
+      queue.splice(qi, 1);
+      return res;
+    }
+    const s = steps.find((x) => x.tabId === tabId && x.ts === ts);
+    if (s) {
+      res.removed = s;
+      return res;
+    }
+    pending.retract.set(guideAmendKey(tabId, ts), { at: now });
+  }
+  return res;
+}
+
+// PUR: beim Aufnehmen eines (gerade fotografierten) Roh-Schritts wartende Nachträge
+// einlösen. false = zurückgenommen (nicht aufnehmen).
+function guideTakePending(src, tabId, pending, now) {
+  if (!src) return false;
+  const key = guideAmendKey(tabId, src.ts);
+  const r = pending.retract.get(key);
+  if (r) {
+    pending.retract.delete(key);
+    if (now - r.at <= GUIDE_AMEND_TTL) return false;
+  }
+  const p = pending.patch.get(key);
+  if (p) {
+    pending.patch.delete(key);
+    guideMergeInteraction(src, p.interaction);
+  }
+  if (typeof src.frameKey === "string") {
+    const gk = guideAmendKey(tabId, src.frameKey);
+    const g = pending.geo.get(gk);
+    if (g) {
+      pending.geo.delete(gk);
+      guideApplyGeo(src, g.geo);
+    }
+  }
+  return true;
+}
+
+// PUR: Anzeige-Text eines Schritts in der Liste — zeigt, WAS es ist (Rechtsklick, Ziehen, …).
+function guideStepLabel(s, i) {
+  const base = s.label || (s.action === "type" ? "Eingabe" : "Schritt " + (i + 1));
+  const it = s.interaction && typeof s.interaction === "object" ? s.interaction : null;
+  if (!it) return base;
+  let text = base;
+  if (it.variant === "key") {
+    const key = typeof it.key === "string" ? it.key : "";
+    text = "Taste: " + key + (s.label && s.label !== key ? " · " + s.label : "");
+  } else if (it.variant === "right") {
+    text = "Rechtsklick: " + base;
+  } else if (it.variant === "double") {
+    text = "Doppelklick: " + base;
+  } else if (it.variant === "drag") {
+    text = "Ziehen: " + base + " → " + (it.dropLabel || "Ziel");
+  } else if (it.enter) {
+    text = base + " ↵";
+  }
+  if (it.hoverLabel && it.variant !== "key") text = it.hoverLabel + " › " + text;
+  return text;
+}
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (
+    !msg ||
+    (msg.type !== "steply-guide-patch" &&
+      msg.type !== "steply-guide-retract" &&
+      msg.type !== "steply-frame-geo")
+  ) {
+    return;
+  }
+  if (!guideActive) return;
+  if (!fromPanelWindow(sender)) return;
+  const res = guideApplyAmend(
+    guideSteps,
+    guideQueue,
+    guideAmendPending,
+    msg,
+    sender.tab.id,
+    Date.now()
+  );
+  if (res.removed) removeGuideStep(res.removed);
+  else if (res.changed) renderGuideSteps();
 });
 
 // Live-Pairing (Welle 25): Wird das Panel gepairt, WAEHREND es offen ist (Seite ->
