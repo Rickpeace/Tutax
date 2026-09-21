@@ -268,6 +268,7 @@ try {
   ok((await h1(mp)) === "Tarif", "Mobil: Auswahl wechselt die Seite");
   await mp.goto(`${BASE}/app/settings/aussehen`, { waitUntil: "domcontentloaded" });
   await h1(mp);
+  await mp.waitForTimeout(800); // Hydration abwarten (wie im Desktop-Schritt), sonst geht die Eingabe ins Leere
   await mp.fill('input[name="color-text"]', "#222222");
   await mp.getByRole("region", { name: "Ungespeicherte Änderungen" }).waitFor({ timeout: 5_000 });
   const ov2 = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
