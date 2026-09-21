@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PencilLine, Eye, Undo2, Sparkles } from "lucide-react";
+import { PencilLine, Eye, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpToggle } from "@/components/app/help-toggle";
-import { CollapsibleSection } from "@/components/app/collapsible-section";
+import { PageHeader } from "@/components/app/page-header";
+import { categoryColor } from "@/lib/category-colors";
 import {
   setTemplateEnabled,
   forkTemplate,
@@ -23,6 +24,12 @@ export type TemplateItem = {
   categoryName: string;
 };
 
+/**
+ * Standard-Anleitungen von Steply (Welle 50d): derselbe Zeilenstil wie die Listenansicht der
+ * Anleitungen (Kategorie-Band, 2px-Linien, Spaltenkopf ab md) und derselbe Schalter wie die
+ * Karten — hier mit der Beschriftung „Auf der Hilfe-Seite". Funktionen unverändert:
+ * einblenden (setTemplateEnabled), anpassen (forkTemplate), zurücksetzen (resetTemplate).
+ */
 export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const [pending, start] = useTransition();
   // Optimistischer Schalter-Zustand; synct mit Server-Daten nach Fork/Reset.
@@ -70,92 +77,120 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const renderRow = (it: TemplateItem) => (
     <div
       key={it.templateId}
-      className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4"
+      className="flex flex-col gap-1.5 border-t-2 border-line-2 px-4 py-2.5 transition-colors hover:bg-[#fffcf7] md:grid md:grid-cols-[minmax(0,1fr)_110px_190px_auto] md:items-center md:gap-4"
+      data-testid="template-row"
     >
-      <span
-              className={
-                it.kind === "fork"
-                  ? "rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
-                  : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground"
-              }
-            >
-              {it.kind === "fork" ? "Angepasst" : "Standard"}
-            </span>
-            <span className="font-bold text-ink">{it.title}</span>
+      {/* Mobil: Titel ganze Breite (umbrechend), darunter Schalter + Aktionen. */}
+      <div className="flex min-w-0 items-start gap-2 md:items-center">
+        <span
+          className="line-clamp-2 min-w-0 text-sm font-extrabold text-ink md:truncate"
+          title={it.title}
+        >
+          {it.title}
+        </span>
+        <KindChip kind={it.kind} className="mt-px md:hidden" />
+      </div>
+      <span className="hidden md:block">
+        <KindChip kind={it.kind} />
+      </span>
+      {/* md:contents — ab md werden Schalter und Aktionen eigene Spalten des Rasters. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 md:contents">
+        <HelpToggle on={!!enabledMap[it.templateId]} onToggle={() => toggle(it.templateId)} />
 
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <HelpToggle on={!!enabledMap[it.templateId]} onToggle={() => toggle(it.templateId)} />
+        <div className="-mr-2 flex flex-wrap items-center gap-0.5 md:mr-0 md:justify-end md:gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/app/preview/${it.renderId}`} target="_blank" />}
+          >
+            <Eye className="size-4" /> Ansehen
+          </Button>
 
+          {it.kind === "fork" ? (
+            <>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 nativeButton={false}
-                render={<Link href={`/app/preview/${it.renderId}`} target="_blank" />}
+                render={<Link href={`/app/tutorials/${it.renderId}`} />}
               >
-                <Eye className="size-4" /> Ansehen
+                <PencilLine className="size-4" /> Bearbeiten
               </Button>
-
-              {it.kind === "fork" ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href={`/app/tutorials/${it.renderId}`} />}
-                  >
-                    <PencilLine className="size-4" /> Bearbeiten
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => {
-                      if (confirm("Eigene Anpassungen verwerfen und auf den Standard zurücksetzen?"))
-                        run(() => resetTemplate(it.templateId), "Auf Standard zurückgesetzt");
-                    }}
-                  >
-                    <Undo2 className="size-4" /> Zurücksetzen
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => run(() => forkTemplate(it.templateId))}
-                >
-                  <PencilLine className="size-4" /> Anpassen
-                </Button>
-              )}
-            </div>
-          </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                onClick={() => {
+                  if (confirm("Eigene Anpassungen verwerfen und auf den Standard zurücksetzen?"))
+                    run(() => resetTemplate(it.templateId), "Auf Standard zurückgesetzt");
+                }}
+              >
+                <Undo2 className="size-4" /> Zurücksetzen
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => run(() => forkTemplate(it.templateId))}
+            >
+              <PencilLine className="size-4" /> Anpassen
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 
   return (
-    <section>
-      <div className="mb-3 flex items-center gap-2 border-b border-line-2 pb-1.5">
-        <Sparkles className="size-4 text-primary" />
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-          Standard-Anleitungen von Steply
-        </h2>
-      </div>
-      <div className="space-y-6">
+    <section data-testid="template-section">
+      <PageHeader
+        sub
+        title="Standard-Anleitungen von Steply"
+        meta={`${items.length} ${items.length === 1 ? "Anleitung" : "Anleitungen"}`}
+        description={
+          <>
+            „Standard“ pflegt Steply zentral – Updates erscheinen automatisch. Beim Anpassen
+            entsteht Ihre eigene Kopie („Angepasst“).
+          </>
+        }
+      />
+      <div className="overflow-hidden rounded-card border-2 border-line bg-card">
+        <div className="hidden grid-cols-[minmax(0,1fr)_110px_190px_auto] gap-4 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
+          <span>Anleitung</span>
+          <span>Art</span>
+          <span>Hilfe-Seite</span>
+          <span />
+        </div>
         {groups.map((g) => (
-          <CollapsibleSection
-            key={g.name}
-            variant="sub"
-            title={g.name}
-            count={g.rows.length}
-            storageKey={`dash:tpl:${g.name}`}
-          >
-            <div className="space-y-2">{g.rows.map(renderRow)}</div>
-          </CollapsibleSection>
+          <div key={g.name}>
+            <div className="flex items-center gap-2 border-t-2 border-line bg-line-2 px-4 py-2 text-[11.5px] font-black uppercase tracking-[0.06em] text-ink-2 first:border-t-0 md:first:border-t-2">
+              <span
+                aria-hidden
+                className="size-2 rounded-full"
+                style={{ background: categoryColor(g.name).solid }}
+              />
+              {g.name}
+              <span className="text-faint">{g.rows.length}</span>
+            </div>
+            {g.rows.map(renderRow)}
+          </div>
         ))}
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        „Standard“ wird zentral von Steply gepflegt – Updates erscheinen automatisch.
-        Beim Anpassen entsteht Ihre eigene Kopie („Angepasst“).
-      </p>
     </section>
+  );
+}
+
+function KindChip({ kind, className = "" }: { kind: "standard" | "fork"; className?: string }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-[2px] text-[11px] font-black ${
+        kind === "fork" ? "bg-accent text-accent-foreground" : "bg-line-2 text-muted-foreground"
+      } ${className}`}
+    >
+      {kind === "fork" ? "Angepasst" : "Standard"}
+    </span>
   );
 }

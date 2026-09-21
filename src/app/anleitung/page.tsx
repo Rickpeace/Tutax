@@ -20,12 +20,12 @@ const steps = [
   {
     icon: UserPlus,
     t: "1. Konto erstellen",
-    d: "Registrieren Sie sich mit E-Mail. Beim ersten Login richten wir gemeinsam Ihre Hilfeseite ein (Name & Adresse).",
+    d: "Registrieren Sie sich mit E-Mail. Beim ersten Login richten wir gemeinsam Ihre Hilfe-Seite ein (Name & Adresse).",
   },
   {
     icon: PencilLine,
-    t: "2. Tutorial aufbauen",
-    d: "Klicken Sie „Neues Tutorial“ und fügen Sie Schritte hinzu. Mit dem „+“ zwischen den Karten setzen Sie neue Schritte genau dort ein, wo sie hingehören.",
+    t: "2. Anleitung erstellen",
+    d: "Klicken Sie oben rechts auf „Neue Anleitung“. Am schnellsten geht es mit der Steply-Erweiterung: einmal durchklicken, Steply macht daraus die Schritte. Alternativ aus einem Video oder von Hand – mit dem „+“ zwischen den Karten setzen Sie neue Schritte genau dort ein, wo sie hingehören.",
   },
   {
     icon: GitBranch,
@@ -34,8 +34,8 @@ const steps = [
   },
   {
     icon: ScanSearch,
-    t: "4. Screenshots & Highlights",
-    d: "Bild hochladen oder Foto aufnehmen, zuschneiden, dann Rechteck/Kreis/Pfeil setzen. Mit der Lupe vergrößern Sie das wichtige Element, mit Blur schwärzen Sie sensible Daten.",
+    t: "4. Screenshots & Markierungen",
+    d: "Bild hochladen oder Foto aufnehmen, zuschneiden, dann Rechteck/Kreis/Pfeil setzen. Mit der Lupe vergrößern Sie das wichtige Element, mit „Verpixeln“ machen Sie sensible Daten unkenntlich.",
   },
   {
     icon: Palette,
@@ -45,7 +45,7 @@ const steps = [
   {
     icon: Send,
     t: "6. Veröffentlichen",
-    d: "Über das ⋯-Menü der Tutorial-Karte „Veröffentlichen“. Das Tutorial erscheint dann auf Ihrer Hilfeseite.",
+    d: "Legen Sie den Schalter „Entwurf“ auf „Veröffentlicht“ um – direkt auf der Karte unter „Anleitungen“ oder oben im Editor. Dort wählen Sie auch, wer die Anleitung sieht: „Hilfe-Seite“ (Ihre Kunden) oder „Nur Team“ (erscheint dann in den Schulungen, mit Schulungsnachweis).",
   },
   {
     icon: Link2,

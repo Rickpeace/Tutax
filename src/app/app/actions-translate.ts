@@ -109,11 +109,11 @@ async function tutorialMeta(
 export async function translateTutorial(tutorialId: string): Promise<TranslateResult> {
   if (!aiConfigured()) throw new Error("KI ist nicht konfiguriert (OPENAI_API_KEY fehlt).");
   const loaded = await loadTutorialForTranslate(tutorialId);
-  if (!loaded) throw new Error("Tutorial nicht gefunden.");
+  if (!loaded) throw new Error("Anleitung nicht gefunden.");
   const { source, languages, accountId } = loaded;
   if (!languages.length) throw new Error("Keine Zusatzsprachen aktiviert.");
   if (!source.title.trim() && !source.steps.length)
-    throw new Error("Nichts zu übersetzen (leeres Tutorial).");
+    throw new Error("Nichts zu übersetzen (leere Anleitung).");
 
   const admin = createAdminClient();
   const done: ExtraLang[] = [];

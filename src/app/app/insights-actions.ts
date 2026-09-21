@@ -71,7 +71,7 @@ export async function createDraftFromQuestion(question: string): Promise<{ tutor
     ]);
     if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) {
       throw new Error(
-        `Free-Limit erreicht (${FREE_TUTORIAL_LIMIT} Tutorials). Für unbegrenzte Tutorials bitte auf Pro upgraden.`,
+        `Grenze des kostenlosen Tarifs erreicht (${FREE_TUTORIAL_LIMIT} Anleitungen). Für unbegrenzte Anleitungen wechseln Sie bitte zu Pro (Einstellungen → Tarif).`,
       );
     }
   }

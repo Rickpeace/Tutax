@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ArrowRight, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ChevronDown, ArrowRight, ArrowUp, ArrowDown, X, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,18 +175,26 @@ export function StepPanel({
             <ArrowDown className="size-4" />
           </Button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs ${dirty ? "font-semibold text-no" : "text-muted-foreground"}`}>
-            {dirty ? "Ungespeichert" : "Gespeichert"}
-          </span>
-          {dirty && (
-            <Button variant="ghost" size="sm" onClick={discard}>
-              Verwerfen
-            </Button>
+        {/* EIN Zustand statt „Gespeichert" neben ausgegrautem „Speichern": ohne Änderungen
+            nur ein ruhiger Haken, mit Änderungen die beiden Knöpfe (Welle 50d). */}
+        <div className="flex items-center gap-2" data-testid="step-save-state">
+          {dirty ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={discard}>
+                Verwerfen
+              </Button>
+              <Button size="sm" onClick={save} title="Änderungen an Titel und Erklärtext speichern">
+                <Save className="size-4" /> Speichern
+              </Button>
+            </>
+          ) : (
+            <span
+              className="flex items-center gap-1 text-xs font-bold text-muted-foreground"
+              title="Titel und Erklärtext sind gespeichert. Bild, Markierungen und Einstellungen speichern sofort."
+            >
+              <Check className="size-3.5 text-teal" /> Gespeichert
+            </span>
           )}
-          <Button size="sm" onClick={save} disabled={!dirty}>
-            <Save className="size-4" /> Speichern
-          </Button>
         </div>
       </div>
 
@@ -237,9 +245,6 @@ export function StepPanel({
         <Switch on={step.is_decision} />
       </button>
 
-      {/* Bedingte Schritte (Welle 42): nur für Automationen relevant; der Mensch ignoriert es. */}
-      <ConditionField step={step} onSetCondition={onSetCondition} />
-
       <div className="space-y-1.5">
         <Label>Erklärtext</Label>
         <RichText
@@ -284,6 +289,9 @@ export function StepPanel({
         </div>
       )}
 
+      {/* Nur für Automationen (Bedingung, Sprung) — der Mensch ignoriert es, darum eingeklappt. */}
+      {!step.is_decision && <AdvancedSection step={step} onSetCondition={onSetCondition} />}
+
       <div className="border-t border-line-2 pt-4">
         <Button
           variant="destructive"
@@ -301,7 +309,7 @@ export function StepPanel({
           <DialogHeader>
             <DialogTitle>Noch nicht gespeichert</DialogTitle>
             <DialogDescription>
-              Dieser Schritt hat Änderungen, die noch nicht gespeichert sind. Was möchtest du tun?
+              Dieser Schritt hat Änderungen, die noch nicht gespeichert sind. Was möchten Sie tun?
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -327,6 +335,54 @@ export function StepPanel({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * „Erweitert (für Automationen)" (Welle 50d): Bedingung und Sprung gelten nur beim
+ * automatischen Ausführen. Standardmäßig eingeklappt; ein Etikett im Kopf zeigt, dass
+ * trotzdem etwas eingestellt ist.
+ */
+function AdvancedSection({
+  step,
+  onSetCondition,
+}: {
+  step: Step;
+  onSetCondition: (id: string, condition: StepCondition | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = [step.condition ? "Bedingung" : null, step.jump ? "Sprung" : null].filter(Boolean);
+  return (
+    <div className="rounded-lg border border-border bg-card" data-testid="step-advanced">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+      >
+        <Zap className="size-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 text-sm font-semibold text-ink">Erweitert (für Automationen)</span>
+        {active.length > 0 && (
+          <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal-text">
+            {active.join(" + ")} aktiv
+          </span>
+        )}
+        <ChevronDown
+          className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-line-2 px-3 pb-3 pt-3">
+          <ConditionField step={step} onSetCondition={onSetCondition} />
+          {step.jump && (
+            <p className="text-xs text-muted-foreground">
+              Dieser Schritt hat einen Sprung für Automationen (überspringt bei zutreffender
+              Bedingung einen Block). Sie ändern ihn in der Automation unter „Automationen“.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -384,7 +440,7 @@ function ConditionField({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div>
       <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
@@ -393,7 +449,7 @@ function ConditionField({
           className="mt-0.5 size-4 accent-primary"
         />
         <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">Bedingung (für Automationen)</div>
+          <div className="text-sm font-semibold text-ink">Bedingung</div>
           <div className="text-xs text-muted-foreground">
             Diesen Schritt beim automatischen Ausführen nur ausführen, wenn er zutrifft — sonst
             überspringen. In der geführten Anleitung wird die Bedingung ignoriert.

@@ -29,9 +29,9 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
   const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
     <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
     <h2 style="margin:0 0 8px">Einladung zu ${org}</h2>
-    <p style="color:#5c5049;line-height:1.55">Du wurdest als <b>${roleLabel}</b> zum Team von <b>${org}</b> auf Steply eingeladen. Hast du schon ein Steply-Konto, meldest du dich einfach mit deinem bestehenden Passwort an — du wechselst danach automatisch ins neue Team. Sonst legst du beim Beitreten ein Passwort fest:</p>
+    <p style="color:#5c5049;line-height:1.55">Sie wurden als <b>${roleLabel}</b> zum Team von <b>${org}</b> auf Steply eingeladen. Haben Sie schon ein Steply-Konto, melden Sie sich einfach mit Ihrem bestehenden Passwort an — Sie wechseln danach automatisch ins neue Team. Sonst legen Sie beim Beitreten ein Passwort fest:</p>
     <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
-    <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>${link}</p>
+    <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Knopf nicht funktioniert, öffnen Sie diesen Link:<br>${link}</p>
   </div>`;
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -147,7 +147,7 @@ export async function acceptInvite(
     if (error)
       return {
         ok: false,
-        message: "Passwort stimmt nicht. Bitte das Passwort deines bestehenden Kontos verwenden – oder per Passwort-vergessen neu setzen.",
+        message: "Das Passwort stimmt nicht. Bitte verwenden Sie das Passwort Ihres bestehenden Kontos – oder setzen Sie es über „Passwort vergessen“ neu.",
       };
     userId = existing.id;
   } else {
@@ -163,7 +163,7 @@ export async function acceptInvite(
     if (error || !created?.user) return { ok: false, message: error?.message ?? "Konto konnte nicht angelegt werden." };
     userId = created.user.id;
     const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
-    if (signErr) return { ok: false, message: "Konto angelegt – bitte melde dich jetzt an." };
+    if (signErr) return { ok: false, message: "Konto angelegt – bitte melden Sie sich jetzt an." };
   }
 
   // Beitritt (idempotent) + Einladung als akzeptiert markieren.
@@ -190,7 +190,7 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Du bist nicht angemeldet." };
+  if (!user) return { ok: false, message: "Sie sind nicht angemeldet." };
 
   const admin = createAdminClient();
   const { data: inv } = await admin

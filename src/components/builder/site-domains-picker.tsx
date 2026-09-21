@@ -94,7 +94,7 @@ export function SiteDomainsPicker({
         }
       }}
     >
-      <PopoverTrigger className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-ink-2 transition-colors hover:bg-muted">
+      <PopoverTrigger className="flex max-w-full items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1 text-[12.5px] font-extrabold text-ink-2 transition-colors hover:border-[#e3d7c2] hover:text-ink">
         <Globe className="size-3.5 text-muted-foreground" />
         {summary ? (
           <span className="max-w-[12rem] truncate">{summary}</span>

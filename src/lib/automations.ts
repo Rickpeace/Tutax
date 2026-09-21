@@ -110,7 +110,7 @@ export const AUTOMATION_ERR_BRANCHING =
 export const AUTOMATION_ERR_TOO_FEW =
   "Zu wenige ausführbare Schritte.";
 export const AUTOMATION_ERR_NOT_FOUND =
-  "Tutorial nicht gefunden.";
+  "Anleitung nicht gefunden.";
 
 // Label/Titel, die nach einem Geheimnis riechen → type='secret'.
 const SECRET_RE = /passwor|pin\b|schl(ü|ue)ssel|secret|token|key/i;

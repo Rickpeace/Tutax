@@ -54,7 +54,7 @@ try { sharp = require("sharp"); qrcode = require("qrcode"); } catch (e) { consol
 const hasFfmpeg = (() => { try { return spawnSync("ffmpeg", ["-version"], { encoding: "utf8" }).status === 0; } catch { return false; } })();
 
 // ---- BUSINESS_REQUIRED-Meldung (aus lib/plan.ts, hier gespiegelt für den Gate-Text) ----
-const BUSINESS_REQUIRED = "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Abo.";
+const BUSINESS_REQUIRED = "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
 
 const createdTuts = [];
 let accountId, userId, jobIds = [];

@@ -33,7 +33,7 @@ export function DriftCheckButton({ tutorialId }: { tutorialId: string }) {
             action: { label: "Hinweise ansehen", onClick: () => router.push("/app/alerts") },
           });
         } else {
-          toast.success("Tutorial wirkt aktuell.");
+          toast.success("Die Anleitung wirkt aktuell.");
         }
         router.refresh();
       } catch {
@@ -43,8 +43,14 @@ export function DriftCheckButton({ tutorialId }: { tutorialId: string }) {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={run} disabled={pending}>
-      <ShieldQuestion className="size-4" /> {pending ? "Prüft …" : "Jetzt prüfen"}
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={run}
+      disabled={pending}
+      title="Prüft per KI, ob die Anleitung noch zur Website passt"
+    >
+      <ShieldQuestion className="size-4" /> {pending ? "Prüft …" : "Aktualität prüfen"}
     </Button>
   );
 }

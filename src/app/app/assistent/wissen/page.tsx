@@ -91,7 +91,7 @@ export default async function KnowledgePage() {
                       : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground"
                   }
                 >
-                  {published ? "Aktiv im Chatbot" : "Entwurf"}
+                  {published ? "Im KI-Assistenten aktiv" : "Entwurf"}
                 </span>
                 <span className="font-bold text-ink group-hover:text-primary">{a.title}</span>
                 <span className="ml-auto text-xs text-muted-foreground">

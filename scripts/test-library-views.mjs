@@ -154,7 +154,9 @@ try {
   await page.getByRole("button", { name: "Liste" }).click();
   await page.waitForTimeout(400);
   ok(await main.getByText("Website", { exact: true }).isVisible(), "Liste: Spaltenkopf „Website“");
-  const groupOrder = await main.locator("div.bg-line-2").allInnerTexts();
+  // Nur die Liste der eigenen Anleitungen (die Standard-Anleitungen darunter haben seit
+  // Welle 50d denselben Zeilenstil mit Kategorie-Bändern).
+  const groupOrder = await main.getByTestId("library-list").locator("div.bg-line-2").allInnerTexts();
   ok(
     groupOrder.length === 3 && /BELEGE/i.test(groupOrder[0]) && /LOHN/i.test(groupOrder[1]) && /SONSTIGES/i.test(groupOrder[2]),
     `Liste: nach Kategorie gruppiert, „Sonstiges“ zuletzt (${JSON.stringify(groupOrder)})`,

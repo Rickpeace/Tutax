@@ -40,7 +40,7 @@ export function InviteConfirm({
         </div>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">Einladung annehmen</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Du wurdest als <b>{roleLabel}</b> zu <b>{orgName || "einer Organisation"}</b> eingeladen.
+          Sie wurden als <b>{roleLabel}</b> zu <b>{orgName || "einer Organisation"}</b> eingeladen.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">Angemeldet als {currentEmail}.</p>
 

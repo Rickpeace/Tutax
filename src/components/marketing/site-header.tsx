@@ -14,7 +14,7 @@ export function SiteHeader() {
             Funktionen
           </Link>
           <Link href="/#how" className="hover:text-ink">
-            So funktioniert&apos;s
+            So funktioniert’s
           </Link>
           <Link href="/#preise" className="hover:text-ink">
             Preise

@@ -64,7 +64,7 @@ async function tutorialQuotaReached(
 
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */
 export async function createTutorial(formData: FormData) {
-  const title = String(formData.get("title") ?? "").trim() || "Neues Tutorial";
+  const title = String(formData.get("title") ?? "").trim() || "Neue Anleitung";
   const categoryId = (String(formData.get("category_id") ?? "") || null) as string | null;
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -177,7 +177,7 @@ export async function duplicateTutorial(id: string) {
     .select("*")
     .eq("id", id)
     .single<Tutorial>();
-  if (e1 || !src) throw new Error(e1?.message ?? "Tutorial nicht gefunden");
+  if (e1 || !src) throw new Error(e1?.message ?? "Anleitung nicht gefunden");
 
   const { data: copy, error: e2 } = await supabase
     .from("tutorials")
@@ -309,7 +309,7 @@ async function copyImagesToPublic(
         } catch (e) {
           // Lieber Abbruch als unredigierte Daten veröffentlichen.
           console.error("Blur-Einbrennen fehlgeschlagen:", e instanceof Error ? e.message : e);
-          throw new Error("Veröffentlichen abgebrochen: Die Schwärzung konnte nicht angewendet werden.");
+          throw new Error("Veröffentlichen abgebrochen: Die Verpixelung konnte nicht angewendet werden.");
         }
       }
       await admin.storage
@@ -352,7 +352,7 @@ export async function publishTutorial(tutorialId: string) {
     .select("id, title, slug, account_id, visibility")
     .eq("id", tutorialId)
     .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id" | "visibility">>();
-  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+  if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden");
 
   // Interne Tutorials: „veröffentlichen" bedeutet nur fürs Team freigeben.
   if (tutorial.visibility === "internal") {
@@ -505,7 +505,7 @@ export async function setTutorialVisibility(
     .select("id, title, slug, account_id, status, visibility")
     .eq("id", tutorialId)
     .single<VisibilityTutorial>();
-  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+  if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden");
 
   await applyVisibilityChange(supabase, account, tutorial, visibility);
   revalidatePath("/app");
@@ -537,7 +537,7 @@ export async function setTutorialAudience(
     .select("id, title, slug, account_id, status, visibility")
     .eq("id", tutorialId)
     .single<VisibilityTutorial>();
-  if (error || !tutorial) throw new Error(error?.message ?? "Tutorial nicht gefunden");
+  if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden");
 
   // Zuerst die Sichtbarkeit über die geteilte Logik umschalten (falls nötig).
   await applyVisibilityChange(supabase, account, tutorial, targetVisibility);

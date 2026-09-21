@@ -252,7 +252,7 @@ function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: 
             <Plus className="size-4" /> Schritt einfügen
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onRecord}>
-            <Zap className="size-4 text-primary" /> Ab hier mit Extension aufnehmen
+            <Zap className="size-4 text-primary" /> Ab hier mit der Steply-Erweiterung aufnehmen
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

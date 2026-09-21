@@ -109,7 +109,7 @@
     if (!d || d.__steply !== true || d.type !== "steply-pair") return;
     const token = typeof d.token === "string" ? d.token.slice(0, 200).trim() : "";
     if (!token) {
-      postPairResult({ ok: false, error: "Kein Token uebergeben." });
+      postPairResult({ ok: false, error: "Kein Verbindungscode übergeben." });
       return;
     }
     try {
@@ -129,7 +129,7 @@
             })
         );
     } catch (err) {
-      postPairResult({ ok: false, error: "Extension nicht erreichbar." });
+      postPairResult({ ok: false, error: "Steply-Erweiterung nicht erreichbar." });
     }
   });
 

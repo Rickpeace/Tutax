@@ -53,9 +53,9 @@ export function AcceptInviteForm({
         <h1 className="text-xl font-extrabold tracking-tight text-ink">Team beitreten</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {hasAccount ? (
-            <>Du hast schon ein Konto. Melde dich an, um {orgName ? <><b>{orgName}</b> </> : null}beizutreten.</>
+            <>Sie haben schon ein Konto. Melden Sie sich an, um {orgName ? <><b>{orgName}</b> </> : null}beizutreten.</>
           ) : (
-            <>Du wurdest {orgName ? <>zu <b>{orgName}</b> </> : null}eingeladen. Lege ein Passwort fest, um beizutreten.</>
+            <>Sie wurden {orgName ? <>zu <b>{orgName}</b> </> : null}eingeladen. Legen Sie ein Passwort fest, um beizutreten.</>
           )}
         </p>
 
@@ -65,7 +65,7 @@ export function AcceptInviteForm({
             <Input id="invite-email" type="email" value={email} disabled readOnly />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="invite-password">{hasAccount ? "Dein Passwort" : "Passwort festlegen"}</Label>
+            <Label htmlFor="invite-password">{hasAccount ? "Ihr Passwort" : "Passwort festlegen"}</Label>
             <PasswordInput
               id="invite-password"
               autoComplete={hasAccount ? "current-password" : "new-password"}
@@ -74,7 +74,7 @@ export function AcceptInviteForm({
               minLength={hasAccount ? undefined : 8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={hasAccount ? "Passwort deines Kontos" : "mindestens 8 Zeichen"}
+              placeholder={hasAccount ? "Passwort Ihres Kontos" : "mindestens 8 Zeichen"}
             />
           </div>
           {error && <p className="rounded-lg bg-no-soft px-3 py-2 text-sm text-no">{error}</p>}

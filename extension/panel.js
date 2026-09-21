@@ -732,7 +732,7 @@ function showConnect(mode) {
   els.connectTitle.textContent = change ? "Verbindung ändern" : "Mit Ihrem Steply-Konto verbinden";
   els.connectLead.textContent = change
     ? "Verbinden Sie diese Steply-Erweiterung mit einem anderen Konto – am einfachsten direkt in Steply."
-    : "Dann landen Aufnahmen direkt in Ihrer Bibliothek, und Sie können Anleitungen auf Websites zeigen.";
+    : "Dann landen Aufnahmen direkt bei Ihren Anleitungen, und Sie können Anleitungen auf Websites zeigen.";
   els.connectBack.hidden = !change;
   els.connectVideoLine.hidden = change;
   setManualOpen(false);
@@ -2096,7 +2096,7 @@ function showGuideDone(r) {
   if (r && r.fallback) {
     els.guideDoneTitle.textContent = "Als neue Anleitung gespeichert";
     els.guideDoneText.textContent =
-      "An der gewählten Stelle ging es nicht – die Aufnahme liegt deshalb als eigener Entwurf in Ihrer Bibliothek." +
+      "An der gewählten Stelle ging es nicht – die Aufnahme liegt deshalb als eigener Entwurf bei Ihren Anleitungen in Steply." +
       (r.fallbackReason ? " " + r.fallbackReason : "");
   } else if (r && r.inserted) {
     els.guideDoneTitle.textContent = "Schritte eingefügt";
@@ -2105,8 +2105,8 @@ function showGuideDone(r) {
   } else {
     els.guideDoneTitle.textContent = "Anleitung ist fertig";
     els.guideDoneText.textContent = title
-      ? "„" + title + "“ liegt als Entwurf in Ihrer Bibliothek."
-      : "Ihre Anleitung liegt als Entwurf in Ihrer Bibliothek.";
+      ? "„" + title + "“ liegt als Entwurf bei Ihren Anleitungen in Steply."
+      : "Ihre Anleitung liegt als Entwurf bei Ihren Anleitungen in Steply.";
   }
   setGuideUploadState("done");
 }

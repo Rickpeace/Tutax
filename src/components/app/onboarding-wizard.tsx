@@ -84,7 +84,7 @@ export function OnboardingWizard({
             ))}
           </div>
           <Button className="mt-6 w-full" onClick={() => setStep(1)}>
-            Los geht&apos;s <ArrowRight className="size-4" />
+            Los geht’s <ArrowRight className="size-4" />
           </Button>
         </div>
       ) : (
@@ -173,7 +173,7 @@ export function OnboardingWizard({
                 <p className="text-xs text-muted-foreground">
                   Mehrsprachige Hilfe-Seite gibt es im Business-Tarif.{" "}
                   <Link
-                    href="/app/settings/abo"
+                    href="/app/settings/tarif"
                     className="font-medium text-primary underline underline-offset-2"
                   >
                     Mehr erfahren

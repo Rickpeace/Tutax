@@ -69,7 +69,7 @@ export function ImageField({
     try {
       const u = videoUrl ?? (await getTutorialVideoUrl(tutorialId));
       if (!u) {
-        toast.error("Zu diesem Tutorial gibt es kein Quell-Video.");
+        toast.error("Zu dieser Anleitung gibt es kein Quell-Video.");
         return;
       }
       setVideoUrl(u);

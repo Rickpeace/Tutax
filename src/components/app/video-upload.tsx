@@ -89,7 +89,7 @@ export function VideoUpload({
     const MAX_MS = 12 * 60 * 1000; // nach 12 Min. aufgeben (Worker down / haengt)
     const iv = setInterval(async () => {
       if (Date.now() - startedAt > MAX_MS) {
-        setError("Die Verarbeitung dauert ungewöhnlich lange. Schau später bei deinen Tutorials nach oder versuch es erneut.");
+        setError("Die Verarbeitung dauert ungewöhnlich lange. Schauen Sie später bei Ihren Anleitungen nach oder versuchen Sie es erneut.");
         setPhase("failed");
         clearInterval(iv);
         return;
@@ -191,7 +191,7 @@ export function VideoUpload({
         } catch (err) {
           clicks = undefined;
           toast.error(err instanceof Error ? err.message : "Die Klick-Datei konnte nicht gelesen werden.", {
-            description: "Das Tutorial wird trotzdem erstellt — nur ohne Klick-Marker.",
+            description: "Die Anleitung wird trotzdem erstellt — nur ohne Klick-Marker.",
           });
         }
       }
@@ -252,7 +252,7 @@ export function VideoUpload({
   async function startRecording() {
     setError(null); setTutorialId(null); setNoMic(false);
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      setError("Dein Browser unterstützt keine Bildschirmaufnahme. Nutze Chrome/Edge oder lade eine Datei hoch.");
+      setError("Ihr Browser unterstützt keine Bildschirmaufnahme. Nutzen Sie Chrome/Edge oder laden Sie eine Datei hoch.");
       setPhase("failed"); return;
     }
     try {
@@ -316,7 +316,7 @@ export function VideoUpload({
         <DialogTrigger render={<Button variant="outline"><Clapperboard className="size-4" /> Aus Video</Button>} />
       )}
       <DialogContent className="sm:max-w-md" showCloseButton={phase !== "recording" && phase !== "uploading" && phase !== "bulk"}>
-        <DialogHeader><DialogTitle>Tutorial aus Video erstellen</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Anleitung aus Video erstellen</DialogTitle></DialogHeader>
 
         {phase === "idle" && (
           <div
@@ -329,8 +329,8 @@ export function VideoUpload({
             onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
           >
             <p className="text-sm text-muted-foreground">
-              Mach die Aufgabe einmal vor und erklär dabei ganz normal. Nach jedem Schritt sagst du
-              <b> „Schnitt“</b> — daraus wird ein Schritt mit Screenshot und Markierung.
+              Führen Sie die Aufgabe einmal vor und erklären Sie dabei ganz normal. Nach jedem
+              Schritt sagen Sie<b> „Schnitt“</b> — daraus wird ein Schritt mit Screenshot und Markierung.
             </p>
 
             {/* Optionales Thema (Welle 20): gibt der KI Kontext und wird der Titel. */}
@@ -356,10 +356,10 @@ export function VideoUpload({
                 <Info className="size-3.5 text-primary" /> So wird die Aufnahme am besten
               </p>
               <ol className="list-decimal space-y-1 pl-4 marker:text-muted-foreground">
-                <li>Zeig die Aufgabe <b>einmal in Ruhe</b> vor und sprich dabei, als würdest du sie einem Kollegen erklären.</li>
-                <li>Bewege die <b>Maus aufs Ziel</b> (Knopf/Feld) und halt kurz drauf, bevor du klickst.</li>
-                <li>Ist der Schritt fertig, sag <b>„Schnitt“</b> — das trennt sauber zum nächsten Schritt.</li>
-                <li>Ruhig arbeiten, nicht hetzen. Am Ende auf <b>„Aufnahme beenden“</b>.</li>
+                <li>Zeigen Sie die Aufgabe <b>einmal in Ruhe</b> und sprechen Sie dabei, als würden Sie sie einer Kollegin erklären.</li>
+                <li>Bewegen Sie die <b>Maus aufs Ziel</b> (Knopf/Feld) und halten Sie kurz darauf, bevor Sie klicken.</li>
+                <li>Ist der Schritt fertig, sagen Sie <b>„Schnitt“</b> — das trennt sauber zum nächsten Schritt.</li>
+                <li>Ruhig arbeiten, nicht hetzen. Am Ende auf <b>„Aufnahme beenden“</b> klicken.</li>
               </ol>
               <p className="pt-0.5">Kein Sekunden-Zählen, keine anderen Zauberwörter nötig. Feinschliff geht danach im Editor.</p>
             </div>
@@ -385,7 +385,7 @@ export function VideoUpload({
                 {clicksName ? (
                   <>Klick-Daten: <b className="text-ink">{clicksName}</b></>
                 ) : (
-                  "Klick-Daten (clicks.json, optional — vom Steply Recorder)"
+                  "Klick-Daten (clicks.json, optional — von der Steply-Erweiterung)"
                 )}
               </span>
               {clicksName && (
@@ -461,7 +461,7 @@ export function VideoUpload({
                 ? "In der Warteschlange …"
                 : progress
                 ? `${progress} …`
-                : "KI erstellt das Tutorial …"}
+                : "KI erstellt die Anleitung …"}
             </p>
             {clicksCount !== null && (
               <p className="flex items-center gap-1.5 text-xs font-medium text-primary">

@@ -61,7 +61,7 @@ export function ArticleEditor({ article }: { article: Article }) {
           await setArticlePublished(article.id, true);
           setPublished(true);
           setDirty(false);
-          toast.success("Aktiv im Chatbot");
+          toast.success("Im KI-Assistenten aktiv");
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Fehler");
         }
@@ -101,7 +101,7 @@ export function ArticleEditor({ article }: { article: Article }) {
       </Link>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <HelpToggle on={published} onToggle={togglePub} disabled={pending} label="Aktiv im Chatbot" />
+        <HelpToggle on={published} onToggle={togglePub} disabled={pending} label="Im KI-Assistenten aktiv" />
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={pending || !dirty} onClick={save}>
             <Save className="size-4" /> Speichern
@@ -132,7 +132,7 @@ export function ArticleEditor({ article }: { article: Article }) {
 
       {published && dirty && (
         <p className="mt-3 text-xs text-muted-foreground">
-          Nicht gespeicherte Änderungen – erst nach „Speichern“ im Chatbot-Wissen aktiv.
+          Nicht gespeicherte Änderungen – erst nach „Speichern“ im KI-Assistenten aktiv.
         </p>
       )}
     </div>

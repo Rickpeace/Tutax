@@ -24,4 +24,4 @@ export function isBusiness(account: { plan?: string | null }): boolean {
 
 /** Einheitliche Fehlermeldung für Business-Features. */
 export const BUSINESS_REQUIRED =
-  "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Abo.";
+  "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";

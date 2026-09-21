@@ -5,10 +5,10 @@ import { GapAction } from "@/components/app/gap-action";
 import { loadOpenGaps } from "@/lib/gaps";
 
 /**
- * Insights-Karte fürs Dashboard (letzte 30 Tage). Zeigt kompakt:
+ * Nutzungs-Karte unter den Anleitungen (letzte 30 Tage). Zeigt kompakt:
  * Aufrufe · Chat-Fragen · davon unbeantwortet · Feedback-Quote · und die
  * Top-3 unbeantworteten Fragen ("Das wurde gefragt, konnte aber nicht
- * beantwortet werden") — der Kern-Nutzwert: sagt der Firma, welches Tutorial fehlt.
+ * beantwortet werden") — der Kern-Nutzwert: sagt der Firma, welche Anleitung fehlt.
  *
  * Rendert NULL, wenn es im Zeitraum überhaupt keine Events gibt. Liest über den
  * RLS-Client (Mitglieder sehen nur eigene Events); EINE gebündelte Abfrage-Runde
@@ -59,15 +59,15 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
     feedbackTotal > 0 ? Math.round((upCount / feedbackTotal) * 100) : null;
 
   return (
-    <section className="mt-6 rounded-2xl border border-border bg-card p-5">
+    <section className="mt-8 rounded-card border-2 border-line bg-card p-5" data-testid="insights-card">
       <div className="mb-4 flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-accent text-primary">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
           <BarChart3 className="size-4" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-ink">Nutzung (letzte 30 Tage)</h2>
-          <p className="text-xs text-muted-foreground">
-            Wie Ihre Anleitungen und der Hilfe-Assistent genutzt werden.
+          <h2 className="text-[17px] font-black leading-tight text-ink">Nutzung (letzte 30 Tage)</h2>
+          <p className="text-[13px] font-semibold text-muted-foreground">
+            Wie Ihre Anleitungen und der KI-Assistent genutzt werden.
           </p>
         </div>
       </div>
@@ -75,7 +75,7 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Aufrufe" value={viewCount.toLocaleString("de-DE")} />
         <Stat
-          label="Chat-Fragen"
+          label="Fragen an die KI"
           value={chatCount.toLocaleString("de-DE")}
           hint={
             chatCount > 0
@@ -102,25 +102,25 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
       </div>
 
       {topGaps.length > 0 && (
-        <div className="mt-5 rounded-xl border border-line-2 bg-background/60 p-4">
-          <h3 className="text-xs font-semibold text-ink">
+        <div className="mt-5 rounded-card border-2 border-line-2 bg-background/60 p-4">
+          <h3 className="text-[13px] font-extrabold text-ink">
             Das wurde gefragt, konnte aber nicht beantwortet werden
           </h3>
-          <p className="mb-3 text-xs text-muted-foreground">
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Ein Hinweis, für welches Thema noch eine Anleitung fehlt.
           </p>
           <ul className="space-y-3">
             {topGaps.map((g) => (
               <li
                 key={g.question}
-                className="flex flex-col gap-2 text-sm text-ink-2 sm:flex-row sm:items-start sm:justify-between"
+                className="flex flex-col gap-2 text-sm font-semibold text-ink-2 sm:flex-row sm:items-start sm:justify-between"
               >
                 <span className="flex min-w-0 flex-1 items-start gap-2">
                   <span className="min-w-0 flex-1">
                     &bdquo;{g.question}&ldquo;
                   </span>
                   {g.count > 1 && (
-                    <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
+                    <span className="shrink-0 rounded-full bg-accent px-2 py-[2px] text-[11px] font-black text-accent-foreground tabular-nums">
                       {g.count}×
                     </span>
                   )}
@@ -131,7 +131,7 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
           </ul>
           <Link
             href="/app/assistent/fragen"
-            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-extrabold text-muted-foreground hover:text-primary"
           >
             Alle offenen Fragen <ArrowRight className="size-3.5" />
           </Link>
@@ -153,13 +153,13 @@ function Stat({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-line-2 bg-background/60 p-3">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="rounded-card border-2 border-line-2 bg-background/60 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-faint">
         {icon}
         {label}
       </div>
-      <div className="mt-1 text-2xl font-bold tabular-nums text-ink">{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
+      <div className="mt-1 text-2xl font-black tabular-nums text-ink">{value}</div>
+      {hint && <div className="mt-0.5 text-xs font-semibold text-muted-foreground">{hint}</div>}
     </div>
   );
 }

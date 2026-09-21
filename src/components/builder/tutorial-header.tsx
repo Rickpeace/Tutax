@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
+import { ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { StatusSwitch } from "@/components/app/status-switch";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
 import { DriftCheckButton } from "@/components/builder/drift-check-button";
@@ -26,6 +27,15 @@ import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/a
 import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
 import type { TutorialVisibility } from "@/lib/types";
 
+/**
+ * Kopf im Anleitungs-Editor (Welle 50d, Entwurf „App-Makeover" §4):
+ *   Zurück · Titel (Stift) · Kurzbeschreibung
+ *   EINE Steuerzeile: Status-Schalter (Veröffentlicht/Entwurf) | Segment „Hilfe-Seite | Nur Team"
+ *   + Schalter „Mit Schulungsnachweis" (nur bei Hilfe-Seite; Nur Team hat den Nachweis immer)
+ *   | Kategorie- und Website-Pill — rechts „Aktualität prüfen" und „Vorschau".
+ * Die Aktionen sind unverändert: publishTutorial/unpublishTutorial und setTutorialAudience
+ * (visibility public/internal + in_lernen).
+ */
 export function TutorialHeader({
   tutorialId,
   initialTitle,
@@ -56,22 +66,21 @@ export function TutorialHeader({
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
   const [editing, setEditing] = useState(false);
-  // Kurzbeschreibung (Untertitel auf der Hilfe-Seiten-Karte) — war bis 06.07. nirgends
-  // editierbar, obwohl /h sie anzeigt.
+  // Kurzbeschreibung (Untertitel auf der Hilfe-Seiten-Karte).
   const [desc, setDesc] = useState(initialDescription);
   const [savedDesc, setSavedDesc] = useState(initialDescription);
   const [descEditing, setDescEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
-  // Zwei Häkchen (Welle 20): „Auf der Hilfe-Seite" ⇔ public; „Im Lern-Bereich".
-  // publicOn ist die Ableitung aus der Sichtbarkeit; lernenOn ist bei intern implizit an.
+  // Wer sieht die Anleitung? „Hilfe-Seite" ⇔ public, „Nur Team" ⇔ internal.
+  // Der Schulungsnachweis (in_lernen) ist nur bei Hilfe-Seite wählbar; Nur Team hat ihn immer.
   const publicOn = visibility === "public";
   const [inLernen, setInLernen] = useState(initialInLernen);
   const [busy, setBusy] = useState(false);
   const [visBusy, setVisBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
   const [stale, setStale] = useState(translationsStale);
-  // Auto-Schwärzung (Welle 28): Anzahl Schritte mit ungeprüften Blurs (>0 = Gate offen).
+  // Auto-Verpixelung (Welle 28): Anzahl Schritte mit ungeprüften Verpixelungen (>0 = Gate offen).
   const [blurGate, setBlurGate] = useState<number | null>(null);
 
   async function translate() {
@@ -121,15 +130,17 @@ export function TutorialHeader({
     }
   }
 
-  // Der eigentliche Publish/Unpublish-Weg (Slug + Bilder in den öffentlichen Bucket bzw.
-  // entfernen). Brennt Blur weiterhin serverseitig über ALLE Blurs (inkl. suggested) ein.
+  // Der eigentliche Veröffentlichen-Weg (Slug + Bilder in den öffentlichen Bucket bzw.
+  // entfernen). Brennt Verpixelungen weiterhin serverseitig über ALLE Markierungen ein.
   async function doPublish(next: boolean) {
     setBusy(true);
     try {
       if (next) await publishTutorial(tutorialId);
       else await unpublishTutorial(tutorialId);
       setPublished(next);
-      const liveMsg = !publicOn ? "Für das Team freigegeben" : "Anleitung ist jetzt veröffentlicht";
+      const liveMsg = publicOn
+        ? "Anleitung ist jetzt veröffentlicht"
+        : "Veröffentlicht – für Ihr Team in den Schulungen";
       toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
@@ -141,8 +152,8 @@ export function TutorialHeader({
   async function togglePublish() {
     if (busy) return;
     const next = !published;
-    // Auto-Schwärzung (Welle 28): VOR dem Veröffentlichen prüfen, ob noch ungeprüfte
-    // automatische Schwärzungen offen sind. Nur ein UI-Gate — der Server blockiert nie,
+    // Auto-Verpixelung (Welle 28): VOR dem Veröffentlichen prüfen, ob noch ungeprüfte
+    // automatische Verpixelungen offen sind. Nur ein UI-Gate — der Server blockiert nie,
     // und die Prüfung selbst darf das Veröffentlichen niemals verhindern (fail-open).
     if (next) {
       setBusy(true);
@@ -162,19 +173,14 @@ export function TutorialHeader({
     await doPublish(next);
   }
 
-  // Zielgruppe umschalten (Häkchen). Regeln:
-  //  - „Auf der Hilfe-Seite" (publicOn): an ⇒ visibility public, aus ⇒ internal.
-  //  - „Im Lern-Bereich" (lernenOn): bei intern IMMER an (implizit, disabled). Bei
-  //    öffentlich = in_lernen.
-  //  - Beide aus ist nicht erlaubt: das letzte aktive Häkchen bleibt gesetzt.
+  // Zielgruppe setzen. Regeln (unverändert seit Welle 20):
+  //  - Hilfe-Seite ⇒ visibility public; Nur Team ⇒ internal.
+  //  - Schulungsnachweis: bei Nur Team IMMER (implizit, in_lernen=false); bei Hilfe-Seite = in_lernen.
   async function applyAudience(nextPublic: boolean, nextLernen: boolean) {
     if (visBusy) return;
-    // Hinweis: Ein „beide aus"-Zustand ist über die Häkchen NICHT erreichbar —
-    // Haken1 aus ⇒ visibility internal (= Team sichtbar, Lernen implizit an),
-    // Haken2 ist bei intern disabled-checked und lässt sich nicht abwählen.
     const prevVis = visibility;
     const prevLernen = inLernen;
-    // Optimistisch spiegeln (intern ⇒ Lernen implizit an, in_lernen zurückgesetzt).
+    // Optimistisch spiegeln (intern ⇒ Nachweis implizit, in_lernen zurückgesetzt).
     setVisibility(nextPublic ? "public" : "internal");
     setInLernen(nextPublic ? nextLernen : false);
     setVisBusy(true);
@@ -183,9 +189,9 @@ export function TutorialHeader({
       toast.success(
         nextPublic
           ? nextLernen
-            ? "Sichtbar: Hilfe-Seite + Schulungen"
-            : "Sichtbar: Hilfe-Seite"
-          : "Sichtbar: Nur Team (Schulungen)",
+            ? "Für die Hilfe-Seite – zusätzlich in den Schulungen mit Nachweis"
+            : "Für die Hilfe-Seite"
+          : "Nur für Ihr Team – in den Schulungen mit Nachweis",
       );
     } catch (e) {
       setVisibility(prevVis);
@@ -196,170 +202,194 @@ export function TutorialHeader({
     }
   }
 
-  // Klick auf „Auf der Hilfe-Seite" (Haken 1). Aus ⇒ intern (Lernen implizit).
-  const togglePublic = () => applyAudience(!publicOn, inLernen);
-  // Klick auf „Im Lern-Bereich" (Haken 2). Nur bei öffentlich wirksam (intern = disabled).
-  const toggleLernen = () => applyAudience(publicOn, !inLernen);
+  const setAudiencePublic = (nextPublic: boolean) => {
+    if (nextPublic === publicOn) return;
+    applyAudience(nextPublic, inLernen);
+  };
+  const toggleNachweis = () => applyAudience(true, !inLernen);
+
+  // Nur Team ist Business. Wer (nach einem Downgrade) schon Nur Team hat, darf zurück.
+  const teamLocked = !isBusiness && publicOn;
 
   return (
     <div className="mb-6">
       <Link
         href="/app"
-        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-ink"
+        className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-muted-foreground transition-colors hover:text-ink"
       >
         <ChevronLeft className="size-4" /> Zurück
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0">
-          {editing ? (
-            <input
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              onBlur={() => {
-                saveTitle();
+      <div className="min-w-0">
+        {editing ? (
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={() => {
+              saveTitle();
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setTitle(saved);
                 setEditing(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  setTitle(saved);
-                  setEditing(false);
-                }
-              }}
-              placeholder="Titel der Anleitung"
-              aria-label="Titel der Anleitung"
-              className="w-full rounded-md border border-ring bg-card px-2 py-0.5 text-xl font-extrabold tracking-tight text-ink outline-none"
-            />
-          ) : (
-            <div className="flex items-start gap-1.5">
-              <h1 className="min-w-0 text-xl font-extrabold tracking-tight text-ink break-words">
-                {saved || "Ohne Titel"}
-              </h1>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="mt-0.5 shrink-0 text-muted-foreground"
-                onClick={() => {
-                  setTitle(saved);
-                  setEditing(true);
-                }}
-                title="Titel bearbeiten"
-                aria-label="Titel bearbeiten"
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-            </div>
-          )}
-          {/* Kurzbeschreibung: erscheint als Untertitel auf der Hilfe-Seiten-Karte. */}
-          {descEditing ? (
-            <input
-              autoFocus
-              value={desc}
-              maxLength={160}
-              onChange={(e) => setDesc(e.target.value)}
-              onBlur={() => {
-                saveDescription();
-                setDescEditing(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  setDesc(savedDesc);
-                  setDescEditing(false);
-                }
-              }}
-              placeholder="Kurzbeschreibung — erscheint unter dem Titel auf der Hilfe-Seite"
-              aria-label="Kurzbeschreibung"
-              className="mt-1 w-full rounded-md border border-ring bg-card px-2 py-0.5 text-sm text-ink-2 outline-none"
-            />
-          ) : (
-            <button
-              type="button"
+              }
+            }}
+            placeholder="Titel der Anleitung"
+            aria-label="Titel der Anleitung"
+            className="w-full rounded-md border border-ring bg-card px-2 py-0.5 text-[22px] font-black tracking-tight text-ink outline-none"
+          />
+        ) : (
+          <div className="flex items-start gap-1.5">
+            <h1 className="min-w-0 break-words text-[22px] font-black leading-tight tracking-tight text-ink">
+              {saved || "Ohne Titel"}
+            </h1>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="mt-0.5 shrink-0 text-muted-foreground"
               onClick={() => {
-                setDesc(savedDesc);
-                setDescEditing(true);
+                setTitle(saved);
+                setEditing(true);
               }}
-              className="group mt-0.5 flex max-w-full items-start gap-1.5 text-left"
-              title="Kurzbeschreibung bearbeiten"
+              title="Titel bearbeiten"
+              aria-label="Titel bearbeiten"
             >
-              <span
-                className={
-                  "min-w-0 break-words text-sm " +
-                  (savedDesc ? "text-ink-2" : "text-muted-foreground italic")
-                }
-              >
-                {savedDesc || "Kurzbeschreibung ergänzen (erscheint auf der Hilfe-Seite)"}
-              </span>
-              <Pencil className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={togglePublish}
-              disabled={busy}
-              className="flex items-center gap-2 rounded-md py-0.5 text-sm disabled:opacity-70"
-              aria-pressed={published}
-              title={
-                published
-                  ? "Ist veröffentlicht – antippen für Entwurf"
-                  : !publicOn
-                    ? "Ist Entwurf – antippen zum Freigeben fürs Team"
-                    : "Ist Entwurf – antippen zum Veröffentlichen"
+              <Pencil className="size-3.5" />
+            </Button>
+          </div>
+        )}
+        {/* Kurzbeschreibung: erscheint als Untertitel auf der Hilfe-Seiten-Karte. */}
+        {descEditing ? (
+          <input
+            autoFocus
+            value={desc}
+            maxLength={160}
+            onChange={(e) => setDesc(e.target.value)}
+            onBlur={() => {
+              saveDescription();
+              setDescEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setDesc(savedDesc);
+                setDescEditing(false);
+              }
+            }}
+            placeholder={
+              publicOn
+                ? "Kurzbeschreibung – erscheint unter dem Titel auf der Hilfe-Seite"
+                : "Kurzbeschreibung – worum geht es in dieser Anleitung?"
+            }
+            aria-label="Kurzbeschreibung"
+            className="mt-1 w-full rounded-md border border-ring bg-card px-2 py-0.5 text-sm text-ink-2 outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setDesc(savedDesc);
+              setDescEditing(true);
+            }}
+            className="group mt-0.5 flex max-w-full items-start gap-1.5 text-left"
+            title="Kurzbeschreibung bearbeiten"
+            data-testid="editor-description"
+          >
+            <span
+              className={
+                "min-w-0 break-words text-sm font-semibold " +
+                (savedDesc ? "text-ink-2" : "text-muted-foreground italic")
               }
             >
-              <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${published ? "bg-yes" : "bg-line"}`}>
-                <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${published ? "left-[18px]" : "left-0.5"}`} />
-              </span>
-              <span className={published ? "font-medium text-ink" : "text-muted-foreground"}>
-                {published ? (!publicOn ? "Freigegeben" : "Veröffentlicht") : "Entwurf"}
-              </span>
-              {busy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-            </button>
-            <span className="text-line">·</span>
-            {/* Zielgruppe als zwei Häkchen (Welle 20): Kunden (Hilfe-Seite) und/oder
-                Team-Lernbereich. Intern ⇒ Lernen implizit an (disabled-checked). */}
-            <div role="group" aria-label="Sichtbarkeit" className="inline-flex items-center gap-2 text-sm">
-              <AudienceCheckbox
-                icon={<Globe className="size-3.5" />}
-                label="Auf der Hilfe-Seite (Kunden)"
-                checked={publicOn}
-                disabled={visBusy}
-                onToggle={togglePublic}
-              />
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex" />}>
-                  <AudienceCheckbox
-                    icon={<Lock className="size-3.5" />}
-                    label="In Schulungen (Team, mit Nachweis)"
-                    checked={!publicOn ? true : inLernen}
-                    // Bei intern implizit an und nicht abwählbar; ohne Business gesperrt.
-                    disabled={visBusy || !publicOn || !isBusiness}
-                    onToggle={toggleLernen}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  {!isBusiness
-                    ? "Schulungen (fürs Team, mit Nachweis) sind im Business-Tarif enthalten."
-                    : !publicOn
-                      ? "Anleitungen nur fürs Team stehen immer in den Schulungen — nie auf der Hilfe-Seite."
-                      : "Zusätzlich in den Schulungen fürs Team zeigen (mit Schulungsnachweis)."}
-                </TooltipContent>
-              </Tooltip>
-              {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-            </div>
-            <span className="text-line">·</span>
-            <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
-            <span className="text-line">·</span>
-            {/* „Gilt für Website" (Welle 31c): Basis-Domains, für die die Anleitung gilt. */}
-            <SiteDomainsPicker tutorialId={tutorialId} initialDomains={siteDomains} />
-          </div>
+              {savedDesc ||
+                (publicOn
+                  ? "Kurzbeschreibung ergänzen (erscheint auf der Hilfe-Seite)"
+                  : "Kurzbeschreibung ergänzen …")}
+            </span>
+            <Pencil className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          </button>
+        )}
+      </div>
+
+      {/* EINE Steuerzeile. Trenner sind Striche (nur ab sm), mobil bricht alles sauber um. */}
+      <div
+        className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2.5"
+        data-testid="editor-controls"
+      >
+        <StatusSwitch
+          on={published}
+          onToggle={togglePublish}
+          disabled={busy}
+          busy={busy}
+          className="text-[13px]"
+          title={
+            published
+              ? "Ist veröffentlicht – antippen für Entwurf"
+              : publicOn
+                ? "Ist Entwurf – antippen, um auf der Hilfe-Seite zu veröffentlichen"
+                : "Ist Entwurf – antippen, um für Ihr Team zu veröffentlichen"
+          }
+        />
+        <ControlSep />
+
+        <div
+          role="radiogroup"
+          aria-label="Wer sieht die Anleitung?"
+          className="flex rounded-full bg-line-2 p-[3px]"
+        >
+          <SegmentButton
+            active={publicOn}
+            disabled={visBusy}
+            onClick={() => setAudiencePublic(true)}
+            icon={<Globe className="size-3.5" />}
+            label="Hilfe-Seite"
+            title="Erscheint (veröffentlicht) auf Ihrer Hilfe-Seite"
+          />
+          <SegmentButton
+            active={!publicOn}
+            disabled={visBusy || teamLocked}
+            onClick={() => setAudiencePublic(false)}
+            icon={<Lock className="size-3.5" />}
+            label="Nur Team"
+            title={
+              teamLocked
+                ? "„Nur Team“ ist im Business-Tarif enthalten"
+                : "Nur für Ihr Team – in den Schulungen, mit Schulungsnachweis"
+            }
+          />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        {publicOn && (
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <StatusSwitch
+                on={inLernen}
+                onToggle={toggleNachweis}
+                disabled={visBusy || !isBusiness}
+                labelOn="Mit Schulungsnachweis"
+                labelOff="Mit Schulungsnachweis"
+                className="text-[12.5px]"
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              {!isBusiness
+                ? "Schulungen mit Nachweis sind im Business-Tarif enthalten."
+                : "Zusätzlich in den Schulungen Ihres Teams zeigen – mit Schulungsnachweis."}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />}
+        <ControlSep />
+
+        <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
+        {/* „Gilt für Website" (Welle 31c): Basis-Domains, für die die Anleitung gilt. */}
+        <SiteDomainsPicker tutorialId={tutorialId} initialDomains={siteDomains} />
+
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {languages.length > 0 && (
             <Tooltip>
               <TooltipTrigger
@@ -401,19 +431,19 @@ export function TutorialHeader({
         </div>
       </div>
 
-      {/* Auto-Schwärzung (Welle 28): Bestätigungs-Gate vor dem Veröffentlichen, wenn noch
-          ungeprüfte automatische Schwärzungen offen sind. Serverseitig NICHT blockierend. */}
+      {/* Auto-Verpixelung (Welle 28): Bestätigungs-Gate vor dem Veröffentlichen, wenn noch
+          ungeprüfte automatische Verpixelungen offen sind. Serverseitig NICHT blockierend. */}
       <Dialog open={blurGate !== null} onOpenChange={(o) => { if (!o) setBlurGate(null); }}>
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Ungeprüfte automatische Schwärzungen</DialogTitle>
+            <DialogTitle>Ungeprüfte automatische Verpixelungen</DialogTitle>
             <DialogDescription>
               {blurGate === 1
-                ? "1 Schritt enthält eine ungeprüfte automatische Schwärzung."
-                : `${blurGate} Schritte enthalten ungeprüfte automatische Schwärzungen.`}{" "}
+                ? "1 Schritt enthält eine ungeprüfte automatische Verpixelung."
+                : `${blurGate} Schritte enthalten ungeprüfte automatische Verpixelungen.`}{" "}
               Bitte prüfen Sie die markierten Stellen im Editor (verschieben, anpassen oder
               löschen), bevor Sie veröffentlichen — oder veröffentlichen Sie trotzdem. Die
-              Schwärzungen werden in jedem Fall in die veröffentlichten Bilder eingebrannt.
+              Verpixelungen werden in jedem Fall in die veröffentlichten Bilder eingebrannt.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -435,39 +465,43 @@ export function TutorialHeader({
   );
 }
 
-/** Häkchen für die Zielgruppen-Wahl (Welle 20): kleine Box + Label, Base-UI-frei. */
-function AudienceCheckbox({
+/** Senkrechter Trenner in der Steuerzeile — nur ab sm (mobil bricht die Zeile ohnehin um). */
+function ControlSep() {
+  return <span aria-hidden className="hidden h-5 w-0.5 shrink-0 rounded-full bg-line sm:block" />;
+}
+
+/** Ein Feld des Segments „Hilfe-Seite | Nur Team". */
+function SegmentButton({
+  active,
+  disabled,
+  onClick,
   icon,
   label,
-  checked,
-  disabled,
-  onToggle,
+  title,
 }: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
   icon: React.ReactNode;
   label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
+  title: string;
 }) {
   return (
     <button
       type="button"
-      role="checkbox"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={onToggle}
-      className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+      role="radio"
+      aria-checked={active}
+      disabled={disabled && !active}
+      onClick={onClick}
+      title={title}
+      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        active
+          ? "bg-card text-ink shadow-[0_1px_3px_rgba(51,41,31,0.12)]"
+          : "text-ink-2 hover:text-ink"
+      }`}
     >
-      <span
-        className={`flex size-4 shrink-0 items-center justify-center rounded border transition-colors ${
-          checked ? "border-primary bg-primary text-white" : "border-line bg-card"
-        }`}
-      >
-        {checked && <Check className="size-3" />}
-      </span>
-      <span className={`inline-flex items-center gap-1 ${checked ? "font-medium text-ink" : ""}`}>
-        {icon} {label}
-      </span>
+      {icon}
+      {label}
     </button>
   );
 }
