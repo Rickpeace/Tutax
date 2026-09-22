@@ -157,7 +157,8 @@ async function BellSlot() {
       .order("detected_at", { ascending: false })
       .limit(3),
     // Wie „Offene Fragen“ (bis 25) — Zähler = Anzahl dieser Liste.
-    loadOpenGaps(account.id, 25),
+    // 26 laden, 25 anzeigen: so erkennt die Glocke „mehr als 25“ (Anzeige „25+“).
+    loadOpenGaps(account.id, 26),
   ]);
   const alerts = ((alertRows ?? []) as unknown as BellAlertRow[]).map((a) => ({
     id: a.id,
@@ -175,7 +176,8 @@ async function BellSlot() {
         count: g.count,
         when: relativeDe(g.lastAt),
       }))}
-      gapTotal={gaps.length}
+      gapTotal={Math.min(gaps.length, 25)}
+      gapsMore={gaps.length > 25}
     />
   );
 }

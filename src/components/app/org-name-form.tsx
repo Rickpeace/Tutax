@@ -12,7 +12,7 @@ import { FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
  * Server-Action wie früher das Branding-Formular (saveBranding) — Adresse bleibt
  * unverändert, Farben werden nicht angefasst (leeres colors-Objekt = nichts mergen).
  */
-export function OrgNameForm({ initialName, slug }: { initialName: string; slug: string }) {
+export function OrgNameForm({ initialName }: { initialName: string }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initialName);
   const [name, setName] = useState(initialName);
@@ -25,7 +25,7 @@ export function OrgNameForm({ initialName, slug }: { initialName: string; slug: 
       return;
     }
     startTransition(async () => {
-      const res = await saveBranding({ name, slug, colors: {} });
+      const res = await saveBranding({ name });
       if (res.ok) {
         setSaved(name.trim());
         setName(name.trim());

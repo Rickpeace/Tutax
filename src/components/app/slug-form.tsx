@@ -32,7 +32,7 @@ export function SlugForm({
 
   function save() {
     startTransition(async () => {
-      const res = await saveBranding({ name, slug, colors: {} });
+      const res = await saveBranding({ slug });
       if (res.ok) {
         setSaved(res.slug);
         setSlug(res.slug);

@@ -173,14 +173,18 @@ export function BellPopover({
   alertTotal,
   gaps,
   gapTotal,
+  gapsMore = false,
 }: {
   alerts: BellAlert[];
   alertTotal: number;
   gaps: BellGap[];
   gapTotal: number;
+  /** Es gibt mehr offene Fragen als geladen (Anzeige „+“). */
+  gapsMore?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const total = alertTotal + gapTotal;
+  const totalLabel = total > 99 ? "99+" : gapsMore ? `${total}+` : String(total);
   const close = () => setOpen(false);
 
   return (
@@ -189,7 +193,7 @@ export function BellPopover({
         render={
           <button
             type="button"
-            aria-label={total ? `Hinweise (${total} offen)` : "Hinweise"}
+            aria-label={total ? `Hinweise (${totalLabel} offen)` : "Hinweise"}
             className={cn(
               "relative grid size-9 place-items-center rounded-full text-ink-2 transition-colors hover:bg-line-2",
               open && "bg-line-2",
@@ -201,7 +205,7 @@ export function BellPopover({
                 data-testid="bell-count"
                 className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-black leading-none text-white"
               >
-                {total > 99 ? "99+" : total}
+                {totalLabel}
               </span>
             ) : null}
           </button>

@@ -346,9 +346,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
         return;
       }
-      // ERST nach erfolgreicher Validierung speichern.
+      // ERST nach erfolgreicher Validierung speichern. Listen/Kontoname des alten Kontos
+      // verwerfen (auch wenn das Panel gerade geschlossen ist).
       return chrome.storage.local
-        .set({ steplyToken: token, steplyAppUrl: appUrl })
+        .remove(["badgeCache", "steplyAccountCache"])
+        .catch(() => {})
+        .then(() => chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl }))
         .then(() => sendResponse({ ok: true, account: String(body.account) }));
     })
     .catch((err) => {
@@ -469,14 +472,16 @@ async function getBadgeTutorials() {
   } catch (err) {
     cache = null;
   }
-  if (cache && Array.isArray(cache.tutorials) && now - (cache.at || 0) < BADGE_TTL) {
-    return cache.tutorials;
-  }
   let token = "";
   try {
     token = (await chrome.storage.local.get("steplyToken")).steplyToken || "";
   } catch (err) {
     token = "";
+  }
+  // Nur eine Liste DIESES Kontos wiederverwenden (fp passt), sonst neu holen.
+  if (cache && cache.fp !== steplyTokenFp(token)) cache = null;
+  if (cache && Array.isArray(cache.tutorials) && now - (cache.at || 0) < BADGE_TTL) {
+    return cache.tutorials;
   }
   if (!token) {
     try {
@@ -499,7 +504,9 @@ async function getBadgeTutorials() {
     const body = await res.json().catch(() => ({}));
     const tutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
     try {
-      await chrome.storage.local.set({ badgeCache: { tutorials, at: now } });
+      // fp = Fingerabdruck des Tokens (wie panel.js tokenFp): das Panel zeigt eine gespeicherte
+      // Liste nur, wenn sie zum AKTUELLEN Konto gehört (nie die Anleitungen des alten Kontos).
+      await chrome.storage.local.set({ badgeCache: { tutorials, at: now, fp: steplyTokenFp(token) } });
     } catch (err) {
       /* egal */
     }
@@ -558,6 +565,17 @@ function quietBadge(fn) {
   } catch (err) {
     /* egal */
   }
+}
+
+// Fingerabdruck des Tokens (FNV-1a, identisch zu panel.js tokenFp) — nie der Token selbst.
+function steplyTokenFp(token) {
+  let h = 0x811c9dc5;
+  const s = String(token || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16);
 }
 
 function clearBadge(tabId) {

@@ -283,6 +283,23 @@ try {
     await page.close();
   }
 
+  // ---- E2: gemerkte Liste OHNE Konto-Stempel (ältere Version / unbekannte Herkunft) ----
+  // QA Welle 50: Der Service-Worker schrieb früher ohne fp — nach einem Kontowechsel bei
+  // geschlossenem Panel erschien so die Liste des ALTEN Kontos. Ohne fp: nie anzeigen.
+  {
+    const page = await openPanel(browser, {
+      local: {
+        steplyToken: TOKEN,
+        steplyAppUrl: "https://app.example.test",
+        badgeCache: { tutorials: CACHED, at: Date.now() },
+      },
+    });
+    await page.waitForFunction(() => !document.getElementById("start").hidden, null, { timeout: 5000 });
+    const g = await geom(page);
+    ok(g.count === "…", `E2: Liste ohne Konto-Stempel wird NICHT gezeigt (Anzeige „${g.count}“)`);
+    await page.close();
+  }
+
   // ---- F: Tab-Wechsel während des Abrufs ----
   {
     const page = await openPanel(browser, {

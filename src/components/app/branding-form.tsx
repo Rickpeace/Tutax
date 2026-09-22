@@ -35,13 +35,11 @@ function toHex6(v: string): string {
  */
 export function BrandingForm({
   name,
-  slug,
   initialLogoUrl,
   initialColors,
   modeHint,
 }: {
   name: string;
-  slug: string;
   initialLogoUrl: string | null;
   initialColors: BrandColors;
   /** Hinweis, wenn gerade ein anderes Design aktiv ist (Farben gelten dann nicht). */
@@ -109,7 +107,7 @@ export function BrandingForm({
     const patch: Partial<BrandColors> = {};
     for (const k of changed) patch[k] = colors[k];
     startTransition(async () => {
-      const res = await saveBranding({ name, slug, colors: patch });
+      const res = await saveBranding({ colors: patch });
       if (res.ok) {
         setSaved(colors);
         toast.success("Farben gespeichert");

@@ -38,7 +38,9 @@ export function StatusSwitch({
       type="button"
       role="switch"
       aria-checked={on}
-      aria-label={compact ? label : undefined}
+      // Fester Name für Screenreader („Veröffentlicht, Schalter, an/aus") — der sichtbare Text
+      // wechselt mit dem Zustand und wäre als Name irreführend („Entwurf, Schalter, aus").
+      aria-label={labelOn}
       onClick={onToggle}
       disabled={disabled}
       className={cn(
@@ -54,7 +56,7 @@ export function StatusSwitch({
           className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}
         />
       </span>
-      <span className={`${compact ? "hidden sm:inline" : ""} ${on ? "text-teal-text" : "text-muted-foreground"}`}>
+      <span aria-hidden className={`${compact ? "hidden sm:inline" : ""} ${on ? "text-teal-text" : "text-muted-foreground"}`}>
         {label}
       </span>
       {busy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />}

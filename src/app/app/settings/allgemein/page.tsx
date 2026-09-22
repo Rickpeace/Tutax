@@ -18,7 +18,7 @@ export default async function AllgemeinPage() {
       />
 
       <SettingsCard title="Organisation" icon={Building2}>
-        <OrgNameForm initialName={account.name} slug={account.slug} />
+        <OrgNameForm initialName={account.name} />
       </SettingsCard>
 
       {memberships.length > 1 && (

@@ -295,6 +295,30 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 50 a/b/c/d (22.09.2026, v2.18.0):** 🎨 **MAKEOVER EXTENSION + APP** — Richard:
+„Extension zu vollgestopft, Liste springt nach 5 s auf; alles stimmig nach Industriestandard.“
+Vorgehen: Audit (2 Agenten, Screenshots jedes Bildschirms) → 2 Entwurfs-Artifacts → Freigabe
+(„Anleitungen“, Video ins Menü, „Lernen“ → „Schulungen“) → 4 Agenten in Worktrees → Merge →
+QA. (a) Erweiterung: Reiter Aufnehmen/Anleitungen/Automationen, EIN „Aufnahme starten“, ?- und
+Konto-Menü (Video mit Ton, Steply lernen, Update, Verbinden/Trennen), Bildschirm „Nicht
+verbunden“, feste Steuerleiste bei der Aufnahme, Prüfen mit fester Fußleiste, „Auf der Seite
+zeigen“ statt führen, Linien-Icons + echte Umlaute; 5-s-Liste: sofort aus chrome.storage
+(badgeCache mit Token-fp, auch vom Service-Worker), parallel aktualisiert, Sequenz-Schutz;
+Server zählt Schritte ohne selector-jsonb (seitenweise). (b) App-Kopf/Glocken-Popover/Avatar/
+Handy-Leiste (+Automationen, „Mehr“)/⌘K aus EINER nav-config; Schulungen; PageHeader; Automations-
+Schritte ab 1. (c) Einstellungen mit Seitenleiste (Allgemein, Team, Aussehen, Adresse & Teilen,
+Sprachen & Vorlesen, Chat, Steply-Erweiterung, Tarif, Profil) + Weiterleitungen alter Routen,
+Speichern-Balken; FEHLER behoben: Standardfarben waren Indigo (Speichern machte Hilfe-Seite
+blau) → DEFAULT_BRAND_COLORS warm (keine Datenkorrektur nötig, DB lesend geprüft). (d) Editor-Kopf
+(Status-Schalter, „Hilfe-Seite | Nur Team“, „Mit Schulungsnachweis“), gemeinsamer StatusSwitch,
+Standard-Anleitungen im Listenstil, ~120 Begriffe app-weit, Wächter test-ui-glossary.
+QA-Nacharbeit: saveBranding schreibt nur übergebene Felder (getrennte Formulare überschrieben
+sich sonst Name/Adresse), Kontowechsel bei geschlossenem Panel (fp-Pflicht + Cache-Löschen beim
+Pairing), Live-Führung bleibt während Hilfe-Seite geschützt, 401 ≠ Netzfehler, Update-Hinweis
+auch ohne Verbindung (am ?), Glocke „25+“, fester Screenreader-Name der Schalter. Tests: alle
+Extension-Suiten, test-app-shell/-settings/-library-views/-builder-header (echter Login),
+test-panel-start-cache (+E2), Build + Lint grün. OFFEN: /h/steply neu einspielen + Screenshots
+(steply-help-content.mjs Texte neu, SHOT_ROUTES/Locator in shoot-steply-help.mjs noch alt).
 **Opus Welle 49 (21.09.2026):** 📚 **BIBLIOTHEK NEU** — Richard fand die Bibliothek
 unübersichtlich; Auswahl per anklickbarer Varianten-Vorschau (Artifact). Umgesetzt: Karte mit
 TITEL + Website im Kategorie-Farbfeld (keine Screenshot-Vorschau mehr — sah zufällig aus, half

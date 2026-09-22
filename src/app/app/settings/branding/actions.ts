@@ -10,10 +10,13 @@ import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import { backfillAccountTranslations } from "@/app/app/actions-translate";
 
+// Welle 50 (QA): Jedes Einstellungs-Formular schickt NUR sein eigenes Feld. Nicht übergebene
+// Felder bleiben in der DB unverändert — sonst überschriebe z. B. ein noch offenes „Aussehen“
+// (Farben) eine inzwischen geänderte Adresse mit dem alten Stand.
 export type BrandingInput = {
-  name: string;
-  slug: string;
-  colors: {
+  name?: string;
+  slug?: string;
+  colors?: {
     primary?: string;
     background?: string;
     surface?: string;
@@ -27,36 +30,48 @@ export async function saveBranding(
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  const name = input.name.trim();
-  const slug = slugify(input.slug || name);
-  if (!name) return { ok: false, error: "Name darf nicht leer sein." };
+  const accUpdate: { name?: string; slug?: string } = {};
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "Name darf nicht leer sein." };
+    accUpdate.name = name;
+  }
+  if (input.slug !== undefined) {
+    const slug = slugify(input.slug);
+    if (!slug) return { ok: false, error: "Die Adresse darf nicht leer sein." };
+    accUpdate.slug = slug;
+  }
+  const slug = accUpdate.slug ?? account.slug;
 
-  const { error: ae } = await supabase
-    .from("accounts")
-    .update({ name, slug })
-    .eq("id", account.id);
-  if (ae) {
-    const dup = ae.code === "23505" || /duplicate|unique/i.test(ae.message);
-    return { ok: false, error: dup ? "Dieser Slug ist bereits vergeben." : ae.message };
+  if (Object.keys(accUpdate).length) {
+    const { error: ae } = await supabase
+      .from("accounts")
+      .update(accUpdate)
+      .eq("id", account.id);
+    if (ae) {
+      const dup = ae.code === "23505" || /duplicate|unique/i.test(ae.message);
+      return { ok: false, error: dup ? "Diese Adresse ist bereits vergeben." : ae.message };
+    }
   }
 
-  const { data: theme } = await supabase
-    .from("themes")
-    .select("tokens")
-    .eq("account_id", account.id)
-    .single();
-  const prev = (theme?.tokens ?? {}) as { colors?: Record<string, string> };
-  const colors = { ...(prev.colors ?? {}) };
-  for (const [k, v] of Object.entries(input.colors)) {
-    if (v) colors[k] = v;
-  }
-  const tokens = { ...prev, colors };
+  const colorPatch = Object.entries(input.colors ?? {}).filter(([, v]) => !!v);
+  if (colorPatch.length) {
+    const { data: theme } = await supabase
+      .from("themes")
+      .select("tokens")
+      .eq("account_id", account.id)
+      .single();
+    const prev = (theme?.tokens ?? {}) as { colors?: Record<string, string> };
+    const colors = { ...(prev.colors ?? {}) };
+    for (const [k, v] of colorPatch) colors[k] = v as string;
+    const tokens = { ...prev, colors };
 
-  const { error: te } = await supabase
-    .from("themes")
-    .update({ tokens, status: "ready", updated_at: new Date().toISOString() })
-    .eq("account_id", account.id);
-  if (te) return { ok: false, error: te.message };
+    const { error: te } = await supabase
+      .from("themes")
+      .update({ tokens, status: "ready", updated_at: new Date().toISOString() })
+      .eq("account_id", account.id);
+    if (te) return { ok: false, error: te.message };
+  }
 
   // Öffentlichen Hub-Cache räumen — alter UND neuer Slug (Slug kann sich ändern).
   invalidateHubTag(account.slug);

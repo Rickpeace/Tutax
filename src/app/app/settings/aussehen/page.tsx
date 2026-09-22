@@ -50,7 +50,6 @@ export default async function AussehenPage() {
 
       <BrandingForm
         name={account.name}
-        slug={account.slug}
         initialLogoUrl={manualLogoUrl}
         // Fehlende Farben = warme Standard-Farben der echten Hilfe-Seite (EINE Quelle).
         initialColors={brandColorsWithDefaults(theme?.tokens)}

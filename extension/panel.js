@@ -50,6 +50,9 @@ const els = {
   mAccountName: document.getElementById("mAccountName"),
   mOpenApp: document.getElementById("mOpenApp"),
   mUpdate: document.getElementById("mUpdate"),
+  helpDot: document.getElementById("helpDot"),
+  mHelpUpdate: document.getElementById("mHelpUpdate"),
+  mHelpUpdateVer: document.getElementById("mHelpUpdateVer"),
   mUpdateVer: document.getElementById("mUpdateVer"),
   mChange: document.getElementById("mChange"),
   mDisconnect: document.getElementById("mDisconnect"),
@@ -493,6 +496,10 @@ function renderHeader() {
     els.avatarBtn.title = accountName ? accountName + " – verbunden" : "Mit Steply verbunden";
   }
   if (els.avatarDot) els.avatarDot.hidden = !updateVersion;
+  // Ohne Verbindung gibt es keinen Avatar — Update dann am „?" anbieten.
+  if (els.helpDot) els.helpDot.hidden = !(updateVersion && !hasToken);
+  if (els.mHelpUpdate) els.mHelpUpdate.hidden = !(updateVersion && !hasToken);
+  if (els.mHelpUpdateVer) els.mHelpUpdateVer.textContent = updateVersion;
   if (els.mAccountName) els.mAccountName.textContent = accountName || "Ihr Steply-Konto";
   if (els.mUpdate) els.mUpdate.hidden = !updateVersion;
   if (els.mUpdateVer) els.mUpdateVer.textContent = updateVersion;
@@ -542,9 +549,15 @@ function openAppTab(pathname) {
 
 // Läuft gerade eine Aufnahme, eine Führung oder eine Automation? Dann wechseln Menü-Einträge
 // den Bildschirm nicht (nichts Laufendes wird aus Versehen „weggeklickt").
+// Läuft eine Live-Führung? Nicht am sichtbaren Bildschirm festmachen — öffnet man während der
+// Führung „Hilfe bei Aufnahme-Problemen", ist guideRun ausgeblendet, die Führung läuft aber weiter.
+function guideRunActive() {
+  return !els.guideRun.hidden || recHelpReturn === "guideRun";
+}
+
 function busyElsewhere() {
   const videoRec = mediaRecorder && mediaRecorder.state !== "inactive";
-  return !!(videoRec || guidePhase !== "idle" || guideFinishing || exec.running || !els.guideRun.hidden);
+  return !!(videoRec || guidePhase !== "idle" || guideFinishing || exec.running || guideRunActive());
 }
 
 function busyNotice() {
@@ -2426,7 +2439,7 @@ function guideCategoryPayload() {
 // ============================================================================
 
 let siteTutorials = null; // Konto-Anleitungen (Liste) oder null = noch unbekannt
-let siteTutorialsError = false; // letzter Abruf gescheitert (Fehler-/Leer-Zustand im Reiter)
+let siteTutorialsError = false; // letzter Abruf gescheitert: true (Netz) | "auth" (Code ungültig) | false
 let siteMatchFetchedAt = 0; // Zeitpunkt des letzten Abruf-VERSUCHS (0 = frisch holen)
 const SITE_MATCH_TTL = 5 * 60 * 1000; // Liste ~5 min als aktuell betrachten
 let accountListFetch = null; // laufender Abruf (Dedupe)
@@ -2435,14 +2448,14 @@ let activeUrl = ""; // URL des aktiven Tabs (NUR lokal)
 let siteMatches = null; // Treffer für die aktive Seite oder null (noch unbekannt)
 
 // Beim Öffnen: zuletzt bekannte Listen aus dem Speicher übernehmen (vor dem ersten Rendern).
-// badgeCache.fp (vom Panel geschrieben) muss zum aktuellen Token passen — so wird nach einem
-// Kontowechsel nie die Liste des alten Kontos gezeigt. Einträge des Service-Workers tragen kein
-// fp; sie stammen ebenfalls vom aktuellen Token (der Worker liest ihn frisch aus dem Speicher).
+// badgeCache.fp (Panel UND Service-Worker schreiben ihn) muss zum aktuellen Token passen — so
+// wird nach einem Kontowechsel nie die Liste des alten Kontos gezeigt. Einträge ohne fp (ältere
+// Versionen) werden ignoriert; dann füllt erst die Netzantwort die Liste.
 async function loadListCaches() {
   try {
     const r = await chrome.storage.local.get(["badgeCache", "steplyDocCache"]);
     const b = r && r.badgeCache;
-    if (hasToken && b && Array.isArray(b.tutorials) && (!b.fp || b.fp === tokenFp(cfg.token))) {
+    if (hasToken && b && Array.isArray(b.tutorials) && b.fp && b.fp === tokenFp(cfg.token)) {
       siteTutorials = b.tutorials;
     }
     const d = r && r.steplyDocCache;
@@ -2471,6 +2484,18 @@ function fetchAccountTutorials() {
       });
       clearTimeout(timer);
       if (token !== cfg.token) return null; // Token wechselte unterwegs → verwerfen (neuer Abruf folgt)
+      if (res.status === 401) {
+        // Code ungültig (in Steply erneuert/widerrufen): KEIN Netzproblem — alte Liste verwerfen
+        // und klar zum Neu-Verbinden auffordern.
+        siteTutorials = null;
+        siteTutorialsError = "auth";
+        try {
+          chrome.storage.local.remove("badgeCache");
+        } catch (err) {
+          /* egal */
+        }
+        return null;
+      }
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json().catch(() => ({}));
       siteTutorials = Array.isArray(body.tutorials) ? body.tutorials : [];
@@ -2507,7 +2532,10 @@ async function loadSiteTutorials() {
 // Beide Listen parallel aktualisieren (nur was veraltet ist). Rendert nach JEDER Antwort neu.
 function refreshLists(force) {
   const jobs = [];
-  if (hasToken && (force || !siteTutorials || Date.now() - siteMatchFetchedAt >= SITE_MATCH_TTL)) {
+  // Ungültiger Code: nicht bei jedem Tab-Wechsel erneut fragen (höchstens 1× pro Minute).
+  const authBackoff =
+    !force && siteTutorialsError === "auth" && Date.now() - siteMatchFetchedAt < 60 * 1000;
+  if (hasToken && !authBackoff && (force || !siteTutorials || Date.now() - siteMatchFetchedAt >= SITE_MATCH_TTL)) {
     jobs.push(fetchAccountTutorials());
   }
   if (force) steplyDocsFetchedAt = 0;
@@ -2939,6 +2967,13 @@ function renderGuidesList() {
 
   // Noch nichts bekannt: Platzhalter (Abruf läuft) bzw. Fehler mit „Erneut versuchen".
   if (siteTutorials === null) {
+    if (siteTutorialsError === "auth") {
+      showGuidesEmpty(
+        "Die Verbindung zu Steply ist nicht mehr gültig. Verbinden Sie die Steply-Erweiterung in Steply unter „Einstellungen → Steply-Erweiterung“ neu.",
+        null
+      );
+      return;
+    }
     if (accountListFetch || !siteTutorialsError) {
       appendSkeletons(listEl, 3);
       return;
@@ -3291,9 +3326,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (!changes.steplyToken && !changes.steplyAppUrl) return;
   const recording =
     (mediaRecorder && mediaRecorder.state !== "inactive") || guideActive || guidePhase !== "idle";
-  const oldFp = tokenFp(cfg.token);
+  // Kontowechsel an den GESPEICHERTEN Werten erkennen (saveCfg setzt cfg.token schon vorher).
+  const tokenChanged =
+    !!changes.steplyToken && changes.steplyToken.oldValue !== changes.steplyToken.newValue;
   loadConfig().then(() => {
-    const tokenChanged = tokenFp(cfg.token) !== oldFp;
     if (tokenChanged) {
       // Anderes Konto (oder getrennt): nichts vom alten Konto weiter anzeigen.
       accountName = "";
@@ -3308,6 +3344,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         /* egal */
       }
       autoListData = null;
+      autoListFetch = null; // laufenden Abruf des alten Kontos nicht wiederverwenden
       computeSiteMatches();
     }
     fetchAccountName();
@@ -3502,9 +3539,9 @@ function guidePortOpen(tabId) {
     guidePort.onDisconnect.addListener(() => {
       guidePort = null;
       // Worker evtl. neu gestartet: solange die Führung sichtbar läuft, Port neu aufbauen.
-      if (!els.guideRun.hidden && guide.tabId != null) {
+      if (guideRunActive() && guide.tabId != null) {
         setTimeout(() => {
-          if (!guidePort && !els.guideRun.hidden && guide.tabId != null) guidePortOpen(guide.tabId);
+          if (!guidePort && guideRunActive() && guide.tabId != null) guidePortOpen(guide.tabId);
         }, 0);
       }
     });
@@ -4201,7 +4238,7 @@ async function guideMaybeResume() {
 // content.js -> Panel: „weiter" (pointerdown auf dem markierten Element).
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-guide-advance") return;
-  if (els.guideRun.hidden) return;
+  if (!guideRunActive()) return;
   // Nur vom gebundenen Tab akzeptieren.
   if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
   guideGoNext();
@@ -4210,7 +4247,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // content.js -> Panel: Selektor-Status. found:false -> Fallback + Drift-Telemetrie.
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-guide-status") return;
-  if (els.guideRun.hidden) return;
+  if (!guideRunActive()) return;
   if (guide.tabId != null && sender && sender.tab && sender.tab.id !== guide.tabId) return;
   // Erholung (Hotfix 06.07.): Findet die stille Wiederaufnahme das Element doch noch
   // (SPA/PPR hat es nur kurz versteckt/ersetzt), verlaesst das Panel den Fallback wieder.
@@ -4373,7 +4410,7 @@ async function guideHandleNavInner(step) {
 // zugehöriger Tab zum aktuellen Schritt passt und die Führung dorthin folgt. Fremde Ladevorgänge
 // laufen dort ins Leere (kein Rebind, kein Vorspulen).
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (els.guideRun.hidden) return;
+  if (!guideRunActive()) return;
   if (changeInfo.status !== "complete") return;
   guideHandleNav();
 });
@@ -4520,19 +4557,23 @@ function showAutomations() {
 
 function loadAutomations() {
   if (autoListFetch) return autoListFetch;
-  autoListFetch = (async () => {
+  const token = cfg.token;
+  let self = null;
+  self = autoListFetch = (async () => {
     try {
       const res = await fetch(appBase() + "/api/recorder/automations", {
-        headers: { Authorization: "Bearer " + cfg.token },
+        headers: { Authorization: "Bearer " + token },
       });
+      if (token !== cfg.token) return; // Konto wechselte unterwegs → Ergebnis verwerfen
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json().catch(() => null);
+      if (token !== cfg.token) return;
       autoListData = body && Array.isArray(body.automations) ? body.automations : [];
       autoListError = false;
     } catch (err) {
-      autoListError = true;
+      if (token === cfg.token) autoListError = true;
     } finally {
-      autoListFetch = null;
+      if (autoListFetch === self) autoListFetch = null;
       if (currentSection === "automations") renderAutoList();
     }
   })();
@@ -6565,6 +6606,7 @@ els.mRecHelp.addEventListener(
 );
 els.mOpenApp.addEventListener("click", menuAction(() => openAppTab("/app")));
 els.mUpdate.addEventListener("click", menuAction(() => openAppTab("/extension")));
+if (els.mHelpUpdate) els.mHelpUpdate.addEventListener("click", menuAction(() => openAppTab("/extension")));
 els.mChange.addEventListener(
   "click",
   menuAction(() => (busyElsewhere() ? busyNotice() : showConnect("change")))
@@ -6701,7 +6743,7 @@ window.addEventListener("pagehide", () => {
   }
   // Live-Führung (Welle 31): Overlay auf der Seite best-effort ausblenden (der Zustand
   // bleibt in chrome.storage.session -> beim Wiederöffnen wird resümiert + neu markiert).
-  if (!els.guideRun.hidden) sendGuideToTab({ type: "steply-guide-hide" });
+  if (guideRunActive()) sendGuideToTab({ type: "steply-guide-hide" });
   // Automationen (Welle 36b): laufenden Lauf stoppen + Cursor/Overlay im Tab abräumen.
   // Der Port bricht beim Dokument-Abbau ohnehin ab → background sendet exec-hide (robust);
   // das direkte hide hier ist nur Best-effort. KEIN Resume — ein Ausführ-Lauf startet nie
