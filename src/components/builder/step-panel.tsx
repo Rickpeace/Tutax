@@ -247,9 +247,7 @@ export function StepPanel({
           className={step.is_decision ? "size-5 text-primary" : "size-5 text-muted-foreground"}
         />
         <div className="flex-1">
-          <div className="text-sm font-semibold text-ink" id={`decision-label-${step.id}`}>
-            Frage / Verzweigung
-          </div>
+          <div className="text-sm font-semibold text-ink">Frage / Verzweigung</div>
           <div className="text-xs text-muted-foreground">
             {step.is_decision
               ? "Dieser Schritt verzweigt je nach Antwort."
@@ -327,7 +325,7 @@ export function StepPanel({
       </div>
 
       <Dialog open={pendingNav !== null} onOpenChange={(o) => { if (!o) setPendingNav(null); }}>
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Noch nicht gespeichert</DialogTitle>
             <DialogDescription>
