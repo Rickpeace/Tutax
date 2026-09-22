@@ -562,7 +562,7 @@ export function HighlightEditor({
                 x2={gx * size.w}
                 y1={0}
                 y2={size.h}
-                stroke="#18a999"
+                className="stroke-teal"
                 strokeWidth={1}
                 strokeDasharray="5 4"
               />
@@ -575,7 +575,7 @@ export function HighlightEditor({
                 x2={size.w}
                 y1={gy * size.h}
                 y2={gy * size.h}
-                stroke="#18a999"
+                className="stroke-teal"
                 strokeWidth={1}
                 strokeDasharray="5 4"
               />
@@ -689,7 +689,7 @@ function Shape({
           height={nh}
           rx={h.rounded ? 4 : 0}
           fill="transparent"
-          stroke={h.suggested ? "#ef6a4e" : "rgba(51,41,31,0.45)"}
+          className={h.suggested ? "stroke-primary" : "stroke-ink/45"}
           strokeWidth={1}
           strokeDasharray="4 3"
           style={{ cursor: "move", pointerEvents: "all" }}
@@ -740,7 +740,7 @@ function BoxHandles({
         width={nw}
         height={nh}
         fill="none"
-        stroke="#3d4ee6"
+        className="stroke-primary"
         strokeWidth={1}
         strokeDasharray="4 3"
         style={{ pointerEvents: "none" }}
@@ -774,7 +774,7 @@ function Dot({
         height={11}
         rx={2}
         fill="#fff"
-        stroke="#3d4ee6"
+        className="stroke-primary"
         strokeWidth={1.5}
       />
     </g>

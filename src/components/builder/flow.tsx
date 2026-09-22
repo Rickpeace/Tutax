@@ -31,6 +31,8 @@ type FlowHandlers = {
   onRecordAfter?: (stepId: string) => void;
   onRecordIntoBranch?: (branchId: string) => void;
   imgBust?: Record<string, number>; // Bild-Neuladen erzwingen (Ersetzen bei gleichem Pfad)
+  /** Nummer jedes Schritts im Ablauf (1, 2, …) — für Karten ohne Titel und Text. */
+  flowNumber?: Map<string, number>;
 };
 
 /** Karten-Flow eines Tutorials (Prototyp-Optik §7.2) mit Einfügepunkten (§7.4). */
@@ -48,7 +50,13 @@ function FlowNode({
   const step = node as RenderStep;
   return (
     <div className="flex flex-col">
-      <StepCard node={step} selected={h.selectedId === step.step.id} onSelect={h.onSelect} bust={h.imgBust?.[step.step.id]} />
+      <StepCard
+        node={step}
+        selected={h.selectedId === step.step.id}
+        onSelect={h.onSelect}
+        bust={h.imgBust?.[step.step.id]}
+        number={h.flowNumber?.get(step.step.id)}
+      />
 
       {step.branches ? (
         <>
@@ -86,25 +94,28 @@ function StepCard({
   selected,
   onSelect,
   bust,
+  number,
 }: {
   node: RenderStep;
   selected: boolean;
   onSelect?: (stepId: string) => void;
   bust?: number;
+  number?: number;
 }) {
   const isQ = !!node.branches;
   const bodyText = plainBody(node.step.body);
   const hasTitle = !!node.step.title?.trim();
   // Titel ist optional (Welle 20): ohne Titel den Anfang des Erklärtexts als
-  // gedimmte, kursive Beschriftung zeigen; fehlt auch der Text → „Schritt {n}".
+  // gedimmte, kursive Beschriftung zeigen; fehlt auch der Text → „Schritt {n}" (n = Nummer im
+  // Ablauf, nicht die Anlege-Position) bzw. „Ohne Titel", falls die Nummer fehlt.
   const bodyLabel = bodyText.length > 40 ? `${bodyText.slice(0, 40).trimEnd()}…` : bodyText;
   return (
     <button
       type="button"
       onClick={() => onSelect?.(node.step.id)}
-      className={`flex w-full items-center gap-3 rounded-xl border bg-card p-[11px] text-left shadow-[0_1px_2px_rgba(16,21,36,0.03)] transition-all hover:-translate-y-px ${
+      className={`flex w-full items-center gap-3 rounded-xl border bg-card p-[11px] text-left shadow-[0_1px_2px_rgba(51,41,31,0.03)] outline-none transition-all hover:-translate-y-px focus-visible:ring-3 focus-visible:ring-ring/50 ${
         selected
-          ? "border-primary shadow-[0_6px_20px_rgba(61,78,230,0.12)]"
+          ? "border-primary shadow-[0_6px_20px_color-mix(in_srgb,var(--primary)_12%,transparent)]"
           : "border-border hover:border-primary/40"
       }`}
     >
@@ -116,7 +127,9 @@ function StepCard({
           ) : bodyLabel ? (
             <span className="min-w-0 truncate font-normal italic text-muted-foreground">{bodyLabel}</span>
           ) : (
-            <span className="italic text-muted-foreground">Schritt {node.step.position}</span>
+            <span className="italic text-muted-foreground">
+              {number ? `Schritt ${number}` : "Ohne Titel"}
+            </span>
           )}
           {isQ && <Tag tone="accent">Frage</Tag>}
         </div>
@@ -212,7 +225,7 @@ function Connector() {
  */
 function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: () => void }) {
   const knob = (
-    <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_rgba(61,78,230,0.18)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white">
+    <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_color-mix(in_srgb,var(--primary)_18%,transparent)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white group-focus-visible/ins:ring-3 group-focus-visible/ins:ring-ring/50">
       <Plus className="size-4" />
     </span>
   );
@@ -223,7 +236,8 @@ function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: 
         type="button"
         onClick={onInsert}
         title="Schritt hier einfügen"
-        className="group/ins relative flex h-9 w-full items-center justify-center"
+        aria-label="Schritt hier einfügen"
+        className="group/ins relative flex h-9 w-full items-center justify-center outline-none"
       >
         <span className="absolute h-full w-0.5 bg-line" />
         {knob}
@@ -241,7 +255,7 @@ function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: 
               type="button"
               title="Hier einfügen oder aufnehmen"
               aria-label="Hier einfügen oder aufnehmen"
-              className="flex items-center justify-center"
+              className="group/ins flex items-center justify-center rounded-full outline-none"
             >
               {knob}
             </button>
@@ -282,7 +296,8 @@ function Branch({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 py-2"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <span
           className="rounded-full px-2.5 py-[3px] text-[11.5px] font-extrabold text-white"
@@ -328,16 +343,34 @@ function countSteps(node: RenderNode): number {
   return c;
 }
 
-/** Tiptap-JSON -> einzeilige Vorschau. */
+/**
+ * Tiptap-JSON -> einzeilige Vorschau. Jeder Textblock (Absatz, Überschrift, Listenpunkt) wird
+ * für sich gesammelt; Blöcke werden mit „ · “ verbunden — außer der vorige endet schon mit einem
+ * Satzzeichen. So laufen Listenpunkte nicht Wort an Wort ineinander.
+ */
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
-  const out: string[] = [];
+  const blocks: string[] = [];
+  const inline = (n: unknown): string => {
+    if (!n || typeof n !== "object") return "";
+    const node = n as { type?: string; text?: string; content?: unknown[] };
+    if (typeof node.text === "string") return node.text;
+    if (node.type === "hardBreak") return " ";
+    return Array.isArray(node.content) ? node.content.map(inline).join("") : "";
+  };
   const walk = (n: unknown) => {
     if (!n || typeof n !== "object") return;
-    const node = n as { text?: string; content?: unknown[] };
-    if (typeof node.text === "string") out.push(node.text);
+    const node = n as { type?: string; text?: string; content?: unknown[] };
+    if (node.type === "paragraph" || node.type === "heading" || typeof node.text === "string") {
+      const t = inline(node).replace(/\s+/g, " ").trim();
+      if (t) blocks.push(t);
+      return;
+    }
     if (Array.isArray(node.content)) node.content.forEach(walk);
   };
   walk(body);
-  return out.join(" ").trim();
+  return blocks.reduce(
+    (acc, b) => (!acc ? b : /[.!?:;…]$/.test(acc) ? `${acc} ${b}` : `${acc} · ${b}`),
+    "",
+  );
 }
