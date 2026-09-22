@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { relativeDe } from "@/lib/format";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import {
@@ -64,6 +64,13 @@ export type LibraryTutorial = {
   visibility: string;
   inLernen: boolean;
   updatedAt: string;
+  /**
+   * Bereits auf dem Server formatierte Zeitangabe („vor 3 Tagen“). Wird NICHT im Browser
+   * berechnet: `relativeDe(updatedAt)` lieferte beim Server-Rendern und beim ersten Rendern
+   * im Browser unterschiedliche Texte → Hydration-Fehler (gleiches Muster wie bei der Glocke,
+   * siehe src/app/app/layout.tsx).
+   */
+  updatedLabel: string;
   categoryId: string | null;
   slug: string | null;
   freshness: string | null;
@@ -148,9 +155,15 @@ export function TutorialCard({
     });
   }
 
+  // Leere Anleitung darf nicht veröffentlicht werden — gleiche Sperre wie im Editor
+  // (tutorial-header.tsx). Zurück auf Entwurf bleibt immer möglich.
+  const canPublish = tutorial.stepCount > 0;
+  const publishBlocked = !live && !canPublish;
+
   // Sofort umschalten, im Hintergrund veröffentlichen/zurückziehen.
   const toggleLive = () => {
     const next = !live;
+    if (next && !canPublish) return;
     setLive(next);
     if (next) {
       publishTutorial(tutorial.id)
@@ -195,17 +208,34 @@ export function TutorialCard({
   };
 
   const editHref = `/app/tutorials/${tutorial.id}`;
-  const statusSwitch = (
+  const switchEl = (
     <StatusSwitch
       on={live}
       onToggle={toggleLive}
       compact={layout === "row"}
+      disabled={publishBlocked}
       title={
-        internal
-          ? "Nur für Ihr Team – veröffentlicht erscheint sie in den Schulungen"
-          : "Veröffentlicht erscheint sie auf der Hilfe-Seite"
+        publishBlocked
+          ? "Erst Schritte anlegen"
+          : internal
+            ? "Nur für Ihr Team – veröffentlicht erscheint sie in den Schulungen"
+            : "Veröffentlicht erscheint sie auf der Hilfe-Seite"
       }
     />
+  );
+  // Gesperrter Schalter: Grund als Tooltip. Der Auslöser ist ein span AUSSERHALB des
+  // deaktivierten Knopfs — ein disabled button liefert selbst keine Maus-Ereignisse.
+  const statusSwitch = publishBlocked ? (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className="inline-flex shrink-0" data-testid="publish-blocked" />}
+      >
+        {switchEl}
+      </TooltipTrigger>
+      <TooltipContent>Erst Schritte anlegen</TooltipContent>
+    </Tooltip>
+  ) : (
+    switchEl
   );
   const menu = (
     <TutorialMenu
@@ -334,7 +364,7 @@ export function TutorialCard({
             {stepsLabel(tutorial.stepCount)}
           </span>
           <span className="hidden text-xs font-bold text-muted-foreground md:block">
-            {relativeDe(tutorial.updatedAt)}
+            {tutorial.updatedLabel}
           </span>
           {statusSwitch}
           {menu}
@@ -382,7 +412,7 @@ export function TutorialCard({
           {stale && <StaleBadge />}
         </div>
         <p className="text-xs font-bold text-muted-foreground">
-          {stepsLabel(tutorial.stepCount)} · {relativeDe(tutorial.updatedAt)}
+          {stepsLabel(tutorial.stepCount)} · {tutorial.updatedLabel}
         </p>
         {tutorial.description && (
           <p className="truncate text-xs font-semibold text-faint">{tutorial.description}</p>

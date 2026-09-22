@@ -478,6 +478,19 @@ export async function publishTutorial(tutorialId: string) {
     .single<Pick<Tutorial, "id" | "title" | "slug" | "account_id" | "visibility">>();
   if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden");
 
+  // Letzte Sperre gegen leere Anleitungen (Editor und Karte sperren schon in der Oberfläche):
+  // eine Anleitung ohne Schritte darf NIE veröffentlicht werden — sonst steht auf der
+  // Hilfe-Seite bzw. in den Schulungen ein leerer Eintrag. Rechteprüfungen bleiben unverändert.
+  const { count: stepCount } = await supabase
+    .from("steps")
+    .select("id", { count: "exact", head: true })
+    .eq("tutorial_id", tutorialId);
+  if ((stepCount ?? 0) === 0) {
+    throw new Error(
+      "Diese Anleitung hat noch keine Schritte. Legen Sie zuerst einen Schritt an, dann können Sie veröffentlichen.",
+    );
+  }
+
   // Interne Tutorials: „veröffentlichen" bedeutet nur fürs Team freigeben.
   if (tutorial.visibility === "internal") {
     const { error: ue } = await supabase

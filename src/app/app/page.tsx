@@ -133,6 +133,9 @@ export default async function DashboardPage() {
     visibility: t.visibility,
     inLernen: !!t.in_lernen,
     updatedAt: t.updated_at,
+    // Zeitangabe hier (Server) formatieren — im Browser berechnet liefe sie beim Hydrieren
+    // auseinander (Hydration-Fehler). Gleiches Muster wie in der Glocke (src/app/app/layout.tsx).
+    updatedLabel: relativeDe(t.updated_at),
     categoryId: t.category_id ?? null,
     slug: t.slug ?? null,
     freshness: t.freshness ?? null,
