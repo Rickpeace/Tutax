@@ -19,4 +19,3 @@ export const tooLongMsg = (what: string, max: number) =>
   `${what} darf höchstens ${max} Zeichen lang sein.`;
 
 export const ORG_NAME_TOO_LONG = tooLongMsg("Der Name", ORG_NAME_MAX);
-export const GUIDE_TITLE_TOO_LONG = tooLongMsg("Der Titel", GUIDE_TITLE_MAX);
