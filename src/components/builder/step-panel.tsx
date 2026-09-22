@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ChevronDown, ArrowRight, ArrowUp, ArrowDown, X, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { RichText } from "@/components/builder/rich-text";
+import { StatusSwitch } from "@/components/app/status-switch";
 import { ImageField } from "@/components/builder/image-field";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
@@ -35,6 +36,7 @@ export function StepPanel({
   onDirtyChange,
   hasSourceVideo = false,
   onSetImage,
+  onRemoveImage,
   onSetHighlights,
   onSetDecision,
   onSetCondition,
@@ -46,6 +48,7 @@ export function StepPanel({
   onInsertIntoBranch,
   onDuplicateImage,
   onClose,
+  stepLabel,
 }: {
   step: Step;
   tutorialId: string;
@@ -71,6 +74,7 @@ export function StepPanel({
       image_height: number | null;
     },
   ) => void;
+  onRemoveImage?: (id: string) => void;
   onSetHighlights: (id: string, highlights: Highlight[]) => void;
   onSetDecision: (id: string, isDecision: boolean) => void;
   onSetCondition: (id: string, condition: StepCondition | null) => void;
@@ -86,6 +90,8 @@ export function StepPanel({
   /** Welle 51a: neuen Schritt direkt danach mit demselben Bild anlegen. */
   onDuplicateImage?: (stepId: string) => void;
   onClose?: () => void;
+  /** Anzeigename eines Schritts: Titel, sonst „Schritt N“ (N = Nummer im Ablauf). */
+  stepLabel: (s: Step) => string;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
   const [body, setBody] = useState<unknown>(step.body ?? null);
@@ -147,13 +153,13 @@ export function StepPanel({
               <X className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt">
+          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt" aria-label="Vorheriger Schritt">
             <ChevronLeft className="size-4" />
           </Button>
           <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">
             {index >= 0 ? `${index + 1} / ${total}` : ""}
           </span>
-          <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
+          <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"} aria-label={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
             {hasNext ? <ChevronRight className="size-4" /> : <Plus className="size-4" />}
           </Button>
           <span className="mx-0.5 h-4 w-px bg-line-2" aria-hidden />
@@ -223,38 +229,47 @@ export function StepPanel({
         hasSourceVideo={hasSourceVideo}
         onSetImage={onSetImage}
         onSetHighlights={onSetHighlights}
+        onRemoveImage={onRemoveImage}
         onDuplicateImage={
           onDuplicateImage ? () => guardedNav(() => onDuplicateImage(step.id), "weiter") : undefined
         }
       />
 
-      <button
-        type="button"
-        onClick={toggleDecision}
-        className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-          step.is_decision
-            ? "border-primary/40 bg-accent"
-            : "border-border bg-card hover:bg-muted"
+      {/* Frage/Verzweigung: derselbe Schalter wie überall (StatusSwitch), die Karte bleibt
+          neutral — nur ein dezenter Rand zeigt den aktiven Zustand. */}
+      <div
+        className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+          step.is_decision ? "border-primary/30 bg-card" : "border-border bg-card"
         }`}
       >
         <GitBranch
+          aria-hidden
           className={step.is_decision ? "size-5 text-primary" : "size-5 text-muted-foreground"}
         />
         <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">Frage / Verzweigung</div>
+          <div className="text-sm font-semibold text-ink" id={`decision-label-${step.id}`}>
+            Frage / Verzweigung
+          </div>
           <div className="text-xs text-muted-foreground">
             {step.is_decision
               ? "Dieser Schritt verzweigt je nach Antwort."
-              : "Linearer Schritt. Antippen, um zu verzweigen."}
+              : "Linearer Schritt. Einschalten, um zu verzweigen."}
           </div>
         </div>
-        <Switch on={step.is_decision} />
-      </button>
+        <StatusSwitch
+          on={step.is_decision}
+          onToggle={toggleDecision}
+          labelOn="Frage / Verzweigung"
+          labelOff="Frage / Verzweigung"
+          className="[&>span:last-child]:sr-only"
+        />
+      </div>
 
       <div className="space-y-1.5">
-        <Label>Erklärtext</Label>
+        <Label id={`body-label-${step.id}`}>Erklärtext</Label>
         <RichText
           key={rtKey}
+          labelledBy={`body-label-${step.id}`}
           value={body}
           onChange={(json) => {
             setBody(json);
@@ -281,6 +296,7 @@ export function StepPanel({
                 targetOptions={targetOptions}
                 onUpdate={onUpdateBranch}
                 onDelete={onDeleteBranch}
+                stepLabel={stepLabel}
                 onGo={() =>
                   guardedNav(
                     () => (b.target_step_id ? onOpenStep(b.target_step_id) : onInsertIntoBranch(b.id)),
@@ -311,14 +327,14 @@ export function StepPanel({
       </div>
 
       <Dialog open={pendingNav !== null} onOpenChange={(o) => { if (!o) setPendingNav(null); }}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Noch nicht gespeichert</DialogTitle>
             <DialogDescription>
               Dieser Schritt hat Änderungen, die noch nicht gespeichert sind. Was möchten Sie tun?
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button variant="ghost" onClick={() => setPendingNav(null)}>Abbrechen</Button>
             <Button
               variant="outline"
@@ -358,14 +374,17 @@ function AdvancedSection({
   onSetCondition: (id: string, condition: StepCondition | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const active = [step.condition ? "Bedingung" : null, step.jump ? "Sprung" : null].filter(Boolean);
+  // Eine „URL enthält“-Bedingung ohne Muster ist noch nicht eingerichtet -> nicht als aktiv zählen.
+  const condActive =
+    !!step.condition && !(step.condition.kind === "url" && !step.condition.pattern.trim());
+  const active = [condActive ? "Bedingung" : null, step.jump ? "Sprung" : null].filter(Boolean);
   return (
     <div className="rounded-lg border border-border bg-card" data-testid="step-advanced">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <Zap className="size-4 shrink-0 text-muted-foreground" />
         <span className="flex-1 text-sm font-semibold text-ink">Erweitert (für Automationen)</span>
@@ -412,11 +431,30 @@ function ConditionField({
   const kind: "element" | "url" = cond?.kind ?? (step.selector ? "element" : "url");
   const hasSelector = !!step.selector;
   const negate = cond?.negate === true;
-  const pattern = cond?.kind === "url" ? cond.pattern : "";
+  const savedPattern = cond?.kind === "url" ? cond.pattern : "";
+  // Muster lokal tippen; gespeichert wird entprellt bzw. spätestens beim Verlassen des Felds —
+  // nicht mehr bei jedem Tastendruck (jede Speicherung war ein Server-Aufruf).
+  const [pattern, setPatternDraft] = useState(savedPattern);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Beim Schließen des Panels einen noch ausstehenden Stand nicht verlieren.
+  const flushRef = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      if (commitTimer.current) clearTimeout(commitTimer.current);
+      flushRef.current?.();
+    },
+    [],
+  );
 
   if (step.is_decision) return null; // Verzweigungs-Schritte: nicht im MVP
 
+  function cancelPending() {
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+    flushRef.current = null;
+  }
   function setKind(next: "element" | "url") {
+    cancelPending();
     if (next === "element") {
       if (!step.selector) return;
       onSetCondition(step.id, { kind: "element", selector: step.selector, ...(negate ? { negate: true } : {}) });
@@ -429,18 +467,30 @@ function ConditionField({
     if (cond.kind === "element") {
       onSetCondition(step.id, { kind: "element", selector: cond.selector, ...(next ? { negate: true } : {}) });
     } else {
-      onSetCondition(step.id, { kind: "url", pattern: cond.pattern, ...(next ? { negate: true } : {}) });
+      // Getippten (evtl. noch nicht gespeicherten) Stand mitnehmen.
+      cancelPending();
+      onSetCondition(step.id, { kind: "url", pattern, ...(next ? { negate: true } : {}) });
     }
   }
-  function setPattern(next: string) {
+  function commitPattern(next: string) {
+    cancelPending();
+    if (next === savedPattern) return;
     onSetCondition(step.id, { kind: "url", pattern: next, ...(negate ? { negate: true } : {}) });
   }
+  function setPattern(next: string) {
+    setPatternDraft(next);
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    flushRef.current = () => commitPattern(next);
+    commitTimer.current = setTimeout(() => commitPattern(next), 800);
+  }
   function toggleEnabled() {
+    cancelPending();
     if (enabled) {
       onSetCondition(step.id, null);
     } else if (step.selector) {
       onSetCondition(step.id, { kind: "element", selector: step.selector });
     } else {
+      setPatternDraft("");
       onSetCondition(step.id, { kind: "url", pattern: "" });
     }
   }
@@ -498,6 +548,8 @@ function ConditionField({
             <Input
               value={pattern}
               onChange={(e) => setPattern(e.target.value)}
+              onBlur={(e) => commitPattern(e.target.value)}
+              aria-label="URL enthält"
               placeholder="z. B. /login  oder  beispiel.de/app"
               className="h-8 text-[13px]"
             />
@@ -524,6 +576,7 @@ function BranchRow({
   onUpdate,
   onDelete,
   onGo,
+  stepLabel,
 }: {
   branch: StepBranch;
   targetOptions: Step[];
@@ -533,10 +586,17 @@ function BranchRow({
   ) => void;
   onDelete: (id: string) => void;
   onGo: () => void;
+  stepLabel: (s: Step) => string;
 }) {
+  const labelText = branch.label?.trim() || "Antwort";
+  const currentTarget = targetOptions.find((s) => s.id === branch.target_step_id);
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
+    // @container: Ist die Zeile schmal (Handy, schmales Panel), rutscht die Ziel-Auswahl in eine
+    // eigene volle Zeile — sonst wäre der Schritt-Name bis zur Unlesbarkeit abgeschnitten.
+    <div className="@container rounded-lg border border-border bg-card p-2">
+    <div className="flex flex-wrap items-center gap-2">
       <span
+        aria-hidden
         className="size-3 shrink-0 rounded-full"
         style={{ background: branch.color || "var(--muted-foreground)" }}
       />
@@ -546,11 +606,12 @@ function BranchRow({
         key={`l:${branch.label ?? ""}`}
         defaultValue={branch.label ?? ""}
         placeholder="Antwort"
+        aria-label="Antwort-Text"
         onBlur={(e) => {
           if (e.target.value !== (branch.label ?? ""))
             onUpdate(branch.id, { label: e.target.value });
         }}
-        className="w-20 shrink-0 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring"
+        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring @md:w-20 @md:flex-none"
       />
       <select
         key={`t:${branch.target_step_id ?? ""}`}
@@ -558,19 +619,21 @@ function BranchRow({
         onChange={(e) =>
           onUpdate(branch.id, { target_step_id: e.target.value || null })
         }
-        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring"
+        aria-label={`Weiter bei Antwort „${labelText}“`}
+        title={currentTarget ? stepLabel(currentTarget) : "Ende"}
+        className="order-last w-full min-w-0 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring @md:order-none @md:w-auto @md:flex-1"
       >
         <option value="">→ Ende</option>
         {targetOptions.map((s) => (
           <option key={s.id} value={s.id}>
-            → {s.title?.trim() || "Ohne Titel"}
+            → {stepLabel(s)}
           </option>
         ))}
       </select>
       <button
         type="button"
         onClick={onGo}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50"
         title={branch.target_step_id ? "Zu diesem Schritt springen" : "Schritt für diese Antwort anlegen"}
         aria-label={branch.target_step_id ? "Zum Ziel-Schritt" : "Schritt anlegen"}
       >
@@ -581,28 +644,12 @@ function BranchRow({
         onClick={() => {
           if (confirm("Diese Antwort-Option löschen?")) onDelete(branch.id);
         }}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-no-soft hover:text-no"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-no-soft hover:text-no focus-visible:ring-3 focus-visible:ring-ring/50"
         aria-label="Antwort löschen"
       >
         <Trash2 className="size-4" />
       </button>
     </div>
+    </div>
   );
 }
-
-function Switch({ on }: { on: boolean }) {
-  return (
-    <span
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        on ? "bg-primary" : "bg-line"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${
-          on ? "left-[18px]" : "left-0.5"
-        }`}
-      />
-    </span>
-  );
-}
-

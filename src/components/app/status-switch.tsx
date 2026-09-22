@@ -44,7 +44,7 @@ export function StatusSwitch({
       onClick={onToggle}
       disabled={disabled}
       className={cn(
-        "flex shrink-0 items-center gap-2 text-xs font-extrabold disabled:cursor-not-allowed disabled:opacity-60",
+        "flex shrink-0 items-center gap-2 rounded-full text-xs font-extrabold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60",
         className,
       )}
       title={title}

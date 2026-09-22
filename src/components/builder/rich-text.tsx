@@ -23,19 +23,27 @@ function safeHttpUrl(raw: string): string | null {
 export function RichText({
   value,
   onChange,
+  labelledBy,
 }: {
   value: unknown;
   onChange: (json: unknown) => void;
+  /** id des sichtbaren Labels („Erklärtext“) — verbindet es für Screenreader mit dem Editor. */
+  labelledBy?: string;
 }) {
   const editor = useEditor({
     // StarterKit v3 enthält Link/Underline/Strike bereits; Link auf http/https begrenzen
     // und beim Klick im Editor nicht öffnen (stört das Bearbeiten).
     extensions: [
       StarterKit.configure({
+        // KEIN `protocols: [...]`: http/https kennt linkify ohnehin, und das Registrieren
+        // eigener Schemata bei jedem Editor-Start löste „linkifyjs: already initialized“ aus.
+        // Die Begrenzung auf http/https übernimmt isAllowedUri (auch für Autolink/Einfügen).
         link: {
           openOnClick: false,
           autolink: true,
-          protocols: ["http", "https"],
+          isAllowedUri: (url, ctx) =>
+            ctx.defaultValidate(url) &&
+            (!/^[a-z][a-z0-9+.-]*:/i.test(url.trim()) || /^https?:/i.test(url.trim())),
           HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
         },
       }),
@@ -44,6 +52,9 @@ export function RichText({
     immediatelyRender: false, // Next.js SSR
     editorProps: {
       attributes: {
+        role: "textbox",
+        "aria-multiline": "true",
+        ...(labelledBy ? { "aria-labelledby": labelledBy } : {}),
         class:
           "min-h-[90px] px-3 py-2 text-sm leading-relaxed text-ink-2 focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-primary [&_a]:underline",
       },
@@ -78,19 +89,19 @@ export function RichText({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-0.5 border-b border-line-2 px-1 py-1">
-        <ToolBtn editor={editor} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <ToolBtn editor={editor} label="Fett" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="size-4" />
         </ToolBtn>
-        <ToolBtn editor={editor} active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolBtn editor={editor} label="Kursiv" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
           <Italic className="size-4" />
         </ToolBtn>
-        <ToolBtn editor={editor} active={linkActive} onClick={setLink} title={linkActive ? "Link entfernen" : "Link einfügen"}>
+        <ToolBtn editor={editor} label={linkActive ? "Link entfernen" : "Link einfügen"} active={linkActive} pressable={false} onClick={setLink}>
           {linkActive ? <Link2Off className="size-4" /> : <Link2 className="size-4" />}
         </ToolBtn>
-        <ToolBtn editor={editor} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+        <ToolBtn editor={editor} label="Aufzählung" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
           <List className="size-4" />
         </ToolBtn>
-        <ToolBtn editor={editor} active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+        <ToolBtn editor={editor} label="Nummerierte Liste" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
           <ListOrdered className="size-4" />
         </ToolBtn>
       </div>
@@ -102,22 +113,28 @@ export function RichText({
 function ToolBtn({
   active,
   onClick,
-  title,
+  label,
+  pressable = true,
   children,
 }: {
   editor: Editor;
   active: boolean;
   onClick: () => void;
-  title?: string;
+  label: string;
+  /** Umschalter (Fett/Kursiv/Listen) melden ihren Zustand per aria-pressed; der Link-Knopf
+   *  wechselt stattdessen seine Beschriftung. */
+  pressable?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      title={title}
+      title={label}
+      aria-label={label}
+      aria-pressed={pressable ? active : undefined}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`flex size-7 items-center justify-center rounded-md transition-colors ${
+      className={`flex size-7 items-center justify-center rounded-md outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
         active ? "bg-accent text-primary" : "text-muted-foreground hover:bg-muted"
       }`}
     >
