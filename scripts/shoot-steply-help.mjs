@@ -2,6 +2,10 @@
 // Selbstdoku (/h/steply) — gegen die NEUE Oberfläche (Welle 50: Hauptmenü „Anleitungen ·
 // Schulungen · Automationen · KI-Assistent“, Einstellungen mit Seitenleiste, Editor-Kopf mit
 // Status-Schalter, Erweiterung mit Reitern).
+// 09/2026: Editor-Kopf mit „Veröffentlichen“/„✓ Veröffentlicht“ + „…“-Menü (Übersetzen, Aktualität
+// prüfen, Link, Zurück auf Entwurf, Texte mit KI verbessern), Zielgruppen-Chips, „+“/Blitz im
+// Ablauf, leere Anleitung, „Texte mit KI verbessern“ über dem Ablauf, Prüfen-Bildschirm der
+// Erweiterung mit eingetippten Werten („weglassen“), Kategorie-„…“-Menü in der Bibliothek.
 //
 // WICHTIG — dieses Skript schreibt NICHTS in die Steply-Doku. Es
 //   1. startet `next dev` lokal (eigener Port) — oder nutzt --base <url>,
@@ -272,7 +276,7 @@ const DEMO_TUTS = [
   { key: "login", title: "Im Kundenportal anmelden", cat: "Kundenportal", status: "published", desc: "Erstanmeldung mit Kundennummer und Passwort.", steps: ["Portal öffnen", "Kundennummer eingeben", "Passwort eingeben", "Anmelden"] },
   { key: "pw", title: "Passwort zurücksetzen", cat: "Kundenportal", status: "published", steps: ["„Passwort vergessen“ wählen", "E-Mail-Adresse eingeben", "Link in der E-Mail öffnen"] },
   { key: "pdf", title: "Rechnung als PDF herunterladen", cat: "Rechnungen & Zahlungen", status: "published", desc: "Rechnungen jederzeit selbst abrufen.", steps: ["„Rechnungen“ öffnen", "Rechnung auswählen", "„PDF herunterladen“ klicken", "Datei speichern"], audio: true },
-  { key: "zahlung", title: "Zahlungsart ändern", cat: "Rechnungen & Zahlungen", status: "draft", steps: ["„Einstellungen“ öffnen", "Zahlungsart wählen", "Änderung speichern"] },
+  { key: "zahlung", title: "Zahlungsart ändern", cat: "Rechnungen & Zahlungen", status: "draft", inLernen: true, steps: ["„Einstellungen“ öffnen", "Zahlungsart wählen", "Änderung speichern"] },
   { key: "adresse", title: "Lieferadresse ändern", cat: "Bestellungen", status: "published", steps: ["„Lieferadressen“ öffnen", "Adresse bearbeiten", "Speichern"] },
   { key: "retoure", title: "Retoure anmelden", cat: "Bestellungen", status: "published", desc: "Rücksendung in wenigen Schritten.", steps: ["Bestellung öffnen", "„Retoure anmelden“ wählen", "Grund angeben", "Etikett drucken"] },
   { key: "onboarding", title: "Neue Kolleginnen und Kollegen einarbeiten", cat: "Intern", status: "published", visibility: "internal", steps: ["Zugänge anlegen", "Ablage zeigen", "Ansprechpartner vorstellen"] },
@@ -435,6 +439,7 @@ async function setupDemo(portalPng) {
       slug: t.key === "pdf" ? "rechnung-als-pdf-herunterladen" : `${t.key}-${ti + 1}`,
       published_at: published ? new Date(now - ti * 86400000).toISOString() : null,
       site_domains: t.visibility === "internal" ? [] : [DEMO.portalHost],
+      ...(t.inLernen ? { in_lernen: true } : {}),
       updated_at: new Date(now - ti * 3600000).toISOString(),
     });
     if (error) throw error;
@@ -655,10 +660,19 @@ try {
     await pg.evaluate(GUIDE_RESOLVE_SRC);
     const boxes = {}, selectors = {}, checks = {};
     for (const [key, t] of Object.entries(targets)) {
-      const loc = t.loc().first();
+      // locs: Markierung um MEHRERE Elemente (z. B. „+“ und Blitz eines Einfügepunkts).
+      const loc = t.loc ? t.loc().first() : null;
       let bb = null;
       try {
-        bb = await loc.boundingBox({ timeout: 4000 });
+        if (t.locs) {
+          const bbs = [];
+          for (const l of t.locs()) bbs.push(await l.first().boundingBox({ timeout: 4000 }));
+          if (bbs.every(Boolean)) {
+            const x1 = Math.min(...bbs.map((b) => b.x)), y1 = Math.min(...bbs.map((b) => b.y));
+            const x2 = Math.max(...bbs.map((b) => b.x + b.width)), y2 = Math.max(...bbs.map((b) => b.y + b.height));
+            bb = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+          }
+        } else bb = await loc.boundingBox({ timeout: 4000 });
       } catch {
         bb = null;
       }
@@ -717,7 +731,7 @@ try {
       if (p === "/api/recorder/tutorials") return json({ tutorials: PANEL_TUTS });
       if (p.startsWith("/api/recorder/tutorials/")) return json(detail(PANEL_DETAIL));
       if (p === "/api/guide/steply") return json({ tutorials: [] });
-      if (p === "/api/recorder/categories") return json({ categories: [] });
+      if (p === "/api/recorder/categories") return json({ categories: CATS.map((name, i) => ({ id: "c" + i, name })) });
       if (p === "/api/recorder/automations") return json({ automations: [] });
       if (/\.(png|webp|jpg)$/.test(p)) return r.fulfill({ status: 200, contentType: "image/png", body: portalPng });
       return json({});
@@ -826,6 +840,21 @@ try {
   }, { scrollTo: () => pg.getByTestId("insights-card") });
   await pg.evaluate(() => window.scrollTo(0, 0));
 
+  // Kategorie-„…“-Menü (Seitenleiste der Bibliothek): erscheint bei Hover, Klick öffnet „Kategorie löschen“.
+  {
+    const row = pg.getByTestId("category-row").filter({ hasText: "Bestellungen" }).first();
+    await row.hover();
+    await row.getByTestId("category-menu").click();
+    await pg.getByTestId("category-delete").waitFor({ timeout: 8000 });
+    await pg.waitForTimeout(500);
+    await capture("dashboard-catmenu", SHOT_ROUTES["dashboard-catmenu"], {
+      // Markierung um „…“ + „Kategorie löschen“. Keine Führung: Name der Kategorie ist je Konto anders.
+      loeschen: { locs: () => [row.getByTestId("category-menu"), pg.getByTestId("category-delete")] },
+    });
+    await pg.keyboard.press("Escape").catch(() => {});
+    await pg.waitForTimeout(300);
+  }
+
   // „Wird erstellt …“-Karte: vorübergehender Video-Auftrag im Wegwerf-Konto.
   const jobId = uuid();
   cleanup.jobIds.push(jobId);
@@ -864,9 +893,17 @@ try {
   await capture("builder", SHOT_ROUTES.builder, {
     // Welle 54: Veröffentlichen-Knopf statt Schalter, Zielgruppe als zwei Chips.
     status: { loc: () => pg.getByTestId("publish-button"), guide: true, noText: true },
-    audience: { loc: () => pg.getByRole("group", { name: "Wer sieht die Anleitung?" }), guide: true },
+    // Text der Gruppe wechselt mit dem Zustand („mit Schulungsnachweis“) -> nur css-Anker.
+    audience: { loc: () => pg.getByRole("group", { name: "Wer sieht die Anleitung?" }), guide: true, noText: true },
     nurteam: { loc: () => pg.getByTestId("audience-chips").getByRole("button", { name: "Team", exact: true }), guide: true },
-    aktualitaet: { loc: () => pg.getByRole("button", { name: /Aktualität prüfen/ }), guide: true },
+    verbessern: { loc: () => pg.getByTestId("improve-texts"), guide: true },
+    // Erster Einfügepunkt im Ablauf: „+“ und Blitz. Keine Führung (je Lücke ein gleicher Knopf).
+    einfuegen: {
+      locs: () => [
+        pg.getByRole("button", { name: "Schritt hier einfügen" }),
+        pg.getByRole("button", { name: "Ab hier mit der Steply-Erweiterung aufnehmen" }),
+      ],
+    },
     titel: { loc: () => pg.locator("#step-title"), guide: true },
     bild: { loc: () => pg.getByTestId("highlight-canvas") },
     rechteck: { loc: () => pg.locator('[title="Rechteck"]'), guide: true },
@@ -874,6 +911,36 @@ try {
     frage: { loc: () => pg.getByText("Frage / Verzweigung", { exact: true }) },
     hoch: { loc: () => pg.getByRole("button", { name: "Schritt nach oben" }), guide: true },
   });
+
+  // „…“-Menü im Editor-Kopf (Übersetzen, Aktualität prüfen, Texte mit KI verbessern …).
+  await pg.getByTestId("editor-more").click();
+  await pg.getByRole("menuitem", { name: /Aktualität prüfen/ }).waitFor({ timeout: 8000 });
+  await pg.waitForTimeout(500);
+  await capture("builder-menu", SHOT_ROUTES["builder-menu"], {
+    mehr: { loc: () => pg.getByTestId("editor-more"), guide: true, noText: true },
+    // Markierung auf dem Menüpunkt, Führung auf „…“ (der Menüpunkt ist erst nach dem Klick da).
+    aktualitaet: { loc: () => pg.getByRole("menuitem", { name: /Aktualität prüfen/ }), guide: () => pg.getByTestId("editor-more"), noText: true },
+    uebersetzen: { loc: () => pg.getByRole("menuitem", { name: /Übersetzen/ }) },
+  });
+  await pg.keyboard.press("Escape").catch(() => {});
+
+  // ---- Leere Anleitung (vorübergehend im Wegwerf-Konto) ----
+  {
+    const emptyId = uuid();
+    const { error } = await admin.from("tutorials").insert({
+      id: emptyId, account_id: demo.accountId, title: "Kundenkonto schließen", status: "draft", visibility: "public",
+      slug: "kundenkonto-schliessen", site_domains: [DEMO.portalHost],
+    });
+    if (error) throw error;
+    await go(`/app/tutorials/${emptyId}`, 2000);
+    await pg.getByTestId("empty-builder").waitFor({ timeout: 15000 }).catch(() => {});
+    await pg.waitForTimeout(600);
+    await capture("builder-empty", SHOT_ROUTES["builder-empty"], {
+      aufnehmen: { loc: () => pg.getByTestId("empty-builder").getByRole("button", { name: "Mit der Steply-Erweiterung aufnehmen" }), guide: true },
+      handanlegen: { loc: () => pg.getByTestId("empty-builder").getByRole("button", { name: "Schritt von Hand anlegen" }), guide: true },
+    });
+    await admin.from("tutorials").delete().eq("id", emptyId);
+  }
 
   // ---- Einstellungen ----
   await go("/app/settings/aussehen", 1800);
@@ -1002,6 +1069,41 @@ try {
       await p.getByRole("button", { name: /Auf der Seite zeigen/ }).click();
       await p.waitForFunction(() => { const s = document.getElementById("guideRun"); return s && !s.hidden; }, null, { timeout: 8000 });
       await p.waitForTimeout(1200);
+    },
+  });
+
+  // Prüfen-Bildschirm nach „Fertig“: drei aufgenommene Schritte, einer mit eingetipptem Wert.
+  //  Zustand direkt im echten panel.js gesetzt (guideSteps/guidePhase sind globale Bindungen).
+  await capturePanel("panel-review", {
+    leftPng: portalLeftPng,
+    panelTargets: { typed: (p) => p.locator("#guideList .typed") },
+    setup: async (p) => {
+      await p.evaluate(async (b64) => {
+        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bin], { type: "image/png" });
+        const url = "https://portal.muster-gmbh.de/rechnungen";
+        const mk = (label, action, typedValue, i) => ({
+          rect: { x: 0.1, y: 0.1, w: 0.1, h: 0.05 }, label, action, url, title: "Rechnungen", selector: { text: label },
+          sensitive: null, fileMeta: null, interaction: null, typedValue, ts: Date.now() - (5 - i) * 4000,
+          tabId: 1, frameKey: null, blob, width: 1280, height: 720, thumbUrl: URL.createObjectURL(blob), imprecise: false,
+        });
+        // guideSteps/guidePhase/show/… sind globale Bindungen aus extension/panel.js.
+        guideSteps.length = 0;
+        guideSteps.push(
+          mk("Rechnungen", "click", "", 0),
+          // Kurzer Wert: ab ~12 Zeichen schneidet die 400-px-Seitenleiste „weglassen“ per Ellipse ab.
+          mk("Kundennummer", "type", "10482", 1),
+          mk("PDF herunterladen", "click", "", 2),
+        );
+        guidePhase = "stopped";
+        show("guideLive");
+        await guideMetaPrepare();
+        els.guideTitle.value = "Rechnung als PDF herunterladen";
+        els.guideCategory.value = "c1"; // „Rechnungen & Zahlungen“
+        renderGuideSteps();
+        renderGuidePhase();
+      }, portalPng.toString("base64"));
+      await p.waitForTimeout(700);
     },
   });
 
