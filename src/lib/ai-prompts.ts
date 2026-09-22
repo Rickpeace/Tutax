@@ -287,3 +287,105 @@ Regeln:
 - Wenn die Anleitung aktuell/in Ordnung ist: is_stale=false, "issues": [], kurze "summary".
 - GENAU EIN issue pro betroffenem Schritt – fasse alle Probleme eines Schritts in einem Eintrag zusammen (niemals mehrere Einträge für denselben Schritt).
 - "suggestion" muss die KONKRETE, KORREKTE Angabe enthalten (z. B. die richtige Login-URL/den richtigen Menüpunkt/Begriff, belegt durch die Web-Quellen) – nicht bloß „präzisieren" oder „aktualisieren". Wenn etwas falsch ist, sage was stattdessen richtig ist.`;
+
+// ── Schritt-Texte glätten (Sofort-Anleitung + „Texte mit KI verbessern“) ─────────────────
+// Genutzt von src/lib/guide-ai.ts (Prompt-Bau, Platzhalter, Prüfung). Die KI sieht NIE einen
+// eingetippten Wert — nur Platzhalter wie {{WERT}}; guide-ai.ts setzt ihn danach wieder ein.
+
+/** Ein Schritt, wie ihn die KI sieht (alle Strings bereits maskiert). */
+export type GuideRefinePromptStep = {
+  n: number;
+  aktion: "klick" | "eingabe";
+  label: string | null; // exakte Bildschirm-Beschriftung des Elements
+  zitat?: string; // empfohlener kennzeichnender Teil der Beschriftung (bei Anhängseln)
+  feld?: string; // Art des Eingabefelds (Suchfeld, Textfeld, Passwortfeld)
+  interaktion?: string; // Rechtsklick, Enter, … (MUSS erhalten bleiben)
+  wert?: string; // Platzhalter des eingegebenen Werts ({{WERT}}), nie der Wert selbst
+  seite?: string; // Seitentitel beim Klick (nur wenn er sich zum vorigen Schritt ändert)
+  titel_bisher: string;
+  text_bisher: string;
+  text_fest?: true; // formatierter Text (Liste, Fettdruck …) – bleibt unverändert
+};
+
+export const GUIDE_REFINE_SYSTEM = `Du bist technischer Redakteur und schreibst die Schritte einer Klick-Anleitung (Software-Tutorial) so, dass sie sich lesen wie von einem Menschen geschrieben: klar, knapp, freundlich, deutsche Sie-Form. Du bekommst je Schritt die bisherigen Texte (oft maschinelle Vorlagen wie „Klicken Sie auf „X““) und Fakten zum Element. Schreibe Titel und Text NEU.
+
+TITEL („title“):
+- Das ZIEL des Schritts als kurze Handlung im Infinitiv-Stil, z. B. „Einstellungen öffnen“, „Kontomenü öffnen“, „Rechnung speichern“, „Passwort eingeben“. Höchstens 50 Zeichen.
+- Immer Deutsch. Hier darfst du Oberflächenbegriffe sinngemäß auf Deutsch benennen (Account menu → Kontomenü), weil der Titel das Ziel beschreibt, nicht den Knopf.
+- KEIN „Klicken Sie …“, KEIN „„X“ anklicken“, keine Beschriftung zitieren müssen. Anführungszeichen im Titel nur für Platzhalter wie {{WERT}} (z. B. „Nach „{{WERT}}“ suchen“).
+
+TEXT („body“):
+- GENAU EIN kurzer, natürlicher Satz (höchstens ca. 140 Zeichen), der die Bedienung beschreibt und die EXAKTE Beschriftung („label“) in „…“ nennt, damit man das Element findet. Nie leer lassen (außer bei „text_fest“).
+- Beschriftungen NIE übersetzen, NIE umformulieren: Ist die Oberfläche englisch, bleibt das Zitat englisch.
+- Lange Beschriftungen (Kartentexte mit Beschreibung, Zähler/Status in Klammern, Datumsangaben): zitiere nur den kennzeichnenden Anfang als zusammenhängenden Teil der Beschriftung, z. B. „Inbox (12 unread)“ → „Inbox“, „Attach files Upload from your computer…“ → „Attach files“. Steht ein „zitat“ dabei, ist das genau dieser sichtbare Teil — nimm ihn.
+- Anführungszeichen immer paarig und vollständig („…“) — nie abgeschnitten, keine geraden ".
+- Der Text wiederholt NIE wortgleich den Titel.
+- Maschinelle Vorsätze wie „Auf der Seite „Home / X“: …“ lässt du weg — Seitentitel sind nur Kontext (der Screenshot zeigt die Seite).
+- Verben: „Klicken Sie auf …“, bei Menüpunkten auch „Wählen Sie …“, bei Eingaben „Geben Sie … ein“.
+
+NICHTS ERFINDEN:
+- Keine Ortsangaben (links, oben, in der Seitenleiste …) — die Position des Elements kennst du nicht.
+- Keine neuen Schaltflächen, Menüs, Werte, Gründe oder Folgen. Anleitungstitel, Seitentitel und die Nachbarschritte helfen dir nur, das ZIEL im Titel treffend zu benennen.
+- Platzhalter wie {{WERT}} stehen für eingegebene Werte: exakt so übernehmen, nie auflösen, nie erfinden. Hat ein Schritt „wert“, MUSS dieser Platzhalter in Titel oder Text vorkommen.
+- Passwortfelder („feld“: Passwortfeld): nie einen Wert nennen, Titel „Passwort eingeben“, Text z. B. „Geben Sie Ihr Passwort in das Feld „Password“ ein.“ (mit der echten Beschriftung).
+- Hat ein Schritt eine „interaktion“ (Rechtsklick, Doppelklick, Ziehen, Tastenkürzel, Enter, vorher mit der Maus über ein Menü fahren), MUSS diese Bedienung im Text erhalten bleiben — mach daraus nie einen einfachen Klick. Tastenkürzel in deutscher Schreibweise (Strg statt Ctrl), Enter als „Enter“.
+- „text_fest“: true → der bisherige Text bleibt; gib „body“ als "" zurück und formuliere nur den Titel.
+- Ohne „label“ formulierst du aus „titel_bisher“/„text_bisher“, ohne Fakten zu ändern; Zitate daraus bleiben wörtlich.
+- Keine Emojis, kein Markdown.
+
+Antworte AUSSCHLIESSLICH als JSON: {"steps":[{"n":1,"title":"…","body":"…"}]} — gleiche Anzahl und Reihenfolge wie die Eingabe.`;
+
+/** Few-Shot (bewusst ein ANDERES Produkt als die Tests), als Nutzer-/Assistenten-Paar. */
+export const GUIDE_REFINE_EXAMPLE_USER = JSON.stringify({
+  anleitung: "E-Mail mit Anhang senden",
+  websites: ["mail.example.com"],
+  schritte: [
+    { n: 1, aktion: "klick", label: "Inbox (12 unread)", zitat: "Inbox", titel_bisher: "Klicken Sie auf „Inbox“", text_bisher: "" },
+    { n: 2, aktion: "klick", label: "New message", titel_bisher: "Klicken Sie auf „New message“", text_bisher: "" },
+    { n: 3, aktion: "eingabe", label: "To", feld: "Textfeld", wert: "{{WERT}}", titel_bisher: "„{{WERT}}“ in „To“ eingeben", text_bisher: "" },
+    { n: 4, aktion: "klick", label: "Attach files Upload from your computer or cloud", zitat: "Attach files", titel_bisher: "Klicken Sie auf „Attach files“", text_bisher: "" },
+    {
+      n: 5,
+      aktion: "klick",
+      label: "Draft 2026",
+      interaktion: "RECHTSKLICK (rechte Maustaste)",
+      titel_bisher: "Klicken Sie mit der rechten Maustaste auf „Draft 2026“",
+      text_bisher: "Klicken Sie mit der rechten Maustaste auf „Draft 2026“.",
+    },
+    {
+      n: 6,
+      aktion: "eingabe",
+      label: "Search mail",
+      feld: "Suchfeld",
+      wert: "{{WERT2}}",
+      interaktion: "Eingabe mit ENTER bestätigen",
+      titel_bisher: "„{{WERT2}}“ in „Search mail“ eingeben",
+      text_bisher: "Geben Sie „{{WERT2}}“ ein und bestätigen Sie mit Enter.",
+    },
+    { n: 7, aktion: "klick", label: "Send", titel_bisher: "Klicken Sie auf „Send“", text_bisher: "" },
+  ],
+});
+
+export const GUIDE_REFINE_EXAMPLE_ASSISTANT = JSON.stringify({
+  steps: [
+    { n: 1, title: "Posteingang öffnen", body: "Klicken Sie auf „Inbox“." },
+    { n: 2, title: "Neue Nachricht beginnen", body: "Klicken Sie auf „New message“." },
+    { n: 3, title: "Empfänger eintragen", body: "Geben Sie „{{WERT}}“ in das Feld „To“ ein." },
+    { n: 4, title: "Datei anhängen", body: "Klicken Sie auf „Attach files“." },
+    { n: 5, title: "Kontextmenü des Entwurfs öffnen", body: "Klicken Sie mit der rechten Maustaste auf „Draft 2026“." },
+    { n: 6, title: "Nach „{{WERT2}}“ suchen", body: "Geben Sie den Suchbegriff in „Search mail“ ein und drücken Sie Enter." },
+    { n: 7, title: "Nachricht senden", body: "Klicken Sie auf „Send“." },
+  ],
+});
+
+/** Nutzer-Nachricht für einen (Teil-)Lauf. Alle Strings sind bereits maskiert. */
+export function guideRefineUser(
+  ctx: { guideTitle?: string | null; domains?: string[] },
+  steps: GuideRefinePromptStep[],
+): string {
+  return JSON.stringify({
+    ...(ctx.guideTitle ? { anleitung: ctx.guideTitle } : {}),
+    ...(ctx.domains?.length ? { websites: ctx.domains } : {}),
+    schritte: steps,
+  });
+}

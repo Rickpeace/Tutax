@@ -22,8 +22,12 @@ import {
   type GuideStepInput,
   type GuideTarget,
 } from "@/lib/guide";
-import { refineGuideSteps } from "@/lib/guide-ai";
-import { describeInteractionForAi } from "@/lib/interaction-text";
+import {
+  refineGuideSteps,
+  refineStepFromGuide,
+  refineContextFromGuide,
+  type RefineStep,
+} from "@/lib/guide-ai";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 
@@ -76,15 +80,8 @@ async function quotaReached(
   return (total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT;
 }
 
-// Eine gespeicherte Step-Zeile (Rückgabe an den KI-Feinschliff, der nur über NEUE Schritte läuft).
-type SavedStep = {
-  id: string;
-  title: string;
-  bodyText: string;
-  label: string;
-  action: "click" | "type";
-  interaction: string | null; // Welle 48: Art der Bedienung in Worten (KI darf sie nicht wegformulieren)
-};
+// Eine gespeicherte Step-Zeile (Eingabe des KI-Feinschliffs, der nur über NEUE Schritte läuft).
+type SavedStep = RefineStep & { id: string };
 
 /**
  * Baut die DB-Zeilen für die (neuen) Schritte — identisch für den Neu-Tutorial- und den
@@ -228,25 +225,27 @@ async function applyGuideCategory(
 
 /**
  * Die neuen Schritte für den after()-Feinschliff aufbereiten (Vorlagen-Texte pro Schritt).
- * Welle 54 (Datenschutz): Eingabe-Schritte MIT getipptem Wert gehen NICHT an die KI — ihr
- * Vorlagen-Titel („„account“ in „Suche“ eingeben“) ist bereits konkret, und der Wert soll den
- * Server nicht Richtung KI-Anbieter verlassen. Sie behalten ihre Vorlagen-Texte.
+ * Datenschutz (Welle 54): ein getippter Wert geht NICHT an die KI — guide-ai.ts ersetzt ihn im
+ * Prompt durch {{WERT}} und setzt ihn danach wieder ein; so werden auch Eingaben geglättet.
  */
 function refineInput(steps: GuideStepInput[], rows: { id: string }[]): SavedStep[] {
-  return rows.flatMap((r, i) =>
-    steps[i].typed_value
-      ? []
-      : [
-          {
-            id: r.id,
-            title: templateTitle(steps[i], i),
-            bodyText: templateBodyText(steps[i], i > 0 ? steps[i - 1] : null),
-            label: steps[i].label,
-            action: steps[i].action,
-            interaction: describeInteractionForAi(steps[i].interaction),
-          },
-        ],
-  );
+  return rows.map((r, i) => ({ id: r.id, ...refineStepFromGuide(steps, i) }));
+}
+
+/** Feinschliff im Hintergrund starten (Titel des Ziel-Tutorials wird dafür nachgeschlagen). */
+function scheduleRefine(admin: SupabaseClient, tutorialId: string, steps: GuideStepInput[], rows: { id: string }[]) {
+  after(async () => {
+    try {
+      const { data: tut } = await admin.from("tutorials").select("title").eq("id", tutorialId).maybeSingle();
+      await refineGuideSteps(
+        admin,
+        refineContextFromGuide((tut?.title as string | null) ?? null, steps),
+        refineInput(steps, rows),
+      );
+    } catch (e) {
+      console.error("[guide-complete] Feinschliff:", e instanceof Error ? e.message : e);
+    }
+  });
 }
 
 type InsertResult =
@@ -463,11 +462,7 @@ async function createNewTutorial(
   }));
   if (branches.length) await admin.from("step_branches").insert(branches);
 
-  after(() =>
-    refineGuideSteps(admin, refineInput(steps, stepRows)).catch((e) =>
-      console.error("[guide-complete] Feinschliff:", e instanceof Error ? e.message : e),
-    ),
-  );
+  scheduleRefine(admin, tutorialId, steps, stepRows);
   return { tutorialId };
 }
 
@@ -509,11 +504,7 @@ export async function POST(req: NextRequest) {
         // Seiten-Kontext (Welle 31c): site_domains als Union mit dem Ziel-Tutorial säen.
         await seedSiteDomains(admin, parsed.tutorialId, steps);
         // KI-Feinschliff NUR über die neuen Schritte.
-        after(() =>
-          refineGuideSteps(admin, refineInput(steps, ins.rows)).catch((e) =>
-            console.error("[guide-complete] Feinschliff:", e instanceof Error ? e.message : e),
-          ),
-        );
+        scheduleRefine(admin, parsed.tutorialId, steps, ins.rows);
         return recorderJson({ tutorialId: parsed.tutorialId, inserted: true });
       }
       fallbackReason = ins.reason;

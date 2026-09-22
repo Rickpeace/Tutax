@@ -521,14 +521,18 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   // Eingabe (Welle 54): mit getipptem Wert „„account“ in „Suche“ eingeben“ bzw. „„account“
   // eingeben“; ohne Wert „Feld „Suche“ ausfüllen“ (verständlicher als „Tragen Sie „Suche“ ein“).
   if (step.action === "type") {
+    // Passwortfelder: nie ein Wert (die Extension schickt dort keinen) — fester, klarer Titel.
+    if (isPasswordField(step.label, step.selector?.css)) return "Passwort eingeben";
     const value = step.typed_value;
-    if (value && step.label) return wrapTwo((a, b) => `„${a}“ in „${b}“ eingeben`, value, step.label);
+    const field = step.label ? labelHead(step.label) : "";
+    if (value && field) return wrapTwo((a, b) => `„${a}“ in „${b}“ eingeben`, value, field);
     if (value) return wrapOne([(v) => `„${v}“ eingeben`], value);
-    if (step.label) return wrapOne([(l) => `Feld „${l}“ ausfüllen`], step.label);
+    if (field) return wrapOne([(l) => `Feld „${l}“ ausfüllen`], field);
     return `Schritt ${n}`;
   }
   if (!step.label) return `Schritt ${n}`;
-  const label = step.label;
+  // Nur der kennzeichnende Anfang des Labels (Kartentext, Zähler in Klammern fallen weg).
+  const label = labelHead(step.label);
   if (step.action === "click" && it?.variant === "drag") {
     const drop = dropLabelOf(it);
     if (drop) return wrapTwo((a, b) => `Ziehen Sie „${a}“ auf „${b}“`, label, drop);
@@ -551,6 +555,56 @@ export function templateTitle(step: GuideStepInput, index: number): string {
     return wrapTwo((a, b) => `Klicken Sie im Menü „${a}“ auf „${b}“`, hover, label);
   }
   return wrapOne([(l) => `Klicken Sie auf „${l}“`], label);
+}
+
+// Passwortfeld? (Beschriftung oder CSS-Pfad verrät es.) Dort gibt es nie einen Wert.
+const PASSWORD_LABEL_RE = /passw|kennwort/i;
+const PASSWORD_CSS_RE = /password/i;
+export function isPasswordField(label: string | null | undefined, css?: string | null): boolean {
+  return PASSWORD_LABEL_RE.test(label ?? "") || PASSWORD_CSS_RE.test(css ?? "");
+}
+
+// Kleine Wörter, nach denen KEIN Beschreibungssatz beginnt („Rechnungen und Belege …“).
+const HEAD_STOP = new Set(
+  "und oder für von mit im in zu zum zur der die das den dem des auf an bei and or for of with to the a an on at by from".split(
+    " ",
+  ),
+);
+const HEAD_ROOM = 30; // bis hierhin gilt ein Label als kurz
+
+/**
+ * Kennzeichnender Anfang eines Labels für Titel-Vorlagen (greift, wenn die KI ausfällt):
+ *  - Zähler/Status in Klammern am Ende fällt weg: „Home (New unread posts)“ → „Home“
+ *  - lange Kartentexte: nur die Überschrift vor dem Beschreibungssatz — bis zum ersten
+ *    Satzzeichen oder bis zu einem großgeschriebenen Wort nach einem kleingeschriebenen, dem
+ *    wieder ein kleines Wort folgt: „Account information See your account…“ → „Account information“
+ * Kurze Labels (≤ 30 Zeichen, ohne Klammer-Anhängsel) und lange ohne erkennbare Überschrift
+ * bleiben unverändert (die Titel-Formen kürzen sie zitat-sicher).
+ */
+export function labelHead(label: string): string {
+  let l = label.replace(/\s+/g, " ").trim();
+  const paren = l.match(/^(.+?)\s*\([^()]*\)$/);
+  if (paren && paren[1].trim().length >= 2) l = paren[1].trim();
+  if (l.length <= HEAD_ROOM) return l;
+  const punct = l.search(/[.!?:;|·•–—]\s/);
+  if (punct >= 3 && punct <= 40) return l.slice(0, punct).trim();
+  const words = l.split(" ");
+  for (let i = 1; i < words.length - 1; i++) {
+    const prev = words[i - 1];
+    if (
+      /^\p{Ll}{4,}$/u.test(prev) &&
+      !HEAD_STOP.has(prev.toLowerCase()) &&
+      /^\p{Lu}\p{Ll}*$/u.test(words[i]) &&
+      /^\p{Ll}/u.test(words[i + 1])
+    ) {
+      const head = words.slice(0, i).join(" ");
+      if (head.length >= 3 && head.length <= 40) return head;
+      break;
+    }
+  }
+  // Keine erkennbare Überschrift: ganz lassen — die Titel-Formen kürzen zitat-sicher auf die
+  // Titel-Länge (mehr Information als ein harter 30-Zeichen-Schnitt).
+  return l;
 }
 
 /**
