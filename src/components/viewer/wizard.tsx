@@ -876,6 +876,29 @@ export function Wizard({
   );
 }
 
+/** Höhe der Werkzeugleiste der Großansicht (fließt in die nutzbare Bildhöhe ein). */
+const LB_TOOLBAR = 56;
+const LB_MAX_ZOOM = 6;
+
+const readViewport = () =>
+  typeof window === "undefined"
+    ? { w: 0, h: 0 }
+    : { w: window.innerWidth, h: window.innerHeight };
+
+/**
+ * Maße der Großansicht: „passend“ (ganzes Bild) plus die Startvergrößerung.
+ * Auf schmalen Fenstern füllt „passend“ nur die Breite — das Bild wäre dann kaum größer
+ * als im Schritt. Darum startet die Ansicht dort so weit vergrößert, dass das Bild die
+ * Fensterhöhe nutzt (höchstens 2,5×); „Ganzes Bild“ holt jederzeit die Übersicht zurück.
+ */
+function fitBox(vp: { w: number; h: number }, aspect: number) {
+  const availW = Math.max(1, vp.w);
+  const availH = Math.max(1, vp.h - LB_TOOLBAR);
+  const fitW = Math.min(availW, availH * aspect);
+  const fitH = fitW / aspect;
+  return { availW, availH, fitW, fitH, startZoom: Math.min(2.5, Math.max(1, availH / Math.max(1, fitH))) };
+}
+
 type LightboxData = {
   url: string;
   highlights: NonNullable<Step["highlights"]>;
@@ -904,42 +927,28 @@ function Lightbox({
   labels: HubLabels;
   onClose: () => void;
 }) {
-  const TOOLBAR = 56;
-  const MAX_ZOOM = 6;
   const rootRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [vp, setVp] = useState({ w: 0, h: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ id: number; x: number; y: number; px: number; py: number } | null>(null);
-  const movedRef = useRef(false);
-  const startedRef = useRef(false);
-
   const aspect =
     data.image_width && data.image_height ? data.image_width / data.image_height : 16 / 10;
 
+  // Fenstergröße SOFORT beim ersten Rendern messen (die Großansicht entsteht erst nach
+  // einem Klick, also nie auf dem Server). Sonst gäbe es einen Frame mit Platzhaltermaßen,
+  // in dem das Bild schon sichtbar, die Markierungs-Ebene aber noch 0 px hoch wäre.
+  const [vp, setVp] = useState(readViewport);
+  const fit = fitBox(vp, aspect);
+  const [zoom, setZoom] = useState(() => fitBox(readViewport(), aspect).startZoom);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ id: number; x: number; y: number; px: number; py: number } | null>(null);
+  const movedRef = useRef(false);
+
   useEffect(() => {
-    const update = () => setVp({ w: window.innerWidth, h: window.innerHeight });
-    update();
+    const update = () => setVp(readViewport());
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const availW = Math.max(1, vp.w);
-  const availH = Math.max(1, vp.h - TOOLBAR);
-  const fitW = Math.min(availW, availH * aspect);
-  const fitH = fitW / aspect;
-  // Startvergrößerung: so weit, dass das Bild die Fensterhöhe füllt (höchstens 2,5×).
-  // Auf breiten Fenstern ist das 1× — dort füllt „passend“ das Fenster schon aus.
-  const startZoom = Math.min(2.5, Math.max(1, availH / Math.max(1, fitH)));
-
-  useEffect(() => {
-    if (startedRef.current || vp.w === 0) return;
-    startedRef.current = true;
-    // Startvergrößerung steht erst fest, wenn die Fenstergröße gemessen ist.
-    setZoom(startZoom);
-  }, [startZoom, vp.w]);
-
+  const { availW, availH, fitW, fitH } = fit;
   const maxX = Math.max(0, (fitW * zoom - availW) / 2);
   const maxY = Math.max(0, (fitH * zoom - availH) / 2);
   const clampPan = (p: { x: number; y: number }) => ({
@@ -949,7 +958,7 @@ function Lightbox({
   const shown = clampPan(pan);
 
   const setZoomAt = (next: number) => {
-    const z = Math.min(MAX_ZOOM, Math.max(1, next));
+    const z = Math.min(LB_MAX_ZOOM, Math.max(1, next));
     setZoom(z);
     if (z <= 1.001) setPan({ x: 0, y: 0 });
   };
@@ -999,7 +1008,7 @@ function Lightbox({
     >
       <div
         className="flex shrink-0 items-center justify-end gap-2 px-2"
-        style={{ height: TOOLBAR }}
+        style={{ height: LB_TOOLBAR }}
       >
         <ToolButton onClick={() => setZoomAt(zoom / 1.6)} label={labels.zoomOut} disabled={zoom <= 1.001}>
           <ZoomOut className="size-5" />
@@ -1007,7 +1016,7 @@ function Lightbox({
         <ToolButton onClick={() => setZoomAt(1)} label={labels.zoomReset} disabled={zoom <= 1.001}>
           <Maximize2 className="size-5" />
         </ToolButton>
-        <ToolButton onClick={() => setZoomAt(zoom * 1.6)} label={labels.zoomIn} disabled={zoom >= MAX_ZOOM - 0.001}>
+        <ToolButton onClick={() => setZoomAt(zoom * 1.6)} label={labels.zoomIn} disabled={zoom >= LB_MAX_ZOOM - 0.001}>
           <ZoomIn className="size-5" />
         </ToolButton>
         <ToolButton onClick={onClose} label={labels.close} ref={closeRef}>

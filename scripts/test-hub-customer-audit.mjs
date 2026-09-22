@@ -534,9 +534,18 @@ try {
 
     // Wizard frisch öffnen: sessionStorage leeren, damit nicht die letzte Position
     // wiederhergestellt wird (der Wizard merkt sich sie pro Tab).
+    // Wizard frisch öffnen: Tab-Speicher UND den Schnappschuss im Verlaufseintrag löschen
+    // (beides hält die Position über ein Neuladen hinweg — beim Test wollen wir Schritt 1).
     const fresh = async (slug, q = "") => {
       await page.goto(`${BASE}/h/${SLUG}/${slug}${q}`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-      await page.evaluate(() => { try { sessionStorage.clear(); } catch {} });
+      await page.evaluate(() => {
+        try { sessionStorage.clear(); } catch {}
+        try {
+          const s = { ...(history.state || {}) };
+          delete s.steplyWizard;
+          history.replaceState(s, "");
+        } catch {}
+      });
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-tx="step"]', { timeout: 60_000 });
     };
@@ -1078,12 +1087,20 @@ try {
           await fr.locator("a[href^='/h/']").first().click({ force: true });
           await page.waitForTimeout(2500);
           const after = page.url();
-          const frameUrl = await page.evaluate(() => document.querySelector("iframe")?.contentWindow?.location?.href ?? "n/a").catch(() => "n/a");
-          const box = await page.evaluate(() => { const r = document.querySelector("iframe").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; });
+          // Hat es geklappt, ist die Eltern-Seite weitergesprungen -> das iframe existiert
+          // nicht mehr. Darum überall null-sicher messen.
+          const box = await page
+            .evaluate(() => {
+              const f = document.querySelector("iframe");
+              if (!f) return null;
+              const r = f.getBoundingClientRect();
+              return { w: Math.round(r.width), h: Math.round(r.height) };
+            })
+            .catch(() => null);
           if (after === before)
             note("ärgerlich", "Einbetten", "Quellen-Link im eingebetteten Chat öffnet die Anleitung IM kleinen iframe",
-              `Die Eltern-Seite bleibt auf ${after}; die Anleitung wird in das ${box.w}×${box.h} px große Chat-Fenster gequetscht (viewer/chat-widget.tsx Z. 349 nutzt <Link> ohne target="_top"). Die Bubble wird dadurch unbrauchbar (kein Zurück).`);
-          else good("Quellen-Link im eingebetteten Chat öffnet die Anleitung im Hauptfenster");
+              `Die Eltern-Seite bleibt auf ${after}; die Anleitung wird in das ${box ? `${box.w}×${box.h}` : "kleine"} px große Chat-Fenster gequetscht (viewer/chat-widget.tsx nutzt <Link> ohne target="_top"). Die Bubble wird dadurch unbrauchbar (kein Zurück).`);
+          else good(`Quellen-Link im eingebetteten Chat öffnet die Anleitung im Hauptfenster (${after.replace(BASE, "")})`);
           await shot(page, "embed-quelle-geklickt");
         } else note("kosmetisch", "Einbetten", "Chat-Antwort im iframe enthält keine Quellen-Links (evtl. keine passenden Treffer)");
       }
