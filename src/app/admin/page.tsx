@@ -1,5 +1,6 @@
 import { AlertTriangle, FileText, Crown } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin";
 import { NewTemplateButton } from "@/components/admin/new-template-button";
 import { TemplateActions } from "@/components/admin/template-actions";
 import { CategoryManager } from "@/components/admin/category-manager";
@@ -8,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { setAccountPlan } from "./actions";
 
 export default async function AdminTemplatesPage() {
+  // Gate AUCH hier: Layout und Page rendern unter PPR parallel — das Layout-Gate
+  // allein ließ den Page-Payload vor dem Redirect an anonyme Besucher raus.
+  await requireAdmin();
   const admin = createAdminClient();
   const [{ data: templates }, { data: categories }, { data: accounts }] = await Promise.all([
     admin

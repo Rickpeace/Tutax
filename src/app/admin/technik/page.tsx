@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { requireAdmin } from "@/lib/admin";
 import { AlertTriangle, CheckCircle2, CircleDashed, XCircle } from "lucide-react";
 import { DEV_LINKS, FLOWS, GAPS, SERVICES, type EnvVar, type Service } from "./inventory";
 
@@ -97,6 +98,8 @@ function ServiceCard({ s }: { s: Service }) {
 export default async function AdminTechnikPage() {
   // Env zur Laufzeit lesen (nicht beim Build einfrieren).
   await connection();
+  // Gate AUCH hier (nicht nur im Layout) — sonst landet der Payload vor dem Redirect beim Besucher.
+  await requireAdmin();
 
   const checkable = SERVICES.flatMap((s) => s.env).filter((e) => e.where === "vercel");
   const missingRequired = checkable.filter((e) => e.required && !isSet(e.name));
