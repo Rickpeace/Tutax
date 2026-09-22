@@ -158,13 +158,30 @@ try {
 <body style="margin:0;font:14px sans-serif"><h1>Zweite Seite</h1><button id="z">Weiter</button>
 <script>window.__probe=function(){return {url:location.pathname};};<\/script></body></html>`,
     "/uebersicht": `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Uebersicht</title></head><body>Uebersicht</body></html>`,
+    // Doku-Seite mit Scroll-Spy: schreibt den Hash staendig per replaceState um (ohne dass
+    // jemand etwas bedient). Darf KEINE Seitenwechsel-Schritte erzeugen.
+    "/anker.html": `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Doku</title></head>
+<body style="margin:0;font:14px sans-serif"><h1>Doku mit Abschnitts-Markierung</h1>
+<script>var n=0;setInterval(function(){n++;history.replaceState(null,"","#abschnitt"+n);},800);
+window.__probe=function(){return {url:location.pathname,hash:location.hash};};<\/script></body></html>`,
+    // Zielseite fuer den Klick auf einen Link, dessen Server 2,5 s braucht.
+    "/langsam.html": `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Langsame Seite</title></head>
+<body style="margin:0;font:14px sans-serif"><h1>Langsame Seite</h1>
+<script>window.__probe=function(){return {url:location.pathname};};<\/script></body></html>`,
+    // Seite mit einem Link dorthin (fuer die Gegenprobe „langsame Navigation").
+    "/start-langsam.html": `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Start</title></head>
+<body style="margin:0;font:14px sans-serif"><a id="slowlink" href="/langsam.html">Zur langsamen Seite</a>
+<script>window.__probe=function(){return {url:location.pathname};};<\/script></body></html>`,
   };
 
-  await ctx.route(/^http:\/\/steply\.test\//, (route) => {
+  await ctx.route(/^http:\/\/steply\.test\//, async (route) => {
     const u = new URL(route.request().url());
     if (u.pathname === "/datei.csv") {
       return route.fulfill({ status: 200, contentType: "text/csv", body: "a;b\n1;2\n" });
     }
+    // Echte Server-Wartezeit nachstellen: die Zielseite antwortet erst nach 2,5 s. Genau hier
+    // lief die Erkennung frueher in einen zweiten, sinnlosen „Weiter zu …"-Schritt.
+    if (u.pathname === "/langsam.html") await sleep(2500);
     const body = PAGES[u.pathname];
     if (!body) return route.fulfill({ status: 404, contentType: "text/html", body: "<h1>404</h1>" });
     return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body });
@@ -546,13 +563,35 @@ try {
       await page.focus("#lb");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
-      await sleep(600);
+      await sleep(1100);
     },
     verify: async (r) =>
       one(r, async (s) => ({
         verdict: s.action === "click" && s.label ? "erfasst" : "teilweise",
         detail: `label=${JSON.stringify(s.label)} css=${JSON.stringify((s.selector || {}).css)} (ein Schritt fuer beide Pfeiltasten)`,
       })),
+  });
+
+  await testCase({
+    id: "3.5c-pfeiltasten-gemaechlich",
+    muster: "Liste im NORMALEN Tempo durchblaettern (4 Pfeiltasten je 400 ms)",
+    supported: true,
+    note: "Pruefbericht: mit 250 ms Entprellung entstand je Tastendruck ein eigener Schritt — eine laengere Liste haette die Aufnahme gefuellt.",
+    run: async () => {
+      // Auswahl zurueck an den Anfang, damit vier Pfeiltasten wirklich vier Wechsel ergeben.
+      await page.evaluate(() => document.getElementById("lb").setAttribute("aria-activedescendant", "o1"));
+      await page.focus("#lb");
+      reset();
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press("ArrowDown");
+        await sleep(400);
+      }
+      await sleep(1100);
+    },
+    verify: async (r) =>
+      r.live.length === 1
+        ? { verdict: "erfasst", detail: `EIN Schritt mit der endgueltigen Auswahl: ${JSON.stringify(r.live[0].label)}` }
+        : { verdict: "teilweise", detail: `${r.live.length} Schritte statt 1 (${r.live.map((s) => s.label).join(", ")})` },
   });
 
   await testCase({
@@ -564,7 +603,7 @@ try {
       await page.evaluate(() => document.activeElement && document.activeElement.blur());
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
-      await sleep(600);
+      await sleep(1100);
     },
     verify: async (r) =>
       r.live.length === 0
@@ -594,6 +633,28 @@ try {
         verdict: opener ? "erfasst" : "teilweise",
         detail: r.live.map((s) => s.label).join(" -> "),
       };
+    },
+  });
+
+  await testCase({
+    id: "3.6b-pfeiltasten-menue-gemaechlich",
+    muster: "Menue oeffnen, im NORMALEN Tempo blaettern, mit Enter waehlen",
+    supported: true,
+    note: "Pruefbericht: bei Menues mit wanderndem Fokus stand der Eintrag doppelt drin (einmal von der Pfeiltaste, einmal vom Enter).",
+    run: async () => {
+      await page.focus("#mtrig");
+      await page.keyboard.press("ArrowDown");
+      await sleep(800);
+      await page.keyboard.press("ArrowDown");
+      await sleep(800);
+      await page.keyboard.press("Enter");
+      await sleep(500);
+    },
+    verify: async (r) => {
+      const css = r.live.map((s) => (s.selector || {}).css);
+      const dupes = css.filter((c, i) => c && css.indexOf(c) !== i);
+      if (dupes.length) return { verdict: "teilweise", detail: `Dublette: ${dupes.join(", ")} (${css.join(" -> ")})` };
+      return { verdict: "erfasst", detail: `${r.live.length} Schritte ohne Dublette: ${css.join(" -> ")}` };
     },
   });
 
@@ -954,6 +1015,52 @@ try {
       return nav.length
         ? { verdict: "teilweise", detail: `ueberfluessiger Seitenwechsel-Schritt (${nav.length})` }
         : { verdict: "erfasst", detail: "nur der Klick — kein Doppel-Schritt" };
+    },
+  });
+
+  await testCase({
+    id: "6.3d-scroll-spy-hash",
+    muster: "Doku-Seite schreibt beim Scrollen staendig den Hash um (ohne Bedienung)",
+    supported: true,
+    note: "Pruefbericht: der Hash zaehlte als Ansichtswechsel — alle 2,5 s entstand ein Schritt, ohne dass jemand etwas tat.",
+    run: async () => {
+      await page.goto("http://steply.test/anker.html", { waitUntil: "load" });
+      await arm();
+      await sleep(1200);
+      reset();
+      await sleep(5000); // nur zusehen: KEIN Klick, KEINE Taste
+    },
+    verify: async (r) =>
+      r.live.length === 0
+        ? { verdict: "erfasst", detail: "kein Schritt (korrekt)" }
+        : {
+            verdict: "teilweise",
+            detail: `${r.live.length} Schritt(e) ohne jede Bedienung: ${JSON.stringify(r.live.map((s) => s.interaction))}`,
+          },
+  });
+
+  await testCase({
+    id: "6.3e-langsame-navigation",
+    muster: "Klick auf einen Link, dessen Seite 2,5 s zum Laden braucht",
+    supported: true,
+    note: "Pruefbericht: die Server-Wartezeit zaehlte mit — hinter jedem Klick auf eine langsame Seite stand ein zweiter, sinnloser Schritt.",
+    run: async () => {
+      await page.goto("http://steply.test/start-langsam.html", { waitUntil: "load" });
+      await arm();
+      await sleep(1800);
+      reset();
+      await clickAt("#slowlink");
+      await page.waitForURL("**/langsam.html", { timeout: 8000 }).catch(() => {});
+      await arm();
+      await sleep(1200);
+    },
+    verify: async (r) => {
+      const nav = r.live.filter((s) => s.interaction && s.interaction.variant === "nav");
+      const click = r.live.filter((s) => (s.selector || {}).css === "#slowlink");
+      if (!click.length) return { verdict: "nicht", detail: "der Klick selbst fehlt" };
+      return nav.length
+        ? { verdict: "teilweise", detail: `${nav.length} ueberfluessige(r) Seitenwechsel-Schritt(e)` }
+        : { verdict: "erfasst", detail: "nur der Klick — die Ladezeit erzeugt keinen Zusatzschritt" };
     },
   });
 

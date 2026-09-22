@@ -19,7 +19,7 @@ node scripts/test-capture-gaps.mjs --only=3.  # einzelne Mustergruppe
 
 Fixtures: `scripts/fixtures/capture-controls.html`, `-keyboard.html`, `-scroll-nav.html`,
 `-widgets.html`. Ergebnis des Laufs vom 22.09.2026 **nach Welle 55** (v2.19.0):
-**60 erfasst · 3 teilweise · 5 nicht erfasst (68 Muster)** — vorher 45 · 6 · 11 (62 Muster).
+**64 erfasst · 3 teilweise · 5 nicht erfasst (72 Muster)** — vorher 45 · 6 · 11 (62 Muster).
 
 Das Abschluss-Bild (L2, Variante A) entsteht im Panel und wird darum in
 `scripts/test-guide-flow-panel.mjs` bewiesen (dort läuft die echte `panel.js`).
@@ -41,6 +41,25 @@ Freigegeben vom Produktinhaber: L1, L3, L4, L5, L6, L7 — dazu nachträglich L2
 | **L5 / L6** | Klick auf `<canvas>` oder in ein **geschlossenes** Shadow DOM: **0 Schritte** — die Aufnahme wirkte auf Google-Docs-artigen Seiten kaputt. | Schritt **ohne Selektor** (`variant:"spot"`) mit Markierung am **Klickpunkt** (56 px), Titel „Auf die markierte Stelle klicken" bzw. „In „X" auf die markierte Stelle klicken". Zweiter Druck auf dieselbe Stelle binnen 600 ms erzeugt keinen zweiten Schritt. | 8.2, 8.3, Gegenprobe 8.3b (Leerfläche → weiterhin kein Schritt) |
 | **L7** | Doppelklick auf eine gewöhnliche Tabellenzelle (Excel-Muster) fiel dem Dead-Click-Filter zum Opfer. | Ein `dblclick` **innerhalb** von `td` / `[role=gridcell]` / `[role=cell]` wird nachgereicht (`variant:"double"`). **Bewusst NICHT** über eine „hat sich das DOM geändert"-Probe: ein Doppelklick auf Fließtext markiert nur ein Wort (und ändert je nach Seite trotzdem das DOM) — die Zellen-Regel ist deterministisch, ohne Timing, und trifft genau das gemeinte Muster. | 9.2 (neu grün), 9.2b unverändert |
 | **L2 (Variante A)** | Der Screenshot entsteht im Moment des Klicks — das **Ergebnis des letzten Klicks** war in keiner Anleitung zu sehen. | Beim „Fertig" fotografiert das Panel **einmal** den Endzustand des aufgenommenen Tabs (700 ms Ruhe, max. 2 s, bestehendes captureVisibleTab-Ratenlimit) und hängt ihn als letzten Schritt an: ohne Selektor, ohne Markierung, Titel „Ergebnis". Entfernbar mit ✕, standardmäßig dabei. Nie bei 0 Schritten, nie beim Verwerfen, nie doppelt (Stopp→Weiter→Stopp), nie bei aktivem Aufnahme-Anker, und bei Fehlern (Tab zu, Kontingent) einfach ohne Bild weiter. | `test-guide-flow-panel.mjs` („Abschluss-Bild: …", 7 Prüfungen) |
+
+### Nachgebessert nach dem QA-Prüfbericht (gleiche Runde)
+
+Ein unabhängiger Prüflauf fand vier Fälle, in denen die erste Fassung **zu viele** oder
+**falsche** Schritte erzeugt hätte. Alle vier sind behoben und haben jetzt einen eigenen Test:
+
+| Befund | Was passierte | Behebung | Beleg |
+| - | - | - | - |
+| Pfeiltasten im **normalen Bedientempo** (400 ms Abstand) erzeugten **je Tastendruck einen Schritt** — das Durchblättern einer längeren Liste hätte die Aufnahme gefüllt. | Entprell-Fenster war mit 250 ms zu knapp. | Fenster auf **700 ms**; zusätzlich nimmt ein Weiterblättern in DERSELBEN Liste den vorigen Pfeiltasten-Schritt zurück → am Ende steht EIN Schritt mit der endgültigen Auswahl. | **3.5c (neu):** 4 Pfeiltasten je 400 ms → genau 1 Schritt |
+| Menüs mit **wanderndem Fokus** (W3C-APG-Standard): der Eintrag stand **doppelt** drin — einmal von der Pfeiltaste, einmal vom Enter. | `keyboardActivate` kannte den Pfeiltasten-Schritt nicht. | Enter auf genau dem Eintrag, den die Pfeiltaste gerade gemeldet hat, erzeugt keinen zweiten Schritt (er bestätigt ihn nur). | **3.6b (neu):** Menü öffnen, gemächlich blättern, Enter → keine Dublette |
+| **Scroll-Spy-Seiten** (Doku/Landingpages schreiben beim Scrollen den Hash per `replaceState` um) erzeugten alle 2,5 s einen Seitenwechsel-Schritt — **ohne jede Bedienung**. | Der Hash zählte als Ansichtswechsel. | Der Hash zählt **nicht** mehr (wie Query-Parameter); nur Herkunft + Pfad. | **6.3d (neu):** 5 s reines Zusehen auf einer Scroll-Spy-Seite → 0 Schritte |
+| Jede Navigation, die **länger als 1,5 s** lud, bekam hinter dem Klick einen zweiten, sinnlosen Schritt — bei Anmelde-/Report-Seiten also fast immer. | Die Server-Wartezeit zählte in das 1,5-s-Fenster hinein. | Bezugspunkt ist jetzt der **Start der Navigation** (`performance.timeOrigin`), nicht der Moment, in dem die neue Seite endlich läuft. | **6.3e (neu):** Klick auf einen Link, dessen Seite 2,5 s braucht → nur der Klick |
+| Textfehler: bei **Strg-Klick auf einen Menüpunkt** fiel der „erst das Menü öffnen"-Teil aus Titel UND Text. | Der Zusatztasten-Zweig stand vor dem Menü-Zweig und ersetzte den Satz. | Menü-Hinweis hat Vorrang im Titel; die gedrückte Taste hängt sich als Zusatz an den Text. | `test-guide-interaction.mjs` („Hover+Strg") |
+
+Ebenfalls behoben: ein schmales Wettrennen beim Seitenstart (der gespeicherte Zeitstempel
+konnte noch ungelesen sein → unnötiger Schritt) und eine unbehandelte Promise-Ablehnung beim
+Schreiben des Zeitstempels.
+
+---
 
 **Schritte ohne Selektor in Führung und Automation** (nav / spot / result): Die bestehende
 Mechanik trägt sie bereits — `lib/automations.ts` nimmt nur Schritte **mit** Selektor in eine

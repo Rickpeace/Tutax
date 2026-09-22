@@ -27,6 +27,9 @@
         <div id="o1" role="option" aria-selected="true">Mandant Müller</div>
         <div id="o2" role="option" aria-selected="false">Mandant Schulze</div>
         <div id="o3" role="option" aria-selected="false">Mandant Yildiz</div>
+        <div id="o4" role="option" aria-selected="false">Mandant Bergmann</div>
+        <div id="o5" role="option" aria-selected="false">Mandant Novak</div>
+        <div id="o6" role="option" aria-selected="false">Mandant Ferreira</div>
       </div>
     </section>
 
@@ -66,7 +69,7 @@
     <script>
       window.__log = [];
       var lb = document.getElementById("lb");
-      var opts = ["o1", "o2", "o3"];
+      var opts = ["o1", "o2", "o3", "o4", "o5", "o6"];
       lb.addEventListener("keydown", function (e) {
         var cur = opts.indexOf(lb.getAttribute("aria-activedescendant"));
         if (e.key === "ArrowDown") cur = Math.min(opts.length - 1, cur + 1);

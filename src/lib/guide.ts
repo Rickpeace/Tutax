@@ -592,6 +592,15 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   if (step.action === "click" && it?.variant === "double") {
     return wrapOne([(l) => `Doppelklicken Sie auf „${l}“`], label);
   }
+  // Hover-Menü (Welle 48): ausführlich, wenn es passt; sonst „Klicken Sie im Menü „H“ auf „X““.
+  // Steht VOR den Zusatztasten: „erst das Menü öffnen“ ist die wichtigere Information, die
+  // gedrückte Taste kommt dann im Fließtext (sonst fiele das Menü aus Titel UND Text heraus).
+  const hover = hoverLabelOf(it);
+  if (step.action === "click" && hover && !it?.variant) {
+    const long = `Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf „${label}“`;
+    if (long.length <= TITLE_MAX) return long;
+    return wrapTwo((a, b) => `Klicken Sie im Menü „${a}“ auf „${b}“`, hover, label);
+  }
   // Mehrfach-/Bereichsauswahl (Welle 55, L3): die gedrückte Zusatztaste gehört in den TITEL —
   // ohne sie verliert der Leser seine bisherige Auswahl.
   const modKeys = modifierKeysDe(it);
@@ -600,13 +609,6 @@ export function templateTitle(step: GuideStepInput, index: number): string {
       ? `Mit gedrückten ${modKeys}-Tasten`
       : `Mit gedrückter ${modKeys}-Taste`;
     return wrapOne([(l) => `${lead} auf „${l}“ klicken`, (l) => `${modKeys}+Klick auf „${l}“`], label);
-  }
-  // Hover-Menü (Welle 48): ausführlich, wenn es passt; sonst „Klicken Sie im Menü „H“ auf „X““.
-  const hover = hoverLabelOf(it);
-  if (step.action === "click" && hover && !it?.variant) {
-    const long = `Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf „${label}“`;
-    if (long.length <= TITLE_MAX) return long;
-    return wrapTwo((a, b) => `Klicken Sie im Menü „${a}“ auf „${b}“`, hover, label);
   }
   return wrapOne([(l) => `Klicken Sie auf „${l}“`], label);
 }
@@ -735,15 +737,19 @@ function variantSentence(step: GuideStepInput): string | null {
   return null;
 }
 
-/** Zusatz-Satz für die gedrückten Zusatztasten eines Klicks (Welle 55, L3). "" = keine. */
-function modifierSentence(step: GuideStepInput): string {
+/**
+ * Zusatz-Satz für die gedrückten Zusatztasten eines Klicks (Welle 55, L3). "" = keine.
+ * `standalone` = der Satz trägt den Schritt allein (kein Hover-Menü, keine Klick-Variante);
+ * sonst hängt er sich als kurzer Zusatz an den bestehenden Satz an.
+ */
+function modifierSentence(step: GuideStepInput, standalone: boolean): string {
   if (step.action !== "click") return "";
   const phrase = modifierPhraseDe(step.interaction);
   if (!phrase) return "";
   const target = step.label ? `„${step.label}“` : "die markierte Stelle";
-  return step.interaction?.variant
-    ? `Halten Sie dabei ${phrase} gedrückt.`
-    : `Halten Sie ${phrase} gedrückt und klicken Sie auf ${target} – so bleibt die bisherige Auswahl erhalten.`;
+  return standalone
+    ? `Halten Sie ${phrase} gedrückt und klicken Sie auf ${target} – so bleibt die bisherige Auswahl erhalten.`
+    : `Halten Sie dabei ${phrase} gedrückt.`;
 }
 
 /**
@@ -788,8 +794,8 @@ export function templateBodyText(
   }
   // Zusatztasten (Welle 55, L3): ohne Variante IST der Modifikator-Satz der Kern, mit Variante
   // (Rechts-/Doppelklick) kommt er als Zusatz dahinter.
-  const modSentence = modifierSentence(step);
-  if (modSentence) core = step.interaction?.variant && core ? `${core} ${modSentence}` : modSentence;
+  const modSentence = modifierSentence(step, !core);
+  if (modSentence) core = core ? `${core} ${modSentence}` : modSentence;
   if (core) return `${context}${core}`;
   // Nichts Zusätzliches: nur beim Seitenwechsel den Kontext + den schlichten Satz, sonst leer.
   return context ? `${context}${plainBodySentence(step)}` : "";

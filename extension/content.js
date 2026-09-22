@@ -2342,6 +2342,12 @@
     }
     if (!hit) return;
     if (editableInfo(active).editable) return; // Textfeld mit role=… -> gehoert dem Enter-Pfad
+    // Roving-Focus-Menues (W3C-APG): die Pfeiltaste hat diesen Eintrag GERADE schon als Schritt
+    // gemeldet — Enter bestaetigt ihn nur. Ohne diese Sperre stuende der Eintrag doppelt drin.
+    if (lastArrowStep && lastArrowStep.el === active && lastArrowStep.ts === lastTs) {
+      lastArrowStep = null;
+      return;
+    }
     // Hover-Menue wie beim Mausklick beruecksichtigen; der Klick-Puls bekommt die Elementmitte.
     const opts = {};
     const g = rectOf(active).px;
@@ -2373,12 +2379,21 @@
   // Eintrag: mit der Maus fuehrt derselbe Klick zum selben Ergebnis, und er bleibt mit Selektor
   // automatisierbar (anders als die Taste selbst).
   const ARROW_KEYS = /^(ArrowDown|ArrowUp|ArrowLeft|ArrowRight)$/;
-  const ARROW_SETTLE_MS = 250; // so lange auf weitere Pfeiltasten warten (= ein Schritt)
+  // Entprell-Fenster: grosszuegig, weil Menschen zwischen zwei Pfeiltasten gut eine halbe
+  // Sekunde brauchen (mit 250 ms entstand je Tastendruck ein eigener Schritt — Pruefbefund).
+  const ARROW_SETTLE_MS = 700; // so lange auf weitere Pfeiltasten warten (= ein Schritt)
   const ARROW_CONTAINER_SEL =
     '[role="listbox"], [role="menu"], [role="menubar"], [role="combobox"]';
   const ARROW_OPTION_SEL =
     '[role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
   let arrowPending = null; // { trigger, wasExpanded, container, wasSel, timer }
+  // Letzter per Pfeiltaste gemeldeter AUSWAHL-Schritt. Zwei Aufgaben:
+  //  • Weiterblaettern in DERSELBEN Liste nach Ablauf des Entprell-Fensters nimmt den vorigen
+  //    Schritt zurueck — am Ende steht EIN Schritt mit der endgueltigen Auswahl.
+  //  • Enter auf demselben Eintrag (Roving-Focus, W3C-APG-Menues) erzeugt KEINEN zweiten
+  //    Schritt — die Auswahl ist schon erfasst, Enter bestaetigt sie nur.
+  // `ts === lastTs` heisst: seitdem wurde KEIN anderer Schritt gemeldet (sonst gilt nichts mehr).
+  let lastArrowStep = null; // { el, container, ts }
 
   // Aktuell hervorgehobener Eintrag eines Listen-/Menue-Containers (oder null).
   function arrowSelection(container) {
@@ -2418,7 +2433,9 @@
         now = "";
       }
       if (now === "true") {
-        emitClick(p.trigger, arrowCenter(p.trigger).cx, arrowCenter(p.trigger).cy, null);
+        const gt = arrowCenter(p.trigger);
+        emitClick(p.trigger, gt.cx, gt.cy, null);
+        lastArrowStep = null; // frisch geoeffnetes Menue: die Auswahl beginnt neu
         return;
       }
     }
@@ -2427,7 +2444,12 @@
       const sel = arrowSelection(p.container);
       if (sel && sel !== p.wasSel && sel.isConnected) {
         const g = arrowCenter(sel);
-        emitClick(sel, g.cx, g.cy, null);
+        // Weiterblaettern in derselben Liste: den vorigen Pfeiltasten-Schritt zuruecknehmen,
+        // sonst entstuende beim Durchblaettern einer laengeren Liste je Eintrag ein Schritt.
+        const prev = lastArrowStep;
+        if (prev && prev.container === p.container && prev.ts === lastTs) sendRetract(prev.ts);
+        const ts = emitClick(sel, g.cx, g.cy, null);
+        lastArrowStep = { el: sel, container: p.container, ts };
       }
     }
   }
@@ -2617,6 +2639,7 @@
   let navLastEmitAt = 0;
   let navPollTimer = null;
   let navArrivalDone = false;
+  let navStoreRead = false; // wurde guideLastStepAt schon aus dem Speicher gelesen?
   let navPendingPop = false;
 
   // Zeitpunkt des letzten erfassten Schritts merken (ueberlebt den Seitenwechsel).
@@ -2638,14 +2661,24 @@
   function navRecentStepAt() {
     return Math.max(lastTs || 0, navStoredStepAt || 0);
   }
-  function navFollowsStep() {
-    const at = navRecentStepAt();
-    return !!at && Date.now() - at <= NAV_AFTER_STEP_MS;
+  // Folgt der Wechsel auf einen erfassten Schritt? `at` ist der Bezugszeitpunkt:
+  // im laufenden Dokument „jetzt"; beim ANKOMMEN auf einer neuen Seite aber der START der
+  // Navigation (performance.timeOrigin) — sonst zaehlte die SERVER-Wartezeit mit und jede
+  // Seite, die laenger als 1,5 s laedt, bekaeme hinter dem Klick einen zweiten, sinnlosen
+  // Schritt (Pruefbefund).
+  function navFollowsStep(at) {
+    const step = navRecentStepAt();
+    const ref = typeof at === "number" && at > 0 ? at : Date.now();
+    return !!step && ref - step <= NAV_AFTER_STEP_MS;
   }
 
+  // Ansicht = Herkunft + Pfad. Der HASH zaehlt BEWUSST NICHT: Doku-/Landingpages schreiben
+  // ihn beim Scrollen staendig per history.replaceState um (Abschnitts-Markierung) — daraus
+  // entstuende alle paar Sekunden ein „Seitenwechsel"-Schritt, ohne dass jemand etwas bedient
+  // (Pruefbefund). Query-Parameter zaehlen aus demselben Grund nicht.
   function navViewKeyNow() {
     try {
-      return (location.origin || "") + (location.pathname || "") + (location.hash || "");
+      return (location.origin || "") + (location.pathname || "");
     } catch (err) {
       return "";
     }
@@ -2681,6 +2714,10 @@
   // Frisch geladenes Dokument: Wie sind wir hier gelandet?
   function navCheckArrival() {
     if (navArrivalDone) return;
+    // Erst pruefen, wenn der Zeitstempel des letzten Schritts wirklich gelesen ist — sonst
+    // koennte ein frueher storage.onChanged-Aufruf ihn als 0 sehen und einen unnoetigen
+    // Seitenwechsel-Schritt erzeugen (Pruefbefund). Der Lese-Callback ruft uns erneut auf.
+    if (!navStoreRead) return;
     navArrivalDone = true;
     if (!recording || mode !== "guide" || !IS_TOP) return;
     let origin = 0;
@@ -2691,7 +2728,8 @@
     }
     // Seite war schon vor dem Aufnahmestart offen -> kein Ankommens-Schritt.
     if (!origin || !startEpoch || origin < startEpoch) return;
-    if (navFollowsStep()) return; // Folge eines erfassten Klicks
+    // Bezugspunkt ist der START dieser Navigation, nicht „jetzt" (s. navFollowsStep).
+    if (navFollowsStep(origin)) return; // Folge eines erfassten Klicks
     const type = navTypeNow();
     if (type === "reload") navEmit("reload");
     else if (type === "back_forward") navEmit("back");
@@ -2728,7 +2766,6 @@
 
   if (IS_TOP) {
     window.addEventListener("popstate", navOnPopState, true);
-    window.addEventListener("hashchange", () => setTimeout(navCheckView, 80), true);
     // Zurueck-Knopf mit bfcache: das Dokument wird WIEDERVERWENDET, es gibt kein neues
     // „navigation"-Ereignis — nur pageshow mit persisted=true. Ohne das bliebe genau der
     // haeufigste Fall (Zurueck) unerfasst.
@@ -5429,10 +5466,13 @@
       if (chrome.runtime.lastError) return;
       const at = res && res[NAV_STORE_KEY];
       if (typeof at === "number" && isFinite(at)) navStoredStepAt = at;
+      navStoreRead = true;
       applyRecState(res && res.rec);
+      navCheckArrival(); // falls applyRecState schon frueher (onChanged) lief
     });
   } catch (err) {
     // storage nicht verfuegbar (sehr alte Chrome-Version) -> Script bleibt passiv.
+    navStoreRead = true;
   }
 
   // Auf Aenderungen des Aufnahmezustands lauschen (Start/Stopp waehrend die Seite offen ist).

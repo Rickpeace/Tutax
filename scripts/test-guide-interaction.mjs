@@ -162,6 +162,17 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Datei", action: "c
     ok(templateTitle(st, 0).length <= 60 && quotesPaired(templateTitle(st, 0)), "Titel-Grenzen eingehalten: " + templateTitle(st, 0));
   }
 
+  // (b2) Hover-Menue + Zusatztaste: das Menue darf NICHT aus Titel UND Text verschwinden
+  //      (Pruefbefund — vorher verschluckte der Strg-Zweig den Menue-Hinweis komplett).
+  const hoverMod = step({
+    label: "Beleg 3",
+    interaction: { hover: { text: "Datei" }, hoverLabel: "Datei", modifiers: ["ctrl"] },
+  });
+  const hmT = templateTitle(hoverMod, 0);
+  const hmB = templateBodyText(hoverMod, hoverMod);
+  ok(/Datei/.test(hmT), `Hover+Strg: Menue bleibt im Titel (${hmT})`);
+  ok(/Datei/.test(hmB) && /Strg-Taste gedrückt/.test(hmB), `Hover+Strg: Menue UND Taste im Text (${hmB})`);
+
   // (e) Chips + KI-Hinweis: die KI darf die neuen Arten nicht wegformulieren.
   ok(interactionChips({ modifiers: ["ctrl"] })[0] === "Strg+Klick", "Chip: Strg+Klick");
   ok(interactionChips({ variant: "nav", nav: "reload" })[0] === "Neu laden", "Chip: Neu laden");
