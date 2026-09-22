@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichText } from "@/components/builder/rich-text";
 import { HelpToggle } from "@/components/app/help-toggle";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   saveArticle,
   setArticlePublished,
@@ -24,6 +25,8 @@ export function ArticleEditor({ article }: { article: Article }) {
   const [published, setPublished] = useState(article.status === "published");
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
+  // Steply-Abfrage statt grauem Browser-Dialog (wie im Editor).
+  const [confirm, confirmDialog] = useConfirm();
 
   // Verlust-Schutz: Browser-Navigation/Tab-Schließen bei ungespeicherten Änderungen abfangen.
   useEffect(() => {
@@ -36,9 +39,17 @@ export function ArticleEditor({ article }: { article: Article }) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  // Interne Navigation (Zurück-Link, Router-Push) bei ungespeicherten Änderungen absichern.
-  const confirmLeave = () =>
-    !dirty || window.confirm("Es gibt ungespeicherte Änderungen. Trotzdem verlassen?");
+  // Interne Navigation (Zurück-Link) bei ungespeicherten Änderungen absichern.
+  const confirmLeave = async () =>
+    !dirty ||
+    (await confirm({
+      title: "Änderungen verwerfen?",
+      description:
+        "Titel und Text dieses Artikels sind noch nicht gespeichert. Beim Verlassen gehen sie verloren.",
+      confirmLabel: "Verwerfen und verlassen",
+      cancelLabel: "Weiter bearbeiten",
+      destructive: true,
+    }));
 
   const save = () =>
     start(async () => {
@@ -75,25 +86,39 @@ export function ArticleEditor({ article }: { article: Article }) {
     }
   };
 
-  const remove = () => {
-    if (confirm("Diesen Artikel dauerhaft löschen?"))
-      start(async () => {
-        try {
-          await deleteArticle(article.id);
-          toast.success("Artikel gelöscht");
-          router.push("/app/assistent/wissen");
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Fehler");
-        }
-      });
+  const remove = async () => {
+    const ok = await confirm({
+      title: `„${article.title || "Artikel"}“ löschen?`,
+      description:
+        "Der Artikel wird dauerhaft gelöscht und steht dem KI-Assistenten nicht mehr als Wissen zur Verfügung. Das kann nicht rückgängig gemacht werden.",
+      confirmLabel: "Endgültig löschen",
+      destructive: true,
+    });
+    if (!ok) return;
+    start(async () => {
+      try {
+        await deleteArticle(article.id);
+        toast.success("Artikel gelöscht");
+        router.push("/app/assistent/wissen");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fehler");
+      }
+    });
   };
 
   return (
     <div className="mx-auto w-full max-w-3xl">
+      {confirmDialog}
       <Link
         href="/app/assistent/wissen"
+        data-testid="article-back"
         onClick={(e) => {
-          if (!confirmLeave()) e.preventDefault();
+          if (!dirty) return;
+          // Abfrage läuft asynchron: Navigation erst stoppen, bei „Verwerfen“ selbst gehen.
+          e.preventDefault();
+          void confirmLeave().then((ok) => {
+            if (ok) router.push("/app/assistent/wissen");
+          });
         }}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-ink"
       >
@@ -106,7 +131,7 @@ export function ArticleEditor({ article }: { article: Article }) {
           <Button variant="outline" size="sm" disabled={pending || !dirty} onClick={save}>
             <Save className="size-4" /> Speichern
           </Button>
-          <Button variant="ghost" size="sm" disabled={pending} onClick={remove}>
+          <Button variant="ghost" size="sm" disabled={pending} onClick={() => void remove()}>
             <Trash2 className="size-4" /> Löschen
           </Button>
         </div>

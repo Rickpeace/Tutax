@@ -15,6 +15,7 @@ import {
 } from "@/app/app/settings/team/actions";
 import { ROLES, ROLE_HINT, ROLE_LABEL, asRole } from "@/lib/roles";
 import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/settings-ui";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type Member = { userId: string; role: string; email: string; isYou: boolean };
 type Invitation = { id: string; email: string; role: string; token: string; expired: boolean; expiresAt: string };
@@ -53,6 +54,8 @@ export function TeamManager({
   const [pending, start] = useTransition();
   const [result, setResult] = useState<InviteResult | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // Steply-Abfrage statt grauem Browser-Dialog (wie im Editor und in der Wissensdatenbank).
+  const [confirm, confirmDialog] = useConfirm();
 
   const copy = (token: string) => {
     navigator.clipboard
@@ -74,6 +77,7 @@ export function TeamManager({
 
   return (
     <div className="grid gap-[18px]">
+      {confirmDialog}
       {isOwner && (
         <SettingsCard
           title="Mitglieder einladen"
@@ -187,21 +191,30 @@ export function TeamManager({
                   disabled={pending}
                   onChange={(e) => {
                     const next = e.target.value;
+                    const select = e.target;
                     const prevLabel = roleLabel(m.role);
-                    if (
-                      m.isYou &&
-                      !confirm(`Ihre eigene Rolle von „${prevLabel}“ zu „${roleLabel(next)}“ ändern? Danach können Sie das Team nicht mehr verwalten.`)
-                    ) {
-                      e.target.value = asRole(m.role);
+                    const apply = () =>
+                      start(async () => {
+                        try {
+                          await changeMemberRole(m.userId, next);
+                          toast.success(`${m.email} ist jetzt ${roleLabel(next)}.`);
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden");
+                        }
+                      });
+                    if (!m.isYou) {
+                      apply();
                       return;
                     }
-                    start(async () => {
-                      try {
-                        await changeMemberRole(m.userId, next);
-                        toast.success(`${m.email} ist jetzt ${roleLabel(next)}.`);
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden");
-                      }
+                    // Eigene Rolle: Folge klar benennen, Auswahl bei „Abbrechen“ zurücksetzen.
+                    void confirm({
+                      title: "Eigene Rolle ändern?",
+                      description: `Ihre Rolle wechselt von „${prevLabel}“ zu „${roleLabel(next)}“. Danach können Sie das Team nicht mehr verwalten – auch diese Änderung nicht zurücknehmen.`,
+                      confirmLabel: "Rolle ändern",
+                      destructive: true,
+                    }).then((ok) => {
+                      if (ok) apply();
+                      else select.value = asRole(m.role);
                     });
                   }}
                   className="shrink-0 cursor-pointer rounded-full border-2 border-line bg-card px-2 py-0.5 text-[12px] font-black text-ink-2"
@@ -220,11 +233,14 @@ export function TeamManager({
                   type="button"
                   disabled={pending}
                   onClick={() => {
-                    if (
-                      confirm(
-                        `„${m.email}“ wirklich aus dem Team entfernen? Die Person verliert sofort den Zugriff.`,
-                      )
-                    )
+                    void confirm({
+                      title: `„${m.email}“ aus dem Team entfernen?`,
+                      description:
+                        "Die Person verliert sofort den Zugriff auf dieses Konto. Angelegte Anleitungen bleiben erhalten.",
+                      confirmLabel: "Entfernen",
+                      destructive: true,
+                    }).then((ok) => {
+                      if (!ok) return;
                       start(async () => {
                         try {
                           await removeMember(m.userId);
@@ -233,6 +249,7 @@ export function TeamManager({
                           toast.error(e instanceof Error ? e.message : "Entfernen fehlgeschlagen");
                         }
                       });
+                    });
                   }}
                   className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-no-soft hover:text-no"
                   aria-label={`${m.email} entfernen`}
