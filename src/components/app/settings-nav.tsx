@@ -15,6 +15,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useMemberMode } from "@/components/app/member-mode";
 
 type SettingsLink = { href: string; label: string; icon: LucideIcon };
 type SettingsGroup = { label: string; links: SettingsLink[] };
@@ -60,12 +61,19 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(href + "/");
 
+/** Mitarbeiter (nur Schulungen) sehen nur „Persönlich" (Profil). */
+function useGroups(): SettingsGroup[] {
+  const member = useMemberMode();
+  return member ? SETTINGS_GROUPS.filter((g) => g.label === "Persönlich") : SETTINGS_GROUPS;
+}
+
 /** Desktop: linke Seitenleiste mit Gruppen-Überschriften. */
 export function SettingsSidebar() {
   const path = usePathname();
+  const groups = useGroups();
   return (
     <nav aria-label="Einstellungen" className="grid content-start gap-3.5">
-      {SETTINGS_GROUPS.map((g) => (
+      {groups.map((g) => (
         <div key={g.label}>
           <h5 className="mb-1 ml-2.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint">
             {g.label}
@@ -102,7 +110,8 @@ export function SettingsSidebar() {
 export function SettingsMobileNav() {
   const path = usePathname();
   const router = useRouter();
-  const current = SETTINGS_GROUPS.flatMap((g) => g.links).find((l) => isActive(path, l.href));
+  const groups = useGroups();
+  const current = groups.flatMap((g) => g.links).find((l) => isActive(path, l.href));
   const Icon = current?.icon ?? LayoutGrid;
   return (
     <label className="relative flex items-center gap-2.5 rounded-full border-2 border-line bg-card py-2 pl-3.5 pr-10 text-sm font-extrabold text-ink">
@@ -117,7 +126,7 @@ export function SettingsMobileNav() {
         className="absolute inset-0 size-full cursor-pointer opacity-0"
       >
         {!current && <option value="">Einstellungen</option>}
-        {SETTINGS_GROUPS.map((g) => (
+        {groups.map((g) => (
           <optgroup key={g.label} label={g.label}>
             {g.links.map((l) => (
               <option key={l.href} value={l.href}>

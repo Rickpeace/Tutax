@@ -22,6 +22,9 @@ export async function POST(
     .eq("id", id)
     .single();
   if (!tut) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
+  // Prüfen kostet KI-Aufrufe und schreibt Hinweise -> nur Inhaber/Bearbeiter (Migration 0037).
+  const { data: canEdit } = await supabase.rpc("can_edit_tutorial", { tid: id });
+  if (canEdit !== true) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
 
   const result = await runDriftCheck(supabase, id);
 

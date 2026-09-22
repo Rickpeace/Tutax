@@ -15,7 +15,7 @@ export default async function LernenDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { account, userId, memberships } = await requireAccount();
+  const { account, userId, memberships } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
   const isOwner = memberships.find((m) => m.id === account.id)?.role === "owner";
 
@@ -27,6 +27,9 @@ export default async function LernenDetailPage({
 
   // Zugriff: Tutorial gehört zum aktiven Konto.
   if (!tutorial || tutorial.account_id !== account.id) notFound();
+  // Nur veröffentlichte Schulungen — Entwürfe (auch interne) sieht niemand im Lernbereich,
+  // sonst kämen Mitarbeiter per URL an unfertige Inhalte.
+  if (tutorial.status !== "published") notFound();
   // Lern-Zugriff (Welle 20): intern ODER öffentlich-mit-in_lernen (beide mit Nachweis).
   // Öffentliche OHNE in_lernen gehören nicht in den Lernbereich -> auf die Hilfe-Seite,
   // sofern veröffentlicht + Slug vorhanden, sonst notFound.

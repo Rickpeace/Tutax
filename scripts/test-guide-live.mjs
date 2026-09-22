@@ -29,6 +29,7 @@
 //
 // Nutzung:  node --env-file=.env.local scripts/test-guide-live.mjs
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 import { spawn } from "node:child_process";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -163,7 +164,7 @@ try {
   const A = await mkUser(`tutax-guide-${stamp}@example.com`);
   accId = A.accountId; userId = A.userId;
   const token = crypto.randomUUID();
-  await admin.from("accounts").update({ recorder_token: token, plan: "pro" }).eq("id", accId);
+  await admin.from("accounts").update({ plan: "pro" }).eq("id", accId).then(() => setRecorderToken(admin, accId, token));
   ok(true, "Setup: Pro-Konto mit recorder_token");
 
   console.log("… Next-Server auf Port", PORT, "wird gestartet (kann einen Moment dauern) …");
@@ -568,7 +569,7 @@ try {
   const F = await mkUser(`tutax-guide-free-${stamp}@example.com`);
   accFree = F.accountId; userFree = F.userId;
   const tokFree = crypto.randomUUID();
-  await admin.from("accounts").update({ recorder_token: tokFree, plan: "free" }).eq("id", accFree);
+  await admin.from("accounts").update({ plan: "free" }).eq("id", accFree).then(() => setRecorderToken(admin, accFree, tokFree));
   // 5 Tutorials anlegen (= FREE_TUTORIAL_LIMIT).
   const fillRows = Array.from({ length: 5 }, (_, i) => ({ account_id: accFree, title: `Limit ${i + 1}` }));
   await admin.from("tutorials").insert(fillRows);

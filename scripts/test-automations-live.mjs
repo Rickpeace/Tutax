@@ -18,6 +18,7 @@
 // Nutzung:
 //   node --env-file=.env.local --experimental-strip-types scripts/test-automations-live.mjs
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 import { spawn } from "node:child_process";
 import { register } from "node:module";
 
@@ -178,8 +179,8 @@ try {
   accounts.push(A, B);
   const tokenA = crypto.randomUUID();
   const tokenB = crypto.randomUUID();
-  await admin.from("accounts").update({ recorder_token: tokenA }).eq("id", A.accountId);
-  await admin.from("accounts").update({ recorder_token: tokenB }).eq("id", B.accountId);
+  await setRecorderToken(admin, A.accountId, tokenA);
+  await setRecorderToken(admin, B.accountId, tokenB);
 
   // Ein reales Bild im PRIVATEN Bucket (createSignedUrl braucht ein existierendes Objekt).
   const imgPath = `${A.accountId}/auto-live-${stamp}/0.webp`;

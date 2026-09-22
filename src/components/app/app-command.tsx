@@ -12,6 +12,7 @@ import {
   CommandItem,
   CommandShortcut,
 } from "@/components/ui/command";
+import { useMemberMode } from "@/components/app/member-mode";
 import {
   MAIN_NAV,
   ASSISTENT_TABS,
@@ -64,6 +65,7 @@ export function AppCommand({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+  const member = useMemberMode();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<TutorialHit[]>([]);
   const [searching, startSearch] = useTransition();
@@ -98,7 +100,8 @@ export function AppCommand({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
-    if (q.length < 2) {
+    // Mitarbeiter durchsuchen keine Anleitungs-Bibliothek (nur Schulungen).
+    if (q.length < 2 || member) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Ergebnisliste leeren, sobald die (externe) Eingabe zu kurz ist, kein Cascade
       setHits([]);
       return;
@@ -112,7 +115,7 @@ export function AppCommand({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, member]);
 
   const go = useCallback(
     (href: string) => {
@@ -131,7 +134,9 @@ export function AppCommand({
     run: () => go(item.href),
   });
 
-  const navEntries: CmdEntry[] = [
+  const navEntries: CmdEntry[] = member
+    ? [navEntry(MAIN_NAV.find((i) => i.href === "/app/lernen") ?? MAIN_NAV[0])]
+    : [
     ...MAIN_NAV.flatMap((item) =>
       item.label === "KI-Assistent"
         ? [navEntry(item), ...ASSISTENT_TABS.map((t) => navEntry(t, "KI-Assistent"))]
@@ -152,7 +157,9 @@ export function AppCommand({
     },
   ];
 
-  const actionEntries: CmdEntry[] = [
+  const actionEntries: CmdEntry[] = member
+    ? []
+    : [
     {
       id: "action:new-tutorial",
       label: "Neue Anleitung",

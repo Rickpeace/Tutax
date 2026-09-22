@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TeamManager } from "@/components/app/team-manager";
 import { SettingsHeader } from "@/components/app/settings-ui";
+import { teamLimit } from "@/lib/plan";
 
 export default async function TeamPage() {
   const { account } = await requireAccount();
@@ -34,6 +35,8 @@ export default async function TeamPage() {
     isYou: m.user_id === user?.id,
   }));
   const myRole = members.find((m) => m.isYou)?.role ?? "editor";
+  const limit = teamLimit(account);
+  const pendingCount = (invRows ?? []).length;
 
   return (
     <div className="grid gap-[18px]">
@@ -48,6 +51,9 @@ export default async function TeamPage() {
         members={members}
         invitations={myRole === "owner" ? (invRows ?? []) : []}
         isOwner={myRole === "owner"}
+        // Infinity ist nicht serialisierbar -> null = unbegrenzt.
+        limit={Number.isFinite(limit) ? limit : null}
+        used={members.length + pendingCount}
       />
     </div>
   );

@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 
-// Steply-Recorder-Verbindungs-Token verwalten. Der Token (accounts.recorder_token,
-// Migration 0023) authentifiziert die Browser-Extension gegen /api/recorder/* — statt
-// Cookies/Sessions, weil die Extension cross-origin läuft. Nur Konto-Mitglieder dürfen
-// ihn erzeugen/rotieren (requireAccount + accounts-RLS via my_account_ids()).
+// Steply-Recorder-Verbindungs-Token verwalten. Der Token authentifiziert die Browser-
+// Extension gegen /api/recorder/* — statt Cookies/Sessions, weil die Extension cross-origin
+// läuft. Seit Migration 0037 PRO PERSON und Organisation (recorder_tokens): wer neu verbindet,
+// trennt niemand anderen mehr. Nur Inhaber/Bearbeiter (requireAccount weist Mitarbeiter ab).
 
 /**
  * Erzeugt/rotiert den Verbindungs-Token. „Erneuern" setzt einfach einen neuen — der
@@ -18,14 +18,14 @@ import { requireAccount } from "@/lib/account";
 export async function rotateRecorderToken(): Promise<
   { ok: true; token: string } | { ok: false; error: string }
 > {
-  const { account } = await requireAccount();
-  const supabase = await createClient();
+  const { account, userId } = await requireAccount();
 
   const token = crypto.randomUUID();
-  const { error } = await supabase
-    .from("accounts")
-    .update({ recorder_token: token })
-    .eq("id", account.id);
+  const { error } = await createAdminClient()
+    .from("recorder_tokens")
+    .upsert({ token, account_id: account.id, user_id: userId, created_at: new Date().toISOString() }, {
+      onConflict: "account_id,user_id",
+    });
   if (error) {
     return { ok: false, error: "Der Token konnte nicht erzeugt werden." };
   }

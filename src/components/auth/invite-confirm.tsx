@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { joinInvite } from "@/app/app/settings/team/actions";
+import { ROLE_LABEL, asRole } from "@/lib/roles";
 
 /** Bestätigungs-Abfrage für einen bereits eingeloggten Nutzer: „Einladung annehmen?" */
 export function InviteConfirm({
@@ -19,7 +20,7 @@ export function InviteConfirm({
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const roleLabel = role === "owner" ? "Inhaber" : "Bearbeiter";
+  const roleLabel = ROLE_LABEL[asRole(role)];
 
   async function join() {
     setPending(true);

@@ -4,13 +4,21 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { UserPlus, Trash2, Copy, Mail, X, Users, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { inviteMember, revokeInvitation, removeMember, type InviteResult } from "@/app/app/settings/team/actions";
+import Link from "next/link";
+import {
+  inviteMember,
+  revokeInvitation,
+  removeMember,
+  changeMemberRole,
+  type InviteResult,
+} from "@/app/app/settings/team/actions";
+import { ROLES, ROLE_HINT, ROLE_LABEL, asRole } from "@/lib/roles";
 import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/settings-ui";
 
 type Member = { userId: string; role: string; email: string; isYou: boolean };
 type Invitation = { id: string; email: string; role: string; token: string };
 
-const roleLabel = (role: string) => (role === "owner" ? "Inhaber" : "Bearbeiter");
+const roleLabel = (role: string) => ROLE_LABEL[asRole(role)];
 
 function RolePill({ role }: { role: string }) {
   return (
@@ -28,11 +36,19 @@ export function TeamManager({
   members,
   invitations,
   isOwner,
+  limit,
+  used,
 }: {
   members: Member[];
   invitations: Invitation[];
   isOwner: boolean;
+  /** Team-Grenze des Tarifs (null = unbegrenzt). */
+  limit: number | null;
+  /** Mitglieder + offene Einladungen. */
+  used: number;
 }) {
+  const full = limit !== null && used >= limit;
+  const ownerCount = members.filter((m) => m.role === "owner").length;
   const [pending, start] = useTransition();
   const [result, setResult] = useState<InviteResult | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -62,7 +78,24 @@ export function TeamManager({
           title="Mitglieder einladen"
           icon={UserPlus}
           description="Die eingeladene Person bekommt eine E-Mail mit einem Beitritts-Link."
+          aside={
+            limit !== null ? (
+              <span className="rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-black text-ink-2" data-testid="team-seats">
+                {used} von {limit} {limit === 1 ? "Platz" : "Plätzen"}
+              </span>
+            ) : undefined
+          }
         >
+          {full && (
+            <p className="rounded-xl bg-line-2 px-3 py-2 text-sm font-bold text-ink-2">
+              {limit === 1
+                ? "Im kostenlosen Tarif arbeiten Sie allein."
+                : `Ihr Tarif erlaubt ${limit} Personen im Team (inkl. offener Einladungen).`}{" "}
+              <Link href="/app/settings/tarif" className="font-extrabold text-primary underline underline-offset-2">
+                Tarif ansehen
+              </Link>
+            </p>
+          )}
           <form ref={formRef} onSubmit={onInvite} className="flex flex-wrap items-end gap-2.5">
             <div className="grid min-w-[12rem] flex-1 gap-1.5">
               <FieldLabel htmlFor="invite-email">E-Mail</FieldLabel>
@@ -84,13 +117,14 @@ export function TeamManager({
                   defaultValue="editor"
                   className={`${settingsInputClass} cursor-pointer appearance-none pr-9`}
                 >
+                  <option value="member">Mitarbeiter</option>
                   <option value="editor">Bearbeiter</option>
                   <option value="owner">Inhaber</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
-            <Button type="submit" disabled={pending} className="h-10">
+            <Button type="submit" disabled={pending || full} className="h-10">
               <Mail className="size-4" /> Einladen
             </Button>
           </form>
@@ -119,10 +153,15 @@ export function TeamManager({
               )}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">
-            „Bearbeiter“ pflegen Anleitungen, Wissen und das Design der Hilfe-Seite. Das Team
-            verwalten nur „Inhaber“.
-          </p>
+          <ul className="grid gap-0.5 text-xs text-muted-foreground">
+            {ROLES.slice()
+              .reverse()
+              .map((r) => (
+                <li key={r}>
+                  <b className="font-extrabold text-ink-2">{ROLE_LABEL[r]}:</b> {ROLE_HINT[r]}
+                </li>
+              ))}
+          </ul>
         </SettingsCard>
       )}
 
@@ -140,7 +179,41 @@ export function TeamManager({
               <div className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
                 {m.email} {m.isYou && <span className="font-semibold text-muted-foreground">(Sie)</span>}
               </div>
-              <RolePill role={m.role} />
+              {isOwner && !(m.role === "owner" && ownerCount <= 1) ? (
+                <select
+                  aria-label={`Rolle von ${m.email}`}
+                  value={asRole(m.role)}
+                  disabled={pending}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const prevLabel = roleLabel(m.role);
+                    if (
+                      m.isYou &&
+                      !confirm(`Ihre eigene Rolle von „${prevLabel}“ zu „${roleLabel(next)}“ ändern? Danach können Sie das Team nicht mehr verwalten.`)
+                    ) {
+                      e.target.value = asRole(m.role);
+                      return;
+                    }
+                    start(async () => {
+                      try {
+                        await changeMemberRole(m.userId, next);
+                        toast.success(`${m.email} ist jetzt ${roleLabel(next)}.`);
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden");
+                      }
+                    });
+                  }}
+                  className="shrink-0 cursor-pointer rounded-full border-2 border-line bg-card px-2 py-0.5 text-[12px] font-black text-ink-2"
+                >
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <RolePill role={m.role} />
+              )}
               {isOwner && !m.isYou && (
                 <button
                   type="button"

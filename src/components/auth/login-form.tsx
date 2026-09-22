@@ -14,7 +14,16 @@ import {
 
 const EMPTY: AuthState = {};
 
-export function LoginForm({ next }: { next: string }) {
+/** Hinweise, mit denen andere Stellen auf die Anmeldung schicken (?error=…). */
+const NOTICES: Record<string, string> = {
+  invite:
+    "Diese Einladung ist nicht mehr gültig – sie wurde schon angenommen oder zurückgezogen. Bitten Sie bei Bedarf um eine neue Einladung.",
+  "kein-team":
+    "Ihr Zugang gehört zu keiner Organisation mehr – vermutlich wurden Sie aus dem Team entfernt. Bitten Sie den Inhaber um eine neue Einladung.",
+};
+
+export function LoginForm({ next, notice }: { next: string; notice?: string }) {
+  const noticeText = notice ? NOTICES[notice] : undefined;
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [pwState, pwAction, pwPending] = useActionState(
     signInWithPassword,
@@ -34,6 +43,11 @@ export function LoginForm({ next }: { next: string }) {
       <p className="mt-1 text-sm text-muted-foreground">
         Willkommen zurück bei Steply.
       </p>
+      {noticeText && (
+        <p role="status" className="mt-4 rounded-lg bg-line-2 px-3 py-2 text-sm text-ink-2">
+          {noticeText}
+        </p>
+      )}
 
       {mode === "password" ? (
         <form action={pwAction} className="mt-6 space-y-4">

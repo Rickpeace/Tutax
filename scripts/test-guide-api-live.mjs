@@ -10,6 +10,7 @@
 //
 // Nutzung:  node --env-file=.env.local scripts/test-guide-api-live.mjs
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 import { spawn } from "node:child_process";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -121,8 +122,8 @@ try {
   accounts.push(A, B);
   const tokenA = crypto.randomUUID();
   const tokenB = crypto.randomUUID();
-  await admin.from("accounts").update({ recorder_token: tokenA }).eq("id", A.accountId);
-  await admin.from("accounts").update({ recorder_token: tokenB }).eq("id", B.accountId);
+  await setRecorderToken(admin, A.accountId, tokenA);
+  await setRecorderToken(admin, B.accountId, tokenB);
 
   const seedA = await seedTutorial(A.accountId, tokenA);
   const seedB = await seedTutorial(B.accountId, tokenB); // Fremd-Tutorial (Konto B)

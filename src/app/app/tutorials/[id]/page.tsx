@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireAccount } from "@/lib/account";
+import { requireAccount, mayEditTutorialOf } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { Builder } from "@/components/builder/builder";
@@ -13,7 +13,8 @@ export default async function EditorPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { account } = await requireAccount();
+  const ctx = await requireAccount();
+  const { account } = ctx;
   const supabase = await createClient();
 
   const { data: tutorial } = await supabase
@@ -22,6 +23,9 @@ export default async function EditorPage({
     .eq("id", id)
     .single<Tutorial>();
   if (!tutorial) notFound();
+  // Öffentlich lesbar heißt nicht editierbar: nur eigene Anleitungen (bzw. Vorlagen für den
+  // Plattform-Admin) im Editor öffnen — fremde veröffentlichte sind per RLS sichtbar.
+  if (!(await mayEditTutorialOf(tutorial.account_id, ctx))) notFound();
 
   const [{ data: categories }, { data: acc }, { data: translations }] = await Promise.all([
     supabase

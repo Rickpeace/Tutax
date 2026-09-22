@@ -10,16 +10,18 @@ import { requireAccount } from "@/lib/account";
  * upsert(onConflict tutorial_id,user_id): Doppelklick bleibt idempotent.
  */
 export async function markCompleted(tutorialId: string) {
-  const { account, userId } = await requireAccount();
+  const { account, userId } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
-  // Integrität: Nachweis nur für interne Tutorials des AKTIVEN Kontos — sonst
-  // ließe sich mit fremden UUIDs eine Completion-Zeile im eigenen Konto fälschen.
+  // Integrität: Nachweis nur für Schulungen des AKTIVEN Kontos (intern ODER öffentlich mit
+  // Schulungsnachweis/in_lernen — wie die Schulungs-Liste) — sonst ließe sich mit fremden
+  // UUIDs eine Completion-Zeile im eigenen Konto fälschen.
   const { data: tut } = await supabase
     .from("tutorials")
     .select("id")
     .eq("id", tutorialId)
     .eq("account_id", account.id)
-    .eq("visibility", "internal")
+    .eq("status", "published")
+    .or("visibility.eq.internal,in_lernen.eq.true")
     .maybeSingle();
   if (!tut) throw new Error("Anleitung nicht gefunden");
   const { error } = await supabase.from("tutorial_completions").upsert(
@@ -33,7 +35,7 @@ export async function markCompleted(tutorialId: string) {
 
 /** Eigenen Haken zurücknehmen. delete-Policy: nur user_id = auth.uid(). */
 export async function unmarkCompleted(tutorialId: string) {
-  const { userId } = await requireAccount();
+  const { userId } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
   const { error } = await supabase
     .from("tutorial_completions")

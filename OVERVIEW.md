@@ -139,7 +139,9 @@ Status-Chips: Veröffentlicht = Teal-Pastell, Entwurf = Amber-Pastell.
 - Dashboard-Karte `insights-card.tsx` (events-Tabelle: Aufrufe, Chat-Fragen, Feedback, Wissenslücken) + Schritt-Feedback „Ich komme hier nicht weiter" im Wizard.
 
 ### Multi-Tenant / Auth / Settings
-- Account/Guard: [`lib/account.ts`](src/lib/account.ts) (`requireAccount`), Admin: [`lib/admin.ts`](src/lib/admin.ts).
+- Account/Guard: [`lib/account.ts`](src/lib/account.ts) (`requireAccount` — weist **Mitarbeiter** standardmäßig ab, Freigabe nur per `{ allowMember: true }`), Admin: [`lib/admin.ts`](src/lib/admin.ts).
+- **Team-Rollen** ([`lib/roles.ts`](src/lib/roles.ts), Migration 0037): **Inhaber** (alles inkl. Team) · **Bearbeiter** (Inhalte, Erweiterung, Einstellungen der Organisation — nicht Team) · **Mitarbeiter** (nur Schulungen + Profil). DB: restriktive RLS-Policies (`can_edit_account`) für alle Schreibzugriffe; `accounts.plan` nur per Server änderbar (Trigger). Rolle änderbar im Team-Tab. Team-Grenze: Free 1 · Pro 5 · Business ∞ (inkl. offener Einladungen, `teamLimit` in `lib/plan.ts`).
+- **Erweiterungs-Verbindung pro Person** (`recorder_tokens`, 0037): verbinden trennt niemand anderen; Entfernen/Herabstufen zu Mitarbeiter trennt die Erweiterung.
 - Auth-Formulare: `components/auth/*`. Token-Hash-Flow via `/auth/confirm` (nicht PKCE) für Reset/Invite.
 - Einstellungen: `app/app/settings/*` (Branding/CI inkl. **Sprachen**, Team/Invites, Konto, Abo, Einbetten inkl. **Recorder-Token** — Eskalation wohnt jetzt unter `/app/assistent`).
 - Tarife: `lib/plan.ts` (free/pro/**business**; `isPro`/`isBusiness`; Gates: Sprachen/KI-CI/Intern/TTS=Business) + `lib/pricing.ts` (PLANS für Landing & Abo). Admin schaltet 3-stufig.

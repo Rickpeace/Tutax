@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { appBaseUrl } from "@/lib/url";
+import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
+import { teamLimit } from "@/lib/plan";
 
 const appUrl = appBaseUrl;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
@@ -24,7 +26,7 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
   const key = process.env.RESEND_API_KEY;
   const from = process.env.INVITE_FROM_EMAIL;
   if (!key || !from) return false;
-  const roleLabel = role === "owner" ? "Inhaber" : "Bearbeiter";
+  const roleLabel = ROLE_LABEL[asRole(role)];
   const org = escapeHtml(orgName);
   const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
     <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
@@ -50,25 +52,49 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
  * Schützt die Team-Verwaltung serverseitig (nicht nur über die UI).
  */
 async function requireOwner() {
-  const { account, userId } = await requireAccount();
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("account_members")
-    .select("role")
-    .eq("account_id", account.id)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (data?.role !== "owner") throw new Error("Nur der Inhaber darf das Team verwalten.");
+  const { account, userId, role } = await requireAccount();
+  if (role !== "owner") throw new Error("Nur der Inhaber darf das Team verwalten.");
   return { account, userId };
+}
+
+/** Eingabe -> gültige Rolle (unbekannt = Bearbeiter, wie bisher der Standard). */
+function parseRole(v: unknown): Role {
+  return v === "owner" || v === "member" ? v : "editor";
+}
+
+/**
+ * Zweite Grenzprüfung beim ANNEHMEN (die erste läuft beim Einladen): schützt vor parallel
+ * angelegten Einladungen und vor einem Tarif-Downgrade zwischen Einladen und Annehmen.
+ * Wer schon Mitglied ist, zählt nicht (Annehmen ist dann ein No-op).
+ */
+async function teamHasRoom(
+  admin: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  userId: string,
+): Promise<boolean> {
+  const [{ data: acc }, { data: rows }] = await Promise.all([
+    admin.from("accounts").select("plan").eq("id", accountId).maybeSingle(),
+    admin.from("account_members").select("user_id").eq("account_id", accountId),
+  ]);
+  const list = rows ?? [];
+  if (list.some((m) => m.user_id === userId)) return true;
+  return list.length < teamLimit(acc ?? {});
+}
+
+const TEAM_FULL =
+  "Das Team ist voll – der Tarif der Organisation erlaubt keine weiteren Personen. Bitte wenden Sie sich an den Inhaber.";
+
+/** Erweiterungs-Verbindung einer Person in diesem Konto ungültig machen (Migration 0037). */
+async function dropRecorderTokens(admin: ReturnType<typeof createAdminClient>, accountId: string, userId: string) {
+  await admin.from("recorder_tokens").delete().eq("account_id", accountId).eq("user_id", userId);
 }
 
 export async function inviteMember(formData: FormData): Promise<InviteResult> {
   const { account, userId } = await requireOwner();
-  const supabase = await createClient();
   const admin = createAdminClient();
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const role = String(formData.get("role") ?? "editor") === "owner" ? "owner" : "editor";
+  const role = parseRole(formData.get("role"));
   if (!email) return { ok: false, message: "Bitte E-Mail eingeben." };
 
   // Bereits Mitglied dieses Kontos? -> kein zweites Mal einladen.
@@ -82,6 +108,30 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     if (u && ids.has(u.id)) return { ok: false, message: "Diese Person ist bereits im Team." };
   }
 
+  // Team-Grenze je Tarif (Free 1, Pro 5, Business unbegrenzt): Mitglieder + offene
+  // Einladungen (ohne eine offene an DIESELBE Adresse — die wird gleich ersetzt).
+  const limit = teamLimit(account);
+  if (Number.isFinite(limit)) {
+    const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
+      admin.from("account_members").select("user_id", { count: "exact", head: true }).eq("account_id", account.id),
+      admin
+        .from("invitations")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", account.id)
+        .eq("status", "pending")
+        .neq("email", email),
+    ]);
+    if ((memberCount ?? 0) + (pendingCount ?? 0) >= limit) {
+      return {
+        ok: false,
+        message:
+          limit <= 1
+            ? "Im kostenlosen Tarif arbeiten Sie allein. Für ein Team wechseln Sie unter Einstellungen → Tarif zu Pro."
+            : `Ihr Tarif erlaubt ${limit} Personen im Team (inkl. offener Einladungen). Für mehr wechseln Sie unter Einstellungen → Tarif zu Business.`,
+      };
+    }
+  }
+
   // Alte offene Einladungen an dieselbe Adresse aufräumen (keine Duplikate).
   await admin
     .from("invitations")
@@ -91,7 +141,9 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     .eq("status", "pending");
 
   const token = newToken();
-  const { error: insErr } = await supabase.from("invitations").insert({
+  // Über den Admin-Client NACH der Grenzprüfung: Nutzer schreiben Einladungen nicht mehr
+  // direkt (RLS nur noch Lesen, Migration 0038) — sonst ließe sich die Grenze per REST umgehen.
+  const { error: insErr } = await admin.from("invitations").insert({
     account_id: account.id,
     email,
     role,
@@ -139,6 +191,7 @@ export async function acceptInvite(
 
   const supabase = await createClient();
   const existing = await findAuthUserByEmail(admin, inv.email);
+  if (!(await teamHasRoom(admin, inv.account_id, existing?.id ?? ""))) return { ok: false, message: TEAM_FULL };
 
   let userId: string;
   if (existing) {
@@ -202,6 +255,7 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
     return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
   if ((user.email ?? "").toLowerCase() !== inv.email.toLowerCase())
     return { ok: false, message: "Diese Einladung ist für eine andere Adresse." };
+  if (!(await teamHasRoom(admin, inv.account_id, user.id))) return { ok: false, message: TEAM_FULL };
 
   await admin.from("account_members").upsert(
     { account_id: inv.account_id, user_id: user.id, role: inv.role },
@@ -246,5 +300,38 @@ export async function removeMember(userId: string) {
     .delete()
     .eq("account_id", account.id)
     .eq("user_id", userId);
+  // Ihre Steply-Erweiterung verliert damit sofort den Zugang zu diesem Konto.
+  await dropRecorderTokens(admin, account.id, userId);
+  revalidatePath("/app/settings/team");
+}
+
+/**
+ * Rolle eines Mitglieds ändern (nur Inhaber). Der letzte Inhaber kann nicht herabgestuft
+ * werden (sonst verwaist das Konto) — auch nicht er selbst. Wird jemand Mitarbeiter,
+ * verliert seine Erweiterung den Zugang (Mitarbeiter erstellen keine Inhalte).
+ */
+export async function changeMemberRole(userId: string, nextRole: string): Promise<void> {
+  const { account } = await requireOwner();
+  const role = parseRole(nextRole);
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from("account_members")
+    .select("user_id, role")
+    .eq("account_id", account.id);
+  const list = rows ?? [];
+  const target = list.find((m) => m.user_id === userId);
+  if (!target) throw new Error("Diese Person ist nicht (mehr) im Team.");
+  if (target.role === role) return;
+  const owners = list.filter((m) => m.role === "owner");
+  if (target.role === "owner" && owners.length <= 1) {
+    throw new Error("Der letzte Inhaber kann nicht herabgestuft werden. Machen Sie zuerst jemand anderen zum Inhaber.");
+  }
+  const { error } = await admin
+    .from("account_members")
+    .update({ role })
+    .eq("account_id", account.id)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  if (role === "member") await dropRecorderTokens(admin, account.id, userId);
   revalidatePath("/app/settings/team");
 }
