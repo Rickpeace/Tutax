@@ -9,12 +9,7 @@ import {
   ImageOff,
   Zap,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { signedImageUrl } from "@/lib/upload";
 import type {
   RenderNode,
@@ -219,57 +214,43 @@ function Connector() {
 }
 
 /**
- * Einfügepunkt auf der Verbindungslinie (§7.4). Ohne Aufnahme-Option bleibt es der
- * klassische Ein-Klick-Einfügepunkt. Mit `onRecord` (Welle 27) wird daraus ein dezentes
- * Menü: „Schritt einfügen" (wie bisher) oder „Ab hier mit Extension aufnehmen".
+ * Einfügepunkt auf der Verbindungslinie (§7.4). Ein Klick auf „+“ fügt SOFORT einen leeren
+ * Schritt ein (und öffnet ihn). Mit `onRecord` (Welle 27) sitzt daneben ein kleines zweites
+ * Symbol „Ab hier mit der Steply-Erweiterung aufnehmen“ — kein Menü mehr dazwischen (Welle 53).
  */
 function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: () => void }) {
-  const knob = (
-    <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_color-mix(in_srgb,var(--primary)_18%,transparent)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white group-focus-visible/ins:ring-3 group-focus-visible/ins:ring-ring/50">
-      <Plus className="size-4" />
-    </span>
-  );
-
-  if (!onRecord) {
-    return (
+  return (
+    <div className="relative flex h-9 w-full items-center justify-center">
+      <span className="pointer-events-none absolute h-full w-0.5 bg-line" />
       <button
         type="button"
         onClick={onInsert}
         title="Schritt hier einfügen"
         aria-label="Schritt hier einfügen"
-        className="group/ins relative flex h-9 w-full items-center justify-center outline-none"
+        className="group/ins relative flex items-center justify-center rounded-full outline-none"
       >
-        <span className="absolute h-full w-0.5 bg-line" />
-        {knob}
+        <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_color-mix(in_srgb,var(--primary)_18%,transparent)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white group-focus-visible/ins:ring-3 group-focus-visible/ins:ring-ring/50">
+          <Plus className="size-4" />
+        </span>
       </button>
-    );
-  }
-
-  return (
-    <div className="group/ins relative flex h-9 w-full items-center justify-center">
-      <span className="pointer-events-none absolute h-full w-0.5 bg-line" />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              title="Hier einfügen oder aufnehmen"
-              aria-label="Hier einfügen oder aufnehmen"
-              className="group/ins flex items-center justify-center rounded-full outline-none"
-            >
-              {knob}
-            </button>
-          }
-        />
-        <DropdownMenuContent align="center" sideOffset={2} className="w-64">
-          <DropdownMenuItem onClick={onInsert}>
-            <Plus className="size-4" /> Schritt einfügen
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onRecord}>
-            <Zap className="size-4 text-primary" /> Ab hier mit der Steply-Erweiterung aufnehmen
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {onRecord && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={onRecord}
+                aria-label="Ab hier mit der Steply-Erweiterung aufnehmen"
+                data-testid="record-here"
+                className="absolute left-[calc(50%+1.25rem)] flex size-6 items-center justify-center rounded-full border border-line bg-card text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            }
+          >
+            <Zap className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Ab hier mit der Steply-Erweiterung aufnehmen</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

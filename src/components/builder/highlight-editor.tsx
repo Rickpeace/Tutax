@@ -157,6 +157,7 @@ export function HighlightEditor({
   const [live, setLive] = useState<Highlight | null>(null);
   const [guides, setGuides] = useState<Guides>(NO_GUIDES);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [helpOpen, setHelpOpen] = useState(false);
   // Eindeutige SVG-IDs: kleiner Editor und Großansicht dürfen sich nie IDs teilen.
   const uid = `he${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
@@ -583,12 +584,24 @@ export function HighlightEditor({
           </svg>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Werkzeug wählen, dann über dem Bild ziehen. Form anklicken zum Verschieben,
-        an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern.
-        „Verpixeln“ macht sensible Daten unkenntlich. Formen rasten an der Bildmitte und an
-        anderen Markierungen ein (mit gedrückter Alt-Taste frei ziehen).
-      </p>
+      {/* Hilfetext standardmäßig eingeklappt — spart Platz unter dem Bild. */}
+      <button
+        type="button"
+        onClick={() => setHelpOpen((o) => !o)}
+        aria-expanded={helpOpen}
+        aria-controls={`${uid}-help`}
+        className="rounded-sm text-xs font-bold text-muted-foreground underline-offset-2 outline-none hover:text-ink hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        Wie funktionieren die Werkzeuge?
+      </button>
+      {helpOpen && (
+        <p id={`${uid}-help`} className="text-xs text-muted-foreground">
+          Werkzeug wählen, dann über dem Bild ziehen. Form anklicken zum Verschieben,
+          an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern.
+          „Verpixeln“ macht sensible Daten unkenntlich. Formen rasten an der Bildmitte und an
+          anderen Markierungen ein (mit gedrückter Alt-Taste frei ziehen).
+        </p>
+      )}
     </div>
   );
 }

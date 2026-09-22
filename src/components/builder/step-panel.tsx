@@ -220,6 +220,20 @@ export function StepPanel({
         />
       </div>
 
+      {/* Reihenfolge (Welle 53): Titel → Erklärtext → Screenshot → Frage → Erweitert. */}
+      <div className="space-y-1.5">
+        <Label id={`body-label-${step.id}`}>Erklärtext</Label>
+        <RichText
+          key={rtKey}
+          labelledBy={`body-label-${step.id}`}
+          value={body}
+          onChange={(json) => {
+            setBody(json);
+            setDirty(true);
+          }}
+        />
+      </div>
+
       <ImageField
         tutorialId={tutorialId}
         stepId={step.id}
@@ -260,19 +274,6 @@ export function StepPanel({
           labelOn="Frage / Verzweigung"
           labelOff="Frage / Verzweigung"
           className="[&>span:last-child]:sr-only"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label id={`body-label-${step.id}`}>Erklärtext</Label>
-        <RichText
-          key={rtKey}
-          labelledBy={`body-label-${step.id}`}
-          value={body}
-          onChange={(json) => {
-            setBody(json);
-            setDirty(true);
-          }}
         />
       </div>
 
