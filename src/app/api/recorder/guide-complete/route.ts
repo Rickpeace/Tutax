@@ -226,16 +226,27 @@ async function applyGuideCategory(
   }
 }
 
-/** Die neuen Schritte für den after()-Feinschliff aufbereiten (Vorlagen-Texte pro Schritt). */
+/**
+ * Die neuen Schritte für den after()-Feinschliff aufbereiten (Vorlagen-Texte pro Schritt).
+ * Welle 54 (Datenschutz): Eingabe-Schritte MIT getipptem Wert gehen NICHT an die KI — ihr
+ * Vorlagen-Titel („„account“ in „Suche“ eingeben“) ist bereits konkret, und der Wert soll den
+ * Server nicht Richtung KI-Anbieter verlassen. Sie behalten ihre Vorlagen-Texte.
+ */
 function refineInput(steps: GuideStepInput[], rows: { id: string }[]): SavedStep[] {
-  return rows.map((r, i) => ({
-    id: r.id,
-    title: templateTitle(steps[i], i),
-    bodyText: templateBodyText(steps[i], i > 0 ? steps[i - 1] : null),
-    label: steps[i].label,
-    action: steps[i].action,
-    interaction: describeInteractionForAi(steps[i].interaction),
-  }));
+  return rows.flatMap((r, i) =>
+    steps[i].typed_value
+      ? []
+      : [
+          {
+            id: r.id,
+            title: templateTitle(steps[i], i),
+            bodyText: templateBodyText(steps[i], i > 0 ? steps[i - 1] : null),
+            label: steps[i].label,
+            action: steps[i].action,
+            interaction: describeInteractionForAi(steps[i].interaction),
+          },
+        ],
+  );
 }
 
 type InsertResult =

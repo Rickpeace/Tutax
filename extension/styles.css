@@ -824,6 +824,31 @@ svg.i.s {
   font-weight: 800;
 }
 
+/* Welle 54: eingetippter Wert eines Eingabe-Schritts (vor dem Hochladen sichtbar) */
+.guide-item .lbl small.typed {
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.guide-item .lbl .typed-drop {
+  border: 0;
+  background: none;
+  padding: 0 0 0 6px;
+  font: inherit;
+  font-weight: 800;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.guide-item .lbl .typed-drop:hover {
+  color: var(--ink);
+}
+.guide-item .lbl .typed-drop:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 .guide-item .rm {
   flex: none;
   border: 0;

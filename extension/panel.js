@@ -1327,7 +1327,7 @@ const COALESCE_WINDOW = 300; // ms: Eingabe-Flush + direkt folgender Klick teile
 const GUIDE_LATE_MS = 600; // Screenshot später als so lange nach dem Klick -> „Bild ggf. ungenau“
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, fileMeta, ts, blob, width, height, thumbUrl, imprecise }
+let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, fileMeta, typedValue, ts, blob, width, height, thumbUrl, imprecise }
 let guideQueue = []; // FIFO: [{ step, tabId, windowId, at }] - wartende Schritte (at = Eingang im Panel)
 let guideCapturing = false;
 let guideCapWinStart = 0; // Beginn des aktuellen captureVisibleTab-Zeitfensters (Panel-Uhr)
@@ -2011,6 +2011,11 @@ function addGuideStep(src, img, tabId, imprecise) {
     // Vertrag s. content.js. Nur ein Objekt durchreichen; der Server validiert streng.
     interaction:
       src.interaction && typeof src.interaction === "object" ? src.interaction : null,
+    // typed_value (Welle 54): der eingetippte Wert eines Eingabe-Schritts (content.js lässt ihn
+    // bei sensiblen Feldern weg). Wird in der Liste angezeigt und kann vor dem Hochladen
+    // weggelassen werden; der Server validiert ihn erneut.
+    typedValue:
+      src.action === "type" && typeof src.typed_value === "string" ? src.typed_value.slice(0, 80) : "",
     ts: src.ts || Date.now(),
     // Panel-intern (NICHT hochgeladen): Absender-Tab (patch/retract adressieren tab+ts) und
     // frameKey eines iframe-Schritts (steply-frame-geo reicht die echte Lage nach).
@@ -2187,6 +2192,26 @@ function renderGuideSteps() {
         small.appendChild(warn);
       }
       lbl.appendChild(small);
+    }
+    // Eingetippter Wert (Welle 54): vor dem Hochladen sichtbar — und mit einem Klick weglassbar
+    // (der Schritt bleibt, der Titel lautet dann „Feld „…“ ausfüllen“).
+    if (s.action === "type" && s.typedValue) {
+      const typed = document.createElement("small");
+      typed.className = "typed";
+      typed.textContent = "Eingabe: „" + s.typedValue + "“";
+      typed.title = "Dieser Wert erscheint im Schritt-Titel. Sensible Felder (z. B. Passwörter) werden nie übernommen.";
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "typed-drop";
+      drop.textContent = "weglassen";
+      drop.title = "Wert nicht übernehmen (der Schritt bleibt)";
+      drop.setAttribute("aria-label", "Eingetippten Wert von Schritt " + (i + 1) + " weglassen");
+      drop.addEventListener("click", () => {
+        s.typedValue = "";
+        renderGuideSteps();
+      });
+      typed.appendChild(drop);
+      lbl.appendChild(typed);
     }
 
     const rm = document.createElement("button");
@@ -2405,6 +2430,8 @@ async function uploadGuide() {
     if (s.condition && typeof s.condition === "object") step.condition = s.condition;
     // interaction (Welle 48): additiv, alte Server ignorieren es.
     if (s.interaction && typeof s.interaction === "object") step.interaction = s.interaction;
+    // typed_value (Welle 54): nur, wenn vorhanden und nicht in der Liste weggelassen.
+    if (s.action === "type" && s.typedValue) step.typed_value = s.typedValue;
     return step;
   });
   // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.

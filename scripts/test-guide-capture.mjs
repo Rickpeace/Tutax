@@ -6,7 +6,8 @@
 //   2) Editierbarkeit: Klick auf <label> loest die Kontrolle auf -> KEIN Klick-Schritt;
 //      contenteditable + password + select gelten als editierbar.
 //   3) Blur-Reihenfolge: Tippen + direkt Klick -> Eingabe-Schritt VOR Klick-Schritt.
-//   4) Datenschutz: getippte Werte (auch Passwoerter) landen NIE im Schritt/Label.
+//   4) Datenschutz: getippte Werte landen nie im Label/Selektor; unkritische nur als
+//      typed_value (Welle 54), Passwoerter gar nicht.
 //   5) Selektor-Vorbau: { css, text, role }; generierte id (":r7:") wird NICHT als #id
 //      genutzt; stabile id schon.
 //
@@ -136,7 +137,19 @@ try {
   ok(await page.evaluate(() => window.__steplyRecorderInstalled === true), "content.js installiert + guide-Modus scharf");
 
   const sent = () => page.evaluate(() => window.__sent.map((s) => ({ action: s.action, label: s.label, selector: s.selector, hasRect: !!s.rect })));
-  const sentRaw = () => page.evaluate(() => JSON.stringify(window.__sent));
+  // Welle 54: ein unkritischer getippter Wert reist NUR als typed_value — sentRaw blendet dieses
+  // Feld aus (prüft also: nie im Label/Selektor/sonstwo); typedOf liefert ihn getrennt.
+  const sentRaw = () =>
+    page.evaluate(() =>
+      JSON.stringify(
+        window.__sent.map((s) => {
+          const r = Object.assign({}, s);
+          delete r.typed_value;
+          return r;
+        }),
+      ),
+    );
+  const typedOf = () => page.evaluate(() => window.__sent.map((s) => s.typed_value));
   const reset = () => page.evaluate(() => { const a = document.activeElement; if (a && a.blur) a.blur(); window.__sent.length = 0; });
 
   // ---------- 1) Label-Hygiene: <style>-CSS NICHT im Label ----------
@@ -172,7 +185,9 @@ try {
     ok(s[1]?.label === "Speichern", `Klick-Label = „Speichern" (war „${s[1]?.label}")`);
     ok(s[0]?.selector?.css === "#email" && s[0]?.selector?.role === "textbox", `email selector { #email, textbox } (war ${JSON.stringify(s[0]?.selector)})`);
     const raw = await sentRaw();
-    ok(!raw.includes("hallo@example.test"), "DATENSCHUTZ: getippter Wert NICHT im Schritt-Payload");
+    ok(!raw.includes("hallo@example.test"), "DATENSCHUTZ: getippter Wert nicht in Label/Selektor");
+    const tv = await typedOf();
+    ok(tv[0] === "hallo@example.test" && tv[1] === undefined, `Eingabe traegt typed_value, Klick nicht (${JSON.stringify(tv)})`);
   }
 
   // ---------- 4) contenteditable: editierbar, Label aus aria-label ----------
@@ -237,7 +252,8 @@ try {
     ok(s.length === 1 && s[0].action === "type", `Telefon-Feld: 1 Eingabe-Schritt (${s.length})`);
     ok(s[0]?.label === "Telefon", `Ueberschrift daneben schlaegt Platzhalter: „Telefon" statt „+49 ..." (war „${s[0]?.label}")`);
     const raw = await sentRaw();
-    ok(!raw.includes("01762"), "DATENSCHUTZ: getippte Nummer NICHT im Payload");
+    ok(!raw.includes("01762"), "DATENSCHUTZ: getippte Nummer nicht in Label/Selektor");
+    ok((await typedOf())[0] === "01762", "Telefon: getippte Nummer als typed_value (Welle 54)");
   }
 
   // ---------- 10) Ohne Ueberschrift in der Naehe bleibt der Platzhalter das Label ----------

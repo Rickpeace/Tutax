@@ -234,7 +234,9 @@ try {
     // Schritt 2: type mit Label, rect (d) AUSSERHALB 0..1 -> muss geclampt werden; selector
     // KAPUTT (css falscher Typ, text ueberlang, fremder Key) -> gesaeubert, KEIN 400.
     { path: hs.uploads[1].path, label: "E-Mail", action: "type", rect: { x: -0.5, y: 1.5, w: 3, h: 2 }, url: "https://app.test/b", title: "Seite B", w: 1000, h: 800,
-      selector: { css: 123, text: "x".repeat(500), role: "textbox", evil: "drop-me", nested: { a: 1 } } },
+      selector: { css: 123, text: "x".repeat(500), role: "textbox", evil: "drop-me", nested: { a: 1 } },
+      // Welle 54: eingetippter Wert (mit Steuerzeichen) -> gesäubert in den Titel, kein eigenes Feld.
+      typed_value: "  max@example.test\u0007 " },
     // Schritt 3: OHNE Label und OHNE selector -> Titel "Schritt 3", selector null
     { path: hs.uploads[2].path, label: "", action: "click", rect: { x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, url: "https://app.test/b", title: "Seite B", w: 1000, h: 800 },
   ];
@@ -262,7 +264,11 @@ try {
 
       // Vorlagen-Titel.
       ok(s1.title === "Klicken Sie auf „Speichern“", `Titel S1 „Klicken Sie auf „Speichern““ (war „${s1.title}")`);
-      ok(s2.title === "Tragen Sie „E-Mail“ ein", `Titel S2 „Tragen Sie „E-Mail“ ein" (war „${s2.title}")`);
+      ok(s2.title === "„max@example.test“ in „E-Mail“ eingeben", `Titel S2 mit getipptem Wert (war „${s2.title}")`);
+      ok(!("typed_value" in s2), "S2: typed_value wird nicht als eigene Spalte gespeichert");
+      // Seitenwechsel (Seite A -> Seite B): Text = Kontext + schlichter Satz mit dem Wert.
+      const s2Text = s2.body?.content?.[0]?.content?.[0]?.text ?? "";
+      ok(s2Text === "Auf der Seite „Seite B“: Geben Sie „max@example.test“ ein.", `S2: Seitenwechsel-Text (${s2Text})`);
       ok(s3.title === "Schritt 3", `Titel S3 „Schritt 3" (war „${s3.title}")`);
 
       // Bild/Maße.

@@ -27,7 +27,9 @@ function safeHref(raw: unknown): string | null {
 export function RichTextView({ doc }: { doc: unknown }) {
   if (!doc || typeof doc !== "object") return null;
   const content = (doc as Node).content ?? [];
-  if (!content.length) return null;
+  // Leerer Erklärtext (z. B. einfacher Klick aus der Aufnahme, Welle 54: nur leere Absätze) →
+  // gar nichts rendern statt leerer <p>-Abstände.
+  if (!content.some((n) => n.type !== "paragraph" || (n.content?.length ?? 0) > 0)) return null;
   // break-words: lange, ungebrochene Ketten (URLs/Dateinamen aus echten Aufnahmen)
   // dürfen umbrechen statt horizontal aus dem Wizard/Druck zu laufen. Normaler Text
   // bleibt unberührt (bricht nur, wenn ein Wort sonst überliefe).

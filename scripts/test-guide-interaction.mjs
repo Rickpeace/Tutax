@@ -85,10 +85,10 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Datei", action: "c
   const lht = templateTitle(lh, 0);
   ok(lht.length <= 60 && quotesPaired(lht) && lht.startsWith("Klicken Sie im Menü „Datei“ auf „"), `Titel Hover lang: ${lht}`);
 
-  // Bestand unveraendert.
+  // Normaler Klick: Titel wie bisher, Text LEER (Welle 54 — der Titel sagt schon alles).
   const plain = step({});
-  ok(templateTitle(plain, 0) === "Klicken Sie auf „Datei“" && templateBodyText(plain, plain) === "Klicken Sie auf „Datei“, um fortzufahren.",
-    "Bestand: normaler Klick unveraendert");
+  ok(templateTitle(plain, 0) === "Klicken Sie auf „Datei“" && templateBodyText(plain, plain) === "",
+    "Normaler Klick: Titel unveraendert, kein Fuelltext");
   const typed = step({ action: "type", label: "Suche", interaction: { enter: true } });
   ok(templateBodyText(typed, typed) === "Tragen Sie hier „Suche“ ein und bestätigen Sie mit Enter.", "Bestand: Eingabe + Enter unveraendert");
 }

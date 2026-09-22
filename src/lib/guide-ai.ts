@@ -35,6 +35,7 @@ const SYSTEM =
   "lässt du weg. KEINE Emojis. Titel höchstens 60 Zeichen. Der Fließtext darf den Titel " +
   "NICHT wortgleich wiederholen — ein bis zwei kurze Sätze mit echter Orientierung " +
   "(wo das Element liegt, woran man es erkennt); sonst lieber ein knapper Satz. " +
+  "Ist „text_vorlage“ LEER, bleibt „body“ leer (\"\") — der Titel reicht dort. " +
   "Hat ein Schritt eine „interaktion“ (Rechtsklick, Doppelklick, Ziehen, Tastenkürzel, " +
   "Enter, vorher mit der Maus über ein Menü fahren), MUSS diese Art der Bedienung in Titel " +
   "oder Text erhalten bleiben — mach daraus NIE einen einfachen Klick. Tastenkürzel " +
@@ -57,7 +58,7 @@ function buildUser(steps: RoughStep[]): string {
     "Anzahl wie oben):\n" +
     "{\n" +
     '  "steps": [\n' +
-    '    { "n": 1, "title": "kurzer Titel (≤60 Zeichen)", "body": "ein bis zwei Sätze" }\n' +
+    '    { "n": 1, "title": "kurzer Titel (≤60 Zeichen)", "body": "ein bis zwei Sätze (leer, wenn text_vorlage leer ist)" }\n' +
     "  ]\n" +
     "}\n\n" +
     "Regeln: gleiche Anzahl Schritte; „label“ (falls vorhanden) wörtlich und in „…“ " +
@@ -124,7 +125,9 @@ export async function refineGuideSteps(
       if (!r) return;
       const patch: Record<string, unknown> = {};
       if (r.title) patch.title = r.title;
-      if (r.body) patch.body = mkBody(r.body);
+      // Welle 54: leerer Vorlagen-Text bleibt leer (einfacher Klick — der Titel sagt alles);
+      // die KI darf dort keinen Füllsatz nachschieben.
+      if (r.body && s.bodyText.trim()) patch.body = mkBody(r.body);
       if (Object.keys(patch).length === 0) return;
       await admin.from("steps").update(patch).eq("id", s.id);
     }),

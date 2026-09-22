@@ -49,7 +49,8 @@
   //   drop:    {css,text,role}, dropLabel     nur variant "drag": Ablage-Ziel
   //   hover:   {css,text,role}, hoverLabel    vorher mit der Maus ueber dieses Element (Menue)
   //   frame:   {url}                          Schritt liegt in einem iframe (origin+pathname)
-  // NIE Feldinhalte. Unbekannte Schluessel verwirft der Server.
+  // interaction traegt NIE Feldinhalte (der getippte Wert reist getrennt als step.typed_value,
+  // Welle 54, nur bei nicht sensiblen Feldern). Unbekannte Schluessel verwirft der Server.
   // Selektor-Erweiterung: selector.shadow = [hostCss, …] (Shadow-Host-Pfade aussen -> innen);
   // css/text/role gelten dann im innersten Shadow-Root (Aufloesung: guide-resolve.js).
   // Panel-intern (nicht hochgeladen): step.frameKey — Zufalls-Kennung eines iframe-Schritts, zu
@@ -630,8 +631,10 @@
     return "";
   }
 
-  // Label fuer ein editierbares Feld. DATENSCHUTZ: NIE der getippte Wert (el.value) - bei
-  // type=password gilt das erst recht (nichts Feldinhaltliches). Kette: <label> > aria >
+  // Label fuer ein editierbares Feld. DATENSCHUTZ: Das LABEL enthaelt nie den getippten Wert
+  // (el.value) - es beschreibt nur das Feld. Der Wert selbst reist seit Welle 54 GETRENNT als
+  // step.typed_value (typedValueFor) und nur bei nicht sensiblen Feldern; Passwortfelder u. a.
+  // bekommen nie einen Wert. Kette: <label> > aria >
   // (select: gewaehlte Option) > sichtbare Feldueberschrift daneben > placeholder > name
   // > title. (Placeholder erst NACH der Ueberschrift: "Telefon" schlaegt "+49 ...".)
   function labelForEditable(control, kind) {
@@ -879,8 +882,9 @@
     return out.css || out.text || out.role ? out : undefined;
   }
 
-  // Lokaler Snapshot eines Feldwerts NUR zum Vergleich (bleibt IM Content-Script; wird NIE
-  // ans Panel gesendet). Bei rich/contenteditable nur die Textlaenge (kein Inhalt).
+  // Lokaler Snapshot eines Feldwerts NUR zum Vergleich „wurde etwas geaendert?" (bleibt IM
+  // Content-Script; wird nie ans Panel gesendet). Bei rich/contenteditable nur die Textlaenge.
+  // Was ans Panel geht, entscheidet allein typedValueFor (Welle 54, mit Sensibel-Filter).
   function fieldSnapshot(el, kind) {
     try {
       if (kind === "rich") return "len:" + ((el.textContent || "").length);
@@ -1051,10 +1055,62 @@
     return rects.slice(0, MAX_SENSITIVE).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }));
   }
 
+  // ---- Eingetippter Wert (Welle 54) ---------------------------------------------------------
+  // Entscheidung des Produktinhabers: Bei einem Eingabe-Schritt reist der getippte Wert mit
+  // (step.typed_value), damit Titel/Text konkret werden („„account“ in „Suche“ eingeben“).
+  // AUSGENOMMEN (dann fehlt das Feld ganz): Passwortfelder, autocomplete mit cc-* / one-time-code
+  // / current-password / new-password, Felder in oder mit [data-steply-sensitive], Felder, die die
+  // Auto-Verpixelung als sensibel erkennt (isSensitiveByMeta), Auswahllisten/Schieberegler (kein
+  // Getipptes) und lange Freitexte (Rich-Editor/textarea > 80 Zeichen). Sonst getrimmt, max. 80.
+  // Der Wert dient NUR Titel/Text — Automationen fuellen Felder weiterhin nie damit aus.
+  const TYPED_VALUE_MAX = 80;
+  const SENSITIVE_AUTOCOMPLETE_RE = /(^|\s)(cc-[\w-]+|one-time-code|current-password|new-password)(\s|$)/i;
+  function isSensitiveField(el) {
+    try {
+      const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+      if (type === "password") return true;
+      const ac = (el.getAttribute && el.getAttribute("autocomplete")) || "";
+      if (ac && SENSITIVE_AUTOCOMPLETE_RE.test(ac)) return true;
+      if (el.hasAttribute && el.hasAttribute("data-steply-sensitive")) return true;
+      if (el.closest && el.closest("[data-steply-sensitive]")) return true;
+      return isSensitiveByMeta(el);
+    } catch (err) {
+      return true; // im Zweifel sensibel -> kein Wert
+    }
+  }
+  function typedValueFor(el) {
+    if (!el || el.nodeType !== 1) return "";
+    const info = editableInfo(el);
+    if (!info.editable || (info.kind !== "text" && info.kind !== "rich")) return "";
+    const control = info.control;
+    if (isSensitiveField(control)) return "";
+    let raw = "";
+    try {
+      const tag = (control.tagName || "").toLowerCase();
+      raw = tag === "input" || tag === "textarea" ? control.value : control.innerText || control.textContent;
+    } catch (err) {
+      return "";
+    }
+    const v = String(raw || "")
+      .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!v) return "";
+    if (v.length > TYPED_VALUE_MAX) {
+      // Lange Freitexte (Chat-Nachricht, Editor, mehrzeiliges Feld) sind kein sinnvoller Titel.
+      const tag = (control.tagName || "").toLowerCase();
+      if (info.kind === "rich" || tag === "textarea") return "";
+      return v.slice(0, TYPED_VALUE_MAX - 1).trimEnd() + "…";
+    }
+    return v;
+  }
+
   // ============================================================================
   // SOFORT-ANLEITUNG: Schritte senden + Nachtraege (Welle 48)
   //
-  // Nachrichten an das Panel (alle ueber chrome.runtime.sendMessage, NIE Feldinhalte):
+  // Nachrichten an das Panel (alle ueber chrome.runtime.sendMessage). Feldinhalte reisen NUR
+  // als step.typed_value eines Eingabe-Schritts (Welle 54: getrimmt, max. 80 Zeichen, nie bei
+  // sensiblen Feldern — s. typedValueFor); patch/retract/frame-geo tragen nie Feldinhalte:
   //   steply-guide-step    {step}                   neuer Schritt -> Panel macht SOFORT Screenshot
   //   steply-guide-patch   {ts, interaction}        interaction in den Schritt ts mergen
   //                                                 (Doppelklick, Ziehen & Ablegen)
@@ -1144,7 +1200,7 @@
   // Einen Schritt an das Panel senden. Die Seitenleiste macht darauf SOFORT einen Screenshot.
   // Der Klick-Puls (lastClickPx) wird erst NACH der Bestaetigung gezeichnet, damit er nie mit
   // im Bild landet. opts: { cx, cy (Fallback-Kreis), interaction, label (statt labelFor),
-  // extra (zusaetzliche Schritt-Felder, z. B. fileMeta) }. el darf null sein (Tastenkuerzel
+  // extra (zusaetzliche Schritt-Felder, z. B. fileMeta), noValue (kein typed_value, Welle 54) }. el darf null sein (Tastenkuerzel
   // ohne Fokus-Element) -> leeres Rechteck. Rueckgabe: ts des Schritts.
   function emitStep(el, action, opts) {
     const o = opts || {};
@@ -1165,6 +1221,12 @@
       selector: selectorFor(el),
       ts,
     };
+    // Eingetippter Wert (Welle 54): nur bei Eingabe-Schritten und nur, wenn das Feld nicht
+    // sensibel ist (typedValueFor liefert sonst ""). Fehlt -> Server nutzt „Feld „X“ ausfüllen“.
+    if (step.action === "type" && el && !o.noValue) {
+      const typed = typedValueFor(el);
+      if (typed) step.typed_value = typed;
+    }
     if (o.extra) Object.assign(step, o.extra);
     const inter = o.interaction ? Object.assign({}, o.interaction) : {};
     let framePx = null;
@@ -2049,7 +2111,12 @@
       // Wert beim Absenden merken: tippt man danach weiter (zweite Suche im selben Feld),
       // oeffnet onInput das Feld wieder (sonst ginge das zweite Enter verloren).
       fe.settledValue = fieldSnapshot(fe.el, fe.kind);
-      emitStep(fe.el, "type", { interaction: { enter: true } });
+      // Welle 54: nur ein wirklich GETIPPTER Wert reist mit — ein vorbefuelltes Feld, das nur
+      // per Enter abgeschickt wird, bekommt keinen typed_value.
+      emitStep(fe.el, "type", {
+        interaction: { enter: true },
+        noValue: fe.settledValue === fe.startValue,
+      });
       return;
     }
     if (fe.kind === "rich" || (fe.el.tagName || "").toLowerCase() === "textarea") probeRichEnter(fe);

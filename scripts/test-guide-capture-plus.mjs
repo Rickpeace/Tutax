@@ -12,7 +12,7 @@
 //   5) Doppelklick -> 1 Schritt + patch double.   6) Rechtsklick mit/ohne eigenes Menue.
 //   7) HTML5-DnD -> patch drag (+ retract ohne Drop); Zeiger-Ziehen; Datei-Drop -> Upload-Schritt.
 //   8) Tastenkuerzel: Ctrl+S (mit/ohne Feld), Ctrl+C im Feld / Ctrl+Alt+Q (@) / Escape -> nichts.
-//   9) DATENSCHUTZ: kein getippter Wert in irgendeiner Nachricht.
+//   9) DATENSCHUTZ: getippter Wert NUR als step.typed_value eines Eingabe-Schritts (Welle 54), sonst nirgends.
 //  10) Panel-Merge-Logik (patch/retract/frame-geo, Queue/in-flight/Liste) + Listen-Labels —
 //      die ECHTEN Funktionen aus extension/panel.js extrahiert und in Node ausgefuehrt.
 //
@@ -60,7 +60,7 @@ const CONTENT_JS = readFileSync(path.join(EXT, "content.js"), "utf8");
 const RESOLVE_JS = readFileSync(path.join(EXT, "guide-resolve.js"), "utf8");
 const PANEL_JS = readFileSync(path.join(EXT, "panel.js"), "utf8");
 
-// Getippte Werte — duerfen in KEINER Nachricht auftauchen.
+// Getippte Werte — duerfen NUR als typed_value eines Eingabe-Schritts auftauchen (privacyCheck).
 const SECRETS = ["FrameEingabe77", "Hallo Team geheim123", "Zeile eins privat", "Wert12345", "SchattenWert99"];
 
 // chrome-Stub je Frame: sammelt ALLE runtime-Nachrichten.
@@ -234,10 +234,18 @@ try {
   const resetAll = async () => {
     for (const fr of page.frames()) await fr.evaluate(() => { if (window.__msgs) window.__msgs.length = 0; });
   };
+  // Welle 54: Der getippte Wert darf NUR als step.typed_value eines Eingabe-Schritts reisen
+  // (Entscheidung des Produktinhabers) — nie in Label, Selektor, interaction, patch, frame-geo.
   const privacyCheck = async (label) => {
-    const raw = JSON.stringify(await allMsgs());
+    const msgs = (await allMsgs()).map((m) => {
+      if (m.type !== "steply-guide-step" || !m.step || !("typed_value" in m.step)) return m;
+      const { typed_value, ...rest } = m.step;
+      if (m.step.action !== "type") rest.__typedOnClick = typed_value; // gehoert nie an Klicks
+      return { ...m, step: rest };
+    });
+    const raw = JSON.stringify(msgs);
     const leaked = SECRETS.filter((s) => raw.includes(s));
-    ok(leaked.length === 0, `DATENSCHUTZ (${label}): kein getippter Wert in irgendeiner Nachricht${leaked.length ? " — GELEAKT: " + leaked.join(",") : ""}`);
+    ok(leaked.length === 0, `DATENSCHUTZ (${label}): getippter Wert nur als typed_value eines Eingabe-Schritts${leaked.length ? " — GELEAKT: " + leaked.join(",") : ""}`);
   };
 
   // =====================================================================================
@@ -299,6 +307,7 @@ try {
     ok(steps.length === 1 && steps[0].action === "type" && steps[0].interaction && steps[0].interaction.enter === true &&
       steps[0].interaction.frame && steps[0].label === "Stadt",
       `iframe: Eingabe + Enter -> type-Schritt mit enter + frame (${JSON.stringify(steps.map((s) => [s.action, s.label, s.interaction]))})`);
+    ok(steps[0] && steps[0].typed_value === "FrameEingabe77", `iframe: getippter Wert als typed_value (${steps[0] && steps[0].typed_value})`);
     const geos = (await msgsOf(top)).filter((m) => m.type === "steply-frame-geo");
     ok(geos.length === 1 && steps[0] && geos[0].key === steps[0].frameKey, "iframe: Geo auch fuer den Eingabe-Schritt");
   }
@@ -374,6 +383,8 @@ try {
     const st = await steps();
     const typed = st.find((s) => s.action === "type" && s.label === "Kennzeichen");
     const sel = st.find((s) => s.action === "type" && s.label !== "Kennzeichen");
+    ok(typed && typed.typed_value === "SchattenWert99", `Shadow: getippter Wert als typed_value (${typed && typed.typed_value})`);
+    ok(sel && !("typed_value" in sel), "Shadow: Auswahlliste -> KEIN typed_value (nichts getippt)");
     ok(typed && typed.selector && typed.selector.shadow && typed.selector.shadow[0] === "#shadowform" && typed.selector.css === "#sf",
       `Shadow: Eingabe-Schritt mit Label „Kennzeichen" + shadow-Selektor (${JSON.stringify(st.map((s) => [s.action, s.label, s.selector]))})`);
     ok(!!sel, `Shadow: <select>-change im Shadow-Root erzeugt Schritt (${JSON.stringify(st.map((s) => s.label))})`);
@@ -426,6 +437,7 @@ try {
     ok(st.length === 1 && st[0].action === "type" && st[0].interaction && st[0].interaction.enter === true && st[0].label === "Nachricht",
       `Chat: Enter -> type-Schritt mit enter (${JSON.stringify(st.map((s) => [s.action, s.label, s.interaction]))})`);
     ok(rt.length === 0, `Chat: Feld leerte sich -> KEIN retract (${rt.length})`);
+    ok(st[0] && st[0].typed_value === "Hallo Team geheim123", `Chat: kurze Nachricht als typed_value (${st[0] && st[0].typed_value})`);
   }
   await reset();
   await page.click("#editor");

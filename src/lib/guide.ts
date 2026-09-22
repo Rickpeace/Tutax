@@ -70,6 +70,12 @@ export type GuideStepInput = {
   condition?: StepCondition; // optional; bedingte Schritte (Welle 42), abwärtskompatibel
   jump?: StepJump; // optional; bedingter Sprung/Block-Überspringen (Welle 47), abwärtskompatibel
   interaction?: StepInteraction; // optional; Welle 48 (Enter/Rechtsklick/…), abwärtskompatibel
+  // optional (Welle 54): der eingetippte Wert eines Eingabe-Schritts (≤80 Zeichen, bereinigt) —
+  // NUR für Titel/Text. Die Extension lässt ihn bei sensiblen Feldern weg (Passwort, Karten-/
+  // Einmal-Codes, [data-steply-sensitive], sensible Beschriftung); der Server prüft die
+  // Beschriftung zusätzlich. Wird NICHT als eigenes Feld gespeichert und NICHT für
+  // Automationen verwendet (die füllen Felder weiterhin nie selbst aus).
+  typed_value?: string;
 };
 
 // Längengrenzen für den Selektor (Kostenbremse + Schutz vor aufgeblähten Payloads).
@@ -305,6 +311,31 @@ export function validateFileMeta(raw: unknown): GuideFileMeta | undefined {
   return out;
 }
 
+// ── Eingetippter Wert (Welle 54) ─────────────────────────────────────────────
+// Entscheidung des Produktinhabers: der getippte Wert darf in Titel/Text, AUSSER bei sensiblen
+// Feldern. Die Extension filtert (Feldtyp, autocomplete, Opt-out-Attribut, Beschriftung); hier
+// nur die Form + ein zweites Netz über die Beschriftung (Begriffe wie die Auto-Verpixelung).
+export const TYPED_VALUE_MAX = 80;
+const SENSITIVE_LABEL_RE =
+  /(api[-_ ]?key|secret|token|geheim|passw|password|kennwort|\bpin\b|\btan\b|iban|kontonummer|kreditkarte|credit[-_ ]?card|card number|kartennummer|cvv|cvc|\bbic\b|one[- ]?time|einmal-?(code|passwort|kennwort))/i;
+
+/**
+ * Validierung des optionalen `typed_value`: nur bei Eingabe-Schritten, nur Strings, Steuer- und
+ * unsichtbare Formatzeichen raus, Whitespace kollabiert, getrimmt, auf 80 Zeichen gekappt. Bei
+ * sensibler Beschriftung (label) wird der Wert verworfen. Leer/kaputt → undefined. Wirft NIE.
+ */
+export function validateTypedValue(raw: unknown, action: GuideAction, label: string): string | undefined {
+  if (action !== "type" || typeof raw !== "string") return undefined;
+  if (label && SENSITIVE_LABEL_RE.test(label)) return undefined;
+  const v = raw
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!v) return undefined;
+  if (v.length <= TYPED_VALUE_MAX) return v;
+  return v.slice(0, TYPED_VALUE_MAX - 1).trimEnd() + "…";
+}
+
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 function isFinitePositiveInt(n: unknown, max: number): n is number {
@@ -427,6 +458,8 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const jump = validateStepJump(s.jump);
     // interaction (Welle 48): optional, tolerant validiert. Fehlt/kaputt -> weg.
     const interaction = validateInteraction(s.interaction, action);
+    // typed_value (Welle 54): optional, nur Eingabe-Schritte; sensible Beschriftung → weg.
+    const typedValue = validateTypedValue(s.typed_value, action, label);
 
     out.push({
       path,
@@ -443,6 +476,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       ...(condition ? { condition } : {}),
       ...(jump ? { jump } : {}),
       ...(interaction ? { interaction } : {}),
+      ...(typedValue ? { typed_value: typedValue } : {}),
     });
   }
   return out;
@@ -465,7 +499,8 @@ export function highlightFromRect(rect: GuideStepInput["rect"]): Highlight {
 /**
  * Vorlagen-Titel je Schritt (Tango-Stil, deutsche Sie-Form, typografische Quotes):
  *  - click + Label → „Klicken Sie auf „{label}""
- *  - type  + Label → „Tragen Sie {label} ein"
+ *  - type  + Wert  → „„{wert}“ in „{label}“ eingeben“ (ohne Label: „„{wert}“ eingeben“)
+ *  - type  + Label → „Feld „{label}“ ausfüllen“ (Welle 54; Wert fehlt, z. B. sensibles Feld)
  *  - Welle 48 (interaction): Rechtsklick, Doppelklick, Ziehen „X“ auf „Y“, „Drücken Sie Strg+S“,
  *    Hover-Menü („Fahren Sie mit der Maus über „H“ und klicken Sie dann auf „X““)
  *  - ohne Label    → „Schritt {n}"
@@ -482,6 +517,15 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   // Tastenkürzel (Welle 48): braucht kein Label — die Kombination IST der Inhalt.
   if (step.action === "click" && it?.variant === "key" && it.key) {
     return `Drücken Sie ${displayKeyDe(it.key)}`.slice(0, TITLE_MAX);
+  }
+  // Eingabe (Welle 54): mit getipptem Wert „„account“ in „Suche“ eingeben“ bzw. „„account“
+  // eingeben“; ohne Wert „Feld „Suche“ ausfüllen“ (verständlicher als „Tragen Sie „Suche“ ein“).
+  if (step.action === "type") {
+    const value = step.typed_value;
+    if (value && step.label) return wrapTwo((a, b) => `„${a}“ in „${b}“ eingeben`, value, step.label);
+    if (value) return wrapOne([(v) => `„${v}“ eingeben`], value);
+    if (step.label) return wrapOne([(l) => `Feld „${l}“ ausfüllen`], step.label);
+    return `Schritt ${n}`;
   }
   if (!step.label) return `Schritt ${n}`;
   const label = step.label;
@@ -506,10 +550,7 @@ export function templateTitle(step: GuideStepInput, index: number): string {
     if (long.length <= TITLE_MAX) return long;
     return wrapTwo((a, b) => `Klicken Sie im Menü „${a}“ auf „${b}“`, hover, label);
   }
-  return wrapOne(
-    [step.action === "type" ? (l) => `Tragen Sie „${l}“ ein` : (l) => `Klicken Sie auf „${l}“`],
-    label,
-  );
+  return wrapOne([(l) => `Klicken Sie auf „${l}“`], label);
 }
 
 /**
@@ -573,9 +614,12 @@ function variantSentence(step: GuideStepInput): string | null {
 }
 
 /**
- * Vorlagen-Fließtext je Schritt: ein Absatz mit Kontext. Zeigt den Seiten-Titel nur,
- * wenn er sich zum vorigen Schritt geändert hat (Seitenwechsel) — dann als „Auf der
- * Seite „…"" eingeleitet. So bleibt der Text knapp und nicht redundant.
+ * Vorlagen-Fließtext je Schritt (Welle 54: NUR wenn er etwas zum Titel hinzufügt). Ein
+ * einfacher Klick („Klicken Sie auf „X““) oder eine Eingabe ohne Enter hat KEINEN Text — der
+ * Titel sagt schon alles. Text entsteht bei: Seitenwechsel (Seiten-Titel hat sich zum vorigen
+ * Schritt geändert → „Auf der Seite „…“: …“), Hover-Menü, Klick-Varianten (Rechts-/Doppelklick,
+ * Ziehen, Taste), Datei-Up-/Download, Enter-Bestätigung und Schritten ohne Beschriftung (dort
+ * ist der Titel nur „Schritt n“). Rückgabe "" = leerer Erklärtext.
  */
 export function templateBodyText(
   step: GuideStepInput,
@@ -591,33 +635,49 @@ export function templateBodyText(
   // Hover-Menü (Welle 48): erst mit der Maus über den Auslöser, dann die eigentliche Aktion.
   const hover = hoverLabelOf(step.interaction);
   const variant = variantSentence(step);
-  if (hover) {
-    if (step.action === "click" && !variant) {
-      const what = step.label ? `„${step.label}“` : "die markierte Stelle";
-      return `${context}Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf ${what}.`;
-    }
-    return `${context}Fahren Sie zuerst mit der Maus über „${hover}“. ${variant ?? baseBodySentence(step)}`;
+  let core: string;
+  if (hover && step.action === "click" && !variant) {
+    const what = step.label ? `„${step.label}“` : "die markierte Stelle";
+    core = `Fahren Sie mit der Maus über „${hover}“ und klicken Sie dann auf ${what}.`;
+  } else if (hover) {
+    core = [`Fahren Sie zuerst mit der Maus über „${hover}“.`, variant ?? extraBodySentence(step)]
+      .filter(Boolean)
+      .join(" ");
+  } else {
+    core = variant ?? extraBodySentence(step);
   }
-  return `${context}${variant ?? baseBodySentence(step)}`;
+  if (core) return `${context}${core}`;
+  // Nichts Zusätzliches: nur beim Seitenwechsel den Kontext + den schlichten Satz, sonst leer.
+  return context ? `${context}${plainBodySentence(step)}` : "";
 }
 
-/** Der bisherige Satz (Download/Eingabe/Klick) — ohne Kontext-Präfix. */
-function baseBodySentence(step: GuideStepInput): string {
-  if (step.file_meta?.role === "download" && step.label) {
-    return `Klicken Sie auf „${step.label}“ — dabei wird eine Datei heruntergeladen.`;
+/**
+ * Satz, der über den Titel HINAUS etwas sagt (Download, Enter, fehlende Beschriftung) —
+ * ohne Kontext-Präfix. "" = der Titel reicht.
+ */
+function extraBodySentence(step: GuideStepInput): string {
+  if (step.file_meta?.role === "download") {
+    const what = step.label ? `„${step.label}“` : "die markierte Stelle";
+    return `Klicken Sie auf ${what} — dabei wird eine Datei heruntergeladen.`;
   }
-  if (step.action === "type" && step.label) {
-    return step.interaction?.enter
-      ? `Tragen Sie hier „${step.label}“ ein und bestätigen Sie mit Enter.`
-      : `Tragen Sie hier „${step.label}“ ein.`;
+  if (step.action === "type") {
+    if (step.interaction?.enter) {
+      if (step.typed_value) return `Geben Sie „${step.typed_value}“ ein und bestätigen Sie mit Enter.`;
+      if (step.label) return `Tragen Sie hier „${step.label}“ ein und bestätigen Sie mit Enter.`;
+      return "Tragen Sie hier Ihre Eingabe ein und bestätigen Sie mit Enter.";
+    }
+    return step.label || step.typed_value ? "" : "Füllen Sie das markierte Feld aus.";
   }
-  if (step.action === "type" && step.interaction?.enter) {
-    return "Tragen Sie hier Ihre Eingabe ein und bestätigen Sie mit Enter.";
+  return step.label ? "" : "Klicken Sie auf die markierte Stelle.";
+}
+
+/** Schlichter Satz zur Aktion (nur mit Seitenwechsel-Kontext verwendet). */
+function plainBodySentence(step: GuideStepInput): string {
+  if (step.action === "type") {
+    if (step.typed_value) return `Geben Sie „${step.typed_value}“ ein.`;
+    return `Füllen Sie das Feld „${step.label}“ aus.`;
   }
-  if (step.label) {
-    return `Klicken Sie auf „${step.label}“, um fortzufahren.`;
-  }
-  return "Führen Sie diesen Schritt wie im Bild markiert aus.";
+  return `Klicken Sie auf „${step.label}“.`;
 }
 
 // Tiptap-Doc aus einem Absatz (gleiches Schema wie mkBody in den bestehenden Actions).

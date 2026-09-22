@@ -6,7 +6,7 @@
 //   2) Normales Feld: Klick rein, tippen, Enter -> ein Schritt (enter:true), kein Doppel durch blur.
 //   3) Mehrzeiliges <textarea> ohne Such-Rolle: Enter = Zeilenumbruch -> KEIN Schritt beim Enter.
 //   4) Enter in einem vorbefuellten Feld ohne Aenderung -> Schritt (Absenden ist eine Aktion).
-//   5) DATENSCHUTZ: getippter Wert nie im Payload.
+//   5) DATENSCHUTZ: getippter Wert NUR als step.typed_value (Welle 54); vorbefuellte Werte nie.
 //   6) Server (guide.ts): enter wird validiert und ergibt „…und bestätigen Sie mit Enter."
 //
 // Nutzung:  node scripts/test-guide-enter.mjs   (kein .env noetig)
@@ -117,7 +117,21 @@ try {
     const gone = new Set(l.filter((e) => e.ev === "retract").map((e) => e.ts));
     return l.filter((e) => e.ev === "step" && !gone.has(e.ts));
   };
-  const raw = () => page.evaluate(() => JSON.stringify(window.__log));
+  // Welle 54: der getippte Wert darf NUR als step.typed_value reisen — raw() blendet genau dieses
+  // Feld aus, damit „nicht im Payload" weiter prüft, dass er nirgends sonst auftaucht.
+  const raw = () =>
+    page.evaluate(() =>
+      JSON.stringify(
+        window.__log.map((e) => {
+          if (e.ev !== "step" || !e.step) return e;
+          const rest = Object.assign({}, e.step);
+          delete rest.typed_value;
+          return Object.assign({}, e, { step: rest });
+        }),
+      ),
+    );
+  const typedValues = () =>
+    page.evaluate(() => window.__log.filter((e) => e.ev === "step").map((e) => e.step.typed_value));
   const reset = () => page.evaluate(() => { window.__log.length = 0; });
 
   // ---------- 1) Google-Muster ----------
@@ -132,7 +146,8 @@ try {
     ok(steps[0]?.label === "Suche", `Google: Label = „Suche" (war „${steps[0]?.label}")`);
     ok(l[0]?.ev === "step" && l.some((e) => e.ev === "submit"),
       `Google: Schritt kommt VOR dem Absenden (${l.map((e) => e.ev).join(",")})`);
-    ok(!(await raw()).includes("steply anleitung"), "DATENSCHUTZ: Suchbegriff NICHT im Payload");
+    ok(!(await raw()).includes("steply anleitung"), "DATENSCHUTZ: Suchbegriff nur als typed_value (nicht in Label/Selektor)");
+    ok((await typedValues())[0] === "steply anleitung", "Google: Suchbegriff als typed_value (Welle 54)");
   }
   // blur danach darf keinen zweiten Schritt erzeugen
   await page.click("#other");
@@ -183,7 +198,8 @@ try {
     const n = await net();
     ok(n.length === 1 && n[0].action === "type" && n[0].enter === true && n[0].label === "Nachricht",
       `Chat-textarea: abgeschickte Nachricht bleibt als Schritt mit enter (${JSON.stringify(await log())})`);
-    ok(!(await raw()).includes("Hallo Team"), "DATENSCHUTZ: Chat-Text NICHT im Payload");
+    ok(!(await raw()).includes("Hallo Team"), "DATENSCHUTZ: Chat-Text nur als typed_value");
+    ok((await typedValues())[0] === "Hallo Team", "Chat-textarea: kurze Nachricht als typed_value");
   }
 
   // ---------- 3c) Pause mitten in der Eingabe: offene Eingabe wird noch gemeldet ----------
@@ -211,7 +227,8 @@ try {
     const steps = (await log()).filter((e) => e.ev === "step");
     ok(steps.length === 1 && steps[0].action === "type" && steps[0].enter === true,
       `Nur Enter im vorbefuellten Feld -> 1 Schritt mit enter (${JSON.stringify(steps)})`);
-    ok(!(await raw()).includes("4711"), "DATENSCHUTZ: vorbefuellter Wert NICHT im Payload");
+    ok(!(await raw()).includes("4711") && (await typedValues())[0] === undefined,
+      "DATENSCHUTZ: vorbefuellter (nicht getippter) Wert nicht im Payload, auch kein typed_value");
   }
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
