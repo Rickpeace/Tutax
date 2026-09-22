@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -23,6 +22,8 @@ import {
 } from "@/app/app/settings/einbetten/actions";
 import type { RecorderConnection } from "@/lib/recorder";
 import { dateLongDe, relativeDe } from "@/lib/format";
+import { ExtensionSetupSteps } from "@/components/extension-setup-steps";
+import { isNewerVersion, useBrowserKind, useRecorderExtension } from "@/lib/use-recorder-extension";
 
 // Welche Verbindung gehört zu DIESEM Browser? Die Seite kann den Token der Erweiterung nicht
 // sehen — wir merken uns nach erfolgreichem Verbinden die (nicht geheime) Kennung lokal.
@@ -63,15 +64,22 @@ function writeThisBrowserId(id: string | null) {
 export function RecorderConnect({
   connections,
   appUrl,
+  latestVersion,
+  zipUrl,
 }: {
   /** Verbindungen der Person in diesem Konto (ohne Token). */
   connections: RecorderConnection[];
   /** Echte App-Basis-URL — nur noch fuer den manuellen Fallback relevant. */
   appUrl: string;
+  /** Aktuell ausgelieferte Version (public/downloads/steply-recorder.json). */
+  latestVersion: string;
+  /** ZIP der Steply-Erweiterung. */
+  zipUrl: string;
 }) {
-  // Extension installiert? null = wird noch geprueft.
-  const [installed, setInstalled] = useState<boolean | null>(null);
-  const [version, setVersion] = useState("");
+  // Steply-Erweiterung installiert? null = wird noch geprüft. Solange nicht erkannt, prüft die
+  // Seite alle 2 s nach (Einrichtung läuft gerade) und springt dann selbst zu „Verbinden“.
+  const { installed, version } = useRecorderExtension({ poll: true });
+  const browser = useBrowserKind();
 
   // Pairing-Zustand.
   const [pairing, setPairing] = useState(false);
@@ -88,34 +96,10 @@ export function RecorderConnect({
   const hasToken = connections.length > 0;
   const thisBrowserConnected = !!thisBrowserId && connections.some((c) => c.id === thisBrowserId);
 
-  // DOM-Marker nach Mount lesen (+ kurze Nachkontrollen, falls die Extension gerade erst
-  // installiert wurde oder das Content-Script minimal spaeter dran ist).
+  // „Dieser Browser“ aus localStorage — nach Mount und asynchron (kein setState im Effekt-Body).
   useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      if (cancelled) return true;
-      const v = document.documentElement.getAttribute("data-steply-recorder");
-      if (v != null) {
-        setInstalled(true);
-        setVersion(v);
-        return true;
-      }
-      return false;
-    };
-    // setState ASYNCHRON planen (kein synchrones setState im Effekt-Body): erste Pruefung
-    // + zwei Nachkontrollen, falls die Extension gerade erst installiert wurde.
-    const t0 = setTimeout(() => {
-      if (!cancelled) setThisBrowserId(readThisBrowserId());
-      if (!read()) setInstalled(false);
-    }, 0);
-    const t1 = setTimeout(read, 500);
-    const t2 = setTimeout(read, 1500);
-    return () => {
-      cancelled = true;
-      clearTimeout(t0);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    const t = setTimeout(() => setThisBrowserId(readThisBrowserId()), 0);
+    return () => clearTimeout(t);
   }, []);
 
   const pair = useCallback(async () => {
@@ -258,14 +242,10 @@ export function RecorderConnect({
     title = "Steply-Erweiterung wird gesucht …";
     sub = "Einen Moment bitte.";
   } else if (installed === false) {
+    // Wird unten als Einrichtung in 3 Schritten gezeigt (showSetup).
     tone = "todo";
     title = "Noch nicht installiert";
-    sub = "Installieren Sie die Steply-Erweiterung für Chrome – danach verbinden Sie sie hier mit einem Klick.";
-    action = (
-      <Button nativeButton={false} render={<Link href="/extension" target="_blank" />}>
-        <Download className="size-4" /> Erweiterung installieren
-      </Button>
-    );
+    sub = "";
   } else if (pairedAccount !== null) {
     tone = "ok";
     title = "Installiert und verbunden";
@@ -311,6 +291,210 @@ export function RecorderConnect({
         ? "bg-amber-soft text-amber-text"
         : "bg-line-2 text-muted-foreground";
 
+  // --- Verbundene Browser (eine Verbindung je Browser/Gerät, Migration 0041) ---
+  const connectionList = (
+    <section
+      data-testid="recorder-connections"
+      className="grid gap-2 rounded-card border-2 border-line bg-card px-[18px] py-4"
+    >
+      <b className="font-black text-ink">Ihre verbundenen Browser</b>
+      <ul className="grid gap-2">
+        {connections.map((c, i) => (
+          <li
+            key={c.id ?? `legacy-${i}`}
+            data-testid="recorder-connection"
+            data-connection-id={c.id ?? ""}
+            className="flex flex-wrap items-center gap-3 rounded-xl bg-line-2/60 px-3 py-2"
+          >
+            <div className="min-w-0 flex-1 basis-52">
+              <span className="block font-extrabold text-ink">
+                {c.label || "Browser"}
+                {c.id && c.id === thisBrowserId && (
+                  <span className="ml-2 rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal-text">
+                    dieser Browser
+                  </span>
+                )}
+              </span>
+              <span className="text-[12.5px] text-muted-foreground" suppressHydrationWarning>
+                {c.createdAt ? `verbunden am ${dateLongDe(c.createdAt)}` : "verbunden"}
+                {" · "}
+                {c.lastUsedAt ? `zuletzt genutzt ${relativeDe(c.lastUsedAt)}` : "noch nicht genutzt"}
+              </span>
+            </div>
+            {c.id && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => disconnect(c)}
+                disabled={removing !== null}
+                aria-label={`${c.label || "Browser"} trennen`}
+              >
+                {removing === c.id ? <Loader2 className="size-4 animate-spin" /> : <Unplug className="size-4" />}
+                Trennen
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        Jeder Browser hat eine eigene Verbindung. „Trennen“ macht nur diese eine ungültig –
+        die Erweiterung dort muss dann neu verbunden werden.
+      </p>
+    </section>
+  );
+
+  // --- Manueller Fallback (eingeklappt) ---
+  const manualFallback = (
+  <div className="text-[13px] text-ink-2">
+    <button
+      type="button"
+      aria-expanded={showManual}
+      onClick={() => setShowManual((s) => !s)}
+      className="flex items-center gap-1.5 text-left font-extrabold text-ink-2 transition-colors hover:text-ink"
+    >
+      <ChevronDown
+        className={"size-4 shrink-0 transition-transform " + (showManual ? "rotate-180" : "-rotate-90")}
+      />
+      Code manuell eingeben (falls die automatische Verbindung nicht klappt)
+    </button>
+    {showManual && (
+      <div className="mt-3 grid gap-3 rounded-card border-2 border-line bg-card px-[18px] py-4">
+        {token ? (
+          <>
+            <div className="grid gap-1.5">
+              <span className="text-[12.5px] font-extrabold text-ink-2">Verbindungs-Code</span>
+              <CopyField value={token} />
+              <p className="text-xs text-muted-foreground">
+                In der Erweiterung unter „Verbindungs-Token“ einfügen. Bewahren Sie den Code
+                wie ein Passwort auf.
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <span className="text-[12.5px] font-extrabold text-ink-2">Steply-Adresse</span>
+              <CopyField value={appUrl} />
+              <p className="text-xs text-muted-foreground">
+                In der Erweiterung unter „Steply-App-URL“ eintragen.
+              </p>
+            </div>
+            <div>
+              <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                Neuen Code erzeugen
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>
+              Erzeugen Sie einen Verbindungs-Code und fügen Sie ihn in der Seitenleiste der
+              Erweiterung ein.
+            </p>
+            <div>
+              <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+                Code erzeugen
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Jeder Code ist eine eigene Verbindung – bereits verbundene Browser bleiben
+              verbunden.
+            </p>
+          </>
+        )}
+      </div>
+    )}
+  </div>
+  );
+
+  // --- Update (Erweiterungs-Menü „Update installieren“ führt über /extension hierher) ---
+  const updateAvailable =
+    installed === true && !!version && !!latestVersion && isNewerVersion(latestVersion, version);
+  const updateNotice = updateAvailable ? (
+    <section
+      data-testid="extension-update"
+      className="grid gap-3 rounded-card border-2 border-primary/25 bg-accent/40 px-[18px] py-4"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1 basis-60">
+          <b className="block font-black text-ink">Update verfügbar: Version {latestVersion}</b>
+          <span className="text-[12.5px] text-ink-2">
+            ZIP herunterladen, in den bisherigen Ordner entpacken (vorhandene Dateien ersetzen),
+            dann unter{" "}
+            <code className="font-mono font-bold text-ink">
+              {browser === "edge" ? "edge://extensions" : "chrome://extensions"}
+            </code>{" "}
+            bei der Steply-Erweiterung auf „Neu laden“ klicken.
+          </span>
+        </div>
+        <Button nativeButton={false} render={<a href={zipUrl} download />}>
+          <Download className="size-4" /> Update herunterladen
+        </Button>
+      </div>
+    </section>
+  ) : null;
+
+  // Einrichtung in 3 Schritten: solange die Erweiterung fehlt – und direkt danach, bis dieser
+  // erste Browser verbunden ist (Schritt 3 „Jetzt verbinden“). Sonst die Status-Karte.
+  const showSetup =
+    installed === false || (installed === true && !hasToken && pairedAccount === null);
+
+  if (showSetup) {
+    const detected = installed === true;
+    return (
+      <div className="grid gap-[18px]">
+        <section data-testid="extension-status" data-state="todo" className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-soft text-amber-text">
+              <Puzzle className="size-[18px]" strokeWidth={2.2} />
+            </span>
+            <div className="min-w-0 flex-1 basis-60">
+              <h2 className="text-lg font-black leading-tight text-ink">In 3 Schritten einrichten</h2>
+              <b className="text-[12.5px] font-extrabold text-muted-foreground">
+                {detected ? "Installiert – noch nicht verbunden" : "Noch nicht installiert"}
+              </b>
+            </div>
+          </div>
+          <ExtensionSetupSteps
+            version={latestVersion}
+            zipUrl={zipUrl}
+            detected={detected}
+            connect={
+              detected ? (
+                <div className="grid gap-3">
+                  <p className="text-sm text-ink-2">
+                    Steply-Erweiterung erkannt{version ? ` (Version ${version})` : ""}. Verbinden Sie
+                    sie jetzt mit Ihrem Konto – ein Klick genügt, kein Code-Kopieren.
+                  </p>
+                  <div>
+                    <Button onClick={pair} disabled={pairing}>
+                      {pairing ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
+                      Jetzt verbinden
+                    </Button>
+                  </div>
+                  {pairError && (
+                    <p role="alert" className="rounded-xl bg-no-soft px-3 py-2 text-sm font-bold text-no">
+                      {pairError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="flex items-start gap-2 text-sm text-ink-2" data-testid="extension-waiting">
+                  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+                  <span>
+                    Sobald die Steply-Erweiterung geladen ist, erkennt diese Seite sie von selbst
+                    und es geht hier weiter – ohne Neuladen.
+                  </span>
+                </p>
+              )
+            }
+          />
+        </section>
+        {connections.length > 0 && connectionList}
+        {manualFallback}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-[18px]">
       <section
@@ -341,118 +525,9 @@ export function RecorderConnect({
         )}
       </section>
 
-      {/* --- Verbundene Browser (eine Verbindung je Browser/Gerät, Migration 0041) --- */}
-      {connections.length > 0 && (
-        <section
-          data-testid="recorder-connections"
-          className="grid gap-2 rounded-card border-2 border-line bg-card px-[18px] py-4"
-        >
-          <b className="font-black text-ink">Ihre verbundenen Browser</b>
-          <ul className="grid gap-2">
-            {connections.map((c, i) => (
-              <li
-                key={c.id ?? `legacy-${i}`}
-                data-testid="recorder-connection"
-                data-connection-id={c.id ?? ""}
-                className="flex flex-wrap items-center gap-3 rounded-xl bg-line-2/60 px-3 py-2"
-              >
-                <div className="min-w-0 flex-1 basis-52">
-                  <span className="block font-extrabold text-ink">
-                    {c.label || "Browser"}
-                    {c.id && c.id === thisBrowserId && (
-                      <span className="ml-2 rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal-text">
-                        dieser Browser
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[12.5px] text-muted-foreground" suppressHydrationWarning>
-                    {c.createdAt ? `verbunden am ${dateLongDe(c.createdAt)}` : "verbunden"}
-                    {" · "}
-                    {c.lastUsedAt ? `zuletzt genutzt ${relativeDe(c.lastUsedAt)}` : "noch nicht genutzt"}
-                  </span>
-                </div>
-                {c.id && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => disconnect(c)}
-                    disabled={removing !== null}
-                    aria-label={`${c.label || "Browser"} trennen`}
-                  >
-                    {removing === c.id ? <Loader2 className="size-4 animate-spin" /> : <Unplug className="size-4" />}
-                    Trennen
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            Jeder Browser hat eine eigene Verbindung. „Trennen“ macht nur diese eine ungültig –
-            die Erweiterung dort muss dann neu verbunden werden.
-          </p>
-        </section>
-      )}
-
-      {/* --- Manueller Fallback (eingeklappt) --- */}
-      <div className="text-[13px] text-ink-2">
-        <button
-          type="button"
-          aria-expanded={showManual}
-          onClick={() => setShowManual((s) => !s)}
-          className="flex items-center gap-1.5 text-left font-extrabold text-ink-2 transition-colors hover:text-ink"
-        >
-          <ChevronDown
-            className={"size-4 shrink-0 transition-transform " + (showManual ? "rotate-180" : "-rotate-90")}
-          />
-          Code manuell eingeben (falls die automatische Verbindung nicht klappt)
-        </button>
-        {showManual && (
-          <div className="mt-3 grid gap-3 rounded-card border-2 border-line bg-card px-[18px] py-4">
-            {token ? (
-              <>
-                <div className="grid gap-1.5">
-                  <span className="text-[12.5px] font-extrabold text-ink-2">Verbindungs-Code</span>
-                  <CopyField value={token} />
-                  <p className="text-xs text-muted-foreground">
-                    In der Erweiterung unter „Verbindungs-Token“ einfügen. Bewahren Sie den Code
-                    wie ein Passwort auf.
-                  </p>
-                </div>
-                <div className="grid gap-1.5">
-                  <span className="text-[12.5px] font-extrabold text-ink-2">Steply-Adresse</span>
-                  <CopyField value={appUrl} />
-                  <p className="text-xs text-muted-foreground">
-                    In der Erweiterung unter „Steply-App-URL“ eintragen.
-                  </p>
-                </div>
-                <div>
-                  <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                    Neuen Code erzeugen
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>
-                  Erzeugen Sie einen Verbindungs-Code und fügen Sie ihn in der Seitenleiste der
-                  Erweiterung ein.
-                </p>
-                <div>
-                  <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-                    Code erzeugen
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Jeder Code ist eine eigene Verbindung – bereits verbundene Browser bleiben
-                  verbunden.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      {connections.length > 0 && connectionList}
+      {updateNotice}
+      {manualFallback}
     </div>
   );
 }
