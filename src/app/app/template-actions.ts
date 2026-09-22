@@ -28,6 +28,16 @@ async function dropEmbeddings(accountId: string, sourceId: string) {
 export async function setTemplateEnabled(templateId: string, enabled: boolean) {
   const { account } = await requireAccount();
   const supabase = await createClient();
+  // Nur echte globale Standard-Vorlagen — sonst ließe sich mit einer fremden Tutorial-ID
+  // deren Inhalt ins eigene Chatbot-Wissen indexieren (Admin-Client unten).
+  const { data: tpl } = await createAdminClient()
+    .from("tutorials")
+    .select("id")
+    .eq("id", templateId)
+    .eq("is_template", true)
+    .is("account_id", null)
+    .maybeSingle();
+  if (!tpl) throw new Error("Vorlage nicht gefunden.");
   const { error } = await supabase
     .from("account_templates")
     .upsert(

@@ -13,6 +13,7 @@
 //
 // Nutzung:  node --env-file=.env.local scripts/test-site-context-live.mjs
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 import { spawn } from "node:child_process";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -98,7 +99,7 @@ try {
   const A = await mkUser(`tutax-sitectx-${stamp}@example.com`);
   accId = A.accountId; userId = A.userId;
   const token = crypto.randomUUID();
-  await admin.from("accounts").update({ recorder_token: token, plan: "pro" }).eq("id", accId);
+  await admin.from("accounts").update({ plan: "pro" }).eq("id", accId).then(() => setRecorderToken(admin, accId, token));
   ok(true, "Setup: Pro-Konto mit recorder_token");
 
   console.log("… Next-Server auf Port", PORT, "wird gestartet (kann einen Moment dauern) …");

@@ -49,6 +49,7 @@ import {
 } from "@/components/app/nav-config";
 import { cn } from "@/lib/utils";
 import { useSwitchAccount } from "@/components/app/account-switcher";
+import { MemberModeSync, useMemberMode } from "@/components/app/member-mode";
 import { signOut } from "@/app/(auth)/actions";
 import type { Membership } from "@/lib/account";
 import { dismissVideoJob, useDismissedVideoJobs } from "@/lib/dismissed-video-jobs";
@@ -75,6 +76,9 @@ export function AppHeader({
 }) {
   const [cmdOpen, setCmdOpen] = useState(false);
   const path = usePathname();
+  // Mitarbeiter (nur Schulungen) sehen nur „Schulungen" — siehe member-mode.tsx.
+  const member = useMemberMode();
+  const nav = member ? MAIN_NAV.filter((i) => i.href === "/app/lernen") : MAIN_NAV;
 
   return (
     <>
@@ -85,7 +89,7 @@ export function AppHeader({
 
         {/* Pill-Navigation (Desktop) — dieselbe Liste wie Handy-Leiste und ⌘K. */}
         <nav aria-label="Hauptbereiche" className="hidden items-center gap-1.5 lg:flex">
-          {MAIN_NAV.map((item) => (
+          {nav.map((item) => (
             <NavPill key={item.href} item={item} active={item.match(path)} />
           ))}
         </nav>
@@ -381,6 +385,7 @@ export function UserMenu({
   accountName,
   memberships,
   isAdmin,
+  member = false,
 }: {
   userName: string | null;
   email: string | null;
@@ -388,6 +393,8 @@ export function UserMenu({
   accountName: string;
   memberships: Membership[];
   isAdmin: boolean;
+  /** Rolle „Mitarbeiter" (nur Schulungen): kein Einstellungen-Eintrag. */
+  member?: boolean;
 }) {
   const { busy, switchTo } = useSwitchAccount();
   const display = userName ?? email ?? accountName;
@@ -395,6 +402,7 @@ export function UserMenu({
 
   return (
     <>
+      <MemberModeSync on={member} />
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -462,9 +470,11 @@ export function UserMenu({
           <DropdownMenuItem className={menuItemClass} render={<Link href={PROFILE_HREF} />}>
             <UserRound className="size-3.5" /> Mein Profil
           </DropdownMenuItem>
-          <DropdownMenuItem className={menuItemClass} render={<Link href={SETTINGS_ITEM.href} />}>
-            <SETTINGS_ITEM.icon className="size-3.5" /> Einstellungen
-          </DropdownMenuItem>
+          {!member && (
+            <DropdownMenuItem className={menuItemClass} render={<Link href={SETTINGS_ITEM.href} />}>
+              <SETTINGS_ITEM.icon className="size-3.5" /> Einstellungen
+            </DropdownMenuItem>
+          )}
           {isAdmin && (
             <DropdownMenuItem className={menuItemClass} render={<Link href="/admin" />}>
               <ShieldCheck className="size-3.5" /> Admin
@@ -512,16 +522,19 @@ export function TabBar({
   more: React.ReactNode;
 }) {
   const path = usePathname();
+  const member = useMemberMode();
+  const left = member ? MOBILE_TABS_LEFT.filter((i) => i.href === "/app/lernen") : MOBILE_TABS_LEFT;
+  const right = member ? [] : MOBILE_TABS_RIGHT;
   return (
     <nav
       aria-label="Hauptnavigation"
       className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t-2 border-line bg-card px-0.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
     >
-      {MOBILE_TABS_LEFT.map((item) => (
+      {left.map((item) => (
         <TabLink key={item.href} item={item} active={item.match(path)} />
       ))}
       {createAction}
-      {MOBILE_TABS_RIGHT.map((item) => (
+      {right.map((item) => (
         <TabLink key={item.href} item={item} active={item.match(path)} />
       ))}
       {more}
@@ -550,7 +563,9 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
 export function MoreTab({ accountSlug }: { accountSlug: string }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
-  const items = mobileMoreItems(accountSlug);
+  const member = useMemberMode();
+  // Mitarbeiter: nur die externen Ziele (Hilfe-Seite ansehen, Steply-Hilfe).
+  const items = mobileMoreItems(accountSlug).filter((i) => !member || i.external);
   const activeInside = items.some((i) => i.match(path));
 
   // Blatt bei Navigation schließen (Pfadwechsel von außen, z. B. Zurück-Taste).

@@ -3,7 +3,12 @@
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAccount } from "@/lib/account";
+import {
+  requireAccount,
+  requireTutorialAccess,
+  requireStepAccess,
+  requireBranchAccess,
+} from "@/lib/account";
 import { hasInvalidBlur, rebuildPublicCopy, removeUnusedPublicCopies } from "@/lib/public-images";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
@@ -15,7 +20,7 @@ import {
   translateStepDelta,
   translateTitleDelta,
   translateBranchDelta,
-} from "@/app/app/actions-translate";
+} from "@/lib/translate-jobs";
 import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
@@ -42,6 +47,7 @@ export async function addStep(
   wire: { branchId: string; fromStepId: string } | null,
   opts?: { imageFromStepId?: string; highlights?: Highlight[] },
 ) {
+  await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
   let image: { image_path: string; image_width: number | null; image_height: number | null } | null = null;
   if (opts?.imageFromStepId) {
@@ -106,6 +112,7 @@ export async function updateStep(
     video_time?: number | null;
   },
 ) {
+  await requireStepAccess(stepId);
   const supabase = await createClient();
   if (Object.keys(patch).length === 0) return;
   if ("highlights" in patch && hasInvalidBlur(patch.highlights)) {
@@ -180,6 +187,7 @@ async function refreshPublicImage(stepId: string) {
 
 /** Frage an/aus. Server spiegelt exakt die optimistische Client-Logik. */
 export async function setDecision(stepId: string, isDecision: boolean) {
+  await requireStepAccess(stepId);
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("step_branches")
@@ -220,6 +228,7 @@ export async function setDecision(stepId: string, isDecision: boolean) {
  * (validateStepCondition): kaputt/leer → null (immer ausführen). Optimistisch-still wie setDecision.
  */
 export async function setStepCondition(stepId: string, condition: unknown) {
+  await requireStepAccess(stepId);
   const supabase = await createClient();
   const clean = validateStepCondition(condition) ?? null;
   await supabase.from("steps").update({ condition: clean }).eq("id", stepId);
@@ -235,6 +244,7 @@ export async function addBranch(branch: {
   target_step_id: string | null;
   position: number;
 }) {
+  await requireStepAccess(branch.step_id);
   const supabase = await createClient();
   const { error } = await supabase.from("step_branches").insert(branch);
   if (error) throw new Error(error.message);
@@ -247,6 +257,7 @@ export async function updateBranch(
   branchId: string,
   patch: { label?: string; target_step_id?: string | null; color?: string | null },
 ) {
+  await requireBranchAccess(branchId);
   const supabase = await createClient();
   const { error } = await supabase
     .from("step_branches")
@@ -261,6 +272,7 @@ export async function updateBranch(
 }
 
 export async function deleteBranch(branchId: string) {
+  await requireBranchAccess(branchId);
   const supabase = await createClient();
   await invalidateBranchTags(branchId); // VOR dem Delete (Lookup braucht die Zeile)
   await markTranslationsStaleByBranch(branchId); // ebenfalls VOR dem Delete
@@ -281,6 +293,8 @@ export async function deleteStep(
   nextTarget: string | null,
   wasRoot: boolean,
 ) {
+  const { tutorialId: owner } = await requireStepAccess(stepId);
+  if (owner !== tutorialId) throw new Error("Schritt nicht gefunden.");
   const supabase = await createClient();
 
   // Vorlese-Audio des Schritts VOR dem Delete aus dem public Bucket räumen (danach
@@ -319,6 +333,8 @@ export async function deleteStep(
  * persistiert nur, die UI führt optimistisch.
  */
 export async function setRootStep(tutorialId: string, stepId: string) {
+  const { tutorialId: owner } = await requireStepAccess(stepId);
+  if (owner !== tutorialId) throw new Error("Schritt nicht gefunden.");
   const supabase = await createClient();
   const { error } = await supabase
     .from("tutorials")
@@ -350,6 +366,7 @@ export async function createCategory(name: string): Promise<{ id: string; name: 
 
 /** Tutorial-Titel ändern. */
 export async function setTutorialTitle(tutorialId: string, title: string) {
+  await requireTutorialAccess(tutorialId);
   const clean = title.trim();
   if (!clean) throw new Error("Titel fehlt");
   const supabase = await createClient();
@@ -372,6 +389,7 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
  * EN/PL/TR-Hub-Karten die übersetzte Beschreibung zeigen statt der deutschen.
  */
 export async function setTutorialDescription(tutorialId: string, description: string) {
+  await requireTutorialAccess(tutorialId);
   const clean = description.replace(/\s+/g, " ").trim().slice(0, 160);
   const supabase = await createClient();
   const { error } = await supabase
@@ -391,6 +409,7 @@ export async function setTutorialDescription(tutorialId: string, description: st
  * Null, wenn kein Quell-Video existiert (manuell gebautes Tutorial) oder nicht erlaubt.
  */
 export async function getTutorialVideoUrl(tutorialId: string): Promise<string | null> {
+  await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
   // RLS-Gate: liefert nur eigene Tutorials -> unsichtbar = kein Zugriff.
   const { data: tut } = await supabase
@@ -425,6 +444,7 @@ export async function getTutorialVideoUrl(tutorialId: string): Promise<string | 
  * (Titel, sonst „Schritt N“ mit N = Nummer im Ablauf — wie im Editor).
  */
 export async function listUnreviewedBlurSteps(tutorialId: string): Promise<string[]> {
+  await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
   const [{ data: steps }, { data: tut }] = await Promise.all([
     supabase.from("steps").select("*").eq("tutorial_id", tutorialId).returns<Step[]>(),
@@ -456,6 +476,7 @@ export async function listUnreviewedBlurSteps(tutorialId: string): Promise<strin
  * setTutorialCategory (persistiert nur, invalidiert den Cache).
  */
 export async function setTutorialSiteDomains(tutorialId: string, domains: string[]) {
+  await requireTutorialAccess(tutorialId);
   const normalized: string[] = [];
   for (const d of Array.isArray(domains) ? domains : []) {
     const n = typeof d === "string" ? normalizeDomain(d) : null;
@@ -477,6 +498,7 @@ export async function setTutorialCategory(
   tutorialId: string,
   categoryId: string | null,
 ) {
+  await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
   const { error } = await supabase
     .from("tutorials")

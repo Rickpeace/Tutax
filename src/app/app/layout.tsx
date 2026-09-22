@@ -14,6 +14,7 @@ import { ContentUpdatedRefresh } from "@/components/app/content-updated-refresh"
 import { NEW_TUTORIAL_EVENT } from "@/components/app/nav-config";
 import { getCurrentUser, requireAccount } from "@/lib/account";
 import { checkAdmin } from "@/lib/admin";
+import { canEdit } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import { loadOpenGaps } from "@/lib/gaps";
 import { relativeDe } from "@/lib/format";
@@ -90,12 +91,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 /** Avatar-Menü (rechts). Enthält den Onboarding-Redirect. */
 async function UserMenuSlot() {
-  const [{ account, memberships, email }, user, isAdmin] = await Promise.all([
-    requireAccount(),
+  const [{ account, memberships, email, role }, user, isAdmin] = await Promise.all([
+    requireAccount({ allowMember: true }),
     getCurrentUser(),
     checkAdmin(),
   ]);
-  if (!account.onboarded) redirect("/onboarding");
+  // Einrichtung ist Sache der Inhalte-Pfleger; Mitarbeiter nie dorthin schicken (sonst
+  // Schleife: /onboarding weist Mitarbeiter wieder ab).
+  if (!account.onboarded && canEdit(role)) redirect("/onboarding");
   return (
     <UserMenu
       userName={userDisplayName(user?.user_metadata)}
@@ -104,31 +107,34 @@ async function UserMenuSlot() {
       accountName={account.name}
       memberships={memberships}
       isAdmin={isAdmin}
+      member={!canEdit(role)}
     />
   );
 }
 
 /** „Hilfe-Seite“-Knopf (braucht den Konto-Slug). */
 async function HelpPageSlot() {
-  const { account } = await requireAccount();
+  const { account } = await requireAccount({ allowMember: true });
   return <HelpPageButton accountSlug={account.slug} />;
 }
 
 /** „＋ Neue Anleitung" (Desktop-Header). Hört auch auf die ⌘K-Aktion. */
 async function NewActionSlot() {
-  const { account } = await requireAccount();
+  const { account, role } = await requireAccount({ allowMember: true });
+  if (!canEdit(role)) return null; // Mitarbeiter erstellen nichts
   return <NewTutorialButton accountId={account.id} openOnEvent={NEW_TUTORIAL_EVENT} />;
 }
 
 /** „Neu"-Tab (mobil) öffnet dieselbe Erstell-Weiche. */
 async function CreateTabSlot() {
-  const { account } = await requireAccount();
+  const { account, role } = await requireAccount({ allowMember: true });
+  if (!canEdit(role)) return <div />; // Platz in der 5er-Leiste halten
   return <NewTutorialButton accountId={account.id} trigger={<CreateTabTrigger />} />;
 }
 
 /** „Mehr"-Tab (mobil) — braucht den Konto-Slug für „Hilfe-Seite ansehen“. */
 async function MoreSlot() {
-  const { account } = await requireAccount();
+  const { account } = await requireAccount({ allowMember: true });
   return <MoreTab accountSlug={account.slug} />;
 }
 
@@ -148,7 +154,8 @@ type BellAlertRow = {
  * filtert die im Browser ausgeblendeten heraus und zeigt höchstens 3).
  */
 async function BellSlot() {
-  const { account } = await requireAccount();
+  const { account, role } = await requireAccount({ allowMember: true });
+  if (!canEdit(role)) return null; // Hinweise/Fragen/Videos betreffen nur Inhalte-Pfleger
   const supabase = await createClient();
   const [{ data: alertRows, count: alertCount }, gaps, { data: failedRows }] = await Promise.all([
     supabase

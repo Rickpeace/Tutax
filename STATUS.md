@@ -144,6 +144,10 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - `node --env-file=.env.local scripts/test-translate-live.mjs` (Übersetzungen inkl. Delta + stale)
   - `node --env-file=.env.local scripts/test-tts-live.mjs`     (Vorlesen: Hash-Cache, public MP3)
   - `node --env-file=.env.local scripts/test-recorder-live.mjs` (Extension-Direkt-Upload, startet Server :3013)
+  - `node --env-file=.env.local scripts/test-team-live.mjs`   (Team E2E: Einladen/Annehmen alle Wege, Rollen, Mitarbeiter-Sperren inkl. DB-Direktzugriff, Erweiterung pro Person, Team-Grenze, Entfernen; Server :3032, `TEAM_PROD=1` = gegen Build)
+  - `node --env-file=.env.local scripts/test-org-switch.mjs`  (Organisation wechseln inkl. gleicher Namen + Fehlerfall; :3031, `ORGSWITCH_PROD=1`)
+  - `node --env-file=.env.local scripts/test-plan-guards-live.mjs` (DB-Sperren per REST: Tarif, Sprachen/Intern/KI-Design nur Business, Einladungen nur via Server — 0037/0038)
+  - Tests, die eine Erweiterungs-Verbindung brauchen, setzen sie über `scripts/_recorder-token.mjs` (pro Person, seit 0037)
   - `npx tsx scripts/test-tree.ts`                             (Tree-Derivation)
   - `node --env-file=.env.local scripts/seed-datev.mjs`        (DATEV-Tutorials seeden, idempotent)
   - Seeds/Pipelines: `seed-steply-help.mjs` (/h/steply-Doku), `shoot-steply-help.mjs <pw-dir>`

@@ -25,3 +25,14 @@ export function isBusiness(account: { plan?: string | null }): boolean {
 /** Einheitliche Fehlermeldung für Business-Features. */
 export const BUSINESS_REQUIRED =
   "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
+
+/**
+ * Wie viele Personen (alle Rollen, inkl. offener Einladungen) das Team haben darf.
+ * Kostenlos = nur der Inhaber, Pro bis 5, Business unbegrenzt (Produktentscheid 22.09.2026).
+ * Bestehende größere Teams werden nicht verkleinert — nur neue Einladungen gesperrt.
+ */
+export function teamLimit(account: { plan?: string | null }): number {
+  if (isBusiness(account)) return Infinity;
+  if (isPro(account)) return 5;
+  return 1;
+}

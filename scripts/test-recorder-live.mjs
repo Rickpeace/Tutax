@@ -10,6 +10,7 @@
 //
 // Nutzung:  node --env-file=.env.local scripts/test-recorder-live.mjs
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 import { spawn } from "node:child_process";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -65,7 +66,7 @@ try {
   const A = await mkUser(`tutax-rec-${stamp}@example.com`);
   accId = A.accountId; userId = A.userId;
   const token = crypto.randomUUID();
-  const { error: te } = await admin.from("accounts").update({ recorder_token: token }).eq("id", accId);
+  const { error: te } = await setRecorderToken(admin, accId, token);
   ok(!te, "Token-Rotation: recorder_token gesetzt");
 
   // Server starten.

@@ -5,14 +5,14 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAccount } from "@/lib/account";
+import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
-import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
+import { translateTutorial, translateTitleDelta } from "@/lib/translate-jobs";
 import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
 import { isExtraLang } from "@/lib/i18n-hub";
 import { FREE_TUTORIAL_LIMIT, isPro, isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
@@ -138,6 +138,7 @@ export async function deleteCategory(categoryId: string) {
 }
 
 export async function renameTutorial(id: string, title: string) {
+  await requireTutorialAccess(id);
   const clean = title.trim();
   if (!clean) return;
   const supabase = await createClient();
@@ -153,6 +154,7 @@ export async function renameTutorial(id: string, title: string) {
 }
 
 export async function deleteTutorial(id: string) {
+  await requireTutorialAccess(id);
   const { account } = await requireAccount();
   const supabase = await createClient();
   await removeTutorialEmbeddings(supabase, id).catch(() => {});
@@ -184,6 +186,7 @@ export async function deleteTutorial(id: string) {
 
 /** Tiefkopie: Tutorial + Schritte + Branches (mit ID-Remapping) */
 export async function duplicateTutorial(id: string) {
+  await requireTutorialAccess(id);
   const { account } = await requireAccount();
   const supabase = await createClient();
 
@@ -382,6 +385,7 @@ async function removePublicImages(
  *    KEIN Index, KEINE Cache-Invalidierung, KEIN Slug nötig.
  */
 export async function publishTutorial(tutorialId: string) {
+  await requireTutorialAccess(tutorialId);
   const { account } = await requireAccount();
   const supabase = await createClient();
 
@@ -532,6 +536,7 @@ export async function setTutorialVisibility(
   tutorialId: string,
   visibility: Tutorial["visibility"],
 ) {
+  await requireTutorialAccess(tutorialId);
   if (visibility !== "public" && visibility !== "internal") return;
   const { account } = await requireAccount();
   // Interne Tutorials + Schulungsnachweis sind Business (zurück auf öffentlich geht immer).
@@ -564,6 +569,7 @@ export async function setTutorialAudience(
   tutorialId: string,
   audience: { publicOn: boolean; lernenOn: boolean },
 ) {
+  await requireTutorialAccess(tutorialId);
   const { account } = await requireAccount();
   const targetVisibility: Tutorial["visibility"] = audience.publicOn ? "public" : "internal";
   // Business-Gate: intern (inkl. Schulungsnachweis) ist Business. Öffentlich geht immer.
@@ -594,6 +600,7 @@ export async function setTutorialAudience(
 
 /** Veröffentlichung zurückziehen: Status = draft, öffentliche Bilder entfernen. */
 export async function unpublishTutorial(tutorialId: string) {
+  await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
 
   const { data: steps } = await supabase

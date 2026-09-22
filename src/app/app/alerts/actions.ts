@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 
@@ -25,6 +26,8 @@ type Issue = { step?: string; problem?: string; suggestion?: string; applied?: b
  * gemeinsam an: ein einziges Umschreiben, das alle Probleme zusammen einarbeitet.
  */
 export async function applyDriftSuggestions(alertId: string, indices: number[]) {
+  // Nur Inhaber/Bearbeiter (KI-Kosten + Schreiben); Mitarbeiter weist requireAccount ab.
+  await requireAccount();
   if (!aiConfigured()) throw new Error("KI ist nicht aktiviert.");
   const supabase = await createClient();
 
@@ -34,6 +37,9 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
     .eq("id", alertId)
     .single();
   if (!alert) throw new Error("Hinweis nicht gefunden.");
+  // Nur Anleitungen des AKTIVEN Kontos (RLS zeigt Hinweise aller Konten, in denen man
+  // Mitglied ist — auch als Mitarbeiter anderswo). Vor dem KI-Aufruf prüfen.
+  await requireTutorialAccess(alert.tutorial_id as string);
 
   const details = (alert.details ?? {}) as { issues?: Issue[] };
   const issues = details.issues ?? [];
@@ -116,12 +122,15 @@ export async function updateAlertStatus(
   alertId: string,
   status: "acknowledged" | "resolved" | "dismissed",
 ) {
+  await requireAccount();
   const supabase = await createClient();
   const { data: alert } = await supabase
     .from("change_alerts")
     .select("tutorial_id")
     .eq("id", alertId)
     .single();
+  if (!alert) throw new Error("Hinweis nicht gefunden.");
+  await requireTutorialAccess(alert.tutorial_id as string);
 
   const patch: Record<string, unknown> = { status };
   if (status === "resolved" || status === "dismissed") {

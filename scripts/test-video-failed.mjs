@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { setRecorderToken } from "./_recorder-token.mjs";
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -85,7 +86,7 @@ try {
   const { data: members } = await admin.from("account_members").select("account_id").eq("user_id", userId);
   accountId = members[0].account_id;
   const token = randomUUID();
-  await admin.from("accounts").update({ name: "Video Test GmbH", onboarded: true, recorder_token: token }).eq("id", accountId);
+  await admin.from("accounts").update({ name: "Video Test GmbH", onboarded: true }).eq("id", accountId).then(() => setRecorderToken(admin, accountId, token));
 
   const createdB = await admin.auth.admin.createUser({ email: emailB, password: PW, email_confirm: true });
   if (createdB.error) throw createdB.error;

@@ -38,6 +38,11 @@ export async function POST(req: NextRequest) {
     .single();
   if (!tutorial?.account_id)
     return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
+  // Sehen reicht nicht: Mitarbeiter (nur Schulungen) sehen Anleitungen, dürfen aber nichts
+  // hochladen. Die signierte URL umgeht die Storage-RLS -> Schreibrecht hier prüfen
+  // (dieselbe DB-Funktion wie die restriktiven Policies, Migration 0037).
+  const { data: canEdit } = await supabase.rpc("can_edit_account", { aid: tutorial.account_id });
+  if (canEdit !== true) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
 
   let path = `${tutorial.account_id}/${tutorialId}/${stepId}.webp`;
 

@@ -185,6 +185,8 @@ try {
   const { data: u } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true });
   userId = u.user.id;
   accountId = (await admin.from("account_members").select("account_id").eq("user_id", userId)).data[0].account_id;
+  // Interne Anleitungen + Mehrsprachigkeit sind Business (DB-Sperre seit 0038) -> Testkonto wie Business-Kunde.
+  await admin.from("accounts").update({ plan: "business" }).eq("id", accountId);
 
   // languages=['en']
   await admin.from("accounts").update({ languages: ["en"] }).eq("id", accountId);

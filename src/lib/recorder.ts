@@ -7,8 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // AUTH-MODELL: Die Browser-Extension ruft diese Routen CROSS-ORIGIN auf (sie läuft
 // auf der Kunden-Website, nicht auf unserer Domain). Cookie-Auth ist damit unmöglich
 // und auch unerwünscht. Stattdessen ein pro-Konto widerrufbarer, hochentropischer
-// UUID-Token (accounts.recorder_token, Migration 0023), den der Nutzer aus den
-// Einstellungen kopiert. Der Token wird via Admin-Client (RLS-Bypass) geprüft.
+// UUID-Token (recorder_tokens, pro Person + Organisation seit Migration 0037), den der
+// Nutzer in den Einstellungen erzeugt. Der Token wird via Admin-Client (RLS-Bypass) geprüft.
 //
 // CORS: Weil kein Cookie/keine Session mitgeschickt wird, ist `Access-Control-Allow-
 // Origin: *` unkritisch — es gibt keine ambient authority, die ein fremder Origin
@@ -67,11 +67,23 @@ export async function accountForRecorderToken(token: unknown): Promise<RecorderA
   // UUID-Form vorab prüfen: schützt die uuid-Spalte vor Query-Fehlern bei Müll-Eingaben.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return null;
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("accounts")
-    .select("id, name, slug")
-    .eq("recorder_token", t)
+  const { data: tok } = await admin
+    .from("recorder_tokens")
+    .select("account_id, user_id")
+    .eq("token", t)
     .maybeSingle();
-  if (error || !data) return null;
+  if (!tok) return null;
+  // Nur solange die Person noch Inhaber/Bearbeiter in dieser Organisation ist (Entfernen/
+  // Herabstufen löscht den Token zwar schon — doppelt hält besser).
+  const [{ data: member }, { data }] = await Promise.all([
+    admin
+      .from("account_members")
+      .select("role")
+      .eq("account_id", tok.account_id)
+      .eq("user_id", tok.user_id)
+      .maybeSingle(),
+    admin.from("accounts").select("id, name, slug").eq("id", tok.account_id).maybeSingle(),
+  ]);
+  if (!data || !member || (member.role !== "owner" && member.role !== "editor")) return null;
   return { id: data.id as string, name: data.name as string, slug: data.slug as string };
 }

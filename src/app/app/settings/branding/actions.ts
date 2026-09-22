@@ -8,7 +8,7 @@ import { invalidateHubTag } from "@/lib/cache-tags";
 import { slugify } from "@/lib/slug";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
-import { backfillAccountTranslations } from "@/app/app/actions-translate";
+import { backfillAccountTranslations } from "@/lib/translate-jobs";
 
 // Welle 50 (QA): Jedes Einstellungs-Formular schickt NUR sein eigenes Feld. Nicht übergebene
 // Felder bleiben in der DB unverändert — sonst überschriebe z. B. ein noch offenes „Aussehen“

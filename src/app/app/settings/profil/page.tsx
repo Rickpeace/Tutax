@@ -6,7 +6,7 @@ import { EmailForm } from "@/components/app/email-form";
 import { SettingsCard, SettingsHeader } from "@/components/app/settings-ui";
 
 export default async function ProfilPage() {
-  await requireAccount();
+  await requireAccount({ allowMember: true });
   const supabase = await createClient();
   const {
     data: { user },

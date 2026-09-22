@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/app/page-header";
  * wie viele im Team sie schon absolviert haben.
  */
 export default async function LernenPage() {
-  const { account, userId } = await requireAccount();
+  const { account, userId } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
 
   // Fürs Team freigegebene Anleitungen des aktiven Kontos: interne ODER öffentliche
