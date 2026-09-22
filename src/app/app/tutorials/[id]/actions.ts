@@ -110,6 +110,20 @@ export async function updateStep(
 ) {
   const supabase = await createClient();
   if (Object.keys(patch).length === 0) return;
+  // SICHERHEIT: Ein Bildpfad kommt vom Browser. Er muss im Ordner des KONTOS dieser Anleitung
+  // liegen (`<account_id>/…`, wie /api/upload-url ihn vergibt) — sonst könnte man einen fremden
+  // Pfad eintragen, den das Veröffentlichen dann mit Admin-Rechten öffentlich kopiert.
+  if (typeof patch.image_path === "string") {
+    const { data: owner } = await supabase
+      .from("steps")
+      .select("tutorials!steps_tutorial_id_fkey!inner(account_id)")
+      .eq("id", stepId)
+      .maybeSingle<{ tutorials: { account_id: string | null } }>();
+    const accountId = owner?.tutorials?.account_id;
+    if (!accountId || !patch.image_path.startsWith(`${accountId}/`) || patch.image_path.includes("..")) {
+      throw new Error("Ungültiger Bildpfad.");
+    }
+  }
   const { error } = await supabase.from("steps").update(patch).eq("id", stepId);
   if (error) throw new Error(error.message);
 
