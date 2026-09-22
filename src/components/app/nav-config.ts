@@ -51,10 +51,10 @@ export const ASSISTENT_TABS: NavItem[] = [
   },
   {
     href: "/app/assistent/eskalation",
-    label: "Kontakt & Eskalation",
+    label: "Persönlicher Kontakt",
     icon: LifeBuoy,
     match: (p) => p.startsWith("/app/assistent/eskalation"),
-    keywords: ["kontakt", "eskalation"],
+    keywords: ["kontakt", "eskalation", "ansprechpartner", "weiterleitung"],
   },
 ];
 

@@ -1,4 +1,4 @@
-// Co-located: Sofort-Feedback beim Tab-Klick auf „Kontakt & Eskalation". Der Rahmen
+// Co-located: Sofort-Feedback beim Tab-Klick auf „Persönlicher Kontakt". Der Rahmen
 // (Kopf + Unternavigation) kommt aus dem Assistent-Layout — hier nur der Formular-Skeleton.
 export default function Loading() {
   return (

@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/app/page-header";
 
 /**
  * Zentrale für alles rund um den Chat-Assistenten: Wissen pflegen, offene Fragen
- * beantworten, Eskalation regeln.
+ * beantworten, persönlichen Kontakt festlegen.
  *
  * Layout-Shell ist STATISCH (Cache Components/PPR): Kopf, Beschreibung, die
  * „einbetten“-Quick-Link und die Unternavigation zeichnen sofort. Nur der
@@ -26,7 +26,7 @@ export default function AssistentLayout({
       <PageHeader
         className="mb-5"
         title="KI-Assistent"
-        description="Der Chat auf Ihrer Hilfe-Seite: Wissen pflegen, offene Fragen beantworten, Eskalation regeln."
+        description="Der Chat auf Ihrer Hilfe-Seite: Wissen pflegen, offene Fragen beantworten, persönlichen Kontakt festlegen."
         actions={
           <>
             <Suspense

@@ -142,6 +142,7 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - `node --env-file=.env.local scripts/test-internal-trace.mjs` (intern: keine public Bilder/Embeddings)
   - `node --env-file=.env.local scripts/test-kb-import-live.mjs` (Wissens-Import + SSRF + PDF)
   - `node --env-file=.env.local scripts/test-chat-topic-e2e.mjs` (Themen-Abgrenzung nach Branche, „Offene Fragen" nur Fach-Lücken)
+  - `node --env-file=.env.local scripts/test-escalation-e2e.mjs` (Persönlicher Kontakt: Seite im Browser + Fach-Zuordnung im Chat + sichere Links)
   - `node --env-file=.env.local scripts/test-kb-sync-e2e.mjs` (Chatbot-Index folgt Bearbeiten/Zurückziehen/Löschen; keine leere Weiterleitungs-Zusage)
   - `node --env-file=.env.local scripts/test-translate-live.mjs` (Übersetzungen inkl. Delta + stale)
   - `node --env-file=.env.local scripts/test-tts-live.mjs`     (Vorlesen: Hash-Cache, public MP3)
@@ -224,6 +225,10 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
       hinterlegtem Kontakt eine Weiterleitung. **Themen-Abgrenzung**: der Bot leitet das Tätigkeitsfeld aus den Titeln
       der eigenen Anleitungen/Kategorien/Artikel ab (`loadTopicOverview` in `/api/chat`) → Fremdes = off_topic, nur echte
       Fach-Lücken landen unter „Offene Fragen" (Test: `scripts/test-chat-topic-e2e.mjs`).
+- [x] **Persönlicher Kontakt (22.09.2026)** (vorher „Kontakt & Eskalation“, von keinem Konto genutzt): Schalter mit Status
+      (erster Kontaktweg schaltet automatisch ein), allgemeiner Kontakt, zuständige Personen als kompakte Karten,
+      Chat-Vorschau rechts über `buildEscalationBox` (lib/escalation.ts = EINE Quelle für Vorschau und /api/chat),
+      Feldprüfung + nur sichere Links (http(s)/E-Mail/Telefon) beim Speichern und bei der Ausgabe.
 - [x] **Drift-Agent**: `/api/tutorials/[id]/check` (gpt-4o-mini bewertet Veralterung →
       `change_alerts` + `freshness`), `DriftCheckButton` im Editor, Alert-Center `/app/alerts`,
       Glocke mit Zähler im Header.

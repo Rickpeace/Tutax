@@ -4,7 +4,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai, embed } from "@/lib/openai";
 import { chatSystem } from "@/lib/ai-prompts";
 import { recordEvent } from "@/lib/events";
-import { safeEmail, safeHttpUrl, safePhone } from "@/lib/escalation";
+import { buildEscalationBox, type EscalationSettings } from "@/lib/escalation";
 import { isExtraLang, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
 
 export const maxDuration = 30;
@@ -147,39 +147,10 @@ export async function POST(req: NextRequest) {
     .single();
   if (!account) return NextResponse.json({ error: "Unbekannt" }, { status: 404 });
 
-  type Expert = { name?: string; expertise?: string; calendarUrl?: string; email?: string; phone?: string };
-  type Esc = {
-    enabled?: boolean;
-    message?: string;
-    contactName?: string;
-    calendarUrl?: string;
-    email?: string;
-    phone?: string;
-    experts?: Expert[];
-  };
-  const esc = (account.escalation ?? {}) as Esc;
+  const esc = (account.escalation ?? {}) as EscalationSettings;
   const experts = Array.isArray(esc.experts) ? esc.experts : [];
   // Eskalation: passende Person (von der KI gewählt) ODER allgemeiner Fallback.
-  const buildEscalation = (expertIdx?: number | null) => {
-    if (!esc.enabled) return null;
-    const p = typeof expertIdx === "number" ? experts[expertIdx] : undefined;
-    // Nur sichere Werte ausliefern (landen als href im Widget) — auch für Altdaten.
-    const calendarUrl = safeHttpUrl(p?.calendarUrl) ?? safeHttpUrl(esc.calendarUrl);
-    const email = safeEmail(p?.email) ?? safeEmail(esc.email);
-    const phone = safePhone(p?.phone) ?? safePhone(esc.phone);
-    const name = p?.name || esc.contactName || account.name;
-    const methods: { type: string; label: string; value: string }[] = [];
-    if (calendarUrl)
-      methods.push({ type: "calendar", label: name ? `Termin buchen · ${name}` : "Termin buchen", value: calendarUrl });
-    if (email) methods.push({ type: "email", label: email, value: `mailto:${email}` });
-    if (phone) methods.push({ type: "phone", label: phone, value: `tel:${phone}` });
-    if (!methods.length) return null;
-    const base = esc.message || "Gerne helfen wir Ihnen persönlich weiter.";
-    const message = p?.name
-      ? `${base} ${p.name}${p.expertise ? ` (${p.expertise})` : ""} ist hierfür die richtige Ansprechperson.`
-      : base;
-    return { message, methods };
-  };
+  const buildEscalation = (expertIdx?: number | null) => buildEscalationBox(esc, expertIdx, account.name);
 
   if (!aiConfigured()) {
     return NextResponse.json({

@@ -1,12 +1,14 @@
 // Kontakt/Eskalation im Hilfe-Chat: Wählt der Bot bei einer Wissenslücke die fachlich
 // passende Person, fällt er sonst auf den allgemeinen Kontakt zurück, und erscheint die
 // Kontaktbox im echten Chat-Widget? Unsichere Links (javascript:) dürfen nie gespeichert
-// bzw. angezeigt werden.
+// bzw. angezeigt werden. Dazu die Einstellungsseite „Persönlicher Kontakt" im Browser:
+// Auto-Einschalten, Feldprüfung, kompakte Personen-Karten, Vorschau, Speichern, mobil.
+// Screenshots → scripts/.shots-escalation (gitignored über .shots*).
 // Echte DB + echte KI, Dev-Server lokal; Wegwerf-Konto wird am Ende gelöscht.
 //
 // Nutzung:  node --env-file=.env.local scripts/test-escalation-e2e.mjs
 import { createRequire } from "node:module";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +42,17 @@ const PORT = 3033;
 const BASE = `http://localhost:${PORT}`;
 const stamp = String(process.hrtime.bigint()).slice(-8);
 const slug = `esc-${stamp}`;
+const email = `tutax-esc-${stamp}@example.com`;
+const SHOT_DIR = path.join(__dirname, ".shots-escalation");
+mkdirSync(SHOT_DIR, { recursive: true });
+
+async function login(page) {
+  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+  await page.fill("#email", email);
+  await page.fill("#password", "Test12345!");
+  await page.click('button[type="submit"]');
+  await page.waitForURL(/\/app/, { timeout: 60_000 });
+}
 
 let failed = false;
 const ok = (c, m) => {
@@ -98,7 +111,7 @@ const EXPERTS = [
 let server, browser, userId, accountId;
 try {
   const created = await admin.auth.admin.createUser({
-    email: `tutax-esc-${stamp}@example.com`,
+    email,
     password: "Test12345!",
     email_confirm: true,
   });
@@ -120,6 +133,98 @@ try {
   });
   console.log("… Server startet auf", PORT, "…");
   if (!(await waitForServer())) throw new Error("Server nicht erreichbar");
+
+  const { chromium } = resolvePlaywright();
+  browser = await chromium.launch({ headless: true });
+
+  // 0) Einstellungsseite „Persönlicher Kontakt" wie ein Mensch bedienen.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+    const page = await ctx.newPage();
+    await login(page);
+    await page.goto(`${BASE}/app/assistent/eskalation`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+    const status = page.getByTestId("contact-status");
+    await status.waitFor({ timeout: 90_000 });
+    await page.waitForTimeout(1200); // Hydration
+    ok(await page.getByRole("link", { name: "Persönlicher Kontakt" }).first().isVisible(), "Tab heißt „Persönlicher Kontakt“");
+    ok(
+      (await status.getAttribute("data-tone")) === "off" && (await status.innerText()).includes("Ausgeschaltet"),
+      "Start: Status „Ausgeschaltet“",
+    );
+
+    await page.fill("#esc-email", "team@example.com");
+    ok((await page.getByTestId("contact-switch").getAttribute("aria-checked")) === "true", "Erste E-Mail schaltet automatisch ein");
+    ok((await status.getAttribute("data-tone")) === "on", "Status wird „Aktiv“");
+
+    await page.fill("#esc-phone", "ruf mich an");
+    ok(await page.getByText("Bitte eine gültige Telefonnummer eingeben.").isVisible(), "Ungültige Telefonnummer wird am Feld markiert");
+    ok(await page.getByRole("button", { name: "Speichern" }).isDisabled(), "Speichern gesperrt, solange ein Feld ungültig ist");
+    await page.fill("#esc-phone", "+49 40 123");
+    await page.fill("#esc-name", "Team Nordlicht");
+
+    await page.getByRole("button", { name: /Zuständige Person hinzufügen/ }).click();
+    const editor = page.getByTestId("person-editor");
+    await editor.getByPlaceholder("Name, z. B. Julia Meier").fill("Frau Müller");
+    await editor.getByLabel("Zuständig für").fill("Lohnabrechnung, Minijobs");
+    await editor.getByLabel("E-Mail").fill("mueller@example.com");
+    await editor.getByRole("button", { name: "Fertig" }).click();
+    const card = page.getByTestId("person-card");
+    ok((await card.count()) === 1, "Person erscheint als kompakte Karte");
+    const cardText = await card.innerText();
+    ok(cardText.includes("Lohnabrechnung") && cardText.includes("Minijobs"), "Karte zeigt Themen als Chips");
+    ok(
+      cardText.includes("mueller@example.com") && cardText.includes("vom allgemeinen Kontakt"),
+      "Karte zeigt eigene E-Mail + geerbte Telefonnummer",
+    );
+
+    const preview = page.getByTestId("contact-preview");
+    await preview.getByRole("button", { name: "Frage zu Lohnabrechnung" }).click();
+    const pbox = await preview.getByTestId("preview-box").innerText();
+    ok(
+      pbox.includes("mueller@example.com") && pbox.includes("+49 40 123") && pbox.includes("Frau Müller"),
+      "Vorschau: Frau Müller mit ihrer E-Mail + Team-Telefon",
+    );
+    await preview.getByRole("button", { name: "Sonstige Frage" }).click();
+    ok((await preview.getByTestId("preview-box").innerText()).includes("team@example.com"), "Vorschau: sonstige Frage → allgemeiner Kontakt");
+    ok((await page.getByTestId("save-state").innerText()).includes("Ungespeicherte Änderungen"), "Hinweis „Ungespeicherte Änderungen“");
+    await page.screenshot({ path: path.join(SHOT_DIR, "1-kontakt-desktop.png"), fullPage: true });
+
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await page.getByTestId("save-state").getByText("Alles gespeichert").waitFor({ timeout: 20_000 });
+    const { data: accRow } = await admin.from("accounts").select("escalation").eq("id", accountId).single();
+    const e = accRow.escalation;
+    ok(
+      e.enabled === true && e.email === "team@example.com" && e.phone === "+49 40 123" && e.contactName === "Team Nordlicht",
+      "DB: allgemeiner Kontakt gespeichert",
+    );
+    ok(e.experts?.length === 1 && e.experts[0].name === "Frau Müller" && e.experts[0].email === "mueller@example.com", "DB: Person gespeichert");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByTestId("person-card").waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(800);
+    ok((await page.locator("#esc-email").inputValue()) === "team@example.com", "Nach Neuladen: Werte bleiben");
+    ok((await page.getByTestId("save-state").innerText()).includes("Alles gespeichert"), "Nach Neuladen: „Alles gespeichert“");
+
+    // Mobil prüfen, solange die Person noch da ist.
+    const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const mp = await mob.newPage();
+    await login(mp);
+    await mp.goto(`${BASE}/app/assistent/eskalation`, { waitUntil: "domcontentloaded" });
+    await mp.getByTestId("person-card").waitFor({ timeout: 60_000 });
+    await mp.waitForTimeout(800);
+    const overflow = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    ok(overflow <= 1, `Mobil 390 px: keine horizontale Scrollleiste (${overflow}px)`);
+    await mp.screenshot({ path: path.join(SHOT_DIR, "2-kontakt-mobil.png"), fullPage: true });
+    await mob.close();
+
+    await page.getByTestId("person-card").getByRole("button", { name: /bearbeiten/ }).click();
+    await page.getByTestId("person-editor").getByRole("button", { name: "Person entfernen" }).click();
+    ok((await page.getByTestId("person-card").count()) === 0, "Person entfernen");
+    await page.getByTestId("contact-switch").click();
+    ok((await status.getAttribute("data-tone")) === "off", "Schalter aus → Status „Ausgeschaltet“");
+    ok((await page.getByTestId("contact-preview").getByTestId("preview-box").count()) === 0, "Vorschau ohne Kontaktbox, wenn ausgeschaltet");
+    await ctx.close();
+  }
 
   // 1) Fachliche Zuordnung.
   await setEscalation({ ...GENERAL, experts: EXPERTS });
@@ -150,8 +255,6 @@ try {
 
   // 4) Kontaktbox im echten Chat-Widget (Hilfe-Seite).
   await setEscalation({ ...GENERAL, experts: EXPERTS });
-  const { chromium } = resolvePlaywright();
-  browser = await chromium.launch({ headless: true });
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   await page.goto(`${BASE}/h/${slug}`, { waitUntil: "domcontentloaded", timeout: 180_000 });
   await page.getByRole("button", { name: "Hilfe-Assistent" }).first().click();

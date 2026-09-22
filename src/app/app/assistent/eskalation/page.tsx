@@ -11,5 +11,5 @@ export default async function EskalationPage() {
     .eq("id", account.id)
     .single();
 
-  return <EscalationForm initial={acc?.escalation ?? {}} />;
+  return <EscalationForm initial={acc?.escalation ?? {}} accountName={account.name} />;
 }

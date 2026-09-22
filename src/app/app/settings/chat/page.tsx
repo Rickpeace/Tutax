@@ -57,7 +57,7 @@ export default async function ChatSettingsPage() {
             nativeButton={false}
             render={<Link href="/app/assistent/eskalation" />}
           >
-            <LifeBuoy className="size-4" /> Kontakt &amp; Eskalation
+            <LifeBuoy className="size-4" /> Persönlicher Kontakt
           </Button>
         </div>
       </SettingsCard>

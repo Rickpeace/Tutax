@@ -302,7 +302,7 @@ export const TUTORIALS = [
         body: "Statt alles zu tippen, importieren Sie „Von Ihrer Website“ oder aus einem Dokument (PDF/Word). Steply erzeugt daraus Entwürfe – nichts wird automatisch veröffentlicht." },
       { shot: "eskalation", target: "person",
         title: "Ansprechpartner hinterlegen",
-        body: "Unter „KI-Assistent“ → „Kontakt & Eskalation“ legen Sie fest, an wen der KI-Assistent verweist, wenn er nicht weiterweiß – mit „Person hinzufügen“ auch je Fachgebiet, mit Terminbuchung, E-Mail und Telefon." },
+        body: "Unter „KI-Assistent“ → „Persönlicher Kontakt“ legen Sie fest, wie Kunden Sie erreichen, wenn der KI-Assistent nicht weiterweiß – mit „Zuständige Person hinzufügen“ auch je Thema, mit Terminbuchung, E-Mail und Telefon. Die Vorschau daneben zeigt, was der Kunde sieht." },
       { shot: "fragen", target: "entwurf",
         title: "Offene Fragen zu Entwürfen machen",
         body: "Fragen, die der KI-Assistent nicht beantworten konnte, sammelt Steply unter „KI-Assistent“ → „Offene Fragen“. Neben jeder Frage baut „Entwurf erstellen“ ein Anleitungs-Gerüst, das Sie nur noch ergänzen." },
