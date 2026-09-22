@@ -181,13 +181,12 @@ try {
   await page.goto(`${BASE}/app/settings/erweiterung`, { waitUntil: "domcontentloaded" });
   await h1(page);
   await page.getByText("Noch nicht installiert").waitFor({ timeout: 15_000 });
+  // Einrichtung IN der App (3 Schritte) statt Link auf die öffentliche /extension.
   const status = page.getByTestId("extension-status");
-  // Base-UI-Button mit render={<Link/>} ist ein <a role="button">.
-  const steps = status.locator("a, button");
-  ok(
-    (await steps.count()) === 1 && (await steps.first().getAttribute("href")) === "/extension",
-    "Erweiterung: genau ein nächster Schritt (installieren → /extension)",
-  );
+  ok((await status.getByTestId("extension-setup").count()) === 1, "Erweiterung: Einrichtung in 3 Schritten");
+  const dl = status.getByRole("button", { name: /Steply-Erweiterung herunterladen/ });
+  ok((await dl.getAttribute("href")) === "/downloads/steply-recorder.zip", "Erweiterung: Download-Knopf → ZIP");
+  ok((await page.locator('a[href="/extension"]').count()) === 0, "Erweiterung: kein Link auf die öffentliche /extension");
   await page.getByText("Code manuell eingeben").click();
   ok(await page.getByRole("button", { name: "Code erzeugen" }).isVisible(), "Erweiterung: „Code manuell eingeben“ klappt auf");
   await page.screenshot({ path: path.join(SHOT_DIR, "d-erweiterung-offen.png"), fullPage: true });
