@@ -306,12 +306,30 @@ try {
     await sleep(1000);
     ok((await edge.getByTestId("recorder-connection").count()) === 1, "Trennen: Liste aktualisiert (1 Eintrag)");
 
+    // ---------- „Neuen Code erzeugen“ ersetzt den ungenutzten Vorgänger (QA 09/2026) ----------
+    // In DERSELBEN Seiten-Sitzung wird der eben erzeugte, nie eingelöste Code ersetzt —
+    // sonst sammelten sich bei jedem Klick dauerhaft gültige Karteileichen an.
+    await openSettings(edge);
+    const codeA = await manualCode(edge);
+    const codeB = await manualCode(edge);
+    ok((await me(codeA)) === 401, "Neuer Code ersetzt den ungenutzten Vorgänger derselben Sitzung");
+    ok(
+      (await rowsOf(accId, ownerId, "id")).length === 2,
+      `… und hinterlässt keine Karteileiche (${(await rowsOf(accId, ownerId, "id")).length} Zeilen)`,
+    );
+
     // ---------- Begrenzung: max. 10, die am längsten ungenutzte fliegt ----------
-    const codes = [];
-    for (let i = 0; i < 9; i++) codes.push(await manualCode(edge));
+    // Jeder weitere Code kommt aus einer FRISCHEN Seiten-Sitzung (Neuladen) — dann ersetzt
+    // er nichts, und die Begrenzung lässt sich wie bisher prüfen.
+    const codes = [codeB];
+    while ((await rowsOf(accId, ownerId, "id")).length < 10) {
+      await openSettings(edge);
+      codes.push(await manualCode(edge));
+    }
     ok((await rowsOf(accId, ownerId, "id")).length === 10, "10 Verbindungen möglich");
     // Edge gerade benutzt -> darf nicht fliegen; der älteste ungenutzte Code schon.
     await admin.from("recorder_tokens").update({ last_used_at: new Date().toISOString() }).eq("token", tEdge);
+    await openSettings(edge); // frische Sitzung -> der 11. Code ersetzt keinen Vorgänger
     const code11 = await manualCode(edge);
     rows = await rowsOf(accId, ownerId, "token, label");
     ok(rows.length === 10, `11. Verbindung: weiterhin 10 (${rows.length})`);
@@ -333,6 +351,7 @@ try {
     await login(ep, E.ed);
     await openSettings(ep);
     await manualCode(ep);
+    await openSettings(ep); // frische Sitzung -> zweiter Code ersetzt den ersten nicht
     await manualCode(ep);
     const edRows = await rowsOf(accId, edId, "token");
     const edStatus = await Promise.all(edRows.map((r) => me(r.token)));
