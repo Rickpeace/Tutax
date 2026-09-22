@@ -5,6 +5,9 @@
 // (Reload); Schalter veroeffentlicht wirklich (DB); mobil keine horizontale Scrollleiste.
 // Welle 54: Kategorie löschen über „…“ (Dialog nennt die Folge, Anleitungen → „Sonstiges“,
 // auch mobil neben dem Titel).
+// Kategorie umbenennen über „…“ → „Umbenennen“ (vorbelegt, Enter speichert, leer/Duplikat
+// werden abgewiesen, DB + Seitenleiste zeigen den neuen Namen; Standard-Kategorien haben
+// kein Menü und sind per REST nicht umbenennbar). Screenshots → scripts/.shots-rename.
 // Screenshots → SHOT_DIR (Standard: scripts/.shots-library, gitignored ueber .shots*).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-library-views.mjs
@@ -19,6 +22,8 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SHOT_DIR = process.env.SHOT_DIR || path.join(__dirname, ".shots-library");
 mkdirSync(SHOT_DIR, { recursive: true });
+const RENAME_DIR = path.join(__dirname, ".shots-rename");
+mkdirSync(RENAME_DIR, { recursive: true });
 
 function resolvePlaywright() {
   try {
@@ -82,6 +87,7 @@ try {
     .insert([
       { account_id: accountId, name: "Belege & Dokumente", position: 0 },
       { account_id: accountId, name: "Lohn & Gehalt", position: 1 },
+      { account_id: accountId, name: "Steuern", position: 2 },
     ])
     .select("id, name");
   if (catErr) throw catErr;
@@ -173,7 +179,12 @@ try {
   // ---- Kategorie löschen (Welle 54): „…“ neben der Kategorie, Bestätigung nennt die Folge ----
   const aside = page.locator("aside").first();
   const lohnRow = aside.getByTestId("category-row").filter({ hasText: "Lohn & Gehalt" });
-  ok((await aside.getByTestId("category-row").count()) === 2, "Nur eigene Kategorien haben ein „…“-Menü (nicht „Sonstiges“)");
+  ok((await aside.getByTestId("category-row").count()) === 3, "Nur eigene Kategorien haben ein „…“-Menü (nicht „Sonstiges“)");
+  // Standard-Kategorien (Bereich „Standard-Anleitungen“) haben nirgends ein „…“-Menü.
+  ok(
+    (await page.getByTestId("category-menu").count()) === (await aside.getByTestId("category-menu").count()),
+    "Standard-Kategorien: kein „…“-Menü (nicht umbenennbar/löschbar)",
+  );
   await lohnRow.hover();
   await lohnRow.getByTestId("category-menu").click();
   await page.getByTestId("category-delete").click();
@@ -216,6 +227,78 @@ try {
   ok(await main.getByText("Lohnabrechnung abrufen").first().isVisible(), "Anleitung weiter sichtbar");
   await page.screenshot({ path: path.join(SHOT_DIR, "kategorie-geloescht.png"), fullPage: false });
 
+  // ---- Kategorie umbenennen ----
+  const belegId = catId("Belege & Dokumente");
+  const belegRow = aside.getByTestId("category-row").filter({ hasText: "Belege & Dokumente" });
+  await belegRow.hover();
+  await belegRow.getByTestId("category-menu").click();
+  await page.getByTestId("category-rename").waitFor({ timeout: 10_000 });
+  const items = (await page.getByRole("menuitem").allInnerTexts()).map((t) => t.trim());
+  ok(items[0] === "Umbenennen" && items[1] === "Kategorie löschen", `Menü: „Umbenennen“ über „Kategorie löschen“ (${JSON.stringify(items)})`);
+  await page.getByTestId("category-rename").click();
+  const rDlg = page.getByTestId("category-rename-dialog");
+  const rInput = page.getByTestId("category-rename-input");
+  await rDlg.waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(400);
+  ok((await rInput.inputValue()) === "Belege & Dokumente", "Dialog: Name vorbelegt");
+  ok(await rInput.evaluate((el) => el === document.activeElement), "Dialog: Namensfeld hat den Fokus");
+  await page.screenshot({ path: path.join(RENAME_DIR, "umbenennen-desktop.png"), fullPage: false });
+
+  // Leer → Meldung, DB unverändert
+  await rInput.fill("   ");
+  await rInput.press("Enter");
+  const rErr = page.getByTestId("category-rename-error");
+  ok(
+    await rErr.waitFor({ timeout: 5_000 }).then(async () => (await rErr.innerText()).includes("Bitte einen Namen eingeben"), () => false),
+    "Leerer Name: verständliche Meldung",
+  );
+  // Duplikat (andere Schreibweise) → Meldung, DB unverändert
+  await rInput.fill("  steuern ");
+  await rInput.press("Enter");
+  ok(
+    await page.getByText("Eine Kategorie „Steuern“ gibt es schon").waitFor({ timeout: 5_000 }).then(() => true, () => false),
+    "Duplikat (Groß/Klein egal): „Eine Kategorie „Steuern“ gibt es schon …“",
+  );
+  await page.screenshot({ path: path.join(RENAME_DIR, "umbenennen-duplikat-desktop.png"), fullPage: false });
+  ok((await admin.from("categories").select("name").eq("id", belegId).single()).data.name === "Belege & Dokumente", "Abgewiesen: Name in der DB unverändert");
+  // Länge: Feld nimmt höchstens 60 Zeichen an
+  await rInput.fill("x".repeat(80));
+  ok((await rInput.inputValue()).length === 60, "Namensfeld begrenzt auf 60 Zeichen");
+
+  // Gültig → Enter speichert
+  await admin.from("categories").update({ name_i18n: { _src: "Belege & Dokumente", en: "Receipts" } }).eq("id", belegId);
+  await rInput.fill("Belege und Nachweise");
+  await rInput.press("Enter");
+  let newName = null;
+  for (let i = 0; i < 20 && newName !== "Belege und Nachweise"; i++) {
+    await page.waitForTimeout(500);
+    newName = (await admin.from("categories").select("name").eq("id", belegId).single()).data.name;
+  }
+  ok(newName === "Belege und Nachweise", `Umbenannt (DB name=${newName})`);
+  const { data: afterRow } = await admin.from("categories").select("name_i18n, account_id").eq("id", belegId).single();
+  ok(
+    afterRow.account_id === accountId && (afterRow.name_i18n === null || afterRow.name_i18n?._src === "Belege und Nachweise"),
+    "Alte Übersetzung verworfen (kein veralteter englischer Name)",
+  );
+  ok(await page.getByText("Kategorie umbenannt").first().waitFor({ timeout: 10_000 }).then(() => true, () => false), "Toast „Kategorie umbenannt“");
+  ok(await rDlg.waitFor({ state: "hidden", timeout: 10_000 }).then(() => true, () => false), "Dialog schließt nach dem Speichern");
+  ok(await aside.getByText("Belege und Nachweise").first().waitFor({ timeout: 15_000 }).then(() => true, () => false), "Seitenleiste zeigt den neuen Namen");
+  ok((await aside.getByText("Belege & Dokumente").count()) === 0, "Alter Name verschwunden");
+  const { data: stillIn } = await admin.from("tutorials").select("category_id").eq("title", "Beleg in DATEV hochladen").eq("account_id", accountId).single();
+  ok(stillIn.category_id === belegId, "Anleitung bleibt in der (umbenannten) Kategorie");
+
+  // Standard-Kategorie (account_id null) ist per REST nicht umbenennbar (RLS).
+  const { data: globalCat } = await admin.from("categories").select("id, name").is("account_id", null).limit(1).maybeSingle();
+  if (globalCat) {
+    const u = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
+    await u.auth.signInWithPassword({ email, password: PW });
+    const r = await u.from("categories").update({ name: "Gekapert" }).eq("id", globalCat.id).select("id");
+    const { data: gAfter } = await admin.from("categories").select("name").eq("id", globalCat.id).single();
+    ok((!!r.error || !(r.data ?? []).length) && gAfter.name === globalCat.name, "Standard-Kategorie per REST umbenennen abgewiesen");
+  } else {
+    console.log("· keine Standard-Kategorie vorhanden – REST-Prüfung übersprungen");
+  }
+
   // ---- Mobil ----
   const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const mp = await mob.newPage();
@@ -238,7 +321,7 @@ try {
   await mp.screenshot({ path: path.join(SHOT_DIR, "4-mobil-liste.png"), fullPage: true });
 
   // Mobil: Kategorie wählen → „…“ neben dem Titel → Lösch-Dialog (nur ansehen, abbrechen).
-  await mp.locator("main").last().getByRole("button", { name: "Belege & Dokumente" }).first().click();
+  await mp.locator("main").last().getByRole("button", { name: "Belege und Nachweise" }).first().click();
   await mp.waitForTimeout(400);
   const mMenu = mp.locator("main").last().locator("h1").getByTestId("category-menu");
   ok(await mMenu.isVisible(), "Mobil: „…“ neben dem Kategorie-Titel");
@@ -250,6 +333,19 @@ try {
   await mp.waitForTimeout(300);
   await mp.screenshot({ path: path.join(SHOT_DIR, "kategorie-loeschen-dialog-mobil.png"), fullPage: false });
   await mDlg.getByRole("button", { name: "Abbrechen" }).click();
+  await mp.waitForTimeout(400);
+  // Mobil: Umbenennen-Dialog (nur ansehen, abbrechen).
+  await mMenu.click();
+  await mp.getByTestId("category-rename").click();
+  const mR = mp.getByTestId("category-rename-dialog");
+  await mR.waitFor({ timeout: 10_000 });
+  await mp.waitForTimeout(400);
+  const box = await mR.boundingBox();
+  ok(!!box && box.x >= 0 && box.x + box.width <= 390, `Mobil: Umbenennen-Dialog passt in 390 px (${box ? Math.round(box.x) + "+" + Math.round(box.width) : "?"})`);
+  ok((await mp.getByTestId("category-rename-input").inputValue()) === "Belege und Nachweise", "Mobil: Dialog mit aktuellem Namen vorbelegt");
+  await mp.screenshot({ path: path.join(RENAME_DIR, "umbenennen-mobil-390.png"), fullPage: false });
+  await mR.getByRole("button", { name: "Abbrechen" }).click();
+  await mR.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
   const overflow3 = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   ok(overflow3 <= 1, `Mobil mit Kategorie-Menü: keine horizontale Scrollleiste (${overflow3}px)`);
 } catch (e) {
