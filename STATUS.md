@@ -5,7 +5,30 @@
 > Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md`
 > **Design-Referenz NEU: `desing claude/` (README + SPEC-*.md, gitignored) — ersetzt prototyp-v4.jsx/§13-Farben.**
 
-Letztes Update: 2026-07-06 (LIVE-FÜHRUNG + Seiten-Erkennung, s. §7h; davor Warm-Redesign §7g — Details: REVIEW.md, offene Punkte: TODO.md)
+Letztes Update: 2026-09-22 (Editor-Überarbeitung + KI-Texte + Eingaben, s. §7i; Details: REVIEW.md, offene Punkte: TODO.md)
+
+## 7i. Editor-Überarbeitung, Player, KI-Texte (21./22.09.2026, Wellen 48–54) — LIVE, Extension v2.18.3
+> - **Sofort-Aufnahme (W48–51):** Enter/Iframes/Hover/Varianten erfasst (`step.interaction`),
+>   Bereit→Start→Pause→Stopp, Migration 0036. Öffentliche Bildkopien sicher (`src/lib/public-images.ts`).
+> - **Editor (W52/53, UX-Audit):** Kopf = Zielgruppen-Chips „Hilfe-Seite (für alle)“ + „Team“
+>   (Team ⇒ „mit Schulungsnachweis“; Mapping public/internal + `in_lernen`, keine Migration),
+>   Knopf „Veröffentlichen“ bzw. Etikett „✓ Veröffentlicht“, Nebenaktionen im „…“-Menü;
+>   „+“ fügt direkt ein, Blitz = „Ab hier aufnehmen“; leere Anleitung bietet Aufnahme (Anker
+>   `afterStepId === tutorialId`); Panel Titel → Text → Bild → Frage; Steply-Dialoge statt
+>   confirm/prompt (`src/components/ui/confirm-dialog.tsx`); Toasts unten rechts.
+>   Audit-Skript: `scripts/shoot-builder-audit.mjs`.
+> - **Player:** Verpixelung ohne Aufblitzen (backdrop-filter + Dekodieren vor Wechsel),
+>   Regressionstest `scripts/test-viewer-blur-flash.mjs`.
+> - **Aufnahme-Texte (W54):** kein Fülltext bei einfachen Klicks; getippter Wert
+>   (`typed_value`, nie Passwort/cc/OTP/sensibel) im Titel; KI-Feinschliff neu
+>   (`GUIDE_REFINE_SYSTEM`, Wert maskiert als `{{WERT}}`, strenge Prüfung) + Editor-Knopf
+>   „Texte mit KI verbessern“ (Vorschläge, Übernehmen, Rückgängig; Limit 30/h pro Person
+>   in `app_metadata`). Tests: `test-guide-ai-quality`, `test-improve-texts-ui`.
+> - **Bibliothek:** Kategorie löschen („…“ an der Kategorie; Anleitungen → „Sonstiges“).
+> - **Marke:** Favicon/App-/Extension-Icons aus `scripts/make-brand-icons.mjs`.
+> - **Geparkt:** „Aktualität prüfen“-Umbau (Text vs. Screenshot) auf Branch
+>   `welle-53-drift-text-vs-screenshot` — Richard: „erstmal weglassen“.
+> - **Parallel (andere Sitzung):** Team-Rollen Inhaber/Bearbeiter/Mitarbeiter, Migrationen 0037–0040.
 
 ## 7h. Live-Führung + Seiten-Erkennung (06.07.2026, Wellen 31a–d) — LIVE, Extension v2.5.1
 > Tango-Prinzip: Die Extension führt Tutorials DIREKT auf der echten Website — Panel
