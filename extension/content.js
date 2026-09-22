@@ -45,7 +45,10 @@
   // .interaction -> Plan -> steply-exec-step / steply-guide-show zurueck an content.js:
   //   enter:   true                           Eingabe per Enter abgeschickt (nur action "type")
   //   variant: "right"|"double"|"drag"|"key"  Rechtsklick / Doppelklick / Ziehen / Tastenkuerzel
+  //            |"nav"|"spot"|"result"         Welle 55, Schritte OHNE Element (s. u.)
   //   key:     "Ctrl+S"                       nur variant "key": Anzeige-Form (Ctrl/Alt/Shift/Meta+Taste)
+  //   modifiers: ["ctrl","shift"]             Welle 55: gedrueckte Zusatztasten beim Klick
+  //   nav:     "back"|"reload"|"goto"         nur variant "nav": Art des Seitenwechsels
   //   drop:    {css,text,role}, dropLabel     nur variant "drag": Ablage-Ziel
   //   hover:   {css,text,role}, hoverLabel    vorher mit der Maus ueber dieses Element (Menue)
   //   frame:   {url}                          Schritt liegt in einem iframe (origin+pathname)
@@ -57,6 +60,16 @@
   // der das Hauptfenster per steply-frame-geo die echte Markierungs-Lage nachreicht.
   // Erfassung (Welle 48b): Enter (Feld / contenteditable-Chat), Rechtsklick, Doppelklick (patch),
   // Ziehen (HTML5 + Zeiger, patch), Tastenkuerzel, Hover-Menues (ARIA), iframes, Shadow DOM.
+  //
+  // SCHRITTE OHNE ELEMENT (Welle 55) — sie tragen bewusst KEINEN Selektor:
+  //   variant "nav"     Seitenwechsel OHNE Klick: Zurueck-Knopf, Neuladen/F5, Weiterleitung,
+  //                     SPA-Routenwechsel. Screenshot zeigt den Zustand NACH dem Wechsel.
+  //   variant "spot"    Klick auf eine Stelle ohne brauchbares Element: <canvas>-Oberflaechen
+  //                     (Google Docs, Figma) und GESCHLOSSENE Shadow-Roots. Markierung = kleines
+  //                     Kaestchen um den Klickpunkt.
+  //   variant "result"  Abschluss-Bild (vom Panel beim „Fertig" angehaengt, nicht von hier).
+  // Weil sie keinen Selektor haben, sortiert lib/automations.ts sie automatisch aus (nicht
+  // automatisierbar) und die Live-Fuehrung zeigt statt eines Overlays den Screenshot-Hinweis.
 
   // ---- Erkennungs-Marker fuer App-Seiten (Welle 25) ------------------------
   // FRUEH (document_start) ein DOM-Attribut setzen, damit App-Seiten erkennen, dass die
@@ -1000,6 +1013,20 @@
     if (rect.y + rect.h > 1) rect.h = round(1 - rect.y);
     return rect;
   }
+  // Markierung um einen KLICKPUNKT (Welle 55, L5/L6): ein kleines Kaestchen um x/y, damit der
+  // Leser sieht, WO geklickt wurde, auch wenn es dort kein Element gibt (Canvas, geschlossenes
+  // Shadow DOM). Bewusst klein — eine grosse Flaeche wuerde nichts zeigen.
+  const SPOT_PX = 56;
+  function spotGeo(x, y) {
+    const half = SPOT_PX / 2;
+    const left = Math.max(0, (typeof x === "number" ? x : 0) - half);
+    const top = Math.max(0, (typeof y === "number" ? y : 0) - half);
+    return {
+      rect: normRect(left, top, SPOT_PX, SPOT_PX),
+      px: { left, top, width: SPOT_PX, height: SPOT_PX, cx: left + half, cy: top + half },
+    };
+  }
+
   function rectOf(el) {
     const px = { left: 0, top: 0, width: 0, height: 0, cx: 0, cy: 0 };
     let rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -1257,8 +1284,10 @@
   // ohne Fokus-Element) -> leeres Rechteck. Rueckgabe: ts des Schritts.
   function emitStep(el, action, opts) {
     const o = opts || {};
-    const geo = rectOf(el);
-    lastClickPx = el
+    // Welle 55 (L5/L6): „spot" = Markierung um den KLICKPUNKT statt um ein Element. Fuer
+    // Canvas-Oberflaechen und geschlossene Shadow-Roots, wo es kein sinnvolles Element gibt.
+    const geo = o.spot ? spotGeo(o.spot.x, o.spot.y) : rectOf(el);
+    lastClickPx = el || o.spot
       ? {
           left: geo.px.left, top: geo.px.top, width: geo.px.width, height: geo.px.height,
           cx: o.cx != null ? o.cx : geo.px.cx, cy: o.cy != null ? o.cy : geo.px.cy,
@@ -1271,7 +1300,9 @@
       action: action === "type" ? "type" : "click",
       url: (location && location.href ? location.href : "").slice(0, 500),
       title: truncate(document.title || "", 200),
-      selector: selectorFor(el),
+      // Schritte ohne Element (spot/nav/result) tragen BEWUSST keinen Selektor — daran
+      // erkennen Automationen und Live-Fuehrung, dass hier nichts angesteuert werden kann.
+      selector: o.spot ? undefined : selectorFor(el),
       ts,
     };
     // Eingetippter Wert (Welle 54): nur bei Eingabe-Schritten und nur, wenn das Feld nicht
@@ -1298,6 +1329,9 @@
     }
     if (Object.keys(inter).length) step.interaction = inter;
     sendToPanel({ type: "steply-guide-step", step });
+    // Welle 55 (L1): Zeitpunkt merken, damit ein direkt folgender Seitenwechsel als FOLGE
+    // dieses Schritts erkannt wird und keinen zweiten Schritt erzeugt.
+    navNoteStep();
     if (framePx) {
       postFrameGeo(step.frameKey, framePx, collectSensitiveRects(true));
     }
@@ -1681,12 +1715,28 @@
   let pendingDown = null; // pointerdown wartet auf mousedown.detail (Doppelklick?)
   let dragProbe = null; // { el, ts, x, y } — pointerdown eines Klick-Schritts (fuer Ziehen)
 
-  function emitClick(el, x, y) {
+  // Gedrueckte Zusatztasten eines Zeiger-Ereignisses (Welle 55, L3) in der Vertrags-Reihenfolge.
+  // Ohne sie sagt der Schritt „Klicken Sie auf Beleg 3" — wer folgt, verliert seine Auswahl.
+  function modifiersOf(event) {
+    if (!event) return null;
+    const mods = [];
+    if (event.ctrlKey) mods.push("ctrl");
+    if (event.metaKey) mods.push("meta");
+    if (event.altKey) mods.push("alt");
+    if (event.shiftKey) mods.push("shift");
+    return mods.length ? mods : null;
+  }
+
+  function emitClick(el, x, y, mods) {
     const opts = { cx: x, cy: y };
     const hover = hoverFor(el);
     if (hover) {
       opts.interaction = { hover: hover.selector };
       if (hover.label) opts.interaction.hoverLabel = hover.label;
+    }
+    if (mods && mods.length) {
+      opts.interaction = opts.interaction || {};
+      opts.interaction.modifiers = mods.slice();
     }
     const ts = emitStep(el, "click", opts);
     lastClickStep = { el, ts, at: Date.now(), doubled: false };
@@ -1695,6 +1745,115 @@
     dragProbe = { el, ts, x, y };
     return ts;
   }
+
+  // ---- Schritte OHNE Element: Canvas + geschlossenes Shadow DOM (Welle 55, L5/L6) ---------
+  // Beide liefern nie einen brauchbaren Selektor — bisher entstand dort GAR KEIN Schritt und
+  // die Aufnahme wirkte auf Google-Docs-artigen Oberflaechen kaputt. Jetzt: Schritt mit
+  // Klickpunkt-Markierung, ohne Selektor, klar als „nicht automatisierbar" erkennbar.
+  // ENG begrenzt, damit daraus keine Flut von Fehlklick-Schritten wird.
+  const SPOT_REPEAT_MS = 600; // zweiter Druck auf dieselbe Stelle -> nur EIN Schritt
+  const SPOT_REPEAT_PX = 12;
+  let lastSpotStep = null; // { el, x, y, at }
+
+  // Web-Baustein mit GESCHLOSSENEM Shadow-Root? Erkennung bewusst eng: eigenes Element
+  // (Bindestrich im Namen), kein OFFENER Shadow-Root (dann sieht realTarget den Knopf), und
+  // nichts im Licht-DOM (sonst waere ein echtes Kind das Ziel gewesen).
+  function isClosedShadowHost(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const tag = (el.tagName || "").toLowerCase();
+    if (tag.indexOf("-") < 0) return false;
+    try {
+      if (el.shadowRoot) return false;
+      return el.childElementCount === 0;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Flaeche, fuer die ein „spot"-Schritt entsteht, oder null.
+  function spotSurfaceFor(target) {
+    if (!target || target.nodeType !== 1) return null;
+    const canvas = closestDeep(target, "canvas");
+    if (canvas) return canvas;
+    if (isClosedShadowHost(target)) return target;
+    return null;
+  }
+
+  function emitSpotClick(target, event) {
+    const surface = spotSurfaceFor(target);
+    if (!surface) return;
+    const x = event.clientX || 0;
+    const y = event.clientY || 0;
+    // Doppelklick / Zittern auf derselben Stelle erzeugt nur EINEN Schritt.
+    const ls = lastSpotStep;
+    if (
+      ls &&
+      ls.el === surface &&
+      Date.now() - ls.at <= SPOT_REPEAT_MS &&
+      Math.abs(ls.x - x) <= SPOT_REPEAT_PX &&
+      Math.abs(ls.y - y) <= SPOT_REPEAT_PX
+    ) {
+      ls.at = Date.now();
+      return;
+    }
+    const interaction = { variant: "spot" };
+    const mods = modifiersOf(event);
+    if (mods) interaction.modifiers = mods;
+    emitStep(surface, "click", {
+      spot: { x, y },
+      // Beschriftung der FLAECHE (aria-label/Ueberschrift), nicht des Klickpunkts — mehr gibt
+      // es hier nicht. Leer ist in Ordnung: der Titel heisst dann „Auf die markierte Stelle
+      // klicken".
+      label: clampLabel(surfaceLabel(surface), 60),
+      interaction,
+    });
+    lastSpotStep = { el: surface, x, y, at: Date.now() };
+  }
+
+  // Name einer Zeichen-/Baustein-Flaeche: aria-label/title/alt, sonst "" (nie der Tag-Name).
+  function surfaceLabel(el) {
+    try {
+      const a =
+        (el.getAttribute && (el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("alt"))) || "";
+      return a.trim();
+    } catch (err) {
+      return "";
+    }
+  }
+
+  // ---- Doppelklick auf eine gewoehnliche Tabellenzelle (Welle 55, L7) ----------------------
+  // „Doppelklick zum Bearbeiten" ist in Tabellen sehr verbreitet, die Zelle selbst ist aber
+  // nicht bedienbar (kein Knopf, kein tabindex, kein Zeiger-Cursor) -> der Dead-Click-Filter
+  // verwarf schon den ersten Klick, der Vorgang fehlte komplett.
+  // GEWAEHLTE VARIANTE: nur in Tabellenzellen nachreichen — NICHT „hat sich das DOM geaendert".
+  // Begruendung: ein Doppelklick auf Fliesstext markiert bloss ein Wort (haeufig, und er
+  // veraendert je nach Seite durchaus das DOM) — eine DOM-Probe wuerde daraus Schritt-Muell
+  // erzeugen. Die Zellen-Regel ist deterministisch, ohne Timing/Beobachter und trifft genau
+  // das gemeinte Muster.
+  const DBL_CELL_SEL = 'td, [role="gridcell"], [role="cell"]';
+
+  function onDoubleClick(event) {
+    if (!recording || mode !== "guide") return;
+    if (typeof event.button === "number" && event.button !== 0) return;
+    const target = realTarget(event);
+    // Bedienbare Ziele laufen weiterhin ueber pointerdown + markDouble (kein Doppel-Schritt).
+    if (interactiveFor(target)) return;
+    const cell = closestDeep(target, DBL_CELL_SEL);
+    if (!cell) return;
+    const lc = lastClickStep;
+    if (lc && lc.el === cell && Date.now() - lc.at <= DOUBLE_MS) return; // schon erfasst
+    const interaction = { variant: "double" };
+    const mods = modifiersOf(event);
+    if (mods) interaction.modifiers = mods;
+    const ts = emitStep(cell, "click", {
+      cx: event.clientX || 0,
+      cy: event.clientY || 0,
+      interaction,
+    });
+    // Als erfasst merken, damit ein Dreifach-Klick keinen zweiten Schritt erzeugt.
+    lastClickStep = { el: cell, ts, at: Date.now(), doubled: true };
+  }
+  document.addEventListener("dblclick", onDoubleClick, true);
 
   // Zweiter Druck eines Doppelklicks: KEIN neuer Schritt, sondern der erste wird „double".
   function markDouble(lc) {
@@ -1725,10 +1884,20 @@
     // offene Eingabe ab.
     flushUnlessInside(target);
 
+    // Pfeiltasten-Menue (Welle 55, L4): ein noch offener Menue-Schritt gehoert VOR diesen Klick.
+    flushArrowStep();
+
     // DEAD-CLICK-FILTER: Klick auf nicht-interaktive Flaeche (passive Karte, Absatz,
     // Leerraum) erzeugt KEINEN Schritt.
     const el = interactiveFor(target);
-    if (!el) return;
+    if (!el) {
+      // Welle 55 (L5/L6): Canvas-Oberflaechen und GESCHLOSSENE Shadow-Roots liefern nie ein
+      // brauchbares Element — statt gar nichts zu erfassen (die Aufnahme wirkte dort kaputt)
+      // entsteht ein Schritt mit Klickpunkt-Markierung und OHNE Selektor. Der Dead-Click-
+      // Filter fuer echte Leerflaechen (<body>, Absaetze, passive Karten) bleibt unveraendert.
+      emitSpotClick(target, event);
+      return;
+    }
 
     // Klick IN ein editierbares Feld erzeugt KEINEN Schritt (kein Feld-Klick-Rauschen).
     const info = editableInfo(controlForLabel(el));
@@ -1754,16 +1923,16 @@
         markDouble(lc);
         return;
       }
-      const pd = { el, x, y };
+      const pd = { el, x, y, mods: modifiersOf(event) };
       pendingDown = pd;
       setTimeout(() => {
         if (pendingDown !== pd) return;
         pendingDown = null;
-        emitClick(pd.el, pd.x, pd.y);
+        emitClick(pd.el, pd.x, pd.y, pd.mods);
       }, 0);
       return;
     }
-    emitClick(el, x, y);
+    emitClick(el, x, y, modifiersOf(event));
   }
 
   // pointerdown feuert VOR click und VOR der Navigation -> der Screenshot zeigt die Seite
@@ -1780,7 +1949,7 @@
       markDouble(lc);
       return;
     }
-    emitClick(pd.el, pd.x, pd.y);
+    emitClick(pd.el, pd.x, pd.y, pd.mods);
   }
   document.addEventListener("mousedown", onMouseDown, true);
 
@@ -2189,6 +2358,123 @@
     if (recentClicks.length > 12) recentClicks.shift();
   }
 
+  // ---- Menues per Pfeiltasten (Welle 55, L4) -----------------------------------------------
+  // Bisher waren Pfeiltasten komplett ausgeschlossen (NO_STEP_KEYS). Wer ein Menue per
+  // Pfeil-runter OEFFNET und den Eintrag mit Enter waehlt, bekam nur den zweiten Schritt — die
+  // Anleitung sprang mitten in ein Menue, das der Leser noch gar nicht offen hat.
+  //
+  // ENG BEGRENZT, damit keine Schritt-Flut entsteht:
+  //   • nur ohne Strg/Alt/Cmd und ausserhalb von Eingabefeldern/nativen <select>,
+  //   • nur wenn danach ein Menue WIRKLICH aufgeht (aria-expanded false -> true) oder sich die
+  //     Auswahl in einer Liste/einem Menue aendert (aria-activedescendant/aria-selected/Fokus),
+  //   • mehrere Pfeiltastendruecke werden zu EINEM Schritt zusammengefasst (Entprellen), der
+  //     erst nach der letzten Taste gemeldet wird — der Screenshot zeigt den Endzustand.
+  // Der Schritt ist ein GANZ NORMALER Klick-Schritt auf den Menue-Knopf bzw. den gewaehlten
+  // Eintrag: mit der Maus fuehrt derselbe Klick zum selben Ergebnis, und er bleibt mit Selektor
+  // automatisierbar (anders als die Taste selbst).
+  const ARROW_KEYS = /^(ArrowDown|ArrowUp|ArrowLeft|ArrowRight)$/;
+  const ARROW_SETTLE_MS = 250; // so lange auf weitere Pfeiltasten warten (= ein Schritt)
+  const ARROW_CONTAINER_SEL =
+    '[role="listbox"], [role="menu"], [role="menubar"], [role="combobox"]';
+  const ARROW_OPTION_SEL =
+    '[role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
+  let arrowPending = null; // { trigger, wasExpanded, container, wasSel, timer }
+
+  // Aktuell hervorgehobener Eintrag eines Listen-/Menue-Containers (oder null).
+  function arrowSelection(container) {
+    if (!container || container.nodeType !== 1) return null;
+    try {
+      const ad = container.getAttribute("aria-activedescendant");
+      if (ad) {
+        const sco = scopeOf(container);
+        const byId = sco && sco.getElementById ? sco.getElementById(ad) : null;
+        if (byId) return byId;
+      }
+      const active = deepActiveElement();
+      if (active && active !== container) {
+        const opt = closestDeep(active, ARROW_OPTION_SEL);
+        if (opt && container.contains(opt)) return opt;
+      }
+      return container.querySelector('[aria-selected="true"]');
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Einen offenen Pfeiltasten-Schritt JETZT melden (vor einem Klick / einer anderen Taste),
+  // damit die Reihenfolge der Schritte stimmt.
+  function flushArrowStep() {
+    const p = arrowPending;
+    if (!p) return;
+    arrowPending = null;
+    if (p.timer) clearTimeout(p.timer);
+    if (!recording || mode !== "guide") return;
+    // (a) Menue ist aufgegangen -> Schritt auf den Ausloeser („Menue oeffnen").
+    if (p.trigger && !p.wasExpanded && p.trigger.isConnected) {
+      let now = "";
+      try {
+        now = p.trigger.getAttribute("aria-expanded") || "";
+      } catch (err) {
+        now = "";
+      }
+      if (now === "true") {
+        emitClick(p.trigger, arrowCenter(p.trigger).cx, arrowCenter(p.trigger).cy, null);
+        return;
+      }
+    }
+    // (b) Auswahl in einer Liste/einem Menue hat gewechselt -> Schritt auf den neuen Eintrag.
+    if (p.container && p.container.isConnected) {
+      const sel = arrowSelection(p.container);
+      if (sel && sel !== p.wasSel && sel.isConnected) {
+        const g = arrowCenter(sel);
+        emitClick(sel, g.cx, g.cy, null);
+      }
+    }
+  }
+
+  function arrowCenter(el) {
+    const g = rectOf(el).px;
+    return { cx: g.cx, cy: g.cy };
+  }
+
+  // Pfeiltaste in einem Menue/einer Liste? Zustand merken und entprellt auswerten.
+  function onArrowKey(event) {
+    const active = deepActiveElement();
+    if (!active || active.nodeType !== 1) return;
+    if (active === document.body || active === document.documentElement) return;
+    if (active.isContentEditable === true) return;
+    const tag = (active.tagName || "").toLowerCase();
+    // Native Bedienelemente melden ihr Ergebnis selbst per change (<select>, Schieberegler …).
+    if (tag === "select" || tag === "input" || tag === "textarea") return;
+    if (editableInfo(controlForLabel(active)).editable) return;
+    const trigger = closestDeep(active, "[aria-expanded]");
+    const container = closestDeep(active, ARROW_CONTAINER_SEL);
+    if (!trigger && !container) return;
+    let wasExpanded = false;
+    try {
+      wasExpanded = !!trigger && trigger.getAttribute("aria-expanded") === "true";
+    } catch (err) {
+      wasExpanded = false;
+    }
+    const p = arrowPending;
+    if (p && p.trigger === trigger && p.container === container) {
+      // Weiterer Druck derselben Serie: nur die Frist verlaengern (ein Schritt fuer alle).
+      if (p.timer) clearTimeout(p.timer);
+      p.timer = setTimeout(flushArrowStep, ARROW_SETTLE_MS);
+      return;
+    }
+    flushArrowStep(); // andere Serie -> die vorige zuerst abschliessen
+    const pending = {
+      trigger: trigger || null,
+      wasExpanded,
+      container: container || null,
+      wasSel: arrowSelection(container),
+      timer: null,
+    };
+    pending.timer = setTimeout(flushArrowStep, ARROW_SETTLE_MS);
+    arrowPending = pending;
+  }
+
   // keydown: Tastenkuerzel (s. o.) und Enter. Enter in einem einzeiligen Feld: die Seite
   // schickt gleich ab und navigiert weg — blur kommt dann NIE. Den Eingabe-Schritt darum JETZT
   // melden (Screenshot zeigt noch das ausgefuellte Feld). Auch ein Enter ohne Aenderung
@@ -2198,6 +2484,13 @@
     if (event.isComposing) return;
     const target = realTarget(event);
     watchShadowRoots(target);
+    // Pfeiltasten in Menues/Listen (Welle 55, L4) — entprellt, damit mehrere Druecke EINEN
+    // Schritt ergeben. Jede ANDERE Taste schliesst eine offene Serie zuerst ab (Reihenfolge).
+    if (!event.repeat && ARROW_KEYS.test(event.key || "") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      onArrowKey(event);
+      return;
+    }
+    flushArrowStep();
     if (event.ctrlKey || event.metaKey || event.altKey) {
       onShortcut(event, target);
       return;
@@ -2285,6 +2578,165 @@
     }
   }
   document.addEventListener("change", onChange, true);
+
+  // ============================================================================
+  // SEITENWECHSEL OHNE KLICK (Welle 55, L1)
+  //
+  // Groesste Alltags-Luecke: Zurueck-Knopf, F5/Neuladen, Anmelde-Weiterleitung und
+  // SPA-Routenwechsel sieht die Seite entweder gar nicht (Browser-Bedienleiste) oder sie
+  // erzeugten schlicht keinen Schritt. Fuer den Leser sprang die Anleitung: Schritt 4 zeigt
+  // Seite A, Schritt 5 ploetzlich Seite B.
+  //
+  // WIE ES ERKANNT WIRD (ohne neue Berechtigung, ohne webNavigation):
+  //   • Ganze Seitenwechsel: `performance.getEntriesByType("navigation")[0].type` sagt beim
+  //     Laden „reload" / „back_forward" / „navigate".
+  //   • SPA (gleiches Dokument): popstate + ein billiger Abgleich der Ansicht (Origin + Pfad +
+  //     Hash) alle 600 ms. History-Patches greifen nicht — Content-Scripts laufen in einer
+  //     eigenen JS-Welt und sehen die pushState-Aufrufe der Seite nicht.
+  //
+  // KEINE DOPPEL-SCHRITTE: Folgt der Wechsel binnen 1,5 s auf einen ERFASSTEN Schritt, ist er
+  // dessen Folge (Klick auf einen Link) -> kein eigener Schritt. Weil der ausloesende Klick auf
+  // der VORIGEN Seite erfasst wurde, merkt sich jede Seite den Zeitpunkt ihres letzten Schritts
+  // in chrome.storage.local (NUR ein Zeitstempel, keine Inhalte).
+  //
+  // KEIN SCHRITT beim Start: War die Seite schon VOR dem Aufnahmestart offen (performance
+  // .timeOrigin < rec.startedAt), entsteht nichts — sonst begaenne jede Aufnahme mit einem
+  // sinnlosen „Weiter zu …".
+  //
+  // ERGEBNIS: ein Schritt OHNE Selektor (variant „nav") -> nicht automatisierbar, in der
+  // Live-Fuehrung ein Hinweis statt eines Overlays. Der Screenshot zeigt die NEUE Seite.
+  // ============================================================================
+  const NAV_AFTER_STEP_MS = 1500; // Wechsel binnen 1,5 s nach einem Schritt = dessen Folge
+  const NAV_SETTLE_MS = 350; // kurz warten, damit der Screenshot die NEUE Ansicht zeigt
+  const NAV_READY_MAX_MS = 1200; // hoechstens so lange auf „nicht mehr am Laden" warten
+  const NAV_COOLDOWN_MS = 2500; // hoechstens ein Seitenwechsel-Schritt je 2,5 s
+  const NAV_POLL_MS = 600; // Abgleich-Takt fuer SPA-Routen
+  const NAV_STORE_KEY = "guideLastStepAt";
+  let navStoredStepAt = 0; // letzter Schritt IRGENDEINER Seite dieser Aufnahme
+  let navViewKey = "";
+  let navLastEmitAt = 0;
+  let navPollTimer = null;
+  let navArrivalDone = false;
+  let navPendingPop = false;
+
+  // Zeitpunkt des letzten erfassten Schritts merken (ueberlebt den Seitenwechsel).
+  // NUR ein Zeitstempel — niemals Inhalte, Labels oder URLs.
+  function navNoteStep() {
+    navStoredStepAt = Date.now();
+    try {
+      const patch = {};
+      patch[NAV_STORE_KEY] = navStoredStepAt;
+      chrome.storage.local.set(patch);
+    } catch (err) {
+      /* storage nicht verfuegbar -> nur die In-Speicher-Zeit zaehlt */
+    }
+  }
+
+  function navRecentStepAt() {
+    return Math.max(lastTs || 0, navStoredStepAt || 0);
+  }
+  function navFollowsStep() {
+    const at = navRecentStepAt();
+    return !!at && Date.now() - at <= NAV_AFTER_STEP_MS;
+  }
+
+  function navViewKeyNow() {
+    try {
+      return (location.origin || "") + (location.pathname || "") + (location.hash || "");
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function navTypeNow() {
+    try {
+      const entries = performance.getEntriesByType("navigation");
+      return (entries && entries[0] && entries[0].type) || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
+  // Einen Seitenwechsel-Schritt melden (entprellt + erst wenn die Seite steht).
+  function navEmit(kind) {
+    const now = Date.now();
+    if (now - navLastEmitAt < NAV_COOLDOWN_MS) return;
+    navLastEmitAt = now;
+    navViewKey = navViewKeyNow();
+    const deadline = now + NAV_READY_MAX_MS;
+    const fire = () => {
+      if (!recording || mode !== "guide" || !IS_TOP) return;
+      if (document.readyState === "loading" && Date.now() < deadline) {
+        setTimeout(fire, 120);
+        return;
+      }
+      emitStep(null, "click", { interaction: { variant: "nav", nav: kind }, label: "" });
+    };
+    setTimeout(fire, NAV_SETTLE_MS);
+  }
+
+  // Frisch geladenes Dokument: Wie sind wir hier gelandet?
+  function navCheckArrival() {
+    if (navArrivalDone) return;
+    navArrivalDone = true;
+    if (!recording || mode !== "guide" || !IS_TOP) return;
+    let origin = 0;
+    try {
+      origin = performance.timeOrigin || 0;
+    } catch (err) {
+      origin = 0;
+    }
+    // Seite war schon vor dem Aufnahmestart offen -> kein Ankommens-Schritt.
+    if (!origin || !startEpoch || origin < startEpoch) return;
+    if (navFollowsStep()) return; // Folge eines erfassten Klicks
+    const type = navTypeNow();
+    if (type === "reload") navEmit("reload");
+    else if (type === "back_forward") navEmit("back");
+    else if (type === "navigate") navEmit("goto");
+  }
+
+  // Gleiches Dokument, andere Ansicht (SPA-Route, Hash, popstate).
+  function navCheckView() {
+    if (!recording || mode !== "guide" || !IS_TOP) return;
+    const key = navViewKeyNow();
+    if (!key || key === navViewKey) return;
+    navViewKey = key;
+    const wasPop = navPendingPop;
+    navPendingPop = false;
+    if (navFollowsStep()) return; // Routenwechsel als Folge eines erfassten Klicks
+    navEmit(wasPop ? "back" : "goto");
+  }
+
+  function navOnPopState() {
+    if (!recording || mode !== "guide" || !IS_TOP) return;
+    navPendingPop = true;
+    setTimeout(navCheckView, 80);
+  }
+
+  function navSetActive(on) {
+    if (navPollTimer) {
+      clearInterval(navPollTimer);
+      navPollTimer = null;
+    }
+    if (!on || !IS_TOP) return;
+    navViewKey = navViewKeyNow();
+    navPollTimer = setInterval(navCheckView, NAV_POLL_MS);
+  }
+
+  if (IS_TOP) {
+    window.addEventListener("popstate", navOnPopState, true);
+    window.addEventListener("hashchange", () => setTimeout(navCheckView, 80), true);
+    // Zurueck-Knopf mit bfcache: das Dokument wird WIEDERVERWENDET, es gibt kein neues
+    // „navigation"-Ereignis — nur pageshow mit persisted=true. Ohne das bliebe genau der
+    // haeufigste Fall (Zurueck) unerfasst.
+    window.addEventListener("pageshow", (event) => {
+      if (!event || event.persisted !== true) return;
+      if (!recording || mode !== "guide") return;
+      navViewKey = navViewKeyNow();
+      if (navFollowsStep()) return;
+      navEmit("back");
+    });
+  }
 
   // ---- Klick-Puls (Tango-Stil): blaues Aufleuchten um das erfasste Element. ----
   let lastClickPx = null;
@@ -2517,6 +2969,7 @@
       ctrl: "Strg",
       control: "Strg",
       shift: "Umschalt",
+      alt: "Alt",
       meta: "Cmd",
       escape: "Esc",
       delete: "Entf",
@@ -2973,6 +3426,18 @@
       return d ? "Ziehen auf „" + d + "“" : "Ziehen";
     }
     if (it.variant === "key" && it.key) return keyDisplayDe(it.key) + " drücken";
+    // Welle 55 — Schritte ohne Element: der Badge sagt, WAS zu tun ist (ein Overlay gibt es
+    // nicht, weil kein Selektor existiert).
+    if (it.variant === "nav") {
+      if (it.nav === "back") return "Zurück zur vorigen Seite";
+      if (it.nav === "reload") return "Seite neu laden";
+      return "Seite wechselt";
+    }
+    if (it.variant === "spot") return "Markierte Stelle im Bild";
+    if (it.variant === "result") return "Ergebnis";
+    if (Array.isArray(it.modifiers) && it.modifiers.length) {
+      return it.modifiers.map(keyDisplayDe).join("+") + " gedrückt halten";
+    }
     if (it.enter) return "Eingeben + Enter";
     return "";
   }
@@ -3979,18 +4444,51 @@
     }
   }
 
-  // Doppelklick: zwei vollstaendige Klicks (detail 1, 2) + dblclick (detail 2).
-  function execDoubleClick(el) {
+  // Gedrueckte Zusatztasten (Welle 55, L3) als Event-Init. Ohne sie waehlt ein Automations-Lauf
+  // bei „Strg+Klick" die Mehrfachauswahl falsch (die bisherige Auswahl ginge verloren).
+  function execModInit(mods) {
+    const out = {};
+    if (!Array.isArray(mods)) return out;
+    for (const m of mods) {
+      const k = typeof m === "string" ? m.toLowerCase() : "";
+      if (k === "ctrl") out.ctrlKey = true;
+      else if (k === "meta") out.metaKey = true;
+      else if (k === "alt") out.altKey = true;
+      else if (k === "shift") out.shiftKey = true;
+    }
+    return out;
+  }
+
+  // Klick MIT Zusatztasten: el.click() kann keine Modifier tragen — darum die vollstaendige
+  // Maus-Sequenz inkl. click-Event mit ctrlKey/shiftKey/… (genau EIN click, kein el.click()).
+  function execModifierClick(el, mods) {
     try {
       const c = execCenter(el);
+      const m = execModInit(mods);
+      execMouse(el, "pointerdown", c.x, c.y, Object.assign({ buttons: 1, detail: 1 }, m));
+      execMouse(el, "mousedown", c.x, c.y, Object.assign({ buttons: 1, detail: 1 }, m));
+      execMouse(el, "pointerup", c.x, c.y, Object.assign({ detail: 1 }, m));
+      execMouse(el, "mouseup", c.x, c.y, Object.assign({ detail: 1 }, m));
+      execMouse(el, "click", c.x, c.y, Object.assign({ detail: 1 }, m));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: "modclick-error" };
+    }
+  }
+
+  // Doppelklick: zwei vollstaendige Klicks (detail 1, 2) + dblclick (detail 2).
+  function execDoubleClick(el, mods) {
+    try {
+      const c = execCenter(el);
+      const m = execModInit(mods);
       for (let n = 1; n <= 2; n++) {
-        execMouse(el, "pointerdown", c.x, c.y, { buttons: 1, detail: n });
-        execMouse(el, "mousedown", c.x, c.y, { buttons: 1, detail: n });
-        execMouse(el, "pointerup", c.x, c.y, { detail: n });
-        execMouse(el, "mouseup", c.x, c.y, { detail: n });
-        execMouse(el, "click", c.x, c.y, { detail: n });
+        execMouse(el, "pointerdown", c.x, c.y, Object.assign({ buttons: 1, detail: n }, m));
+        execMouse(el, "mousedown", c.x, c.y, Object.assign({ buttons: 1, detail: n }, m));
+        execMouse(el, "pointerup", c.x, c.y, Object.assign({ detail: n }, m));
+        execMouse(el, "mouseup", c.x, c.y, Object.assign({ detail: n }, m));
+        execMouse(el, "click", c.x, c.y, Object.assign({ detail: n }, m));
       }
-      execMouse(el, "dblclick", c.x, c.y, { detail: 2 });
+      execMouse(el, "dblclick", c.x, c.y, Object.assign({ detail: 2 }, m));
       return { ok: true };
     } catch (err) {
       return { ok: false, reason: "dblclick-error" };
@@ -4201,9 +4699,12 @@
     if (action === "select") return execSelect(el, step.value);
     if (action === "toggle") return execToggle(el);
     // Klick-Varianten (Welle 48). Ziehen laeuft asynchron in execPerform (Maus reist mit).
+    const mods = Array.isArray(it.modifiers) && it.modifiers.length ? it.modifiers : null;
     if (it.variant === "right") return execContextClick(el);
-    if (it.variant === "double") return execDoubleClick(el);
+    if (it.variant === "double") return execDoubleClick(el, mods);
     if (it.variant === "key") return execKeyPress(el, it.key);
+    // Zusatztasten beim Klick (Welle 55, L3): vollstaendige Maus-Sequenz statt el.click().
+    if (mods) return execModifierClick(el, mods);
     return execClick(el); // Default: click
   }
 
@@ -4900,18 +5401,31 @@
       if (mode === "guide" && !focusedEditable && active) {
         adoptEditable(active, false);
       }
+      // Seitenwechsel ohne Klick (Welle 55, L1): Beobachtung an, dann pruefen, wie wir auf
+      // DIESER Seite gelandet sind (nur einmal je Dokument).
+      if (mode === "guide") {
+        navSetActive(true);
+        navCheckArrival();
+      } else {
+        navSetActive(false);
+      }
     } else {
       // Pause/Stopp (Welle 48): eine noch nicht abgeschlossene Eingabe (Feld nicht verlassen)
       // JETZT melden — das Panel nimmt nach dem Entfernen von rec noch kurz Schritte an.
       if (recording && mode === "guide") flushPendingInput();
       recording = false;
+      navSetActive(false);
     }
   }
 
   // Beim Laden den aktuellen Zustand lesen (deckt frisch geladene Folge-Seiten ab).
+  // guideLastStepAt (Welle 55, L1): Zeitpunkt des letzten Schritts der VORIGEN Seite — nur
+  // so erkennt ein frisch geladenes Dokument, dass der Wechsel Folge eines Klicks war.
   try {
-    chrome.storage.local.get("rec", (res) => {
+    chrome.storage.local.get(["rec", NAV_STORE_KEY], (res) => {
       if (chrome.runtime.lastError) return;
+      const at = res && res[NAV_STORE_KEY];
+      if (typeof at === "number" && isFinite(at)) navStoredStepAt = at;
       applyRecState(res && res.rec);
     });
   } catch (err) {
