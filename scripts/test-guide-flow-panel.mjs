@@ -532,6 +532,241 @@ try {
   await click("guidePause");
   ok(!(await vis("guideCaptureHint")), "Hinweis: in der Pause ausgeblendet");
 
+  // ---- 8) Schnelle Klicks (Welle 51): kein stiller Schritt-Verlust ----
+  // Stub bildet Chromiums captureVisibleTab-Kontingent nach (2 Aufrufe je 1-s-Fenster, das
+  // mit dem ersten Aufruf nach Ablauf beginnt; darüber: Quota-Fehler wie im echten Browser)
+  // und protokolliert jeden Aufruf mit Zeitstempel.
+  await click("guideStop");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  await click("guideDiscard");
+  await activate(1);
+  await page.evaluate(() => {
+    const T = window.__T;
+    T.capLog = [];
+    T.quotaRejects = 0;
+    let winStart = -1e9;
+    let tokens = 0;
+    const orig = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = (msg) => {
+      if (msg && msg.type === "steply-capture") {
+        const now = performance.now();
+        if (now > winStart + 1000) {
+          winStart = now;
+          tokens = 2;
+        }
+        if (tokens <= 0) {
+          T.quotaRejects++;
+          return Promise.resolve({
+            ok: false,
+            error: "This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota.",
+          });
+        }
+        tokens--;
+        T.capLog.push(Date.now());
+      }
+      return orig(msg);
+    };
+  });
+  await sleep(1300); // evtl. altes Kontingent-Fenster ablaufen lassen
+  await click("recStart");
+  await page.waitForFunction(() => guideActive, null, { timeout: 3000 });
+  const fire = (label, action, ts) =>
+    page.evaluate(
+      ({ label, action, ts }) => {
+        window.__T.events.onMessage._fire(
+          {
+            type: "steply-guide-step",
+            step: { rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.05 }, label, action, url: "https://example.com/start", ts },
+          },
+          { tab: { id: 1, windowId: 10 } },
+          () => {}
+        );
+        return Date.now();
+      },
+      { label, action, ts }
+    );
+
+  // 8a) Zwei echte Klicks im 200-ms-Abstand (z. B. „Filter öffnen“ → „Option wählen“):
+  //     zwei EIGENE Screenshot-Aufrufe, beide sofort (das Menü ist beim 2. Klick noch offen).
+  const t0 = Date.now();
+  const sentA = await fire("Klicken Sie auf „Filter“", "click", t0);
+  await sleep(200);
+  const sentB = await fire("Klicken Sie auf „Offen“", "click", t0 + 200);
+  ok(await waitSteps(2, 3000), "Zwei Klicks (200 ms): beide Schritte in der Liste");
+  {
+    const r = await page.evaluate(() => ({
+      log: window.__T.capLog.slice(),
+      imp: guideSteps.map((s) => s.imprecise),
+      distinctBlobs: guideSteps[0].blob !== guideSteps[1].blob,
+    }));
+    ok(r.log.length === 2, `Zwei Klicks: zwei getrennte Screenshot-Aufrufe (${r.log.length})`);
+    ok(r.distinctBlobs, "Zwei Klicks: jeder Schritt hat ein eigenes Bild");
+    ok(r.log[1] - sentB < 250, `Zwei Klicks: 2. Screenshot sofort (${r.log[1] - sentB} ms nach dem Klick, nicht erst nach 550 ms)`);
+    ok(r.log[0] - sentA < 250, "Zwei Klicks: 1. Screenshot sofort");
+    ok(!r.imp[0] && !r.imp[1], "Zwei Klicks: kein „Bild ggf. ungenau“");
+  }
+
+  // 8b) Acht Schritte in < 1 s: alle acht landen (in Reihenfolge) in der Liste, jeder mit Bild.
+  await sleep(1300);
+  await page.evaluate(() => (window.__T.capLog = []));
+  const labels8 = Array.from({ length: 8 }, (_, i) => `Schnell ${i + 1}`);
+  const tStart8 = Date.now();
+  for (let i = 0; i < 8; i++) {
+    await fire(labels8[i], "click", tStart8 + i * 110);
+    await sleep(110);
+  }
+  const burstMs = Date.now() - tStart8;
+  ok(await waitSteps(10, 8000), `Acht schnelle Schritte (${burstMs} ms): alle in der Liste (10 gesamt)`);
+  {
+    const r = await page.evaluate(() => ({
+      labels: guideSteps.slice(2).map((s) => s.label),
+      allImg: guideSteps.every((s) => s.blob && s.blob.size > 0 && s.thumbUrl),
+      imp: guideSteps.slice(2).map((s) => !!s.imprecise),
+      caps: window.__T.capLog.length,
+      status: document.getElementById("status").textContent,
+      rendered: document.querySelectorAll("#guideList .guide-item").length,
+      warns: document.querySelectorAll("#guideList .img-warn").length,
+    }));
+    ok(JSON.stringify(r.labels) === JSON.stringify(labels8), "Acht Schritte: Reihenfolge erhalten");
+    ok(r.allImg, "Acht Schritte: jeder Schritt hat ein Bild");
+    ok(r.rendered === 10, `Acht Schritte: Liste zeigt 10 Einträge (${r.rendered})`);
+    ok(!/übersprungen/.test(r.status), "Acht Schritte: kein „Schritt übersprungen“");
+    ok(r.caps >= 2 && r.caps < 8, `Acht Schritte: Rückstau teilt Screenshots (${r.caps} Aufrufe für 8 Schritte)`);
+    ok(r.imp.some(Boolean), `Acht Schritte: verspätete Bilder markiert (${r.imp.map((x) => (x ? "!" : "·")).join("")})`);
+    ok(!r.imp[0] && !r.imp[1], "Acht Schritte: die ersten beiden (sofort fotografiert) sind nicht markiert");
+    ok(r.warns === r.imp.filter(Boolean).length, `Acht Schritte: „Bild ggf. ungenau“ sichtbar (${r.warns}×)`);
+  }
+  ok((await page.evaluate(() => window.__T.quotaRejects)) === 0, "Kontingent: kein einziger Quota-Fehler (Limiter trifft Chromiums Fenster)");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "8-schnelle-klicks.png"), fullPage: true });
+
+  // 8c) Eingabe-Flush + Klick (Welle 24) teilen sich weiterhin EINEN Screenshot.
+  await sleep(1300);
+  await page.evaluate(() => (window.__T.capLog = []));
+  // Wie content.js (flushUnlessInside + emitClick im selben pointerdown): zwei Nachrichten direkt
+  // hintereinander (eigene Tasks, wie runtime-Nachrichten).
+  await page.evaluate(() => {
+    const T = window.__T;
+    const ts = Date.now();
+    const send = (label, action, t) =>
+      T.events.onMessage._fire(
+        {
+          type: "steply-guide-step",
+          step: { rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.05 }, label, action, url: "https://example.com/start", ts: t },
+        },
+        { tab: { id: 1, windowId: 10 } },
+        () => {}
+      );
+    setTimeout(() => send("Geben Sie „Müller“ ein", "type", ts), 0);
+    setTimeout(() => send("Klicken Sie auf „Suchen“", "click", ts + 2), 0);
+  });
+  ok(await waitSteps(12, 3000), "Eingabe + Klick: beide Schritte in der Liste");
+  {
+    const r = await page.evaluate(() => ({
+      caps: window.__T.capLog.length,
+      same: guideSteps[10].blob === guideSteps[11].blob,
+      imp: guideSteps[10].imprecise || guideSteps[11].imprecise,
+    }));
+    ok(r.caps === 1 && r.same, `Eingabe + Klick: EIN geteilter Screenshot (${r.caps})`);
+    ok(!r.imp, "Eingabe + Klick: nicht als ungenau markiert");
+  }
+
+  // 8d) Quota-Fehler trotz Limiter (fremder Aufrufer verbraucht das Kontingent): Schritt bleibt.
+  await sleep(1300);
+  await page.evaluate(() => {
+    // Kontingent „von außen“ leeren: zwei Aufrufe am Panel vorbei.
+    chrome.runtime.sendMessage({ type: "steply-capture", windowId: 10 });
+    chrome.runtime.sendMessage({ type: "steply-capture", windowId: 10 });
+  });
+  await fire("Klicken Sie auf „Nach Quota“", "click", Date.now());
+  ok(await waitSteps(13, 5000), "Quota-Fehler: Schritt wird nach Ablauf des Fensters doch fotografiert");
+  ok(
+    (await page.evaluate(() => window.__T.quotaRejects)) >= 1 &&
+      (await page.evaluate(() => guideSteps[12].label === "Klicken Sie auf „Nach Quota“")),
+    "Quota-Fehler: erkannt und abgewartet statt verworfen"
+  );
+
+  // ---- 9) Video: Auftrags-Status nach dem Upload (Welle 51) ----
+  // Vorher endete „wird erstellt“ still. Jetzt fragt das Panel /api/recorder/video-status ab:
+  // gescheitert -> Grund in Klartext + „Erneut aufnehmen“; fertig -> „In Steply öffnen“ direkt
+  // in die Anleitung.
+  await click("guideStop").catch(() => {});
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 }).catch(() => {});
+  if (!(await page.evaluate(() => document.getElementById("guideDiscard").hidden))) await click("guideDiscard");
+  const statusSeq = { "job-fail": ["queued", "processing", "failed"], "job-done": ["processing", "done"] };
+  const statusHits = { "job-fail": 0, "job-done": 0 };
+  let authSeen = "";
+  await page.route(/\/api\/recorder\/video-status/, (r) => {
+    const u = new URL(r.request().url());
+    const id = u.searchParams.get("id");
+    authSeen = r.request().headers()["authorization"] || "";
+    const seq = statusSeq[id] || ["queued"];
+    const n = statusHits[id] || 0;
+    statusHits[id] = n + 1;
+    const st = seq[Math.min(n, seq.length - 1)];
+    const body = {
+      status: st,
+      progress: st === "processing" ? "Schritt 1/3" : null,
+      tutorialId: st === "done" ? "tut-42" : null,
+      reason: st === "failed" ? "die Aufnahme ließ sich nicht lesen (möglicherweise unvollständig oder zu kurz)" : null,
+    };
+    return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.evaluate(() => {
+    window.__T.created = [];
+    chrome.tabs.create = (o) => {
+      window.__T.created.push(o && o.url);
+      return Promise.resolve({ id: 777 });
+    };
+    show("videoDone");
+    setVideoDoneState("recorded");
+    els.uploadBox.hidden = false;
+    els.uploadDone.hidden = false;
+    watchVideoJob("job-fail", appBase());
+  });
+  ok(/Warteschlange/.test(await page.textContent("#uploadDoneText")), "Video-Status: zuerst „In der Warteschlange“");
+  await page.waitForFunction(() => /KI verarbeitet/.test(document.getElementById("uploadDoneText").textContent), null, { timeout: 9000 }).catch(() => {});
+  ok(/KI verarbeitet das Video – Schritt 1\/3/.test(await page.textContent("#uploadDoneText")), "Video-Status: Fortschritt wird angezeigt");
+  await page.waitForFunction(() => !document.getElementById("videoRetry").hidden, null, { timeout: 12000 }).catch(() => {});
+  ok(await vis("videoRetry"), "Video-Status: gescheitert → „Erneut aufnehmen“ sichtbar");
+  ok(!(await vis("openApp")), "Video-Status: gescheitert → kein „In Steply öffnen“");
+  ok(
+    (await page.textContent("#uploadDoneText")).includes(
+      "Das Video konnte nicht verarbeitet werden – die Aufnahme ließ sich nicht lesen (möglicherweise unvollständig oder zu kurz). Bitte erneut aufnehmen."
+    ),
+    "Video-Status: Grund in Klartext"
+  );
+  ok((await page.textContent("#videoDoneTitle")).trim() === "Verarbeitung fehlgeschlagen", "Video-Status: Überschrift „Verarbeitung fehlgeschlagen“");
+  ok(authSeen === "Bearer tok-test", "Video-Status: Abfrage mit Verbindungs-Token (Bearer)");
+  const hitsAfterFail = statusHits["job-fail"];
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "9-video-fehlgeschlagen.png"), fullPage: true });
+  await sleep(4500);
+  ok(statusHits["job-fail"] === hitsAfterFail, "Video-Status: nach dem Endzustand keine weiteren Abfragen");
+  await click("videoRetry");
+  await page.waitForFunction(() => !document.getElementById("videoSetup").hidden, null, { timeout: 3000 }).catch(() => {});
+  ok(await vis("videoSetup"), "Video-Status: „Erneut aufnehmen“ → Video-Aufnahme vorbereiten");
+  ok((await page.textContent("#videoDoneTitle")).trim() === "Aufnahme fertig", "Video-Status: Fertig-Bildschirm zurückgesetzt");
+
+  await page.evaluate(() => {
+    show("videoDone");
+    els.uploadBox.hidden = false;
+    els.uploadDone.hidden = false;
+    watchVideoJob("job-done", appBase());
+  });
+  await page.waitForFunction(() => /Fertig/.test(document.getElementById("uploadDoneText").textContent), null, { timeout: 12000 }).catch(() => {});
+  ok(/Fertig – die Anleitung liegt als Entwurf in Steply/.test(await page.textContent("#uploadDoneText")), "Video-Status: fertig → „Fertig – …“");
+  ok((await page.textContent("#videoDoneTitle")).trim() === "Anleitung erstellt" && (await vis("openApp")) && !(await vis("videoRetry")), "Video-Status: fertig → „In Steply öffnen“");
+  await click("openApp");
+  ok(
+    (await page.evaluate(() => window.__T.created.slice())).includes("https://app.example.test/app/tutorials/tut-42"),
+    "Video-Status: „In Steply öffnen“ öffnet direkt die neue Anleitung"
+  );
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "10-video-fertig.png"), fullPage: true });
+  // „Neue Aufnahme“ beendet eine laufende Abfrage.
+  await page.evaluate(() => watchVideoJob("job-x", appBase()));
+  await click("again");
+  await sleep(4500);
+  ok(!(statusHits["job-x"] > 0),"Video-Status: „Neue Aufnahme“ beendet die Abfrage");
+
   ok(pageErrors.length === 0, "keine Seitenfehler" + (pageErrors.length ? ": " + pageErrors.join(" | ") : ""));
 } catch (err) {
   console.error(err);

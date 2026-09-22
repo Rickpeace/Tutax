@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { importFromWebsite } from "@/app/app/assistent/wissen/import-actions";
 
 type ImportResult = { count: number; titles: string[] };
@@ -36,6 +38,9 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
   // Website-Dialog
   const [webOpen, setWebOpen] = useState(false);
   const [url, setUrl] = useState(accountWebsite);
+  // Welle 51: optionale Zusatz-Unterseiten (eine pro Zeile) — für Seiten, die der Import
+  // nicht von selbst findet (z. B. per JavaScript aufgebaute Menüs).
+  const [extra, setExtra] = useState("");
   const [pending, start] = useTransition();
 
   // Dokument-Upload
@@ -53,7 +58,7 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
     }
     start(async () => {
       try {
-        const res = await importFromWebsite(target);
+        const res = await importFromWebsite(target, extra);
         setWebOpen(false);
         successToast(res);
         router.refresh();
@@ -98,7 +103,10 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
         onOpenChange={(o) => {
           if (pending) return; // während des Laufs nicht schließen
           setWebOpen(o);
-          if (o) setUrl(accountWebsite);
+          if (o) {
+            setUrl(accountWebsite);
+            setExtra("");
+          }
         }}
       >
         <DialogTrigger
@@ -112,8 +120,8 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
           <DialogHeader>
             <DialogTitle>Von Ihrer Website übernehmen</DialogTitle>
             <DialogDescription>
-              Wir lesen Ihre Website und schlagen Wissens-Artikel vor — als Entwürfe, nichts geht
-              ungeprüft in den Chat.
+              Wir lesen Ihre Website (Startseite und bis zu 12 Unterseiten) und schlagen
+              Wissens-Artikel vor — als Entwürfe, nichts geht ungeprüft in den Chat.
             </DialogDescription>
           </DialogHeader>
 
@@ -132,7 +140,26 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
               }}
               disabled={pending}
               autoFocus
+              aria-label="Website-Adresse"
             />
+            <div className="space-y-1.5">
+              <Label htmlFor="kb-import-extra" className="text-xs font-extrabold text-ink-2">
+                Weitere Unterseiten (optional), eine pro Zeile
+              </Label>
+              <Textarea
+                id="kb-import-extra"
+                data-testid="kb-import-extra"
+                rows={3}
+                placeholder={"https://www.ihre-kanzlei.de/leistungen\nhttps://www.ihre-kanzlei.de/faq"}
+                value={extra}
+                onChange={(e) => setExtra(e.target.value)}
+                disabled={pending}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Nur Seiten derselben Website, höchstens 10. Hilfreich, wenn wichtige Seiten fehlen.
+              </p>
+            </div>
             {pending && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin text-primary" /> Website wird gelesen und

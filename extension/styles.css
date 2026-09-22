@@ -818,6 +818,12 @@ svg.i.s {
   text-overflow: ellipsis;
 }
 
+/* Welle 51: Screenshot kam verspaetet (sehr schnelle Klickfolge) */
+.guide-item .lbl small .img-warn {
+  color: var(--amber-d);
+  font-weight: 800;
+}
+
 .guide-item .rm {
   flex: none;
   border: 0;
