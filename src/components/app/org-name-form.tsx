@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { saveBranding } from "@/app/app/settings/branding/actions";
 import { SaveBar } from "@/components/app/save-bar";
 import { FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
+import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
 
 /**
  * „Name der Organisation" (Einstellungen → Allgemein). Speichert über dieselbe
@@ -22,6 +23,11 @@ export function OrgNameForm({ initialName }: { initialName: string }) {
   function save() {
     if (!name.trim()) {
       toast.error("Der Name darf nicht leer sein.");
+      return;
+    }
+    // maxLength greift nur beim Tippen — Einfügen aus der Zwischenablage nicht immer.
+    if (name.trim().length > ORG_NAME_MAX) {
+      toast.error(ORG_NAME_TOO_LONG);
       return;
     }
     startTransition(async () => {
@@ -47,11 +53,13 @@ export function OrgNameForm({ initialName }: { initialName: string }) {
         onKeyDown={(e) => {
           if (e.key === "Enter" && dirty) save();
         }}
+        maxLength={ORG_NAME_MAX}
         className={settingsInputClass}
         autoComplete="organization"
       />
       <p className="text-xs text-muted-foreground">
-        Erscheint oben auf Ihrer Hilfe-Seite und in Einladungen an Ihr Team.
+        Erscheint oben auf Ihrer Hilfe-Seite und in Einladungen an Ihr Team. Höchstens{" "}
+        {ORG_NAME_MAX} Zeichen.
       </p>
       <SaveBar dirty={dirty} saving={pending} onSave={save} onDiscard={() => setName(saved)} />
     </div>

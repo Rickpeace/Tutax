@@ -27,6 +27,7 @@ import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
 import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/lib/category-name";
+import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
 import { canEdit } from "@/lib/roles";
@@ -379,7 +380,8 @@ export async function createCategory(name: string): Promise<{ id: string; name: 
 /** Tutorial-Titel ändern. */
 export async function setTutorialTitle(tutorialId: string, title: string) {
   await requireTutorialAccess(tutorialId);
-  const clean = title.trim();
+  // Gleiche Grenze wie im Formular (maxLength) — Einfügen aus der Zwischenablage umgeht das.
+  const clean = title.replace(/\s+/g, " ").trim().slice(0, GUIDE_TITLE_MAX);
   if (!clean) throw new Error("Titel fehlt");
   const supabase = await createClient();
   const { error } = await supabase
@@ -403,7 +405,7 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
  */
 export async function setTutorialDescription(tutorialId: string, description: string) {
   await requireTutorialAccess(tutorialId);
-  const clean = description.replace(/\s+/g, " ").trim().slice(0, 160);
+  const clean = description.replace(/\s+/g, " ").trim().slice(0, GUIDE_DESCRIPTION_MAX);
   const supabase = await createClient();
   const { error } = await supabase
     .from("tutorials")

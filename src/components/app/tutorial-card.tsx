@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { relativeDe } from "@/lib/format";
 import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
+import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import {
   categoryColor,
   categoryStripes,
@@ -244,7 +245,12 @@ export function TutorialCard({
           <DialogHeader>
             <DialogTitle>Anleitung umbenennen</DialogTitle>
           </DialogHeader>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={GUIDE_TITLE_MAX}
+            autoFocus
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
               Abbrechen

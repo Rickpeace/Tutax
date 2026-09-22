@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { RunStatusBadge } from "@/components/app/automation-run-status";
 import { relativeDe } from "@/lib/format";
+import { AUTOMATION_TITLE_MAX } from "@/lib/text-limits";
 import type { AutomationParam, AutomationSchedule, ScheduleFreq } from "@/lib/automations";
 import {
   renameAutomation,
@@ -224,7 +225,12 @@ export function AutomationDetail({
 
   function saveTitle() {
     const clean = titleValue.trim();
-    if (!clean || clean === currentTitle) {
+    // Leer schloss früher still — der Name blieb unverändert, ohne dass jemand es merkte.
+    if (!clean) {
+      toast.error("Bitte einen Namen eingeben.");
+      return;
+    }
+    if (clean === currentTitle) {
       setEditingTitle(false);
       setTitleValue(currentTitle);
       return;
@@ -348,6 +354,8 @@ export function AutomationDetail({
             <Input
               value={titleValue}
               onChange={(e) => setTitleValue(e.target.value)}
+              maxLength={AUTOMATION_TITLE_MAX}
+              aria-label="Name der Automation"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") saveTitle();

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
+import { ORG_NAME_MAX } from "@/lib/text-limits";
 
 export async function completeOnboarding(input: {
   name: string;
@@ -10,7 +11,11 @@ export async function completeOnboarding(input: {
 }) {
   const { account } = await requireAccount();
   const supabase = await createClient();
-  const name = input.name.trim() || account.name;
+  // Einrichtung soll nie an einer zu langen Eingabe scheitern -> hier gekappt (das
+  // Formular begrenzt bereits auf ORG_NAME_MAX), Einstellungen lehnen dagegen ab.
+  const name =
+    input.name.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim().slice(0, ORG_NAME_MAX) ||
+    account.name;
 
   await supabase
     .from("accounts")
