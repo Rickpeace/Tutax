@@ -7,7 +7,7 @@ import { TriangleAlert } from "lucide-react";
 import { saveBranding } from "@/app/app/settings/branding/actions";
 import { SaveBar } from "@/components/app/save-bar";
 import { FieldLabel } from "@/components/app/settings-ui";
-import { slugify } from "@/lib/slug";
+import { slugify, SLUG_UNUSABLE } from "@/lib/slug";
 
 /**
  * „Adresse der Hilfe-Seite" (Einstellungen → Adresse & Teilen). Speichert über
@@ -29,8 +29,14 @@ export function SlugForm({
   const [pending, startTransition] = useTransition();
   const preview = slugify(slug || name);
   const dirty = slug.trim() !== saved;
+  // Eingabe da, aber nichts Verwertbares darin (z. B. „###“) -> vorab sagen statt speichern.
+  const unusable = slug.trim().length > 0 && preview.length === 0;
 
   function save() {
+    if (unusable) {
+      toast.error(SLUG_UNUSABLE);
+      return;
+    }
     startTransition(async () => {
       const res = await saveBranding({ slug });
       if (res.ok) {
@@ -65,10 +71,16 @@ export function SlugForm({
           spellCheck={false}
         />
       </div>
-      <p className="break-all text-xs text-muted-foreground">
-        {appUrl}/h/<b className="text-ink-2">{preview}</b>
-      </p>
-      {dirty && (
+      {unusable ? (
+        <p role="alert" className="text-xs font-bold text-no">
+          {SLUG_UNUSABLE}
+        </p>
+      ) : (
+        <p className="break-all text-xs text-muted-foreground">
+          {appUrl}/h/<b className="text-ink-2">{preview}</b>
+        </p>
+      )}
+      {dirty && !unusable && (
         <p className="flex items-start gap-1.5 rounded-xl bg-amber-soft px-3 py-2 text-xs font-bold text-amber-text">
           <TriangleAlert className="mt-px size-3.5 shrink-0" />
           Nach dem Speichern funktionieren bisherige Links und gedruckte QR-Codes nicht mehr.

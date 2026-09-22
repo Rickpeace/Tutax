@@ -5,7 +5,8 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 import { invalidateHubTag } from "@/lib/cache-tags";
-import { slugify } from "@/lib/slug";
+import { slugify, SLUG_UNUSABLE } from "@/lib/slug";
+import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import { backfillAccountTranslations } from "@/lib/translate-jobs";
@@ -32,13 +33,18 @@ export async function saveBranding(
 
   const accUpdate: { name?: string; slug?: string } = {};
   if (input.name !== undefined) {
-    const name = input.name.trim();
+    // Steuerzeichen raus, Leerraum zusammenfassen (ein 3000-Zeichen-Name zerlegte sonst
+    // den Kopf der Hilfe-Seite). Gekappt wird NICHT still — wir lehnen mit Meldung ab.
+    const name = input.name.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim();
     if (!name) return { ok: false, error: "Name darf nicht leer sein." };
+    if (name.length > ORG_NAME_MAX) return { ok: false, error: ORG_NAME_TOO_LONG };
     accUpdate.name = name;
   }
   if (input.slug !== undefined) {
+    // Kein stiller Ersatzwert mehr: „###“ ergibt leer -> ablehnen, alte Adresse bleibt.
+    if (!input.slug.trim()) return { ok: false, error: "Die Adresse darf nicht leer sein." };
     const slug = slugify(input.slug);
-    if (!slug) return { ok: false, error: "Die Adresse darf nicht leer sein." };
+    if (!slug) return { ok: false, error: SLUG_UNUSABLE };
     accUpdate.slug = slug;
   }
   const slug = accUpdate.slug ?? account.slug;
