@@ -30,6 +30,7 @@ import {
   setRootStep,
   setStepCondition,
 } from "@/app/app/tutorials/[id]/actions";
+import { unpublishTutorial } from "@/app/app/actions";
 import { YES, NO } from "@/lib/builder/constants";
 
 function useMedia(query: string) {
@@ -94,6 +95,7 @@ export function Builder({
   branches: initialBranches,
   rootStepId: initialRoot,
   hasSourceVideo = false,
+  published = false,
 }: {
   tutorialId: string;
   steps: Step[];
@@ -101,6 +103,8 @@ export function Builder({
   rootStepId: string | null;
   /** Tutorial hat ein Quell-Video -> „Bild aus Video wählen" in jedem Schritt anbieten. */
   hasSourceVideo?: boolean;
+  /** Ist die Anleitung gerade veröffentlicht? Steuert die Ansage beim Löschen des letzten Schritts. */
+  published?: boolean;
 }) {
   const router = useRouter();
   const mobile = useMedia("(max-width: 767px)");
@@ -204,7 +208,30 @@ export function Builder({
     [persist],
   );
 
+  // ── Doppelklick-Schutz beim Anlegen (ein Klick = EIN Schritt) ────────────────
+  // Ohne Sperre legte ein Doppelklick auf „+“ zwei leere Schritte an: die Handler laufen
+  // synchron, bevor der erste Schritt gespeichert ist. Gleiche Idee wie der busy-Guard
+  // beim Veröffentlichen — bis der Server den neuen Schritt bestätigt, wird nicht erneut
+  // angelegt. Ein Ref (kein State): die Sperre muss SOFORT greifen, nicht erst nach Rendern.
+  const addingRef = useRef(false);
+  const beginAdd = useCallback(() => {
+    if (addingRef.current) return false;
+    addingRef.current = true;
+    return true;
+  }, []);
+  const endAdd = useCallback((p: Promise<unknown>) => {
+    p.then(
+      () => {
+        addingRef.current = false;
+      },
+      () => {
+        addingRef.current = false;
+      },
+    );
+  }, []);
+
   const handleAddStep = useCallback(() => {
+    if (!beginAdd()) return;
     const id = crypto.randomUUID();
     const maxPos = steps.reduce((m, s) => Math.max(m, s.position), 0);
     const position = maxPos + 1;
@@ -242,16 +269,18 @@ export function Builder({
       }
     }
     const added = persist(() => addStep(tutorialId, { id, title: "", position }, setRoot, wire));
+    endAdd(added);
     // Erster Schritt: Kopf neu laden (Übersetzen/Aktualität/Veröffentlichen waren gesperrt).
     if (setRoot) added.then(() => router.refresh(), () => {});
     setSelectedId(id);
-  }, [steps, branches, tutorialId, persist, router]);
+  }, [steps, branches, tutorialId, persist, router, beginAdd, endAdd]);
 
   // §7.4: Schritt gezielt in einen Ast einfügen (B → N → altes Ziel).
   // `seed` (Welle 51a): Bild eines Schritts + übernommene Verpixelung für den neuen Schritt.
   function insertIntoBranch(branchId: string, seed?: ImageSeed) {
     const branch = branches.find((b) => b.id === branchId);
     if (!branch) return;
+    if (!beginAdd()) return; // Doppelklick auf „+“ legt nur EINEN Schritt an
     const id = crypto.randomUUID();
     const weiterId = crypto.randomUUID();
     const position = steps.reduce((m, s) => Math.max(m, s.position), 0) + 1;
@@ -270,18 +299,20 @@ export function Builder({
           created_at: "",
         }),
     );
-    persist(async () => {
-      await addStep(tutorialId, { id, title: "", position }, false, null, seed?.server);
-      await updateBranch(branchId, { target_step_id: id });
-      await addBranch({
-        id: weiterId,
-        step_id: id,
-        label: null,
-        color: null,
-        target_step_id: oldTarget,
-        position: 0,
-      });
-    });
+    endAdd(
+      persist(async () => {
+        await addStep(tutorialId, { id, title: "", position }, false, null, seed?.server);
+        await updateBranch(branchId, { target_step_id: id });
+        await addBranch({
+          id: weiterId,
+          step_id: id,
+          label: null,
+          color: null,
+          target_step_id: oldTarget,
+          position: 0,
+        });
+      }),
+    );
     setSelectedId(id);
   }
 
@@ -294,6 +325,7 @@ export function Builder({
       insertIntoBranch(own[0].id, seed);
       return;
     }
+    if (!beginAdd()) return; // Doppelklick auf „+“ legt nur EINEN Schritt an
     const id = crypto.randomUUID();
     const weiterId = crypto.randomUUID();
     const position = steps.reduce((m, s) => Math.max(m, s.position), 0) + 1;
@@ -310,13 +342,15 @@ export function Builder({
         created_at: "",
       },
     ]);
-    persist(() =>
-      addStep(
-        tutorialId,
-        { id, title: "", position },
-        false,
-        { branchId: weiterId, fromStepId: stepId },
-        seed?.server,
+    endAdd(
+      persist(() =>
+        addStep(
+          tutorialId,
+          { id, title: "", position },
+          false,
+          { branchId: weiterId, fromStepId: stepId },
+          seed?.server,
+        ),
       ),
     );
     setSelectedId(id);
@@ -435,9 +469,26 @@ export function Builder({
       setSelectedId(null);
       const removed = persist(() => deleteStep(tutorialId, stepId, nextTarget, wasRoot));
       // Letzter Schritt weg: Kopf neu laden (sperrt Übersetzen/Aktualität/Veröffentlichen).
-      if (steps.length === 1) removed.then(() => router.refresh(), () => {});
+      // War die Anleitung veröffentlicht, wäre sie jetzt leer auf der Hilfe-Seite/in den
+      // Schulungen — deshalb automatisch auf Entwurf zurücksetzen (im Lösch-Dialog angesagt).
+      if (steps.length === 1) {
+        removed.then(() => {
+          if (!published) {
+            router.refresh();
+            return;
+          }
+          unpublishTutorial(tutorialId)
+            .then(() => toast("Letzter Schritt gelöscht – die Anleitung steht wieder auf Entwurf."))
+            .catch(() =>
+              toast.error(
+                "Der Schritt wurde gelöscht, die Anleitung konnte aber nicht auf Entwurf gesetzt werden. Bitte im Kopf oben umschalten.",
+              ),
+            )
+            .finally(() => router.refresh());
+        }, () => {});
+      }
     },
-    [steps, branches, rootId, tutorialId, persist, router],
+    [steps, branches, rootId, tutorialId, persist, router, published],
   );
 
   // ── Schritt-Umordnen (Hoch/Runter) ──────────────────────────────────────────
@@ -835,6 +886,7 @@ export function Builder({
         onDuplicateImage={duplicateImageToNewStep}
         onClose={withClose ? closeEditor : undefined}
         stepLabel={stepLabel}
+        published={published}
       />
     ) : null;
 

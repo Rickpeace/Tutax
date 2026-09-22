@@ -104,6 +104,7 @@ export default async function EditorPage({
         branches={branches ?? []}
         rootStepId={tutorial.root_step_id}
         hasSourceVideo={!!videoJob}
+        published={tutorial.status === "published"}
       />
     </main>
   );

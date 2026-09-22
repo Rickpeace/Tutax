@@ -58,6 +58,7 @@ export function StepPanel({
   onDuplicateImage,
   onClose,
   stepLabel,
+  published = false,
 }: {
   step: Step;
   tutorialId: string;
@@ -101,6 +102,8 @@ export function StepPanel({
   onClose?: () => void;
   /** Anzeigename eines Schritts: Titel, sonst „Schritt N“ (N = Nummer im Ablauf). */
   stepLabel: (s: Step) => string;
+  /** Ist die Anleitung veröffentlicht? Nur für die Ansage beim Löschen des letzten Schritts. */
+  published?: boolean;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
   const [body, setBody] = useState<unknown>(step.body ?? null);
@@ -162,8 +165,15 @@ export function StepPanel({
   // linearer Schritt -> Vorgänger zeigen auf den nächsten Schritt; Frage -> Antworten gehen
   // mit, Vorgänger zeigen aufs Ende, Ast-Schritte bleiben unverbunden stehen.
   async function askDeleteStep() {
+    // Einziger Schritt der Anleitung: danach ist sie leer. Eine VERÖFFENTLICHTE Anleitung
+    // setzt der Builder dann automatisch auf Entwurf zurück — das wird hier angesagt.
+    const isOnlyStep = allSteps.length === 1;
     let consequence: string;
-    if (step.is_decision && branches.length > 0) {
+    if (isOnlyStep) {
+      consequence = published
+        ? "Die Anleitung hat danach keine Schritte mehr und wird auf Entwurf zurückgesetzt."
+        : "Die Anleitung hat danach keine Schritte mehr.";
+    } else if (step.is_decision && branches.length > 0) {
       const names = branches
         .slice()
         .sort((a, b) => a.position - b.position)
@@ -177,8 +187,11 @@ export function StepPanel({
           : "");
     } else if (!step.is_decision && branches.some((b) => b.target_step_id)) {
       consequence = "Der Ablauf geht danach direkt mit dem nächsten Schritt weiter.";
-    } else {
+    } else if (hasPrev) {
       consequence = "Die Anleitung endet danach beim vorigen Schritt.";
+    } else {
+      // Erster Schritt im Ablauf ohne Nachfolger: „vorigen Schritt“ gibt es hier nicht.
+      consequence = "Dieser Schritt hat weder einen vorigen noch einen nächsten Schritt.";
     }
     const ok = await confirm({
       title: `„${stepLabel(step)}“ löschen?`,
