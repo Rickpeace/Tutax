@@ -1,30 +1,17 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import sharp from "sharp";
 import { aiConfigured, AI } from "@/lib/ai";
-import { openai } from "@/lib/openai";
 import { DRIFT_SYSTEM } from "@/lib/ai-prompts";
-import { burnBlur, unionBlurs } from "@/lib/redact";
 
 /**
- * Gemeinsame Kernlogik von „Aktualität prüfen“ (REVIEW C, Aktualitäts-Autopilot).
+ * Gemeinsame Drift-Check-Kernlogik (REVIEW C, Aktualitäts-Autopilot).
  * Wird sowohl von der manuellen Route (`/api/tutorials/[id]/check`) als auch vom
  * wöchentlichen Cron (`/api/cron/drift`) genutzt — Verhalten identisch halten
- * (Cooldown 60 Min, Kosten-Schutz, change_alerts-Ablösung).
- *
- * Seit 09/2026: Die KI vergleicht Titel/Erklärtext jedes Schritts mit SEINEM Screenshot
- * (Bild-Eingabe) und meldet nur sichtbare Abweichungen. Vorher lief eine Web-Suche über den
- * Anleitungstext — die hat fremde Produkte „erkannt“ (Steply-Screenshots als ChatGPT-Workspace)
- * und daraus Hinweise gebaut. Keine Web-Suche mehr, keine Vermutungen über Produkt/Anbieter.
- *
- * Datenschutz: Verpixelungen werden VOR dem Versand in die Pixel eingebrannt (wie bei den
- * öffentlichen Bildkopien); das private Original verlässt den Server nie unredigiert.
+ * (Cooldown 60 Min, Kosten-Schutz, Quellen-Merge, change_alerts-Ablösung).
  *
  * Die Route reicht ihren RLS-Client durch (Autorisierung bleibt dort), der Cron
- * den Admin-Client. Der Ergebnis-Typ bildet die Route-Antworten ab.
+ * den Admin-Client. Der Ergebnis-Typ bildet die bisherigen Route-Antworten ab.
  */
-export type DriftIssue = { step?: string; problem?: string; suggestion?: string };
-
 export type DriftResult =
   | { kind: "not_configured" }
   | { kind: "cooldown"; sinceMin: number; waitMin: number }
@@ -34,19 +21,9 @@ export type DriftResult =
       is_stale: boolean;
       severity?: string;
       summary?: string;
-      issues: DriftIssue[];
-      /** Bleibt für die Hinweis-Seite erhalten (früher Web-Quellen); jetzt immer leer. */
+      issues: { step?: string; problem?: string; suggestion?: string }[];
       sources: { title: string; url: string }[];
-      /** Anzahl Schritte, deren Screenshot verglichen wurde (0 = nichts zu vergleichen). */
-      compared: number;
-      /** id des neu angelegten Glocken-Hinweises (nur bei Abweichungen). */
-      alertId?: string;
     };
-
-/** Höchstens so viele Screenshots pro Prüfung (Kosten-/Zeitdeckel). */
-const MAX_IMAGES = 12;
-/** Bildbreite für die KI: reicht für Knopf-/Menü-Beschriftungen, hält Tokens klein. */
-const IMAGE_WIDTH = 1280;
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -61,42 +38,10 @@ function plainBody(body: unknown): string {
   return out.join(" ").trim();
 }
 
-type StepRow = {
-  title: string | null;
-  body: unknown;
-  position: number;
-  image_path: string | null;
-  highlights: unknown;
-};
-
-/** Privates Bild laden, Verpixelungen einbrennen, verkleinern -> data:-URL (oder null). */
-async function redactedImage(
-  supabase: SupabaseClient,
-  path: string,
-  blurs: unknown,
-): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.storage.from("tutorial-images").download(path);
-    if (error || !data) return null;
-    const original = Buffer.from(await data.arrayBuffer());
-    const redacted = await burnBlur(original, blurs);
-    const jpg = await sharp(redacted)
-      .resize({ width: IMAGE_WIDTH, withoutEnlargement: true })
-      .jpeg({ quality: 72 })
-      .toBuffer();
-    return `data:image/jpeg;base64,${jpg.toString("base64")}`;
-  } catch {
-    return null; // kaputtes/fehlendes Bild: Schritt wird dann nicht verglichen
-  }
-}
-
-/** „N. Titel“ — dieselbe Schreibweise, die applyDriftSuggestions zurück auflöst. */
-const stepRef = (i: number, s: StepRow) => `${i + 1}. ${s.title?.trim() ?? ""}`.trim();
-
 /**
- * Führt die Prüfung für EINE Anleitung aus. Setzt freshness/drift_checked_at und legt NUR
- * bei echten Abweichungen einen Glocken-Hinweis (change_alert) an.
- * `supabase` muss Lese-/Schreibrechte auf steps/tutorials/change_alerts + Bild-Lesezugriff haben.
+ * Führt den Drift-Check für EIN Tutorial aus. Setzt beim (Nicht-)Veraltet-Sein
+ * freshness/drift_checked_at und legt bei is_stale ein change_alert an.
+ * `supabase` muss Lese-/Schreibrechte auf steps/tutorials/change_alerts haben.
  */
 export async function runDriftCheck(
   supabase: SupabaseClient,
@@ -111,7 +56,7 @@ export async function runDriftCheck(
 
   if (!aiConfigured()) return { kind: "not_configured" };
 
-  // Cooldown (Kosten-Schutz): max. 1×/Stunde.
+  // Cooldown (Kosten-Schutz, teuerster KI-Call = web_search): max. 1×/Stunde.
   if (tut.drift_checked_at) {
     const last = new Date(tut.drift_checked_at).getTime();
     const elapsedMin = (Date.now() - last) / 60_000;
@@ -122,115 +67,73 @@ export async function runDriftCheck(
     }
   }
 
-  const { data: stepRows } = await supabase
+  const { data: steps } = await supabase
     .from("steps")
-    .select("title, body, position, image_path, highlights")
+    .select("title, body, position")
     .eq("tutorial_id", tutorialId)
     .order("position", { ascending: true });
-  const steps = (stepRows ?? []) as StepRow[];
 
-  // Geteilte Bilder (mehrere Schritte, ein image_path): Vereinigung aller Verpixelungen
-  // einbrennen — lieber zu viel als zu wenig unkenntlich (wie bei den öffentlichen Kopien).
-  const blursByPath = new Map<string, unknown[]>();
-  for (const s of steps) {
-    if (!s.image_path) continue;
-    const list = blursByPath.get(s.image_path) ?? [];
-    list.push(s.highlights);
-    blursByPath.set(s.image_path, list);
-  }
-
-  const withImage = steps
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => !!s.image_path)
-    .slice(0, MAX_IMAGES);
-  const images = await Promise.all(
-    withImage.map(({ s }) =>
-      redactedImage(supabase, s.image_path!, unionBlurs(blursByPath.get(s.image_path!) ?? [])),
-    ),
-  );
-  const imageByIndex = new Map<number, string>();
-  withImage.forEach(({ i }, k) => {
-    if (images[k]) imageByIndex.set(i, images[k]!);
-  });
-
-  // Nichts zu vergleichen (keine Screenshots): keine KI-Kosten, nichts speichern.
-  if (imageByIndex.size === 0) {
-    return {
-      kind: "ok",
-      is_stale: false,
-      summary: "Keine Screenshots zum Vergleichen.",
-      issues: [],
-      sources: [],
-      compared: 0,
-    };
-  }
-
-  // Pro Schritt: Text, direkt gefolgt von SEINEM Screenshot (sonst ordnet die KI Bilder falsch zu).
-  type Part =
-    | { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string; detail: "high" } };
-  const parts: Part[] = [
-    {
-      type: "text",
-      text: `Anleitung: ${tut.title ?? ""}\nAnzahl Schritte: ${steps.length}`,
-    },
-  ];
-  steps.forEach((s, i) => {
-    const img = imageByIndex.get(i);
-    parts.push({
-      type: "text",
-      text:
-        `\n--- Schritt ${stepRef(i, s)}\n` +
-        `Titel: ${s.title?.trim() || "(ohne Titel)"}\n` +
-        `Erklärtext: ${plainBody(s.body) || "(leer)"}\n` +
-        (img ? "Screenshot dieses Schritts:" : "(kein Screenshot – diesen Schritt NICHT bewerten)"),
-    });
-    if (img) parts.push({ type: "image_url", image_url: { url: img, detail: "high" } });
-  });
+  const content =
+    `Titel: ${tut.title}\n\nSchritte:\n` +
+    (steps ?? [])
+      .map((s, i) => `${i + 1}. ${s.title ?? ""}: ${plainBody(s.body)}`)
+      .join("\n");
 
   try {
-    const completion = await openai().chat.completions.create(
-      {
-        model: AI.models.vision,
-        messages: [
+    // Responses-API mit Web-Suche -> echte Quellen + detaillierte Prüfung.
+    const res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${AI.openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: AI.models.chat,
+        tools: [{ type: "web_search" }],
+        input: [
           { role: "system", content: DRIFT_SYSTEM },
-          { role: "user", content: parts },
+          { role: "user", content },
         ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 3000,
-      },
-      { timeout: 45_000 },
+        max_output_tokens: 1400,
+      }),
+      signal: AbortSignal.timeout(55000),
+    });
+    const j = await res.json();
+    if (j.error) throw new Error(j.error.message);
+
+    type Anno = { type?: string; url?: string; title?: string };
+    type Content = { type?: string; text?: string; annotations?: Anno[] };
+    const contents = (Array.isArray(j.output) ? j.output : []).flatMap(
+      (o: { content?: Content[] }) => o.content ?? [],
     );
-    const text = completion.choices[0]?.message?.content ?? "";
+    const text = contents
+      .filter((c: Content) => c.type === "output_text")
+      .map((c: Content) => c.text ?? "")
+      .join("\n")
+      .trim();
+    const citations = contents
+      .flatMap((c: Content) => c.annotations ?? [])
+      .filter((a: Anno) => a.type === "url_citation" && a.url)
+      .map((a: Anno) => ({ title: a.title || a.url!, url: a.url! }));
 
-    let parsed: { issues?: unknown } = {};
+    let result: {
+      is_stale?: boolean;
+      severity?: string;
+      summary?: string;
+      issues?: { step?: string; problem?: string; suggestion?: string }[];
+      sources?: { title?: string; url?: string }[];
+    } = {};
     try {
-      parsed = JSON.parse(text);
+      const m = text.match(/\{[\s\S]*\}/);
+      result = JSON.parse(m ? m[0] : text);
     } catch {
-      /* unparsebar -> keine Befunde (lieber nichts melden als Unsinn) */
+      /* unparsebar -> als nicht-stale behandeln */
     }
-    // Nur vollständige Befunde zu Schritten, die wirklich einen Screenshot hatten.
-    const comparedRefs = new Set([...imageByIndex.keys()].map((i) => i + 1));
-    const issues: DriftIssue[] = (Array.isArray(parsed.issues) ? parsed.issues : [])
-      .filter((x): x is DriftIssue => !!x && typeof x === "object")
-      .map((x) => ({
-        step: typeof x.step === "string" ? x.step.trim() : undefined,
-        problem: typeof x.problem === "string" ? x.problem.trim() : undefined,
-        suggestion: typeof x.suggestion === "string" ? x.suggestion.trim() : undefined,
-      }))
-      .filter((x) => {
-        if (!x.problem || !x.step) return false;
-        const n = x.step.match(/^\s*(\d+)/);
-        return !n || comparedRefs.has(parseInt(n[1], 10));
-      })
-      .slice(0, 8);
 
-    const isStale = issues.length > 0;
-    const summary = isStale
-      ? issues.length === 1
-        ? "1 mögliche Abweichung zwischen Text und Screenshot gefunden."
-        : `${issues.length} mögliche Abweichungen zwischen Text und Screenshot gefunden.`
-      : "Texte und Screenshots passen zusammen.";
+    // Quellen mergen (Modell + echte Zitate), nach URL deduplizieren.
+    const srcMap = new Map<string, { title: string; url: string }>();
+    for (const s of [...(result.sources ?? []), ...citations]) {
+      if (s?.url) srcMap.set(s.url, { title: s.title || s.url, url: s.url });
+    }
+    const sources = [...srcMap.values()].slice(0, 5);
+    const issues = (Array.isArray(result.issues) ? result.issues : []).slice(0, 8);
 
     // Re-Check löst vorherige offene Hinweise ab.
     await supabase
@@ -239,39 +142,37 @@ export async function runDriftCheck(
       .eq("tutorial_id", tutorialId)
       .eq("status", "open");
 
-    let alertId: string | undefined;
-    if (isStale) {
-      // Glocken-Hinweis NUR bei echten Abweichungen.
-      const { data: alert } = await supabase
-        .from("change_alerts")
-        .insert({
-          tutorial_id: tutorialId,
-          severity: "warning",
-          summary,
-          details: {
-            issues,
-            sources: [],
-            affected_steps: issues.map((i) => i.step).filter(Boolean),
-          },
-        })
-        .select("id")
-        .maybeSingle();
-      alertId = (alert?.id as string | undefined) ?? undefined;
+    if (result.is_stale) {
+      await supabase.from("change_alerts").insert({
+        tutorial_id: tutorialId,
+        severity: ["info", "warning", "critical"].includes(result.severity ?? "")
+          ? result.severity
+          : "warning",
+        summary: result.summary ?? "Mögliche Änderung erkannt.",
+        details: {
+          issues,
+          sources,
+          affected_steps: issues.map((i) => i.step).filter(Boolean),
+        },
+      });
+      await supabase
+        .from("tutorials")
+        .update({ freshness: "stale", drift_checked_at: new Date().toISOString() })
+        .eq("id", tutorialId);
+    } else {
+      await supabase
+        .from("tutorials")
+        .update({ freshness: "ok", drift_checked_at: new Date().toISOString() })
+        .eq("id", tutorialId);
     }
-    await supabase
-      .from("tutorials")
-      .update({ freshness: isStale ? "stale" : "ok", drift_checked_at: new Date().toISOString() })
-      .eq("id", tutorialId);
 
     return {
       kind: "ok",
-      is_stale: isStale,
-      severity: isStale ? "warning" : undefined,
-      summary,
+      is_stale: !!result.is_stale,
+      severity: result.severity,
+      summary: result.summary,
       issues,
-      sources: [],
-      compared: imageByIndex.size,
-      alertId,
+      sources,
     };
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : "Fehler" };
