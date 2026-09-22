@@ -100,6 +100,7 @@ async function UserMenuSlot() {
     <UserMenu
       userName={userDisplayName(user?.user_metadata)}
       email={email}
+      accountId={account.id}
       accountName={account.name}
       memberships={memberships}
       isAdmin={isAdmin}

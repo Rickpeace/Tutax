@@ -21,23 +21,30 @@ import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
 
-/** Aktive Organisation wechseln (nur wenn der Nutzer dort Mitglied ist). */
-export async function setActiveAccount(accountId: string) {
+/**
+ * Aktive Organisation wechseln (nur wenn der Nutzer dort Mitglied ist). Meldet das
+ * Ergebnis zurück, damit der Umschalter bei Fehlern nicht stumm gesperrt hängen bleibt.
+ */
+export async function setActiveAccount(
+  accountId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return { ok: false, error: "Sitzung abgelaufen – bitte neu anmelden." };
   const { data: m } = await supabase
     .from("account_members")
     .select("account_id")
     .eq("user_id", user.id)
     .eq("account_id", accountId)
     .maybeSingle();
-  if (!m) return; // nicht Mitglied -> ignorieren
+  if (!m) return { ok: false, error: "Sie sind kein Mitglied dieser Organisation." };
   // Serverseitig in den User-Metadaten merken -> geräteübergreifend gleich.
-  await supabase.auth.updateUser({ data: { active_account_id: accountId } });
+  const { error } = await supabase.auth.updateUser({ data: { active_account_id: accountId } });
+  if (error) return { ok: false, error: "Wechsel fehlgeschlagen: " + error.message };
   revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 /**

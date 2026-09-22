@@ -48,7 +48,7 @@ import {
   type NavItem,
 } from "@/components/app/nav-config";
 import { cn } from "@/lib/utils";
-import { setActiveAccount } from "@/app/app/actions";
+import { useSwitchAccount } from "@/components/app/account-switcher";
 import { signOut } from "@/app/(auth)/actions";
 import type { Membership } from "@/lib/account";
 import { dismissVideoJob, useDismissedVideoJobs } from "@/lib/dismissed-video-jobs";
@@ -377,17 +377,19 @@ const menuItemClass =
 export function UserMenu({
   userName,
   email,
+  accountId,
   accountName,
   memberships,
   isAdmin,
 }: {
   userName: string | null;
   email: string | null;
+  accountId: string;
   accountName: string;
   memberships: Membership[];
   isAdmin: boolean;
 }) {
-  const [busy, setBusy] = useState(false);
+  const { busy, switchTo } = useSwitchAccount();
   const display = userName ?? email ?? accountName;
   const initial = (display.trim()[0] ?? "S").toUpperCase();
 
@@ -441,17 +443,14 @@ export function UserMenu({
                     key={m.id}
                     disabled={busy}
                     className={menuItemClass}
-                    onClick={async () => {
-                      if (m.name === accountName) return;
-                      setBusy(true);
-                      await setActiveAccount(m.id);
-                      window.location.assign("/app");
+                    onClick={() => {
+                      if (m.id !== accountId) void switchTo(m.id);
                     }}
                   >
                     <Check
                       className={cn(
                         "size-3.5",
-                        m.name === accountName ? "opacity-100" : "opacity-0",
+                        m.id === accountId ? "opacity-100" : "opacity-0",
                       )}
                     />
                     <span className="truncate">{m.name}</span>

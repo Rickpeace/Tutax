@@ -1,13 +1,45 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { setActiveAccount } from "@/app/app/actions";
 
 type Membership = { id: string; name: string; role: string };
 
 /**
+ * Organisation wechseln + frisch in /app landen. Gemeinsam für Auswahlfeld (Einstellungen)
+ * und Avatar-Menü. Schlägt der Aufruf fehl, wird der Umschalter wieder freigegeben und der
+ * Nutzer informiert. Wirft die Action selbst (typisch: Tab mit veralteter App-Version nach
+ * einem Deploy -> „Server Action not found", oder Netz weg), lädt die Seite neu — danach
+ * läuft die aktuelle Version und ein erneuter Versuch klappt.
+ */
+export function useSwitchAccount() {
+  const [busy, setBusy] = useState(false);
+
+  async function switchTo(accountId: string) {
+    setBusy(true);
+    try {
+      const res = await setActiveAccount(accountId);
+      if (!res?.ok) {
+        toast.error(res?.error || "Organisation konnte nicht gewechselt werden.");
+        setBusy(false);
+        return false;
+      }
+      window.location.assign("/app"); // frisch in die gewechselte Org
+      return true;
+    } catch {
+      toast.error("Wechsel hat nicht geklappt – die Seite wird neu geladen. Bitte danach erneut versuchen.");
+      setTimeout(() => window.location.reload(), 1500);
+      return false;
+    }
+  }
+
+  return { busy, switchTo };
+}
+
+/**
  * Zeigt die aktive Organisation. Gehört der Nutzer mehreren an, wird ein
- * Umschalter angeboten (Cookie `active_account` -> Reload mit neuem Konto).
+ * Umschalter angeboten (User-Metadaten `active_account_id` -> Reload mit neuem Konto).
  */
 export function AccountSwitcher({
   currentId,
@@ -21,7 +53,9 @@ export function AccountSwitcher({
   /** Volle Breite (Sidebar) statt kompakter Inline-Variante (frühere Topbar). */
   full?: boolean;
 }) {
-  const [busy, setBusy] = useState(false);
+  const { busy, switchTo } = useSwitchAccount();
+  // Kontrolliert, damit das Feld bei Fehlern auf die echte aktive Org zurückspringt.
+  const [value, setValue] = useState(currentId);
 
   if (memberships.length <= 1) {
     return (
@@ -39,13 +73,14 @@ export function AccountSwitcher({
 
   return (
     <select
-      defaultValue={currentId}
+      value={value}
       disabled={busy}
       aria-label="Organisation wechseln"
       onChange={async (e) => {
-        setBusy(true);
-        await setActiveAccount(e.target.value);
-        window.location.assign("/app"); // frisch in die gewechselte Org
+        const next = e.target.value;
+        if (next === currentId) return;
+        setValue(next);
+        if (!(await switchTo(next))) setValue(currentId);
       }}
       className={
         full
