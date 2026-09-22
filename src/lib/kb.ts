@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedMany } from "@/lib/openai";
 import { embeddingsConfigured } from "@/lib/ai";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Tiptap-JSON -> Klartext. */
 function plainBody(body: unknown): string {
@@ -59,30 +60,83 @@ export async function indexTutorial(
     if (txt.trim()) chunks.push({ text: `${tut.title} – ${txt}`, meta });
   }
 
-  const del = await admin
-    .from("kb_embeddings")
-    .delete()
-    .eq("account_id", accountId)
-    .eq("source_type", "tutorial")
-    .eq("source_id", tutorialId);
-  if (del.error) {
-    console.error("[kb] delete tutorial embeddings failed", { tutorialId, error: del.error });
-    throw new Error(`Index-Bereinigung fehlgeschlagen: ${del.error.message}`);
-  }
-
   const vectors = await embedMany(chunks.map((c) => c.text));
-  const rows = chunks.map((c, i) => ({
-    account_id: accountId,
-    source_type: "tutorial",
-    source_id: tutorialId,
-    chunk: c.text,
-    embedding: JSON.stringify(vectors[i]), // pgvector akzeptiert "[...]"-Textform
-    metadata: c.meta,
-  }));
-  const ins = await admin.from("kb_embeddings").insert(rows);
-  if (ins.error) {
-    console.error("[kb] insert tutorial embeddings failed", { tutorialId, error: ins.error });
+  await replaceSource(
+    admin,
+    accountId,
+    "tutorial",
+    tutorialId,
+    chunks.map((c, i) => ({ chunk: c.text, embedding: vectors[i], metadata: c.meta })),
+  );
+}
+
+/**
+ * Index-Zeilen einer Quelle atomar ersetzen (RPC replace_kb_source, Migration 0040):
+ * Delete+Insert in EINER Transaktion, per Advisory-Lock serialisiert — parallele
+ * Hintergrund-Reindexe (mehrere Saves kurz hintereinander) erzeugen so keine Duplikate.
+ */
+async function replaceSource(
+  admin: SupabaseClient,
+  accountId: string,
+  sourceType: "tutorial" | "kb_article",
+  sourceId: string,
+  rows: { chunk: string; embedding: number[]; metadata: Record<string, unknown> }[],
+): Promise<void> {
+  const { error } = await admin.rpc("replace_kb_source", {
+    p_account: accountId,
+    p_source_type: sourceType,
+    p_source_id: sourceId,
+    p_rows: rows.map((r) => ({ ...r, embedding: JSON.stringify(r.embedding) })), // pgvector-Textform "[...]"
+  });
+  if (!error) return;
+  // Übergang: Migration 0040 noch nicht eingespielt -> bisheriger Weg (Delete, dann Insert).
+  if (error.code === "PGRST202") {
+    const del = await admin
+      .from("kb_embeddings")
+      .delete()
+      .eq("account_id", accountId)
+      .eq("source_type", sourceType)
+      .eq("source_id", sourceId);
+    const ins = del.error
+      ? del
+      : await admin.from("kb_embeddings").insert(
+          rows.map((r) => ({
+            account_id: accountId,
+            source_type: sourceType,
+            source_id: sourceId,
+            chunk: r.chunk,
+            embedding: JSON.stringify(r.embedding),
+            metadata: r.metadata,
+          })),
+        );
+    if (!ins.error) return;
+    console.error("[kb] replace embeddings (fallback) failed", { sourceType, sourceId, error: ins.error });
     throw new Error(`Index-Aktualisierung fehlgeschlagen: ${ins.error.message}`);
+  }
+  console.error("[kb] replace embeddings failed", { sourceType, sourceId, error });
+  throw new Error(`Index-Aktualisierung fehlgeschlagen: ${error.message}`);
+}
+
+/**
+ * Nach einer inhaltlichen Änderung (Schritt/Titel/Kategorie) den Chatbot-Index nachziehen —
+ * aber NUR, wenn die Anleitung live ist (veröffentlicht + öffentlich). Entwürfe und interne
+ * Anleitungen dürfen nie in den Index. Für after(): wirft nie, loggt Fehler.
+ * Vorlagen (is_template) sind pro aktivierendem Konto indiziert und bleiben außen vor.
+ */
+export async function reindexTutorialIfLive(tutorialId: string): Promise<void> {
+  try {
+    if (!embeddingsConfigured()) return;
+    const admin = createAdminClient();
+    const { data: t } = await admin
+      .from("tutorials")
+      .select("account_id, status, visibility, is_template")
+      .eq("id", tutorialId)
+      .maybeSingle();
+    if (!t || !t.account_id || t.is_template) return;
+    if (t.status !== "published" || t.visibility !== "public") return;
+    await indexTutorial(admin, t.account_id, tutorialId);
+  } catch (e) {
+    console.error("[kb] Reindex nach Änderung fehlgeschlagen:", tutorialId, e instanceof Error ? e.message : e);
   }
 }
 
@@ -135,18 +189,11 @@ export async function indexArticle(
     .eq("id", articleId)
     .single();
 
-  // Vorhandene Embeddings immer entfernen (Update/Unpublish/Delete).
-  const del = await admin
-    .from("kb_embeddings")
-    .delete()
-    .eq("source_type", "kb_article")
-    .eq("source_id", articleId);
-  if (del.error) {
-    console.error("[kb] delete article embeddings failed", { articleId, error: del.error });
-    throw new Error(`Index-Bereinigung fehlgeschlagen: ${del.error.message}`);
+  if (!a || a.status !== "published") {
+    // Nicht (mehr) veröffentlicht: Index entfernen (Unpublish/Delete).
+    await removeArticleEmbeddings(admin, articleId);
+    return;
   }
-
-  if (!a || a.status !== "published") return;
 
   const meta = { title: a.title }; // kein slug -> wird als Kontext genutzt, nicht verlinkt
   const text = plainBody(a.body);
@@ -154,19 +201,13 @@ export async function indexArticle(
   for (const part of chunkText(text)) chunks.push(`${a.title} – ${part}`);
 
   const vectors = await embedMany(chunks);
-  const rows = chunks.map((c, i) => ({
-    account_id: accountId,
-    source_type: "kb_article",
-    source_id: articleId,
-    chunk: c,
-    embedding: JSON.stringify(vectors[i]),
-    metadata: meta,
-  }));
-  const ins = await admin.from("kb_embeddings").insert(rows);
-  if (ins.error) {
-    console.error("[kb] insert article embeddings failed", { articleId, error: ins.error });
-    throw new Error(`Index-Aktualisierung fehlgeschlagen: ${ins.error.message}`);
-  }
+  await replaceSource(
+    admin,
+    accountId,
+    "kb_article",
+    articleId,
+    chunks.map((c, i) => ({ chunk: c, embedding: vectors[i], metadata: meta })),
+  );
 }
 
 export async function removeArticleEmbeddings(

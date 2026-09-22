@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
-import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
+import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
@@ -150,6 +150,7 @@ export async function renameTutorial(id: string, title: string) {
   await invalidateTutorialTags(id);
   await markTranslationsStale(id);
   after(() => translateTitleDelta(id));
+  after(() => reindexTutorialIfLive(id)); // Titel steckt in jedem Chatbot-Ausschnitt
   revalidatePath("/app");
 }
 

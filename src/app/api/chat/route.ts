@@ -175,7 +175,10 @@ export async function POST(req: NextRequest) {
           .join("\n\n")
       : "(keine passenden Inhalte gefunden)";
 
-    const expertsText = experts.length
+    // Weiterleitung nur ankündigen/Experten nur nennen, wenn es wirklich einen Kontaktweg gibt.
+    const canEscalate =
+      buildEscalation(null) !== null || experts.some((_, i) => buildEscalation(i) !== null);
+    const expertsText = canEscalate && experts.length
       ? `\n\nAnsprechpartner (für mögliche Weiterleitung):\n${experts
           .map((e, i) => `[${i}] ${e.name ?? "?"}${e.expertise ? " – " + e.expertise : ""}`)
           .join("\n")}`
@@ -190,7 +193,11 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "system",
-          content: chatSystem(account.name, lang === "de" ? "Deutsch" : LANG_TARGET[lang]),
+          content: chatSystem(
+            account.name,
+            lang === "de" ? "Deutsch" : LANG_TARGET[lang],
+            canEscalate, // nur mit echtem Kontaktweg eine Weiterleitung ankündigen
+          ),
         },
         ...history.map((h) => ({
           role: h.role === "bot" ? ("assistant" as const) : ("user" as const),

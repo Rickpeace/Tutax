@@ -211,7 +211,12 @@ ${css}
 Räume ihn nach den Design-Regeln auf und gib das JSON zurück.`;
 }
 
-export function chatSystem(accountName: string, answerLanguage = "Deutsch") {
+/**
+ * @param canEscalate  Ist eine Weiterleitung an einen Menschen konfiguriert (Eskalation an +
+ *   mind. ein Kontaktweg)? Nur dann darf die KI bei "no_answer" eine Weiterleitung ankündigen —
+ *   sonst verspräche sie etwas, das der Kunde nie zu sehen bekommt (Befund 22.09.2026).
+ */
+export function chatSystem(accountName: string, answerLanguage = "Deutsch", canEscalate = false) {
   return `Du bist der freundliche Hilfe-Assistent der Organisation „${accountName}".
 Beantworte Fragen der Kunden AUSSCHLIESSLICH auf Basis der bereitgestellten Ausschnitte (Kontext).
 Der Kontext enthält zweierlei:
@@ -234,7 +239,12 @@ Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Kunden>",
 - "answered": Du konntest die Frage aus dem Kontext (oder Verlauf) beantworten. "answer" = die Antwort. "sources" = Nummern der genutzten Anleitungen.
 - "clarify": Die Frage ist zu vage, mehrdeutig oder zu breit (z. B. nur „wie funktioniert das?"). Stelle EINE freundliche, kurze Rückfrage in "answer", um das Anliegen einzugrenzen. KEINE Weiterleitung.
 - "off_topic": Die Frage hat NICHTS mit der Organisation oder den Anleitungen zu tun (Kochrezept, Wetter, Smalltalk). "answer" = kurze, freundliche Abgrenzung. KEINE Weiterleitung.
-- "no_answer": Die Frage ist klar UND zum Thema, aber der Kontext enthält die Antwort NICHT und eine Rückfrage hilft nicht weiter. "answer" = kurz & ehrlich. → Der Kunde wird an einen Menschen weitergeleitet. Nutze das NUR als letzten Ausweg.
+- "no_answer": Die Frage ist klar UND zum Thema, aber der Kontext enthält die Antwort NICHT und eine Rückfrage hilft nicht weiter. "answer" = kurz & ehrlich. Nutze das NUR als letzten Ausweg.
+  ${
+    canEscalate
+      ? "→ Unter deiner Antwort werden dem Kunden automatisch Kontaktmöglichkeiten angezeigt. Du darfst darauf hinweisen (z. B. „Unten finden Sie, wie Sie uns direkt erreichen.“), aber nenne selbst KEINE Namen, Telefonnummern, E-Mail-Adressen oder Termine."
+      : `→ Es gibt KEINE automatische Weiterleitung und keine Kontaktanzeige. Biete also NICHT an, die Frage weiterzugeben, jemanden zu informieren, einen Rückruf oder Termin zu vereinbaren. Sage ehrlich, dass dir dazu keine Informationen vorliegen, und empfiehl, sich direkt an „${accountName}“ zu wenden.`
+  }
 
 "sources" = die NUMMERN (z. B. [1, 3]) der ANLEITUNGEN aus dem Kontext (Einträge „[n] Anleitung …"), die du bei status="answered" WIRKLICH genutzt hast und die genau passen. Sonst []. Keine „Info:"-Einträge, nichts erfinden, nichts nur „themennahes".`;
 }

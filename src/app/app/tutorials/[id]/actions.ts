@@ -22,6 +22,7 @@ import {
   translateBranchDelta,
 } from "@/lib/translate-jobs";
 import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
+import { reindexTutorialIfLive } from "@/lib/kb";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
@@ -97,6 +98,7 @@ export async function addStep(
   if (image) await refreshPublicImage(step.id); // wirft sichtbar; Kopie ist dann entfernt
   await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
   await markTranslationsStale(tutorialId); // neuer Schritt -> Übersetzungen unvollständig
+  after(() => reindexTutorialIfLive(tutorialId)); // Chatbot kennt den neuen Schritt
 }
 
 /** Titel/Text/Bild speichern (stiller Auto-Save). */
@@ -112,7 +114,7 @@ export async function updateStep(
     video_time?: number | null;
   },
 ) {
-  await requireStepAccess(stepId);
+  const { tutorialId } = await requireStepAccess(stepId);
   const supabase = await createClient();
   if (Object.keys(patch).length === 0) return;
   if ("highlights" in patch && hasInvalidBlur(patch.highlights)) {
@@ -161,6 +163,8 @@ export async function updateStep(
     // Vorlesen: Text geändert -> Audio nachziehen (nur published+public, Hash-Cache
     // vermeidet Doppelkosten). ensureStepAudio wirft nicht -> stört den Save nie.
     after(() => ensureStepAudio(stepId));
+    // Chatbot-Index: bei veröffentlichten Anleitungen den neuen Text sofort nachziehen.
+    after(() => reindexTutorialIfLive(tutorialId));
   }
 }
 
@@ -325,6 +329,7 @@ export async function deleteStep(
   if (victim?.image_path) await removeUnusedPublicCopies([victim.image_path as string]);
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
+  after(() => reindexTutorialIfLive(tutorialId)); // Chatbot vergisst den Schritt
 }
 
 /**
@@ -378,6 +383,7 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId);
   after(() => translateTitleDelta(tutorialId));
+  after(() => reindexTutorialIfLive(tutorialId)); // Titel steckt in jedem Chatbot-Ausschnitt
 }
 
 /**

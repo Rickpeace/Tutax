@@ -141,6 +141,7 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - `node --env-file=.env.local scripts/test-internal-rls.mjs` (interne Tutorials anon-dicht)
   - `node --env-file=.env.local scripts/test-internal-trace.mjs` (intern: keine public Bilder/Embeddings)
   - `node --env-file=.env.local scripts/test-kb-import-live.mjs` (Wissens-Import + SSRF + PDF)
+  - `node --env-file=.env.local scripts/test-kb-sync-e2e.mjs` (Chatbot-Index folgt Bearbeiten/Zurückziehen/Löschen; keine leere Weiterleitungs-Zusage)
   - `node --env-file=.env.local scripts/test-translate-live.mjs` (Übersetzungen inkl. Delta + stale)
   - `node --env-file=.env.local scripts/test-tts-live.mjs`     (Vorlesen: Hash-Cache, public MP3)
   - `node --env-file=.env.local scripts/test-recorder-live.mjs` (Extension-Direkt-Upload, startet Server :3013)
@@ -216,6 +217,10 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
 - [x] **Chatbot/RAG**: `lib/kb.ts` (Indizierung beim Publish), Migration 0005 `match_kb` (pgvector),
       `/api/chat` (Frage→Embed→Suche→gpt-4o-mini, antwortet nur aus Kontext + Quell-Links),
       `ChatWidget` auf der Hub-Seite. Backbone live verifiziert (test-kb-live).
+- [x] **Chatbot-Index-Sync (22.09.2026)**: Bearbeiten veröffentlichter Anleitungen zieht den Index im Hintergrund nach
+      (`reindexTutorialIfLive`); Migration **0040**: Trigger räumen den Index bei Löschen/Zurückziehen/intern in der DB,
+      `replace_kb_source` ersetzt atomar (keine Duplikate, schreibt nie Entwürfe). Bot verspricht nur noch mit
+      hinterlegtem Kontakt eine Weiterleitung.
 - [x] **Drift-Agent**: `/api/tutorials/[id]/check` (gpt-4o-mini bewertet Veralterung →
       `change_alerts` + `freshness`), `DriftCheckButton` im Editor, Alert-Center `/app/alerts`,
       Glocke mit Zähler im Header.

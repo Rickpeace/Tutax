@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
+import { reindexTutorialIfLive } from "@/lib/kb";
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -109,6 +111,9 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
     .update({ title: newTitle, body: bodyDoc })
     .eq("id", target.id);
   if (upErr) throw new Error(upErr.message);
+  // Chatbot soll den korrigierten Schritt kennen (nur wenn die Anleitung live ist).
+  const tutorialId = alert.tutorial_id as string;
+  after(() => reindexTutorialIfLive(tutorialId));
 
   // Alle einbezogenen Positionen als übernommen markieren.
   for (const i of indices) if (issues[i]) issues[i] = { ...issues[i], applied: true };
