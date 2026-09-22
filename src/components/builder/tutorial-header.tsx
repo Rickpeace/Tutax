@@ -51,6 +51,7 @@ import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/a
 import { LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import type { TutorialVisibility } from "@/lib/types";
+import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 
 /**
  * Kopf im Anleitungs-Editor (Welle 50d, Entwurf „App-Makeover" §4; Welle 54 umgebaut):
@@ -296,6 +297,7 @@ export function TutorialHeader({
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            maxLength={GUIDE_TITLE_MAX}
             onFocus={(e) => e.currentTarget.select()}
             onBlur={() => {
               saveTitle();
@@ -337,7 +339,7 @@ export function TutorialHeader({
           <input
             autoFocus
             value={desc}
-            maxLength={160}
+            maxLength={GUIDE_DESCRIPTION_MAX}
             onChange={(e) => setDesc(e.target.value)}
             onBlur={() => {
               saveDescription();

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkAdmin } from "@/lib/admin";
-import { slugify } from "@/lib/slug";
+import { slugify, fallbackSlug } from "@/lib/slug";
 import { removeTutorialEmbeddings } from "@/lib/kb";
 
 async function ensureAdmin() {
@@ -35,7 +35,8 @@ export async function publishTemplate(id: string) {
 
   let slug = t.slug as string | null;
   if (!slug) {
-    const base = slugify(t.title);
+    // Ohne Buchstaben/Zahlen im Titel: stabile Ersatz-Adresse aus der Kennung.
+    const base = slugify(t.title) || fallbackSlug("vorlage", id);
     const { data: existing } = await admin
       .from("tutorials")
       .select("slug")

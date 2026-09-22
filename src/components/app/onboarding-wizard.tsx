@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { completeOnboarding, skipOnboarding } from "@/app/onboarding/actions";
+import { ORG_NAME_MAX } from "@/lib/text-limits";
 import { saveLanguages } from "@/app/app/settings/branding/actions";
 import { EXTRA_LANGS, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 
@@ -101,6 +102,7 @@ export function OnboardingWizard({
                 id="ob-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                maxLength={ORG_NAME_MAX}
                 placeholder="Muster GmbH"
               />
             </div>

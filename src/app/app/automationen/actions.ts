@@ -10,6 +10,7 @@ import {
   sanitizeSchedule,
 } from "@/lib/automations";
 import { validateStepCondition, validateStepJump } from "@/lib/guide";
+import { AUTOMATION_TITLE_MAX } from "@/lib/text-limits";
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -38,7 +39,7 @@ export async function createAutomationFromTutorial(
 
 /** Automation umbenennen (konto-scoped via RLS). */
 export async function renameAutomation(id: string, title: string) {
-  const clean = title.trim().slice(0, 120);
+  const clean = title.trim().slice(0, AUTOMATION_TITLE_MAX);
   if (!clean) return;
   const supabase = await createClient();
   const { error } = await supabase

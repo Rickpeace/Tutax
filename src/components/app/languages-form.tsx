@@ -67,7 +67,10 @@ export function LanguagesForm({
     >
       <ul className="-mx-[18px] divide-y-2 divide-line-2 border-y-2 border-line-2">
         {rows.map((r) => {
-          const disabled = r.fixed || !isBusiness || pending;
+          // Ohne Business bleibt nur das EINSCHALTEN gesperrt. Eine bereits aktive
+          // Sprache (z. B. nach einem Downgrade) muss abschaltbar bleiben — der Server
+          // erlaubt das Leeren ausdrücklich (saveLanguages).
+          const disabled = r.fixed || pending || (!isBusiness && !r.on);
           const id = `lang-${r.lang}`;
           return (
             <li key={r.lang} className="flex items-center gap-3 px-[18px] py-2.5">
@@ -100,7 +103,8 @@ export function LanguagesForm({
       </ul>
       {!isBusiness && (
         <p className="text-xs text-muted-foreground">
-          Mehrsprachige Hilfe-Seite gibt es im Business-Tarif.{" "}
+          Mehrsprachige Hilfe-Seite gibt es im Business-Tarif.
+          {selected.size > 0 ? " Bereits aktive Sprachen können Sie weiterhin abschalten." : ""}{" "}
           <Link
             href="/app/settings/tarif"
             className="font-extrabold text-primary underline underline-offset-2"

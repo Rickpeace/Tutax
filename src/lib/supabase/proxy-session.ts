@@ -58,7 +58,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  const isProtected = path.startsWith("/app") || path.startsWith("/onboarding");
+  // /admin gehört dazu: ohne Anmeldung kam sonst HTTP 200 mit der Admin-Kopfleiste
+  // (Daten blieben dank AdminGate zwar weg, es sah aber nach einem echten Bereich aus).
+  const isProtected =
+    path.startsWith("/app") || path.startsWith("/onboarding") || path.startsWith("/admin");
   const isAuthPage = path === "/login" || path === "/signup";
 
   if (!user && isProtected) {

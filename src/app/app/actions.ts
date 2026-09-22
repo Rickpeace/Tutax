@@ -6,8 +6,9 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount, requireTutorialAccess } from "@/lib/account";
-import { slugify } from "@/lib/slug";
+import { slugify, fallbackSlug } from "@/lib/slug";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
+import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
@@ -216,7 +217,8 @@ export async function renameCategory(
 
 export async function renameTutorial(id: string, title: string) {
   await requireTutorialAccess(id);
-  const clean = title.trim();
+  // Länge begrenzt (Karten, Suchtreffer, Hilfe-Seite) — gleiche Grenze wie im Formular.
+  const clean = title.replace(/\s+/g, " ").trim().slice(0, GUIDE_TITLE_MAX);
   if (!clean) return;
   const supabase = await createClient();
   const { error } = await supabase
@@ -368,7 +370,9 @@ async function ensureSlug(
   currentSlug: string | null,
 ): Promise<string> {
   if (currentSlug) return currentSlug;
-  const base = slugify(title);
+  // Titel ohne Buchstaben/Zahlen (z. B. „###“) ergibt keinen Slug mehr -> stabile
+  // Ersatz-Adresse aus der Kennung, damit die Anleitung trotzdem einen Link bekommt.
+  const base = slugify(title) || fallbackSlug("anleitung", tutorialId);
   const { data: existing } = await supabase
     .from("tutorials")
     .select("slug")
