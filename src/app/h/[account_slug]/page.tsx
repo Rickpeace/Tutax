@@ -11,6 +11,7 @@ import { HubBrowser, type HubTutorial } from "@/components/viewer/hub-browser";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 import { LangSwitcher } from "@/components/viewer/lang-switcher";
 import { LangSuggestBar } from "@/components/viewer/lang-suggest-bar";
+import { HtmlLang } from "@/components/viewer/html-lang";
 import {
   resolveLang,
   labelsFor,
@@ -99,20 +100,24 @@ export async function generateMetadata({
   const description = `Hilfe & Anleitungen von ${account.name} – Schritt für Schritt erklärt.`;
   // hreflang: DE + aktivierte Sprachen (nur wenn welche aktiv sind).
   const base = `/h/${account.slug}`;
-  const alternates =
-    languages.length > 0
+  // canonical IMMER ohne ?lang=/?preview= — sonst indexieren Suchmaschinen dieselbe
+  // Seite mehrfach. Die Sprachvarianten bleiben über hreflang erreichbar.
+  const alternates = {
+    canonical: base,
+    ...(languages.length > 0
       ? {
           languages: {
             [LANG_BCP47.de]: base,
             ...Object.fromEntries(languages.map((l) => [LANG_BCP47[l], `${base}?lang=${l}`])),
           },
         }
-      : undefined;
+      : {}),
+  };
   const { logoPath } = resolveTheme(data.theme);
   return {
     title: `Hilfe & Anleitungen · ${account.name}`,
     description,
-    ...(alternates ? { alternates } : {}),
+    alternates,
     openGraph: {
       title: `Hilfe & Anleitungen · ${account.name}`,
       description,
@@ -182,6 +187,8 @@ export default async function HubPage({
       className={`flex min-h-screen flex-col ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
+      {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
+      <HtmlLang lang={LANG_BCP47[lang]} />
       {fontsHref && (
         <>
           {/* Preconnect vor dem Stylesheet (React 19 hoisted beides in den <head>) →

@@ -12,7 +12,8 @@ import { buildRenderTree, type RenderNode } from "@/lib/builder/tree";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
 import { PrintButton } from "@/components/viewer/print-button";
-import { resolveLang, labelsFor, t, isExtraLang, type HubLang } from "@/lib/i18n-hub";
+import { HtmlLang } from "@/components/viewer/html-lang";
+import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
 // Öffentliche Druckansicht: gleiche gecachten Daten wie die Tutorial-Seite
@@ -206,6 +207,8 @@ export default async function PrintPage({
       className="min-h-screen bg-white print:bg-white"
       style={{ ...brandStyle(tokens), fontFamily: fonts.body, color: "var(--brand-ink)" }}
     >
+      {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
+      <HtmlLang lang={LANG_BCP47[lang]} />
       {fontsHref && (
         <>
           <link rel="preconnect" href="https://fonts.googleapis.com" />

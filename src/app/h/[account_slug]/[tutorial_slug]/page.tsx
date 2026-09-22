@@ -15,6 +15,7 @@ import { Wizard } from "@/components/viewer/wizard";
 import { ChatWidget } from "@/components/viewer/chat-widget";
 import { LangSwitcher } from "@/components/viewer/lang-switcher";
 import { LangSuggestBar } from "@/components/viewer/lang-suggest-bar";
+import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -146,20 +147,24 @@ export async function generateMetadata({
     tutorial.description?.trim() ||
     `Schritt-für-Schritt-Anleitung von ${account.name}: ${tutorial.title}.`;
   const base = `/h/${account.slug}/${tutorial_slug}`;
-  const alternates =
-    languages.length > 0
+  // canonical IMMER ohne ?lang=/?preview= — sonst indexieren Suchmaschinen dieselbe
+  // Anleitung mehrfach. Die Sprachvarianten bleiben über hreflang erreichbar.
+  const alternates = {
+    canonical: base,
+    ...(languages.length > 0
       ? {
           languages: {
             [LANG_BCP47.de]: base,
             ...Object.fromEntries(languages.map((l) => [LANG_BCP47[l], `${base}?lang=${l}`])),
           },
         }
-      : undefined;
+      : {}),
+  };
   const { logoPath } = resolveTheme(data.theme);
   return {
     title,
     description,
-    ...(alternates ? { alternates } : {}),
+    alternates,
     openGraph: {
       title,
       description,
@@ -221,6 +226,8 @@ export default async function ViewerPage({
       className={`min-h-screen ${skinClass}`}
       style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
     >
+      {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
+      <HtmlLang lang={LANG_BCP47[lang]} />
       {fontsHref && (
         <>
           {/* Preconnect vor dem Stylesheet (React 19 hoisted beides in den <head>) →
