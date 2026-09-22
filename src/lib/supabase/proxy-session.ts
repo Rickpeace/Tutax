@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { asRole, canEdit } from "@/lib/roles";
 
 /**
  * Hält die Supabase-Session frisch (Token-Refresh) und macht einen
@@ -73,5 +75,44 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Öffentliche Seite der Steply-Erweiterung: eingeloggte Inhaber/Bearbeiter gehören zur
+  // Einrichtung IN der App (sonst Marketing-Kopf mit „Anmelden“ → wirkt wie ausgeloggt).
+  // Mitarbeiter (dürfen die Erweiterung nicht nutzen) und Ausgeloggte sehen die öffentliche
+  // Seite. Hier statt in der Seite, damit /extension statisch (PPR) bleibt und nichts
+  // aufblitzt. Die Zielseite prüft die Rolle selbst noch einmal (requireAccount).
+  if (user && path === "/extension" && (await mayUseExtension(supabase, user))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/app/settings/erweiterung";
+    url.search = "";
+    const redirect = NextResponse.redirect(url);
+    // Frisch erneuerte Session-Cookies nicht verlieren.
+    for (const c of response.cookies.getAll()) redirect.cookies.set(c);
+    return redirect;
+  }
+
   return response;
+}
+
+/**
+ * Darf der Nutzer im AKTIVEN Konto die Erweiterung nutzen (Inhaber/Bearbeiter)? Gleiche Wahl
+ * des aktiven Kontos wie lib/account.ts (Metadaten `active_account_id`, sonst das erste).
+ * Fehler → false (dann eben die öffentliche Seite; kein Risiko).
+ */
+async function mayUseExtension(
+  supabase: SupabaseClient,
+  user: { id: string; user_metadata?: { active_account_id?: string } | null },
+): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("account_members")
+      .select("account_id, role")
+      .eq("user_id", user.id);
+    const rows = data ?? [];
+    if (!rows.length) return false;
+    const activeId = user.user_metadata?.active_account_id;
+    const active = rows.find((r) => r.account_id === activeId) ?? rows[0];
+    return canEdit(asRole(active.role));
+  } catch {
+    return false;
+  }
 }
