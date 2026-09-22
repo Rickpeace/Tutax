@@ -4141,6 +4141,16 @@ function guideRenderImage(step) {
 }
 
 // Fallback-Darstellung ein/aus: Screenshot groß + Hinweis (kein Overlay möglich).
+// Welle 55: Schritt, für den es absichtlich kein Ziel auf der Seite gibt — Seitenwechsel
+// ohne Klick („nav"), markierte Stelle ohne Element („spot") und das Abschluss-Bild
+// („result"). Erkannt an der Interaktion, nicht am fehlenden Selektor: ein Schritt aus einer
+// ALTEN Aufnahme ohne Selektor bleibt ein echter Fehlschlag (und damit sichtbar).
+const GUIDE_NO_TARGET_VARIANTS = { nav: 1, spot: 1, result: 1 };
+function guideStepHasNoTarget(step) {
+  const it = guideInteraction(step);
+  return !!it && GUIDE_NO_TARGET_VARIANTS[it.variant] === 1;
+}
+
 function guideSetFallback(on, hintText) {
   if (on) {
     els.runImageWrap.classList.add("run-image-large");
@@ -4653,12 +4663,21 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
     // Technischer Grund (Welle 33, Fix 3) nur noch als Tooltip — nie im sichtbaren Text (Welle 50a).
     const reason = typeof msg.reason === "string" ? msg.reason.trim().slice(0, 60) : "";
+    // Welle 55: Schritte OHNE Selektor (Seitenwechsel, markierte Stelle, Abschluss-Bild) sind
+    // ABSICHTLICH nicht ansteuerbar — „nicht zu finden“ wäre dort schlicht falsch und würde
+    // dem Menschen einen Fehler vorgaukeln. Sie bekommen einen eigenen, ruhigen Hinweis und
+    // zählen auch nicht als Selektor-Fehlschlag in der Telemetrie.
+    const intentional = guideStepHasNoTarget(step);
     guideSetFallback(
       true,
-      "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",
+      intentional
+        ? "Für diesen Schritt gibt es nichts zum Anklicken – folgen Sie dem Screenshot."
+        : "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",
     );
-    if (reason) els.runFallbackHint.title = "Grund: " + reason;
-    sendGuideEvent("selector_miss", step ? step.title : null);
+    if (!intentional) {
+      if (reason) els.runFallbackHint.title = "Grund: " + reason;
+      sendGuideEvent("selector_miss", step ? step.title : null);
+    }
   }
 });
 
