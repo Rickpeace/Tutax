@@ -1,14 +1,16 @@
 // Welle 50d — Kopf im Anleitungs-Editor (Entwurf „App-Makeover“ §4) + Schritt-Panel.
 // Echter Login gegen die echte DB (Wegwerf-Konto im Business-Tarif, wird am Ende gelöscht),
 // Dev-Server lokal. Prüft:
-//   - Steuerzeile: Status-Schalter (Entwurf/Veröffentlicht), Segment „Hilfe-Seite | Nur Team",
-//     Schalter „Mit Schulungsnachweis" (nur bei Hilfe-Seite), keine „·“-Trenner
-//   - Nachweis-Schalter wirkt in der DB (in_lernen), „Nur Team" wirkt (visibility=internal),
-//     Nachweis-Schalter dann ausgeblendet, Kurzbeschreibung ohne „(erscheint auf der Hilfe-Seite)"
-//   - Veröffentlichen per Schalter wirkt (status=published) und zurück (draft)
+//   - Welle 54: Knopf „Veröffentlichen“ (koralle, rechts neben „Vorschau“, vor „…“) statt
+//     Schalter; veröffentlicht → Etikett „✓ Veröffentlicht“ + „Zurück auf Entwurf“ im „…“-Menü;
+//     leere Anleitung gesperrt („Erst Schritte anlegen“)
+//   - Zielgruppe: zwei Chips „Hilfe-Seite (für alle)“ / „Team“ (role=group, aria-pressed), alle
+//     3 Kombinationen in der DB (public+in_lernen / internal / public), letzter aktiver Chip nicht
+//     abwählbar (Tooltip), Hinweis „mit Schulungsnachweis“ (kein Schalter), Tastatur, Pro-Tarif
+//     sperrt „Team“; keine „·“-Trenner; einzeilig bei 1400 px
 //   - Schritt-Panel: „Erweitert (für Automationen)" standardmäßig eingeklappt; ohne Änderungen
 //     nur „Gespeichert" (kein ausgegrauter Speichern-Knopf), mit Änderungen Speichern/Verwerfen
-//   - mobil 390 px: keine horizontale Scrollleiste
+//   - mobil 390 px (Entwurf + veröffentlicht): keine horizontale Scrollleiste, nichts ragt raus
 // Screenshots → SHOT_DIR (Standard: scripts/.shots-builder-header, gitignored über .shots*).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-builder-header.mjs
@@ -49,7 +51,7 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
   auth: { persistSession: false },
 });
 
-const PORT = 3027;
+const PORT = Number(process.env.TEST_PORT) || 3027;
 const BASE = `http://localhost:${PORT}`;
 const PW = "Test12345!";
 const stamp = String(process.hrtime.bigint()).slice(-8);
@@ -166,44 +168,59 @@ try {
   await controls.waitFor({ timeout: 90_000 });
   await page.waitForTimeout(1200); // Hydration
 
-  // ---- Steuerzeile ----
-  const status = controls.getByRole("switch").first();
-  ok((await status.innerText()).includes("Entwurf"), "Status-Schalter zeigt „Entwurf“");
-  ok((await status.getAttribute("aria-checked")) === "false", "Status-Schalter ist aus");
-  const seg = controls.getByRole("radiogroup", { name: "Wer sieht die Anleitung?" });
-  ok(await seg.isVisible(), "Segment „Hilfe-Seite | Nur Team“ sichtbar");
-  const segHelp = seg.getByRole("radio", { name: "Hilfe-Seite" });
-  const segTeam = seg.getByRole("radio", { name: "Nur Team" });
-  ok((await segHelp.getAttribute("aria-checked")) === "true", "„Hilfe-Seite“ ist gewählt");
-  const nachweis = controls.getByRole("switch", { name: /Mit Schulungsnachweis/ });
-  ok(await nachweis.isVisible(), "Schalter „Mit Schulungsnachweis“ sichtbar (bei Hilfe-Seite)");
+  // ---- Steuerzeile (Welle 54: Veröffentlichen-Knopf + Zielgruppen-Chips) ----
+  const shotHead = (name) =>
+    page.screenshot({ path: path.join(SHOT_DIR, name), clip: { x: 0, y: 0, width: 1400, height: 420 } });
+  ok((await controls.getByRole("switch").count()) === 0, "Kein Status-Schalter mehr im Editor-Kopf");
+  const publishBtn = controls.getByTestId("publish-button");
+  ok(await publishBtn.isVisible(), "Entwurf: Knopf „Veröffentlichen“ sichtbar");
+  ok((await publishBtn.innerText()).includes("Veröffentlichen"), "Knopf heißt „Veröffentlichen“");
+  ok(await publishBtn.isEnabled(), "Knopf aktiv (Anleitung hat Schritte)");
+  // Reihenfolge rechts: Vorschau · Veröffentlichen · „…“
+  const order = await controls.evaluate((el) => {
+    const pv = el.querySelector('a[href^="/app/preview/"]');
+    const pb = el.querySelector('[data-testid="publish-button"]');
+    const more = el.querySelector('[data-testid="editor-more"]');
+    if (!pv || !pb || !more) return null;
+    return [pv, pb, more].map((n) => n.getBoundingClientRect().left);
+  });
+  ok(!!order && order[0] < order[1] && order[1] < order[2], `Reihenfolge Vorschau → Veröffentlichen → „…“ (${JSON.stringify(order)})`);
+  const bg = await publishBtn.evaluate((b) => getComputedStyle(b).backgroundColor);
+  ok(bg === "rgb(239, 106, 78)", `Veröffentlichen ist koralle/primär (${bg})`);
+
+  const group = controls.getByRole("group", { name: "Wer sieht die Anleitung?" });
+  ok(await group.isVisible(), "Gruppe „Wer sieht die Anleitung?“ (role=group) sichtbar");
+  const chipHelp = group.getByRole("button", { name: "Hilfe-Seite (für alle)" });
+  const chipTeam = group.getByRole("button", { name: "Team", exact: true });
+  const pressed = async (loc) => (await loc.getAttribute("aria-pressed")) === "true";
+  const hint = group.getByTestId("training-proof-hint");
+  ok((await pressed(chipHelp)) && !(await pressed(chipTeam)), "Start: nur „Hilfe-Seite (für alle)“ an");
+  ok((await hint.count()) === 0, "Ohne Team kein Hinweis „mit Schulungsnachweis“");
   ok(await controls.getByText("Zugang & Konto").isVisible(), "Kategorie-Pill in der Steuerzeile");
   ok(await controls.getByText("login.datev.de").isVisible(), "Website-Pill in der Steuerzeile");
-  // Welle 53: seltene Aktionen im „…“-Menü; die Steuerzeile bricht bei 1440 px nicht um.
+  // Welle 53: seltene Aktionen im „…“-Menü; die Steuerzeile bricht bei 1400 px nicht um.
   await controls.getByTestId("editor-more").click();
   const driftItem = page.getByRole("menuitem", { name: /Aktualität prüfen/ });
-  ok(await driftItem.waitFor({ timeout: 5_000 }).then(() => true, () => false), "„Aktualität prüfen“ (im „…“-Menü) statt „Jetzt prüfen“");
+  ok(await driftItem.waitFor({ timeout: 5_000 }).then(() => true, () => false), "„Aktualität prüfen“ im „…“-Menü");
+  ok((await page.getByTestId("unpublish").count()) === 0, "Entwurf: kein „Zurück auf Entwurf“ im Menü");
   await page.keyboard.press("Escape");
   await driftItem.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
-  // Zeilen = verschiedene Mittellinien der sichtbaren Elemente (±12 px Toleranz).
-  const rowTops = await controls.evaluate((el) => {
-    const mids = [...el.children]
-      .map((c) => c.getBoundingClientRect())
-      .filter((r) => r.width > 0 && r.height > 0)
-      .map((r) => r.top + r.height / 2)
-      .sort((a, b) => a - b);
-    let rows = 0;
-    let last = -1e9;
-    for (const m of mids) {
-      if (m - last > 12) rows++;
-      last = m;
-    }
-    return rows;
-  });
-  ok(rowTops === 1, `Steuerzeile einzeilig bei 1400 px (${rowTops} Zeile(n))`);
-  // Base UI: <Button render={<Link/>}> trägt role="button" — daher über den Text + href prüfen.
-  const preview = controls.locator(`a[href="/app/preview/${tutorialId}"]`);
-  ok((await preview.count()) === 1 && (await preview.innerText()).includes("Vorschau"), "„Vorschau“ in der Steuerzeile");
+  const countRows = () =>
+    controls.evaluate((el) => {
+      const mids = [...el.children]
+        .map((c) => c.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => r.top + r.height / 2)
+        .sort((a, b) => a - b);
+      let rows = 0;
+      let last = -1e9;
+      for (const m of mids) {
+        if (m - last > 12) rows++;
+        last = m;
+      }
+      return rows;
+    });
+  ok((await countRows()) === 1, `Steuerzeile einzeilig bei 1400 px (Entwurf, nur Hilfe-Seite)`);
   const headerText = await page.locator("main").last().evaluate((m) => {
     const h1 = m.querySelector("h1");
     const box = h1?.closest("div.mb-6");
@@ -214,31 +231,136 @@ try {
     (await page.getByTestId("editor-description").innerText()).includes("(erscheint auf der Hilfe-Seite)"),
     "Kurzbeschreibung (Hilfe-Seite) nennt die Hilfe-Seite",
   );
-  await page.screenshot({ path: path.join(SHOT_DIR, "1-editor-kopf-desktop.png"), clip: { x: 0, y: 0, width: 1400, height: 420 } });
+  await shotHead("1-kopf-entwurf-desktop.png");
+  await shotHead("zielgruppe-1-nur-hilfe-seite.png");
 
-  // ---- Nachweis-Schalter → DB in_lernen ----
-  await nachweis.click();
-  ok((await dbWait(tutorialId, "in_lernen", true)) === true, "Nachweis-Schalter setzt in_lernen=true (DB)");
-  ok((await nachweis.getAttribute("aria-checked")) === "true", "Nachweis-Schalter steht auf an");
+  // Letzter aktiver Chip ist nicht abwählbar (mit Tooltip-Begründung).
+  await chipHelp.click({ force: true }); // aria-disabled: Playwright klickt sonst nicht
+  await page.waitForTimeout(700);
+  ok(await pressed(chipHelp), "Letzter aktiver Chip (Hilfe-Seite) bleibt an");
+  ok((await chipHelp.getAttribute("aria-disabled")) === "true", "Letzter aktiver Chip: aria-disabled");
+  const tip = page.getByText(/Mindestens eine Zielgruppe bleibt aktiv/).first(); // Tooltip (und Hinweis-Toast)
+  await page.mouse.move(5, 5); // nach dem Klick erst weg, dann wieder drauf -> Tooltip
+  await page.waitForTimeout(300);
+  await chipHelp.hover();
+  ok(await tip.waitFor({ timeout: 5_000 }).then(() => true, () => false), "Tooltip erklärt: mindestens eine Zielgruppe bleibt aktiv");
+  const dbHelp = await admin.from("tutorials").select("visibility, in_lernen").eq("id", tutorialId).single();
+  ok(dbHelp.data.visibility === "public" && dbHelp.data.in_lernen === false, "DB unverändert (public, in_lernen=false)");
+  await page.mouse.move(5, 5);
 
-  // ---- Nur Team → DB visibility ----
-  await segTeam.click();
-  ok((await dbWait(tutorialId, "visibility", "internal")) === "internal", "„Nur Team“ setzt visibility=internal (DB)");
+  // Team dazu → beides = public + in_lernen
+  await chipTeam.click();
+  ok((await dbWait(tutorialId, "in_lernen", true)) === true, "„Team“ dazu: in_lernen=true (DB)");
+  ok((await dbWait(tutorialId, "visibility", "public")) === "public", "„Team“ dazu: visibility bleibt public (DB)");
   await page.waitForTimeout(400);
-  ok((await segTeam.getAttribute("aria-checked")) === "true", "„Nur Team“ ist gewählt");
-  ok((await controls.getByRole("switch", { name: /Mit Schulungsnachweis/ }).count()) === 0, "Nachweis-Schalter bei „Nur Team“ ausgeblendet");
-  const descTeam = await page.getByTestId("editor-description").innerText();
-  ok(descTeam.includes("Kurzbeschreibung ergänzen") && !descTeam.includes("erscheint auf der Hilfe-Seite"), `Kurzbeschreibung bei „Nur Team“ neutral („${descTeam}“)`);
-  await page.screenshot({ path: path.join(SHOT_DIR, "2-editor-kopf-nur-team.png"), clip: { x: 0, y: 0, width: 1400, height: 420 } });
+  ok((await pressed(chipHelp)) && (await pressed(chipTeam)), "Beide Chips an");
+  ok(await hint.isVisible(), "Hinweis „mit Schulungsnachweis“ neben „Team“");
+  ok((await controls.getByRole("switch").count()) === 0, "Schulungsnachweis ist KEIN eigener Schalter");
+  await hint.hover();
+  ok(
+    await page.getByText("Mitarbeiter finden die Anleitung unter Schulungen und bestätigen sie dort.").waitFor({ timeout: 5_000 }).then(() => true, () => false),
+    "Hinweis-Tooltip: „Mitarbeiter finden die Anleitung unter Schulungen …“",
+  );
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  ok((await countRows()) === 1, "Steuerzeile einzeilig bei 1400 px (beide Zielgruppen + Hinweis)");
+  await shotHead("zielgruppe-2-beides.png");
 
-  // ---- Veröffentlichen per Schalter ----
-  await status.click();
-  ok((await dbWait(tutorialId, "status", "published")) === "published", "Status-Schalter veröffentlicht (DB status=published)");
-  await controls.getByRole("switch").first().getByText("Veröffentlicht").waitFor({ timeout: 20_000 });
-  ok(true, "Schalter zeigt „Veröffentlicht“ (auch bei „Nur Team“, kein „Freigegeben“)");
-  await page.waitForTimeout(500);
-  await status.click();
-  ok((await dbWait(tutorialId, "status", "draft")) === "draft", "Zurück auf Entwurf (DB status=draft)");
+  // Hilfe-Seite ab → nur Team = internal
+  await chipHelp.click();
+  ok((await dbWait(tutorialId, "visibility", "internal")) === "internal", "Nur „Team“: visibility=internal (DB)");
+  await page.waitForTimeout(400);
+  ok(!(await pressed(chipHelp)) && (await pressed(chipTeam)), "Nur „Team“ an");
+  ok(await hint.isVisible(), "Nur Team: Hinweis „mit Schulungsnachweis“ bleibt");
+  const descTeam = await page.getByTestId("editor-description").innerText();
+  ok(descTeam.includes("Kurzbeschreibung ergänzen") && !descTeam.includes("erscheint auf der Hilfe-Seite"), `Kurzbeschreibung bei nur Team neutral („${descTeam}“)`);
+  await chipTeam.click({ force: true });
+  await page.waitForTimeout(700);
+  ok(await pressed(chipTeam), "Letzter aktiver Chip (Team) bleibt an");
+  ok((await admin.from("tutorials").select("visibility").eq("id", tutorialId).single()).data.visibility === "internal", "DB bleibt internal");
+  await shotHead("zielgruppe-3-nur-team.png");
+
+  // Zurück: Hilfe dazu (beides), dann Team ab (nur Hilfe)
+  await chipHelp.click();
+  ok((await dbWait(tutorialId, "visibility", "public")) === "public", "Hilfe-Seite wieder dazu: public (DB)");
+  ok((await dbWait(tutorialId, "in_lernen", true)) === true, "… und Team bleibt (in_lernen=true)");
+  await page.waitForTimeout(400);
+  await chipTeam.click();
+  ok((await dbWait(tutorialId, "in_lernen", false)) === false, "Team ab: in_lernen=false (DB)");
+  await page.waitForTimeout(400);
+  ok((await pressed(chipHelp)) && !(await pressed(chipTeam)), "Wieder nur Hilfe-Seite");
+
+  // Tastatur: Fokusring + Leertaste schaltet
+  await chipHelp.focus();
+  await page.keyboard.press("Tab"); // per Tastatur auf „Team“ -> :focus-visible
+  const ring = await chipTeam.evaluate((b) => getComputedStyle(b).boxShadow);
+  ok(ring && ring !== "none", `Chip hat sichtbaren Fokusring (${ring.slice(0, 40)}…)`);
+  await page.keyboard.press("Space");
+  ok((await dbWait(tutorialId, "in_lernen", true)) === true, "Tastatur (Leertaste) schaltet „Team“ (DB)");
+  await page.waitForTimeout(400);
+  await chipTeam.click();
+  ok((await dbWait(tutorialId, "in_lernen", false)) === false, "… und wieder aus");
+  await page.waitForTimeout(400);
+
+  // ---- Veröffentlichen per Knopf, zurück per „…“-Menü ----
+  await publishBtn.click();
+  ok((await dbWait(tutorialId, "status", "published")) === "published", "„Veröffentlichen“ wirkt (DB status=published)");
+  const badge = controls.getByTestId("published-badge");
+  await badge.waitFor({ timeout: 20_000 });
+  ok((await badge.innerText()).includes("Veröffentlicht"), "Etikett „✓ Veröffentlicht“ statt Knopf");
+  ok((await controls.getByTestId("publish-button").count()) === 0, "Veröffentlicht: kein Veröffentlichen-Knopf mehr");
+  const badgeBg = await badge.evaluate((b) => getComputedStyle(b).backgroundColor);
+  ok(badgeBg === "rgb(220, 243, 239)", `Etikett ist teal (${badgeBg})`);
+  ok((await countRows()) === 1, "Steuerzeile einzeilig bei 1400 px (veröffentlicht)");
+  await page.waitForTimeout(400);
+  await shotHead("2-kopf-veroeffentlicht-desktop.png");
+  await controls.getByTestId("editor-more").click();
+  const unpub = page.getByTestId("unpublish");
+  await unpub.waitFor({ timeout: 5_000 });
+  ok((await unpub.innerText()).includes("Zurück auf Entwurf"), "„…“-Menü: „Zurück auf Entwurf“");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOT_DIR, "3-menue-zurueck-auf-entwurf.png"), clip: { x: 700, y: 0, width: 700, height: 560 } });
+  await unpub.click();
+  ok((await dbWait(tutorialId, "status", "draft")) === "draft", "„Zurück auf Entwurf“ wirkt (DB status=draft)");
+  await controls.getByTestId("publish-button").waitFor({ timeout: 20_000 });
+  ok(true, "Danach wieder der Knopf „Veröffentlichen“");
+
+  // ---- Leere Anleitung: Veröffentlichen gesperrt mit Hinweis ----
+  {
+    const { data: empty } = await admin
+      .from("tutorials")
+      .insert({ account_id: accountId, title: "Leere Anleitung", status: "draft", visibility: "public" })
+      .select("id")
+      .single();
+    await page.goto(`${BASE}/app/tutorials/${empty.id}`, { waitUntil: "domcontentloaded" });
+    const c2 = page.getByTestId("editor-controls");
+    await c2.waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(1000);
+    const b2 = c2.getByTestId("publish-button");
+    ok(await b2.isDisabled(), "Leere Anleitung: „Veröffentlichen“ gesperrt");
+    await c2.getByTestId("empty-lock").hover();
+    ok(await page.getByText("Erst Schritte anlegen").first().waitFor({ timeout: 5_000 }).then(() => true, () => false), "Tooltip „Erst Schritte anlegen“");
+    await page.mouse.move(5, 5);
+  }
+
+  // ---- Ohne Business: „Team“ gesperrt (Tarif-Hinweis), Hilfe-Seite bleibt ----
+  await admin.from("accounts").update({ plan: "pro" }).eq("id", accountId);
+  await page.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
+  await controls.waitFor({ timeout: 60_000 });
+  await page.waitForTimeout(1200);
+  ok((await chipTeam.getAttribute("aria-disabled")) === "true", "Pro-Tarif: „Team“ gesperrt");
+  await chipTeam.click({ force: true });
+  await page.waitForTimeout(800);
+  ok((await admin.from("tutorials").select("in_lernen").eq("id", tutorialId).single()).data.in_lernen === false, "Pro-Tarif: Klick auf „Team“ ändert nichts (DB)");
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  await chipTeam.hover();
+  ok(await page.getByText(/im Business-Tarif enthalten/).first().waitFor({ timeout: 5_000 }).then(() => true, () => false), "Hinweis (Toast/Tooltip) nennt den Business-Tarif");
+  await page.mouse.move(5, 5);
+  await admin.from("accounts").update({ plan: "business" }).eq("id", accountId);
+  await page.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
+  await controls.waitFor({ timeout: 60_000 });
+  await page.waitForTimeout(1200);
 
   // ---- Schritt-Panel ----
   await page.locator("main").last().getByText("Anmelden").first().click();
@@ -262,18 +384,35 @@ try {
   await saveState.getByRole("button", { name: "Verwerfen" }).click();
   ok((await saveState.getByText("Gespeichert").count()) === 1, "Verwerfen: wieder „Gespeichert“");
 
-  // ---- Mobil 390 px ----
+  // ---- Mobil 390 px (Entwurf mit beiden Zielgruppen, dann veröffentlicht) ----
+  await admin.from("tutorials").update({ in_lernen: true }).eq("id", tutorialId);
   const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const mp = await mob.newPage();
   await login(mp);
   await mp.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
-  await mp.getByTestId("editor-controls").waitFor({ timeout: 60_000 });
+  const mc = mp.getByTestId("editor-controls");
+  await mc.waitFor({ timeout: 60_000 });
   await mp.waitForTimeout(800);
-  const overflow = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  ok(overflow <= 1, `Mobil 390 px: keine horizontale Scrollleiste (${overflow}px)`);
-  const ctlOverflow = await mp.getByTestId("editor-controls").evaluate((el) => el.scrollWidth - el.clientWidth);
-  ok(ctlOverflow <= 1, `Mobil: Steuerzeile bricht sauber um (${ctlOverflow}px)`);
-  await mp.screenshot({ path: path.join(SHOT_DIR, "5-editor-kopf-mobil.png"), fullPage: false });
+  const mobileChecks = async (label) => {
+    const overflow = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    ok(overflow <= 1, `Mobil 390 px (${label}): keine horizontale Scrollleiste (${overflow}px)`);
+    const ctlOverflow = await mc.evaluate((el) => el.scrollWidth - el.clientWidth);
+    ok(ctlOverflow <= 1, `Mobil (${label}): Steuerzeile bricht sauber um (${ctlOverflow}px)`);
+    const outside = await mc.evaluate((el) =>
+      [...el.querySelectorAll("button, a, span")]
+        .map((n) => n.getBoundingClientRect())
+        .filter((r) => r.width > 0 && (r.right > window.innerWidth + 1 || r.left < -1)).length,
+    );
+    ok(outside === 0, `Mobil (${label}): kein Element ragt über den Rand (${outside})`);
+  };
+  await mobileChecks("Entwurf");
+  await mp.screenshot({ path: path.join(SHOT_DIR, "4-kopf-entwurf-mobil-390.png"), fullPage: false });
+  await mc.getByTestId("publish-button").click();
+  ok((await dbWait(tutorialId, "status", "published")) === "published", "Mobil: „Veröffentlichen“ wirkt (DB)");
+  await mc.getByTestId("published-badge").waitFor({ timeout: 20_000 });
+  await mp.waitForTimeout(500);
+  await mobileChecks("veröffentlicht");
+  await mp.screenshot({ path: path.join(SHOT_DIR, "5-kopf-veroeffentlicht-mobil-390.png"), fullPage: false });
 
   // ---- Standard-Anleitungen (nur wenn Vorlagen existieren) ----
   await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });

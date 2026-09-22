@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  BadgeCheck,
+  Check,
   ChevronLeft,
   ExternalLink,
   Eye,
@@ -10,10 +12,12 @@ import {
   Languages,
   Link2,
   Loader2,
-  Lock,
   MoreHorizontal,
   Pencil,
+  Send,
   ShieldQuestion,
+  Undo2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,7 +29,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { StatusSwitch } from "@/components/app/status-switch";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
 import { useDriftCheck } from "@/components/builder/drift-check-button";
@@ -48,13 +51,17 @@ import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import type { TutorialVisibility } from "@/lib/types";
 
 /**
- * Kopf im Anleitungs-Editor (Welle 50d, Entwurf „App-Makeover" §4):
+ * Kopf im Anleitungs-Editor (Welle 50d, Entwurf „App-Makeover" §4; Welle 54 umgebaut):
  *   Zurück · Titel (Stift) · Kurzbeschreibung
- *   EINE Steuerzeile: Status-Schalter (Veröffentlicht/Entwurf) | Segment „Hilfe-Seite | Nur Team"
- *   + Schalter „Mit Schulungsnachweis" (nur bei Hilfe-Seite; Nur Team hat den Nachweis immer)
- *   | Kategorie- und Website-Pill — rechts „Aktualität prüfen" und „Vorschau".
- * Die Aktionen sind unverändert: publishTutorial/unpublishTutorial und setTutorialAudience
- * (visibility public/internal + in_lernen).
+ *   EINE Steuerzeile: Zielgruppe als zwei unabhängige Chips „Hilfe-Seite (für alle)“ und
+ *   „Team“ (+ fester Hinweis „mit Schulungsnachweis“, wenn Team an ist) | Kategorie- und
+ *   Website-Pill — rechts „Vorschau“, dann „Veröffentlichen“ (Entwurf) bzw. das Etikett
+ *   „✓ Veröffentlicht“, dann das „…“-Menü (dort auch „Zurück auf Entwurf“).
+ * Die Aktionen sind unverändert: publishTutorial/unpublishTutorial und setTutorialAudience.
+ * Abbildung der Chips auf die BESTEHENDEN Daten (keine Migration):
+ *   nur Hilfe-Seite = visibility public + in_lernen false
+ *   nur Team        = visibility internal
+ *   beides          = visibility public + in_lernen true
  */
 export function TutorialHeader({
   tutorialId,
@@ -100,10 +107,11 @@ export function TutorialHeader({
   const [descEditing, setDescEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
-  // Wer sieht die Anleitung? „Hilfe-Seite" ⇔ public, „Nur Team" ⇔ internal.
-  // Der Schulungsnachweis (in_lernen) ist nur bei Hilfe-Seite wählbar; Nur Team hat ihn immer.
+  // Wer sieht die Anleitung? Zwei unabhängige Chips (mind. einer an):
+  //   Hilfe-Seite ⇔ visibility public;  Team ⇔ internal ODER (public + in_lernen).
   const publicOn = visibility === "public";
   const [inLernen, setInLernen] = useState(initialInLernen);
+  const teamOn = !publicOn || inLernen;
   const [busy, setBusy] = useState(false);
   const [visBusy, setVisBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
@@ -178,9 +186,11 @@ export function TutorialHeader({
         if ("slug" in res && res.slug) setSlug(res.slug);
       } else await unpublishTutorial(tutorialId);
       setPublished(next);
-      const liveMsg = publicOn
-        ? "Anleitung ist jetzt veröffentlicht"
-        : "Veröffentlicht – für Ihr Team in den Schulungen";
+      const liveMsg = !publicOn
+        ? "Veröffentlicht – für Ihr Team in den Schulungen"
+        : teamOn
+          ? "Veröffentlicht – auf der Hilfe-Seite und in den Schulungen Ihres Teams"
+          : "Anleitung ist jetzt veröffentlicht";
       toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
@@ -192,6 +202,8 @@ export function TutorialHeader({
   async function togglePublish() {
     if (busy) return;
     const next = !published;
+    // Leere Anleitung: Veröffentlichen gesperrt (Zurück auf Entwurf bleibt immer möglich).
+    if (next && !hasSteps) return;
     // Auto-Verpixelung (Welle 28): VOR dem Veröffentlichen prüfen, ob noch ungeprüfte
     // automatische Verpixelungen offen sind. Nur ein UI-Gate — der Server blockiert nie,
     // und die Prüfung selbst darf das Veröffentlichen niemals verhindern (fail-open).
@@ -213,9 +225,9 @@ export function TutorialHeader({
     await doPublish(next);
   }
 
-  // Zielgruppe setzen. Regeln (unverändert seit Welle 20):
-  //  - Hilfe-Seite ⇒ visibility public; Nur Team ⇒ internal.
-  //  - Schulungsnachweis: bei Nur Team IMMER (implizit, in_lernen=false); bei Hilfe-Seite = in_lernen.
+  // Zielgruppe setzen (Server-Regeln unverändert seit Welle 20):
+  //  - Hilfe-Seite an ⇒ visibility public; aus ⇒ internal (nur Team).
+  //  - Team neben Hilfe-Seite ⇒ in_lernen; bei nur Team implizit (in_lernen=false).
   async function applyAudience(nextPublic: boolean, nextLernen: boolean) {
     if (visBusy) return;
     const prevVis = visibility;
@@ -229,9 +241,9 @@ export function TutorialHeader({
       toast.success(
         nextPublic
           ? nextLernen
-            ? "Für die Hilfe-Seite – zusätzlich in den Schulungen mit Nachweis"
-            : "Für die Hilfe-Seite"
-          : "Nur für Ihr Team – in den Schulungen mit Nachweis",
+            ? "Hilfe-Seite und Team – Ihr Team findet die Anleitung unter Schulungen"
+            : "Nur auf der Hilfe-Seite (für alle)"
+          : "Nur für Ihr Team – unter Schulungen, mit Schulungsnachweis",
       );
     } catch (e) {
       setVisibility(prevVis);
@@ -242,14 +254,22 @@ export function TutorialHeader({
     }
   }
 
-  const setAudiencePublic = (nextPublic: boolean) => {
-    if (nextPublic === publicOn) return;
-    applyAudience(nextPublic, inLernen);
+  // Zwei unabhängige Chips; der LETZTE aktive lässt sich nicht abwählen (nie „nirgends sichtbar“).
+  const toggleHelp = () => {
+    if (publicOn && !teamOn) return; // letzter aktiver Chip
+    if (helpLocked) return;
+    if (publicOn) applyAudience(false, false); // beides → nur Team
+    else applyAudience(true, true); // nur Team → beides
   };
-  const toggleNachweis = () => applyAudience(true, !inLernen);
-
-  // Nur Team ist Business. Wer (nach einem Downgrade) schon Nur Team hat, darf zurück.
-  const teamLocked = !isBusiness && publicOn;
+  // Team ist Business. Wer (nach einem Downgrade) Team schon hat, darf es behalten/abwählen.
+  const teamLocked = !isBusiness && !teamOn;
+  // Hilfe-Seite abwählen hieße „nur Team“ (internal) — ebenfalls Business (Server-Gate).
+  const helpLocked = !isBusiness && publicOn && teamOn;
+  const toggleTeam = () => {
+    if (teamOn && !publicOn) return; // letzter aktiver Chip
+    if (teamLocked) return;
+    applyAudience(true, !teamOn); // beides → nur Hilfe-Seite bzw. nur Hilfe-Seite → beides
+  };
   const noSteps = !hasSteps;
   const drift = useDriftCheck(tutorialId);
   // „Übersetzung veraltet“ als kleiner Punkt am „…“-Knopf (vorher am Übersetzen-Knopf).
@@ -364,74 +384,69 @@ export function TutorialHeader({
         className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2.5"
         data-testid="editor-controls"
       >
-        {/* Leere Anleitung: Veröffentlichen gesperrt (Zurück auf Entwurf bleibt immer möglich). */}
-        <EmptyLock locked={noSteps && !published}>
-          <StatusSwitch
-            on={published}
-            onToggle={togglePublish}
-            disabled={busy || (noSteps && !published)}
-            busy={busy}
-            className="text-[13px]"
-            title={
-              noSteps && !published
-                ? undefined
-                : published
-                  ? "Ist veröffentlicht – antippen für Entwurf"
-                  : publicOn
-                    ? "Ist Entwurf – antippen, um auf der Hilfe-Seite zu veröffentlichen"
-                    : "Ist Entwurf – antippen, um für Ihr Team zu veröffentlichen"
-            }
-          />
-        </EmptyLock>
-        <ControlSep />
-
+        {/* Zielgruppe: zwei unabhängige Chips (Mehrfachauswahl, mind. einer an). */}
         <div
-          role="radiogroup"
+          role="group"
           aria-label="Wer sieht die Anleitung?"
-          className="flex rounded-full bg-line-2 p-[3px]"
+          aria-busy={visBusy || undefined}
+          className="flex flex-wrap items-center gap-1.5"
+          data-testid="audience-chips"
         >
-          <SegmentButton
+          <AudienceChip
             active={publicOn}
-            disabled={visBusy}
-            onClick={() => setAudiencePublic(true)}
-            icon={<Globe className="size-3.5" />}
-            label="Hilfe-Seite"
-            title="Erscheint (veröffentlicht) auf Ihrer Hilfe-Seite"
-          />
-          <SegmentButton
-            active={!publicOn}
-            disabled={visBusy || teamLocked}
-            onClick={() => setAudiencePublic(false)}
-            icon={<Lock className="size-3.5" />}
-            label="Nur Team"
-            title={
-              teamLocked
-                ? "„Nur Team“ ist im Business-Tarif enthalten"
-                : "Nur für Ihr Team – in den Schulungen, mit Schulungsnachweis"
+            locked={(publicOn && !teamOn) || helpLocked}
+            busy={visBusy}
+            onClick={toggleHelp}
+            icon={<Globe className="size-3.5" aria-hidden />}
+            label="Hilfe-Seite (für alle)"
+            hint={
+              helpLocked
+                ? "Anleitungen nur für Ihr Team sind im Business-Tarif enthalten."
+                : publicOn && !teamOn
+                ? "Mindestens eine Zielgruppe bleibt aktiv – schalten Sie zuerst „Team“ ein."
+                : publicOn
+                  ? "Erscheint auf Ihrer Hilfe-Seite – für alle sichtbar. Antippen, um sie nur für Ihr Team zu zeigen."
+                  : "Zusätzlich auf Ihrer Hilfe-Seite zeigen – für alle sichtbar."
             }
           />
+          <AudienceChip
+            active={teamOn}
+            locked={teamOn && !publicOn}
+            disabled={teamLocked}
+            busy={visBusy}
+            onClick={toggleTeam}
+            icon={<Users className="size-3.5" aria-hidden />}
+            label="Team"
+            hint={
+              teamLocked
+                ? "„Team“ (Schulungen mit Nachweis) ist im Business-Tarif enthalten."
+                : teamOn && !publicOn
+                  ? "Mindestens eine Zielgruppe bleibt aktiv – schalten Sie zuerst „Hilfe-Seite (für alle)“ ein."
+                  : teamOn
+                    ? "Ihr Team sieht die Anleitung unter Schulungen. Antippen, um sie nur auf der Hilfe-Seite zu zeigen."
+                    : "Zusätzlich für Ihr Team unter Schulungen zeigen – mit Schulungsnachweis."
+            }
+          />
+          {teamOn && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    tabIndex={0}
+                    data-testid="training-proof-hint"
+                    className="inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-[12px] font-bold text-violet-text outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                }
+              >
+                <BadgeCheck className="size-3.5" aria-hidden /> mit Schulungsnachweis
+              </TooltipTrigger>
+              <TooltipContent>
+                Mitarbeiter finden die Anleitung unter Schulungen und bestätigen sie dort.
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />}
         </div>
-
-        {publicOn && (
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <StatusSwitch
-                on={inLernen}
-                onToggle={toggleNachweis}
-                disabled={visBusy || !isBusiness}
-                labelOn="Mit Schulungsnachweis"
-                labelOff="Mit Schulungsnachweis"
-                className="text-[12.5px]"
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              {!isBusiness
-                ? "Schulungen mit Nachweis sind im Business-Tarif enthalten."
-                : "Zusätzlich in den Schulungen Ihres Teams zeigen – mit Schulungsnachweis."}
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {visBusy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />}
         <ControlSep />
 
         <CategoryPicker tutorialId={tutorialId} categories={categories} currentCategoryId={categoryId} />
@@ -449,6 +464,42 @@ export function TutorialHeader({
           >
             <Eye className="size-4" /> Vorschau
           </Button>
+          {published ? (
+            // Veröffentlicht: Etikett statt Knopf; „Zurück auf Entwurf“ steht im „…“-Menü.
+            <span
+              data-testid="published-badge"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-teal-soft px-3 text-[0.8rem] font-extrabold text-teal-text"
+            >
+              {busy ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Check className="size-3.5" strokeWidth={3} aria-hidden />
+              )}
+              Veröffentlicht
+            </span>
+          ) : (
+            // Leere Anleitung: Veröffentlichen gesperrt, Hinweis „Erst Schritte anlegen“.
+            <EmptyLock locked={noSteps}>
+              <Button
+                size="sm"
+                onClick={togglePublish}
+                disabled={busy || noSteps}
+                data-testid="publish-button"
+                title={
+                  noSteps
+                    ? undefined
+                    : !publicOn
+                      ? "Für Ihr Team unter Schulungen veröffentlichen"
+                      : teamOn
+                        ? "Auf der Hilfe-Seite und für Ihr Team veröffentlichen"
+                        : "Auf der Hilfe-Seite veröffentlichen"
+                }
+              >
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                Veröffentlichen
+              </Button>
+            </EmptyLock>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -523,6 +574,29 @@ export function TutorialHeader({
                     }
                   >
                     <ExternalLink className="size-4" /> Auf der Hilfe-Seite öffnen
+                  </DropdownMenuItem>
+                </>
+              )}
+              {published && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={togglePublish}
+                    disabled={busy}
+                    data-testid="unpublish"
+                    className="items-start"
+                  >
+                    <Undo2 className="mt-0.5 size-4" />
+                    <MenuText
+                      label="Zurück auf Entwurf"
+                      hint={
+                        !publicOn
+                          ? "Verschwindet aus den Schulungen, bis Sie wieder veröffentlichen."
+                          : teamOn
+                            ? "Verschwindet von der Hilfe-Seite und aus den Schulungen, bis Sie wieder veröffentlichen."
+                            : "Verschwindet von der Hilfe-Seite, bis Sie wieder veröffentlichen."
+                      }
+                    />
                   </DropdownMenuItem>
                 </>
               )}
@@ -611,38 +685,54 @@ function ControlSep() {
   return <span aria-hidden className="hidden h-5 w-0.5 shrink-0 rounded-full bg-line sm:block" />;
 }
 
-/** Ein Feld des Segments „Hilfe-Seite | Nur Team". */
-function SegmentButton({
+/**
+ * Ein Zielgruppen-Chip (Welle 54): Umschaltknopf mit aria-pressed. `locked` = letzter aktiver
+ * Chip (nicht abwählbar), `disabled` = Tarif-Sperre. Beides über aria-disabled statt disabled,
+ * damit der Tooltip mit der Begründung auch dann erscheint (Maus UND Tastatur-Fokus).
+ */
+function AudienceChip({
   active,
+  locked,
   disabled,
+  busy,
   onClick,
   icon,
   label,
-  title,
+  hint,
 }: {
   active: boolean;
+  locked?: boolean;
   disabled?: boolean;
+  busy?: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
-  title: string;
+  hint: string;
 }) {
+  const inert = locked || disabled || busy;
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      disabled={disabled && !active}
-      onClick={onClick}
-      title={title}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-extrabold outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
-        active
-          ? "bg-card text-ink shadow-[0_1px_3px_rgba(51,41,31,0.12)]"
-          : "text-ink-2 hover:text-ink"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        aria-pressed={active}
+        aria-disabled={inert || undefined}
+        onClick={() => {
+          if (!inert) onClick();
+          // Gesperrt: Begründung auch per Klick/Tippen zeigen (Tooltip schließt beim Klick,
+          // Touch-Geräte haben keinen Hover).
+          else if (!busy) toast(hint, { id: "audience-locked" });
+        }}
+        data-active={active}
+        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border-2 px-3 text-[12.5px] font-extrabold outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
+          active
+            ? "border-teal bg-teal-soft text-teal-text"
+            : "border-line bg-card text-ink-2 hover:border-[#e3d7c2] hover:text-ink"
+        } ${disabled ? "cursor-not-allowed opacity-50" : locked ? "cursor-default" : ""}`}
+      >
+        {active ? <Check className="size-3.5" strokeWidth={3} aria-hidden /> : icon}
+        {label}
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
   );
 }

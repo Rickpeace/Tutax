@@ -181,7 +181,7 @@ try {
   await page.waitForTimeout(1200); // Hydration
 
   // 1) Veröffentlichen -> indiziert.
-  await controls.getByRole("switch").first().click();
+  await controls.getByTestId("publish-button").click(); // Welle 54: Knopf statt Schalter
   ok((await dbWait(tutorialId, "status", "published")) === "published", "Veröffentlicht (DB)");
   let rows = await embWait(tutorialId, (r) => r.some((x) => x.chunk.includes("Kamera antippen")));
   ok(rows.some((x) => x.chunk.includes("Kamera antippen")), `Beim Veröffentlichen indiziert (${rows.length} Ausschnitte)`);
@@ -232,7 +232,8 @@ try {
   ok(!/hilfe@example\.com/.test(a3.answer), "Mit Kontakt: KI nennt die Adresse nicht selbst (steht in der Box)");
 
   // 4) Zurückziehen über die UI -> Index leer.
-  await controls.getByRole("switch").first().click();
+  await controls.getByTestId("editor-more").click(); // Welle 54: „Zurück auf Entwurf“ im „…“-Menü
+  await page.getByTestId("unpublish").click();
   ok((await dbWait(tutorialId, "status", "draft")) === "draft", "Zurückgezogen (DB)");
   rows = await embWait(tutorialId, (r) => r.length === 0);
   ok(rows.length === 0, "Zurückgezogen: Chatbot-Index leer");

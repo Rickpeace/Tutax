@@ -698,12 +698,12 @@ try {
   // 17) Veröffentlichen → Blur-Gate → veröffentlicht
   await step("veröffentlichen", async () => {
     await page.waitForTimeout(3000);
-    await controls.getByRole("switch").first().click();
+    await controls.getByTestId("publish-button").click(); // Welle 54: Knopf statt Schalter
     await page.getByRole("dialog").waitFor({ timeout: 20_000 });
     await page.waitForTimeout(400);
     await shot(page, "d22-veroeffentlichen-verpixelung-pruefen");
     await page.getByRole("button", { name: "Trotzdem veröffentlichen" }).click();
-    await controls.getByRole("switch").first().getByText("Veröffentlicht").waitFor({ timeout: 60_000 });
+    await controls.getByTestId("published-badge").waitFor({ timeout: 60_000 });
     await page.waitForTimeout(800);
     await shot(page, "d23-veroeffentlicht");
   });

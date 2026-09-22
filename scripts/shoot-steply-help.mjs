@@ -862,9 +862,10 @@ try {
   await pg.waitForSelector("#step-title", { timeout: 15000 }).catch(() => {});
   await pg.waitForTimeout(1500);
   await capture("builder", SHOT_ROUTES.builder, {
-    status: { loc: () => pg.getByTestId("editor-controls").getByRole("switch", { name: "Veröffentlicht" }), guide: true, noText: true },
-    audience: { loc: () => pg.getByRole("radiogroup", { name: "Wer sieht die Anleitung?" }), guide: true },
-    nurteam: { loc: () => pg.getByRole("radio", { name: /Nur Team/ }), guide: true },
+    // Welle 54: Veröffentlichen-Knopf statt Schalter, Zielgruppe als zwei Chips.
+    status: { loc: () => pg.getByTestId("publish-button"), guide: true, noText: true },
+    audience: { loc: () => pg.getByRole("group", { name: "Wer sieht die Anleitung?" }), guide: true },
+    nurteam: { loc: () => pg.getByTestId("audience-chips").getByRole("button", { name: "Team", exact: true }), guide: true },
     aktualitaet: { loc: () => pg.getByRole("button", { name: /Aktualität prüfen/ }), guide: true },
     titel: { loc: () => pg.locator("#step-title"), guide: true },
     bild: { loc: () => pg.getByTestId("highlight-canvas") },

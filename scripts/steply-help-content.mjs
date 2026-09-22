@@ -242,7 +242,7 @@ export const TUTORIALS = [
     steps: [
       { shot: "builder", target: "status",
         title: "Veröffentlichen",
-        body: "Legen Sie oben im Editor den Schalter von „Entwurf“ auf „Veröffentlicht“ um – oder direkt auf der Karte unter „Anleitungen“. Daneben wählen Sie „Hilfe-Seite“ oder „Nur Team“. Verpixelte Stellen werden beim Veröffentlichen fest ins Bild gebrannt." },
+        body: "Klicken Sie oben im Editor auf „Veröffentlichen“ – oder legen Sie direkt auf der Karte unter „Anleitungen“ den Schalter um. Im Editor wählen Sie auch „Hilfe-Seite (für alle)“, „Team“ oder beides; zurück auf Entwurf geht über das „…“-Menü. Verpixelte Stellen werden beim Veröffentlichen fest ins Bild gebrannt." },
       { shot: "teilen", target: "link",
         title: "Weg 1: Der Link",
         body: "Unter „Einstellungen“ → „Adresse & Teilen“ finden Sie bei „Link teilen“ die Adresse Ihrer Hilfe-Seite. Verlinken Sie sie als Menüpunkt „Hilfe“ auf Ihrer Website – fertig. Den Link zu einer einzelnen Anleitung kopieren Sie im Editor mit „Link kopieren“." },
@@ -332,7 +332,7 @@ export const TUTORIALS = [
         body: "Wer zu mehreren Organisationen gehört, wechselt im Menü hinter dem Profilbild oben rechts („Organisation wechseln“) oder unter „Einstellungen“ → „Allgemein“. Jede Organisation hat ihre eigene Hilfe-Seite, ihr eigenes Design und ihr eigenes Team." },
       { shot: "builder", target: "audience",
         title: "Anleitungen nur fürs Team",
-        body: "Oben im Editor wählen Sie „Hilfe-Seite“ oder „Nur Team“ (Business). Anleitungen „Nur Team“ erscheinen nie auf der Hilfe-Seite und nie im KI-Assistenten, sondern nur in den Schulungen Ihres Teams. Öffentliche Anleitungen nehmen Sie mit „Mit Schulungsnachweis“ zusätzlich auf." },
+        body: "Oben im Editor schalten Sie „Hilfe-Seite (für alle)“ und „Team“ (Business) unabhängig voneinander ein – eines bleibt immer an. Nur „Team“: Die Anleitung erscheint nie auf der Hilfe-Seite und nie im KI-Assistenten, sondern nur in den Schulungen Ihres Teams. Beides: öffentlich und zusätzlich in den Schulungen – mit Schulungsnachweis." },
       { shot: "lernen", target: "karte",
         title: "Schulungen & Schulungsnachweis",
         body: "Unter „Schulungen“ arbeitet das Team seine Anleitungen durch und markiert sie als absolviert. Jede Karte zeigt, wie viele im Team schon fertig sind; Inhaber sehen in der Schulung, wer was wann erledigt hat." },

@@ -45,7 +45,7 @@ const steps = [
   {
     icon: Send,
     t: "6. Veröffentlichen",
-    d: "Legen Sie den Schalter „Entwurf“ auf „Veröffentlicht“ um – direkt auf der Karte unter „Anleitungen“ oder oben im Editor. Dort wählen Sie auch, wer die Anleitung sieht: „Hilfe-Seite“ (Ihre Kunden) oder „Nur Team“ (erscheint dann in den Schulungen, mit Schulungsnachweis).",
+    d: "Klicken Sie oben im Editor auf „Veröffentlichen“ – oder legen Sie direkt auf der Karte unter „Anleitungen“ den Schalter um. Im Editor wählen Sie auch, wer die Anleitung sieht: „Hilfe-Seite (für alle)“, „Team“ (erscheint in den Schulungen, mit Schulungsnachweis) oder beides.",
   },
   {
     icon: Link2,

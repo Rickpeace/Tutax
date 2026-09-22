@@ -53,7 +53,7 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
   auth: { persistSession: false },
 });
 
-const PORT = 3031;
+const PORT = Number(process.env.TEST_PORT) || 3031;
 const BASE = `http://localhost:${PORT}`;
 const PW = "Test12345!";
 const stamp = String(process.hrtime.bigint()).slice(-8);
@@ -393,7 +393,7 @@ try {
   await page.getByRole("menu").waitFor({ state: "hidden", timeout: 5_000 }).catch(async () => {
     await page.screenshot({ path: path.join(SHOT_DIR, "debug-menu.png") });
   });
-  await controls.getByRole("switch").first().click();
+  await controls.getByTestId("publish-button").click(); // Welle 54: Knopf statt Schalter
   const pub = await waitFor(async () => {
     const { data } = await admin.from("tutorials").select("status, slug").eq("id", tutorialId).single();
     return data?.status === "published" && data.slug ? data : null;

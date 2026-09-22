@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * EIN Schalter-Stil für die ganze App (Welle 50d): Regler (Teal an, Beige aus) + Beschriftung.
- * Genutzt von den Anleitungs-Karten/-Zeilen, dem Editor-Kopf („Veröffentlicht/Entwurf“,
- * „Mit Schulungsnachweis“), den Standard-Anleitungen („Auf der Hilfe-Seite“) und der
+ * Genutzt von den Anleitungs-Karten/-Zeilen, dem Schritt-Panel (der Editor-Kopf hat seit Welle 54
+ * einen Veröffentlichen-Knopf + Zielgruppen-Chips), den Standard-Anleitungen („Auf der Hilfe-Seite“) und der
  * Wissensdatenbank. Reine Darstellung — die Aktion kommt über `onToggle`.
  */
 export function StatusSwitch({

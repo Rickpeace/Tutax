@@ -37,7 +37,7 @@ const secret = process.env.SUPABASE_SECRET_KEY;
 const admin = createClient(url, secret, { auth: { persistSession: false } });
 const BUCKET = "tutorial-images";
 // Welle 28: 3013/3016/3017 sind anderweitig belegt -> ab 3019.
-const PORT = 3019;
+const PORT = Number(process.env.TEST_PORT) || 3019;
 const BASE = `http://localhost:${PORT}`;
 
 let failed = false;
