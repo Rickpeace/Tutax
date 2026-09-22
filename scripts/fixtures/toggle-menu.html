@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Schalter-Menue (Fixture)</title>
+<!--
+  Fixture fuer scripts/test-guide-toggle-capture.mjs. Stellt Menue-Muster nach, an denen die
+  Aufnahme (extension/content.js) Klicks verlieren konnte. V1-V3 sind 1:1 dem echten DOM des
+  TradingView-Hauptmenues nachgebaut (Stand 22.09.2026, oeffentliche Chart-Seite):
+    <div role="treegrid" tabindex="-1">                         (Menue-Container)
+      <div role="row" aria-checked="false" aria-label="Dark theme" tabindex="-1"
+           data-role="menuitem"> … <span role="gridcell">Dark theme</span>
+           … <span class="switchView"><span class="track"/><span class="thumb"/></span>
+    cursor: default ueberall, kein button/a/role=menuitem, tabindex=-1 (Roving-Focus).
+  Der Chrome-Stub (window.chrome, window.__msgs) wird vom Test VOR content.js eingespielt.
+-->
+<style>
+  body { margin: 0; font: 14px sans-serif; cursor: default; }
+  .menu { position: absolute; left: 20px; top: 20px; width: 260px; padding: 8px 0; border: 1px solid #ccc; background: #fff; }
+  .menu * { cursor: default; }
+  .row { display: flex; align-items: center; height: 32px; padding: 0 12px; }
+  .row .title { flex: 1; }
+  .sw { display: inline-block; width: 34px; height: 18px; border-radius: 9px; background: #bbb; position: relative; }
+  .sw .thumb { position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 7px; background: #fff; }
+  [aria-checked="true"] .sw { background: #2962ff; }
+  [aria-checked="true"] .sw .thumb { left: 18px; }
+  .sep { height: 1px; background: #ddd; margin: 4px 0; }
+  .sub { position: absolute; left: 282px; top: 170px; width: 160px; border: 1px solid #ccc; background: #fff; }
+  [hidden] { display: none !important; }
+  .panel { position: absolute; left: 480px; top: 20px; width: 300px; }
+  .dlg { position: absolute; left: 480px; top: 360px; width: 300px; height: 100px; border: 1px solid #ccc; padding: 8px; }
+</style>
+</head>
+<body>
+  <!-- V1-V3: TradingView-Muster -->
+  <div id="tv" class="menu" role="treegrid" tabindex="-1" data-qa-id="popup-menu-container">
+    <div class="row" id="help" role="row" aria-label="Help Center" aria-level="1" tabindex="-1" data-role="menuitem">
+      <span class="title"><span role="gridcell" aria-colspan="3">Help Center</span></span>
+    </div>
+    <div class="sep" id="sep" role="separator"></div>
+    <div class="row" id="dark" role="row" aria-checked="false" aria-label="Dark theme" tabindex="-1" data-role="menuitem">
+      <span class="title"><span role="gridcell" aria-colspan="2" id="darkText">Dark theme</span></span>
+      <span role="gridcell"><span class="sw"><span class="track"></span><span class="thumb" id="darkThumb"></span></span></span>
+    </div>
+    <div class="row" id="draw" role="row" aria-checked="true" aria-label="Drawings panel" aria-level="1" tabindex="-1" data-role="menuitem">
+      <span class="title"><span role="gridcell" aria-colspan="2">Drawings panel</span></span>
+      <span role="gridcell"><span class="sw"><span class="track"></span><span class="thumb" id="drawThumb"></span></span></span>
+    </div>
+    <div class="row" id="lang" role="row" aria-level="1" tabindex="-1" data-role="menuitem">
+      <span class="title" id="langText">Language</span>
+      <span><span>English</span> ›</span>
+    </div>
+  </div>
+  <div id="langSub" class="sub" role="treegrid" tabindex="-1" hidden>
+    <div class="row" id="de" role="row" aria-selected="false" aria-label="Deutsch" tabindex="-1" data-role="menuitem">
+      <span class="title"><span role="gridcell" aria-colspan="3" id="deText">Deutsch</span></span>
+    </div>
+    <div class="row" id="en" role="row" aria-selected="true" aria-label="English" tabindex="-1" data-role="menuitem">
+      <span class="title"><span role="gridcell" aria-colspan="3">English</span></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <!-- V4: role=menuitemcheckbox, Umschalten auf pointerdown mit preventDefault, React-artiges
+         Re-Render (Element wird ERSETZT) vor dem click -->
+    <div role="menu" id="v4menu">
+      <div role="menuitemcheckbox" aria-checked="false" id="v4" class="row">Gitternetz</div>
+    </div>
+    <!-- V5: Zeile mit innerem <input type=checkbox role=switch> + <label for> -->
+    <div class="row" id="v5row">
+      <label for="v5" id="v5label">Benachrichtigungen</label>
+      <input type="checkbox" role="switch" id="v5">
+    </div>
+    <!-- V6: Container stoppt pointerdown/mousedown/click (Bubble), Toggle per aria-pressed -->
+    <div id="v6wrap">
+      <div id="v6" class="row" aria-pressed="false">Magnet-Modus</div>
+    </div>
+    <!-- Regression: normaler Knopf -->
+    <button id="plain">Speichern</button>
+  </div>
+
+  <!-- Negativ: Dialog-Container mit tabindex=-1 (Klick auf reinen Text = kein Schritt) -->
+  <div class="dlg" id="dlg" role="dialog" tabindex="-1"><p id="dlgText">Nur ein erklaerender Absatz.</p></div>
+
+<script>
+  // Seiten-Logik (wie ein SPA-Rahmenwerk: Handler am Element, nicht im onclick-Attribut)
+  function toggle(el) { el.setAttribute("aria-checked", el.getAttribute("aria-checked") === "true" ? "false" : "true"); }
+  document.getElementById("dark").addEventListener("click", function () { toggle(this); });
+  document.getElementById("draw").addEventListener("click", function () { toggle(this); });
+  document.getElementById("help").addEventListener("click", function () { window.__helpClicked = true; });
+  // Untermenue per Hover (TradingView: Language › oeffnet beim Drueberfahren)
+  document.getElementById("lang").addEventListener("mouseenter", function () { document.getElementById("langSub").hidden = false; });
+  document.getElementById("de").addEventListener("click", function () { window.__lang = "de"; });
+  // V4: Umschalten + Re-Render auf pointerdown
+  document.getElementById("v4menu").addEventListener("pointerdown", function (e) {
+    const old = e.target.closest('[role="menuitemcheckbox"]');
+    if (!old) return;
+    e.preventDefault();
+    const neu = old.cloneNode(true);
+    neu.setAttribute("aria-checked", old.getAttribute("aria-checked") === "true" ? "false" : "true");
+    old.replaceWith(neu);
+  });
+  // V6: Propagation im Menue-Container unterdruecken
+  const v6wrap = document.getElementById("v6wrap");
+  for (const t of ["pointerdown", "mousedown", "click"]) v6wrap.addEventListener(t, function (e) { e.stopPropagation(); });
+  document.getElementById("v6").addEventListener("click", function () {
+    this.setAttribute("aria-pressed", this.getAttribute("aria-pressed") === "true" ? "false" : "true");
+  });
+</script>
+</body>
+</html>
