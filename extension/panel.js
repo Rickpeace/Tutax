@@ -2198,7 +2198,12 @@ function renderGuideSteps() {
     if (s.action === "type" && s.typedValue) {
       const typed = document.createElement("small");
       typed.className = "typed";
-      typed.textContent = "Eingabe: „" + s.typedValue + "“";
+      // Wert in eigenem Span (kürzbar), „weglassen“ daneben schrumpft nie — sonst schnitt die
+      // schmale Seitenleiste den Knopf bei längeren Werten ab.
+      const val = document.createElement("span");
+      val.className = "typed-val";
+      val.textContent = "Eingabe: „" + s.typedValue + "“";
+      typed.appendChild(val);
       typed.title = "Dieser Wert erscheint im Schritt-Titel. Sensible Felder (z. B. Passwörter) werden nie übernommen.";
       const drop = document.createElement("button");
       drop.type = "button";

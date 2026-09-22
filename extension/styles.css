@@ -826,10 +826,19 @@ svg.i.s {
 
 /* Welle 54: eingetippter Wert eines Eingabe-Schritts (vor dem Hochladen sichtbar) */
 .guide-item .lbl small.typed {
+  display: flex;
+  align-items: baseline;
   color: var(--ink-2);
   font-weight: 700;
 }
+.guide-item .lbl small.typed .typed-val {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .guide-item .lbl .typed-drop {
+  flex: none;
   border: 0;
   background: none;
   padding: 0 0 0 6px;
