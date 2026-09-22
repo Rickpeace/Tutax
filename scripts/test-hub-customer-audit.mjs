@@ -657,6 +657,9 @@ try {
     else if (lb && lb.imgAlt) good(`Großansicht übernimmt den Schritt-Titel als Alt-Text ('${lb.imgAlt}")`);
     else if (lb) note("ärgerlich", "Barrierefreiheit", "Bild in der Großansicht hat gar kein alt-Attribut");
 
+    // Ausgangszustand der Großansicht festhalten (auf schmalen Fenstern bereits vergrößert)
+    await shot(page, `lightbox-${vp.name}`);
+
     // Kein horizontales Scrollen der SEITE, obwohl die Großansicht das Fenster füllt
     const lbOverflow = await overflow(page);
     if (lbOverflow.sw <= lbOverflow.iw + 1) good(`Großansicht ${vp.name}: Seite scrollt nicht horizontal`);
@@ -690,7 +693,7 @@ try {
     if (trapped) good("Großansicht hält den Tastatur-Fokus im Dialog");
     else note("ärgerlich", "Barrierefreiheit", "Tab verlässt die Großansicht (keine Fokusfalle)");
 
-    await shot(page, `lightbox-${vp.name}`);
+    await shot(page, `lightbox-ganzes-bild-${vp.name}`);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
     if (await page.locator('[role="dialog"]').count()) note("ärgerlich", "Wizard", "Escape schließt die Großansicht nicht");
