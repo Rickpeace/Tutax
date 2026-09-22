@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { StatusSwitch } from "@/components/app/status-switch";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
-import { useDriftCheck } from "@/components/builder/drift-check-button";
+import { useDriftCheck } from "@/components/builder/drift-check";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -502,7 +502,7 @@ export function TutorialHeader({
                 )}
                 <MenuText
                   label={drift.pending ? "Prüft …" : "Aktualität prüfen"}
-                  hint={noSteps ? "Erst Schritte anlegen" : "Prüft per KI, ob die Anleitung noch zur Website passt"}
+                  hint={noSteps ? "Erst Schritte anlegen" : "Prüft per KI, ob Texte und Screenshots zusammenpassen"}
                 />
               </DropdownMenuItem>
               {shareable && (
@@ -530,6 +530,8 @@ export function TutorialHeader({
           </DropdownMenu>
         </div>
       </div>
+
+      {drift.dialog}
 
       {/* Auto-Verpixelung (Welle 28): Bestätigungs-Gate vor dem Veröffentlichen, wenn noch
           ungeprüfte automatische Verpixelungen offen sind. Serverseitig NICHT blockierend. */}

@@ -50,7 +50,7 @@ export default async function AlertsPage() {
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8">
       <PageHeader
         title="Aktualität prüfen"
-        description="Stellen in Ihren Anleitungen, die vermutlich nicht mehr zur Website passen – gefunden bei der automatischen Prüfung."
+        description="Stellen in Ihren Anleitungen, an denen Text und Screenshot vermutlich nicht zusammenpassen – gefunden bei der automatischen Prüfung."
         meta={alerts.length ? `${alerts.length} offen` : undefined}
       />
 

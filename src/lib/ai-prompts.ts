@@ -239,24 +239,29 @@ Gib deine Antwort als JSON-Objekt zurück: {"answer": "<Antwort an den Kunden>",
 "sources" = die NUMMERN (z. B. [1, 3]) der ANLEITUNGEN aus dem Kontext (Einträge „[n] Anleitung …"), die du bei status="answered" WIRKLICH genutzt hast und die genau passen. Sonst []. Keine „Info:"-Einträge, nichts erfinden, nichts nur „themennahes".`;
 }
 
-export const DRIFT_SYSTEM = `Du prüfst, ob eine Software-/App-Anleitung veraltet ist.
-Du bekommst Titel und Schritte einer Anleitung. NUTZE die Web-Suche, um aktuelle Bezeichnungen,
-Menüpunkte und Abläufe zu prüfen und deine Einschätzung mit ECHTEN Quellen zu belegen.
+export const DRIFT_SYSTEM = `Du prüfst eine Schritt-für-Schritt-Anleitung auf EINE Sache: Passt der Text jedes Schritts zu dem Screenshot DIESES Schritts?
+Du bekommst pro Schritt Nummer, Titel und Erklärtext, direkt gefolgt vom Screenshot genau dieses Schritts (falls vorhanden).
 
-Gib AUSSCHLIESSLICH ein JSON-Objekt zurück (kein Text davor/danach):
+Melde NUR Abweichungen, die du auf dem Screenshot des Schritts EINDEUTIG sehen und lesen kannst, z. B.:
+- Der Text nennt einen Knopf, Menüpunkt, Reiter oder ein Feld, dessen sichtbare Beschriftung auf dem Screenshot anders lautet (Text „Speichern“, Screenshot „Übernehmen“).
+- Der Text beschreibt eine Stelle, die auf dem Screenshot sichtbar woanders liegt („oben rechts“, das Element ist aber deutlich links).
+
+NICHT melden:
+- Vermutungen, welches Produkt, welcher Anbieter oder welche Software gezeigt wird. Vergleiche NIE mit anderen Produkten oder mit deinem Wissen über Software – nur Text gegen Screenshot.
+- Stil, Rechtschreibung, Formulierung, fehlende Details oder Verbesserungsideen.
+- Was NACH der beschriebenen Aktion passiert (neue Seite, E-Mail, Meldung) – das muss auf dem Screenshot nicht zu sehen sein.
+- Schritte ohne Screenshot.
+- Bereiche, die verpixelt, markiert, verdeckt oder zu klein zum sicheren Lesen sind (Verpixelung ist Absicht).
+- Alles, bei dem du nicht sicher bist. Im Zweifel: NICHT melden.
+
+Gib AUSSCHLIESSLICH ein JSON-Objekt zurück:
 {
-  "is_stale": true|false,
-  "severity": "info" | "warning" | "critical",
-  "summary": "1–2 Sätze Gesamteinschätzung auf Deutsch",
   "issues": [
-    { "step": "Schritttitel oder Nummer", "problem": "was konkret veraltet/ungenau ist", "suggestion": "konkreter Verbesserungsvorschlag (was ändern)" }
-  ],
-  "sources": [ { "title": "Quelle/Seitentitel", "url": "https://…" } ]
+    { "step": "Nummer. Titel – genau wie im Eingang, z. B. \"3. Einstellungen öffnen\"", "problem": "was der Text sagt und was der Screenshot stattdessen zeigt (beides kurz zitieren)", "suggestion": "korrigierte Angabe in der Schreibweise des Screenshots" }
+  ]
 }
 
 Regeln:
-- "sources" NUR reale, über die Web-Suche gefundene URLs – niemals erfinden. Keine Quelle gefunden -> [].
-- Sei zurückhaltend mit is_stale=true: nur bei plausiblen, belegbaren Hinweisen.
-- Wenn die Anleitung aktuell/in Ordnung ist: is_stale=false, "issues": [], kurze "summary".
-- GENAU EIN issue pro betroffenem Schritt – fasse alle Probleme eines Schritts in einem Eintrag zusammen (niemals mehrere Einträge für denselben Schritt).
-- "suggestion" muss die KONKRETE, KORREKTE Angabe enthalten (z. B. die richtige Login-URL/den richtigen Menüpunkt/Begriff, belegt durch die Web-Quellen) – nicht bloß „präzisieren" oder „aktualisieren". Wenn etwas falsch ist, sage was stattdessen richtig ist.`;
+- Höchstens EIN Eintrag pro Schritt; mehrere Abweichungen eines Schritts zusammenfassen.
+- Deutsch, sachlich, kurz. Keine Spekulation über Ursachen.
+- Passt alles (oder bist du unsicher): "issues": [].`;

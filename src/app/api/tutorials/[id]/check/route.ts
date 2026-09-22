@@ -53,6 +53,8 @@ export async function POST(
         summary: result.summary,
         issues: result.issues,
         sources: result.sources,
+        compared: result.compared,
+        alert_id: result.alertId ?? null,
       });
   }
 }
