@@ -181,10 +181,26 @@ try {
   ok(await controls.getByText("login.datev.de").isVisible(), "Website-Pill in der Steuerzeile");
   // Welle 53: seltene Aktionen im „…“-Menü; die Steuerzeile bricht bei 1440 px nicht um.
   await controls.getByTestId("editor-more").click();
-  ok(await page.getByRole("menuitem", { name: /Aktualität prüfen/ }).isVisible(), "„Aktualität prüfen“ (im „…“-Menü) statt „Jetzt prüfen“");
+  const driftItem = page.getByRole("menuitem", { name: /Aktualität prüfen/ });
+  ok(await driftItem.waitFor({ timeout: 5_000 }).then(() => true, () => false), "„Aktualität prüfen“ (im „…“-Menü) statt „Jetzt prüfen“");
   await page.keyboard.press("Escape");
-  const rowTops = await controls.evaluate((el) => new Set([...el.children].filter((c) => c.getBoundingClientRect().width > 0).map((c) => Math.round(c.getBoundingClientRect().top))).size);
-  ok(rowTops === 1, `Steuerzeile einzeilig bei 1440 px (${rowTops} Zeile(n))`);
+  await driftItem.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+  // Zeilen = verschiedene Mittellinien der sichtbaren Elemente (±12 px Toleranz).
+  const rowTops = await controls.evaluate((el) => {
+    const mids = [...el.children]
+      .map((c) => c.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map((r) => r.top + r.height / 2)
+      .sort((a, b) => a - b);
+    let rows = 0;
+    let last = -1e9;
+    for (const m of mids) {
+      if (m - last > 12) rows++;
+      last = m;
+    }
+    return rows;
+  });
+  ok(rowTops === 1, `Steuerzeile einzeilig bei 1400 px (${rowTops} Zeile(n))`);
   // Base UI: <Button render={<Link/>}> trägt role="button" — daher über den Text + href prüfen.
   const preview = controls.locator(`a[href="/app/preview/${tutorialId}"]`);
   ok((await preview.count()) === 1 && (await preview.innerText()).includes("Vorschau"), "„Vorschau“ in der Steuerzeile");

@@ -380,8 +380,12 @@ try {
   // Welle 53: „Link zur Hilfe-Seite kopieren“ + „Auf der Hilfe-Seite öffnen“ im „…“-Menü des Kopfs.
   const more = controls.getByTestId("editor-more");
   await more.click();
+  await page.getByRole("menu").waitFor({ timeout: 5_000 });
   ok((await page.getByTestId("copy-link").count()) === 0, "Entwurf: kein „Link kopieren“");
   await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden", timeout: 5_000 }).catch(async () => {
+    await page.screenshot({ path: path.join(SHOT_DIR, "debug-menu.png") });
+  });
   await controls.getByRole("switch").first().click();
   const pub = await waitFor(async () => {
     const { data } = await admin.from("tutorials").select("status, slug").eq("id", tutorialId).single();
