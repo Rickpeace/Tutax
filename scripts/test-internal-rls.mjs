@@ -35,6 +35,8 @@ try {
     .eq("user_id", userId);
   accountId = mem?.[0]?.account_id;
   ok(!!accountId, "Konto via Trigger angelegt");
+  // Interne Anleitungen sind Business (DB-Sperre seit 0038) -> Testkonto wie Business-Kunde.
+  await admin.from("accounts").update({ plan: "business" }).eq("id", accountId);
 
   // --- Internes, veröffentlichtes Tutorial + Schritt (als Owner) ---
   const member = createClient(url, pub, { auth: { persistSession: false } });
