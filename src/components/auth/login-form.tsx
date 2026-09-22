@@ -18,6 +18,9 @@ const EMPTY: AuthState = {};
 const NOTICES: Record<string, string> = {
   invite:
     "Diese Einladung ist nicht mehr gültig – sie wurde schon angenommen oder zurückgezogen. Bitten Sie bei Bedarf um eine neue Einladung.",
+  verlassen: "Sie haben die Organisation verlassen. Wenn Sie wieder dazugehören möchten, bitten Sie den Inhaber um eine neue Einladung.",
+  "invite-abgelaufen":
+    "Diese Einladung ist abgelaufen (gültig 14 Tage). Bitten Sie den Inhaber, sie neu zu senden.",
   "kein-team":
     "Ihr Zugang gehört zu keiner Organisation mehr – vermutlich wurden Sie aus dem Team entfernt. Bitten Sie den Inhaber um eine neue Einladung.",
 };

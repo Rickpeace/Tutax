@@ -30,10 +30,12 @@ export default async function LernenPage() {
   const list = tuts ?? [];
   const ids = list.map((t) => t.id);
 
-  // Nachweise (kontoweit lesbar per RLS) + Mitglieder-Gesamtzahl parallel.
+  // Nachweise + Mitglieder-Gesamtzahl parallel. Server-Client: Mitarbeiter dürfen per RLS
+  // nur den EIGENEN Nachweis lesen (0039) — die Team-Zählung („3 von 5") braucht alle.
+  // Sicher gescopt: ids stammen ausschließlich aus Tutorials des aktiven Kontos.
   const [{ data: completions }, { count: memberCount }] = await Promise.all([
     ids.length
-      ? supabase
+      ? createAdminClient()
           .from("tutorial_completions")
           .select("tutorial_id, user_id, completed_at")
           .in("tutorial_id", ids)

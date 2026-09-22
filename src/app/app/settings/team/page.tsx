@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { TeamManager } from "@/components/app/team-manager";
 import { SettingsHeader } from "@/components/app/settings-ui";
 import { teamLimit } from "@/lib/plan";
+import { inviteExpiresAt, isInviteExpired } from "@/lib/invitations";
 
 export default async function TeamPage() {
   const { account } = await requireAccount();
@@ -36,7 +37,13 @@ export default async function TeamPage() {
   }));
   const myRole = members.find((m) => m.isYou)?.role ?? "editor";
   const limit = teamLimit(account);
-  const pendingCount = (invRows ?? []).length;
+  // Abgelaufene Einladungen (14 Tage) belegen keinen Platz; sie bleiben sichtbar zum Neu senden.
+  const invitations = (invRows ?? []).map((i) => ({
+    ...i,
+    expired: isInviteExpired(i.created_at),
+    expiresAt: inviteExpiresAt(i.created_at).toISOString(),
+  }));
+  const pendingCount = invitations.filter((i) => !i.expired).length;
 
   return (
     <div className="grid gap-[18px]">
@@ -49,7 +56,7 @@ export default async function TeamPage() {
           könnte sonst aus dem Client-Payload einen offenen Owner-Invite-Token abgreifen. */}
       <TeamManager
         members={members}
-        invitations={myRole === "owner" ? (invRows ?? []) : []}
+        invitations={myRole === "owner" ? invitations : []}
         isOwner={myRole === "owner"}
         // Infinity ist nicht serialisierbar -> null = unbegrenzt.
         limit={Number.isFinite(limit) ? limit : null}

@@ -8,6 +8,7 @@ import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { appBaseUrl } from "@/lib/url";
 import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
 import { teamLimit } from "@/lib/plan";
+import { INVITE_VALID_DAYS, inviteCutoffIso, isInviteExpired } from "@/lib/invitations";
 
 const appUrl = appBaseUrl;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
@@ -33,6 +34,7 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
     <h2 style="margin:0 0 8px">Einladung zu ${org}</h2>
     <p style="color:#5c5049;line-height:1.55">Sie wurden als <b>${roleLabel}</b> zum Team von <b>${org}</b> auf Steply eingeladen. Haben Sie schon ein Steply-Konto, melden Sie sich einfach mit Ihrem bestehenden Passwort an — Sie wechseln danach automatisch ins neue Team. Sonst legen Sie beim Beitreten ein Passwort fest:</p>
     <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
+    <p style="color:#8a7d75;font-size:12px">Der Link ist ${INVITE_VALID_DAYS} Tage gültig.</p>
     <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Knopf nicht funktioniert, öffnen Sie diesen Link:<br>${link}</p>
   </div>`;
   try {
@@ -81,6 +83,8 @@ async function teamHasRoom(
   return list.length < teamLimit(acc ?? {});
 }
 
+const INVITE_EXPIRED = `Diese Einladung ist abgelaufen (gültig ${INVITE_VALID_DAYS} Tage). Bitten Sie den Inhaber, sie neu zu senden.`;
+
 const TEAM_FULL =
   "Das Team ist voll – der Tarif der Organisation erlaubt keine weiteren Personen. Bitte wenden Sie sich an den Inhaber.";
 
@@ -119,6 +123,7 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
         .select("id", { count: "exact", head: true })
         .eq("account_id", account.id)
         .eq("status", "pending")
+        .gte("created_at", inviteCutoffIso())
         .neq("email", email),
     ]);
     if ((memberCount ?? 0) + (pendingCount ?? 0) >= limit) {
@@ -183,11 +188,13 @@ export async function acceptInvite(
   const admin = createAdminClient();
   const { data: inv } = await admin
     .from("invitations")
-    .select("id, account_id, role, status, email")
+    .select("id, account_id, role, status, email, created_at")
     .eq("token", token)
     .maybeSingle();
   if (!inv || inv.status !== "pending" || !inv.email)
     return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
+  if (isInviteExpired(inv.created_at))
+    return { ok: false, message: INVITE_EXPIRED };
 
   const supabase = await createClient();
   const existing = await findAuthUserByEmail(admin, inv.email);
@@ -248,11 +255,13 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
   const admin = createAdminClient();
   const { data: inv } = await admin
     .from("invitations")
-    .select("id, account_id, role, status, email")
+    .select("id, account_id, role, status, email, created_at")
     .eq("token", token)
     .maybeSingle();
   if (!inv || inv.status !== "pending" || !inv.email)
     return { ok: false, message: "Diese Einladung ist ungültig, bereits eingelöst oder zurückgezogen." };
+  if (isInviteExpired(inv.created_at))
+    return { ok: false, message: INVITE_EXPIRED };
   if ((user.email ?? "").toLowerCase() !== inv.email.toLowerCase())
     return { ok: false, message: "Diese Einladung ist für eine andere Adresse." };
   if (!(await teamHasRoom(admin, inv.account_id, user.id))) return { ok: false, message: TEAM_FULL };
@@ -334,4 +343,60 @@ export async function changeMemberRole(userId: string, nextRole: string): Promis
   if (error) throw new Error(error.message);
   if (role === "member") await dropRecorderTokens(admin, account.id, userId);
   revalidatePath("/app/settings/team");
+}
+
+/**
+ * Einladung neu senden (nur Inhaber): gleicher Empfänger, gleiche Rolle, NEUER Link mit
+ * frischer Gültigkeit — der alte Link wird ungültig (inviteMember ersetzt offene Einladungen
+ * an dieselbe Adresse). Geht auch für abgelaufene Einladungen.
+ */
+export async function resendInvitation(id: string): Promise<InviteResult> {
+  const { account } = await requireOwner();
+  const admin = createAdminClient();
+  const { data: inv } = await admin
+    .from("invitations")
+    .select("email, role, status")
+    .eq("id", id)
+    .eq("account_id", account.id)
+    .maybeSingle();
+  if (!inv || inv.status !== "pending") return { ok: false, message: "Einladung nicht gefunden." };
+  const fd = new FormData();
+  fd.set("email", inv.email);
+  fd.set("role", inv.role);
+  return inviteMember(fd);
+}
+
+/**
+ * Organisation selbst verlassen (jede Rolle). Der letzte Inhaber kann nicht gehen (das
+ * Konto verwaiste sonst) — er muss erst jemand anderen zum Inhaber machen. Danach wird die
+ * nächste eigene Organisation aktiv; gibt es keine mehr, meldet die App beim nächsten
+ * Aufruf sauber ab (requireAccount -> /login?error=kein-team).
+ */
+export async function leaveTeam(): Promise<{ ok: true; hasOtherOrg: boolean } | { ok: false; error: string }> {
+  const { account, userId, role, memberships } = await requireAccount({ allowMember: true });
+  const admin = createAdminClient();
+  if (role === "owner") {
+    const { count } = await admin
+      .from("account_members")
+      .select("user_id", { count: "exact", head: true })
+      .eq("account_id", account.id)
+      .eq("role", "owner");
+    if ((count ?? 0) <= 1) {
+      return {
+        ok: false,
+        error: "Sie sind der einzige Inhaber. Machen Sie zuerst eine andere Person zum Inhaber (Einstellungen → Team).",
+      };
+    }
+  }
+  const { error } = await admin
+    .from("account_members")
+    .delete()
+    .eq("account_id", account.id)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  await dropRecorderTokens(admin, account.id, userId);
+  const next = memberships.find((m) => m.id !== account.id);
+  const supabase = await createClient();
+  await supabase.auth.updateUser({ data: { active_account_id: next?.id ?? null } });
+  return { ok: true, hasOtherOrg: !!next };
 }
