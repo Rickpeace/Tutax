@@ -8,6 +8,7 @@ import {
   setTutorialCategory,
 } from "@/app/app/tutorials/[id]/actions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CATEGORY_NAME_MAX } from "@/lib/category-name";
 
 type Cat = { id: string; name: string };
 
@@ -92,6 +93,7 @@ export function CategoryPicker({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !exact && query.trim()) create();
           }}
+          maxLength={CATEGORY_NAME_MAX}
           placeholder="Suchen oder neu anlegen …"
           autoComplete="off"
           className="w-full border-b border-line-2 px-3 py-2 text-sm outline-none"

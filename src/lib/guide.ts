@@ -10,6 +10,7 @@ import "server-only";
 import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
 import { displayKeyDe, dropLabelOf, hoverLabelOf } from "@/lib/interaction-text";
 import { DEFAULT_HIGHLIGHT_COLOR } from "@/lib/highlight-color";
+import { CATEGORY_NAME_MAX } from "@/lib/category-name";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -130,7 +131,7 @@ export function parseGuideTarget(raw: unknown): GuideTarget | null {
 // geht NIE verloren). Wirft NIE. Nur die FORM wird geprüft; ob die id dem Konto gehört
 // bzw. der Name schon existiert, klärt die Route gegen die DB (Admin-Client).
 export type GuideCategory = { id: string } | { name: string };
-export const CATEGORY_NAME_MAX = 60;
+export { CATEGORY_NAME_MAX }; // eine Quelle: lib/category-name.ts (auch Umbenennen)
 
 export function parseGuideCategory(raw: unknown): GuideCategory | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;

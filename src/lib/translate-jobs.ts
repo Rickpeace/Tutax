@@ -146,6 +146,28 @@ export async function translateTutorial(tutorialId: string): Promise<TranslateRe
   return { languages: done };
 }
 
+/**
+ * Nur die Kategorienamen eines Kontos in dessen aktive Zusatzsprachen übersetzen (z. B.
+ * nach dem Umbenennen einer Kategorie). Idempotent/billig wie oben; ohne KI oder ohne
+ * Zusatzsprachen passiert nichts. Wirft nicht (läuft in after()).
+ */
+export async function translateAccountCategories(accountId: string): Promise<void> {
+  if (!aiConfigured()) return;
+  try {
+    const admin = createAdminClient();
+    const { data: acc } = await admin
+      .from("accounts")
+      .select("languages")
+      .eq("id", accountId)
+      .maybeSingle();
+    const languages = ((acc?.languages as string[] | null) ?? []).filter(isExtraLang);
+    if (!languages.length) return;
+    await translateAccountCategoriesCore(admin, chat(), AI.models.chat, accountId, languages);
+  } catch (e) {
+    console.error("Kategorie-Übersetzung:", e instanceof Error ? e.message : e);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // DELTA: nur EIN Stück je aktivierter Sprache. Bei Erfolg für ALLE Sprachen wird
 // stale=false gesetzt. Fehler werfen NICHT (hängt an after()) -> stale bleibt stehen,

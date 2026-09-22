@@ -121,6 +121,8 @@ export function LibraryBrowser({
   const hasUncategorized = tutorials.some((t) => !t.categoryId);
   // Für den Lösch-Dialog: ALLE Anleitungen der Kategorie (unabhängig von Bereich/Status).
   const totalInCat = (id: string) => tutorials.filter((t) => t.categoryId === id).length;
+  // Für den Umbenennen-Dialog: Namen der übrigen eigenen Kategorien (Duplikat-Hinweis).
+  const otherCatNames = (id: string) => categories.filter((c) => c.id !== id).map((c) => c.name);
   const activeOwnCat =
     canManageCategories && categoryId !== "alle" && categoryId !== "__none"
       ? catById.get(categoryId)
@@ -205,7 +207,7 @@ export function LibraryBrowser({
                   color={c.id === "__none" ? CATEGORY_NEUTRAL : categoryColor(c.name)}
                 />
               );
-              // Eigene Kategorie: „…“-Menü (Kategorie löschen) — erscheint bei Hover/Fokus.
+              // Eigene Kategorie: „…“-Menü (Umbenennen, Kategorie löschen) — erscheint bei Hover/Fokus.
               if (c.id === "__none" || !canManageCategories) return row;
               return (
                 <div key={c.id} className="group/cat relative flex items-center" data-testid="category-row">
@@ -214,6 +216,7 @@ export function LibraryBrowser({
                     categoryId={c.id}
                     categoryName={c.name}
                     tutorialCount={totalInCat(c.id)}
+                    otherNames={otherCatNames(c.id)}
                     onDeleted={() => {
                       if (categoryId === c.id) setCategoryId("alle");
                     }}
@@ -266,11 +269,12 @@ export function LibraryBrowser({
               activeOwnCat ? (
                 <span className="inline-flex max-w-full items-center gap-1">
                   <span className="min-w-0 break-words">{activeName}</span>
-                  {/* Mobil gibt es keine Seitenleiste: „…“ (Kategorie löschen) neben dem Titel. */}
+                  {/* Mobil gibt es keine Seitenleiste: „…“ (Umbenennen, Kategorie löschen) neben dem Titel. */}
                   <CategoryMenu
                     categoryId={activeOwnCat.id}
                     categoryName={activeOwnCat.name}
                     tutorialCount={totalInCat(activeOwnCat.id)}
+                    otherNames={otherCatNames(activeOwnCat.id)}
                     onDeleted={() => setCategoryId("alle")}
                     className="lg:hidden"
                   />

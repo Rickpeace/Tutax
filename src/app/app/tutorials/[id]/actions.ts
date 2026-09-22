@@ -26,6 +26,7 @@ import { reindexTutorialIfLive } from "@/lib/kb";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
+import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/lib/category-name";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
 import { canEdit } from "@/lib/roles";
@@ -355,8 +356,10 @@ export async function setRootStep(tutorialId: string, stepId: string) {
 
 /** Kategorie anlegen (§7.3, „on the fly" aus der Combobox). */
 export async function createCategory(name: string): Promise<{ id: string; name: string }> {
-  const clean = name.trim();
+  const clean = cleanCategoryName(name);
   if (!clean) throw new Error("Name fehlt");
+  // Gleiche Höchstlänge wie Umbenennen und Sofort-Anleitung (lib/category-name.ts).
+  if (clean.length > CATEGORY_NAME_MAX) throw new Error(CATEGORY_NAME_TOO_LONG);
   const { account } = await requireAccount();
   const supabase = await createClient();
   const { data: existing } = await supabase

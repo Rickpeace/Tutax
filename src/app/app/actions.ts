@@ -12,7 +12,19 @@ import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "
 import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
-import { translateTutorial, translateTitleDelta } from "@/lib/translate-jobs";
+import {
+  translateTutorial,
+  translateTitleDelta,
+  translateAccountCategories,
+} from "@/lib/translate-jobs";
+import {
+  CATEGORY_NAME_MAX,
+  CATEGORY_NAME_EMPTY,
+  CATEGORY_NAME_TOO_LONG,
+  categoryNameKey,
+  categoryNameTaken,
+  cleanCategoryName,
+} from "@/lib/category-name";
 import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
 import { isExtraLang } from "@/lib/i18n-hub";
 import { FREE_TUTORIAL_LIMIT, isPro, isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
@@ -121,6 +133,79 @@ export async function deleteCategory(categoryId: string): Promise<{ moved: numbe
   }
   revalidatePath("/app");
   return { moved: affectedIds.length };
+}
+
+/**
+ * EIGENE Kategorie umbenennen. Sicherheit wie deleteCategory: requireAccount() (nur Rollen
+ * mit Bearbeiten-Recht) + Kategorie muss dem aktiven Konto gehören (globale/Standard-
+ * Kategorien mit account_id = null nie). Regeln: nicht leer, höchstens CATEGORY_NAME_MAX
+ * Zeichen, kein zweiter gleicher Name im Konto (Groß/Klein egal).
+ * Folgen: Die Hilfe-Seite hat keine Kategorie-URLs (Gruppen-Überschriften hängen nur am
+ * Namen) — es brechen also keine Links; die Kategorie-Farbe leitet sich aus dem Namen ab
+ * und kann wechseln. Übersetzte Namen (name_i18n) werden verworfen (Hilfe-Seite zeigt
+ * sofort den neuen deutschen Namen) und im Hintergrund neu übersetzt. Der Name steckt in
+ * den KI-Ausschnitten → veröffentlichte Anleitungen der Kategorie neu indizieren.
+ */
+export async function renameCategory(
+  categoryId: string,
+  name: string,
+): Promise<{ name: string }> {
+  const { account } = await requireAccount();
+  const clean = cleanCategoryName(String(name ?? ""));
+  if (!clean) throw new Error(CATEGORY_NAME_EMPTY);
+  if (clean.length > CATEGORY_NAME_MAX) throw new Error(CATEGORY_NAME_TOO_LONG);
+  const supabase = await createClient();
+
+  // Nur eigene Kategorie (account_id gesetzt + == aktives Konto). Globale ausschließen.
+  const { data: cat, error: ce } = await supabase
+    .from("categories")
+    .select("id, account_id, name")
+    .eq("id", categoryId)
+    .maybeSingle();
+  if (ce) throw new Error(ce.message);
+  if (!cat || cat.account_id !== account.id) {
+    throw new Error("Kategorie kann nicht umbenannt werden.");
+  }
+  if (cat.name === clean) return { name: clean }; // nichts zu tun
+
+  // Duplikat im selben Konto (Groß/Klein egal, die Kategorie selbst ausgenommen).
+  const { data: siblings, error: se } = await supabase
+    .from("categories")
+    .select("id, name")
+    .eq("account_id", account.id);
+  if (se) throw new Error(se.message);
+  const key = categoryNameKey(clean);
+  const taken = (siblings ?? []).find(
+    (c) => c.id !== categoryId && categoryNameKey(String(c.name ?? "")) === key,
+  );
+  if (taken) throw new Error(categoryNameTaken(String(taken.name)));
+
+  // .select(): ein von RLS still verweigertes Update (0 Zeilen) nicht als Erfolg melden.
+  const { data: done, error } = await supabase
+    .from("categories")
+    .update({ name: clean, name_i18n: null })
+    .eq("id", categoryId)
+    .eq("account_id", account.id)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!done?.length) throw new Error("Kategorie kann nicht umbenannt werden.");
+
+  const { data: affected } = await supabase
+    .from("tutorials")
+    .select("id")
+    .eq("account_id", account.id)
+    .eq("category_id", categoryId);
+  const affectedIds = (affected ?? []).map((t) => t.id as string);
+
+  invalidateHubTag(account.slug);
+  for (const id of affectedIds) await invalidateTutorialTags(id);
+  after(async () => {
+    for (const id of affectedIds) await reindexTutorialIfLive(id);
+    await translateAccountCategories(account.id);
+    invalidateHubTag(account.slug); // neue Übersetzungen sichtbar machen
+  });
+  revalidatePath("/app");
+  return { name: clean };
 }
 
 export async function renameTutorial(id: string, title: string) {
