@@ -18,12 +18,16 @@ import {
 /** Nur echte http/https-Links zulassen (javascript:/data: etc. verwerfen). */
 function safeHttpUrl(raw: string): string | null {
   const trimmed = raw.trim();
-  if (!trimmed) return null;
+  // Leerzeichen sind nie Teil einer Adresse (Chrome würde sie im Hostnamen sonst als %20 annehmen).
+  if (!trimmed || /\s/.test(trimmed)) return null;
   // Ohne Schema -> https:// annehmen (der Kunde tippt „example.com").
   const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
     const u = new URL(withScheme);
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    // Echter Hostname: nur Buchstaben/Ziffern/Punkt/Bindestrich (IDN kommt als Punycode) und
+    // mit Punkt (beispiel.de) — „keine adresse“ oder „hallo“ sind kein Link.
+    if (!/^[a-z0-9.-]+$/i.test(u.hostname) || !u.hostname.includes(".")) return null;
     return u.href;
   } catch {
     return null;

@@ -156,7 +156,9 @@ export function CropDialog({
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-[100] bg-black/80" />
+        {/* forceRender: in der mobilen Schublade ist der Zuschnitt ein verschachtelter Dialog —
+            Base UI zeigt dessen Hintergrund sonst nicht (Seite schien hell durch). */}
+        <DialogPrimitive.Backdrop forceRender className="fixed inset-0 z-[100] bg-black/80" />
         <DialogPrimitive.Popup
           data-testid="crop-dialog"
           className="fixed inset-0 z-[100] flex flex-col p-4 outline-none"
