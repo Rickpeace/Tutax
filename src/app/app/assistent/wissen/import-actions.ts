@@ -6,7 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { aiConfigured } from "@/lib/ai";
 import { safeFetch } from "@/lib/ssrf";
-import { assertImportBudget, textToDraftArticles, type ImportResult } from "@/lib/kb-import";
+import {
+  KbImportError,
+  assertImportBudget,
+  textToDraftArticles,
+  type ImportResult,
+} from "@/lib/kb-import";
 import {
   MAX_SUBPAGES,
   allocateBudget,
@@ -164,10 +169,29 @@ function labelOf(url: string): string {
  * themes.source_url des Kontos. Ergebnis: Anzahl + Titel der angelegten Entwürfe.
  *
  * @param extraUrls „Weitere Unterseiten, eine pro Zeile“ (nur dieselbe Website, max. 10).
+ *
+ * Erwartete Fehler (Adresse ungültig, Website nicht erreichbar, zu wenig Text, KI aus, Budget)
+ * kommen als `{ error }` ZURÜCK statt zu werfen: eine geworfene Server-Action antwortet mit
+ * HTTP 500 und landete so als Serverfehler in der Überwachung, obwohl nur die Eingabe nicht
+ * passte. Echte Störungen werfen weiterhin.
  */
-export async function importFromWebsite(rawUrl?: string, extraUrls?: string): Promise<ImportResult> {
+type WebsiteImportResult = ImportResult | { error: string };
+
+export async function importFromWebsite(
+  rawUrl?: string,
+  extraUrls?: string,
+): Promise<WebsiteImportResult> {
+  try {
+    return await runWebsiteImport(rawUrl, extraUrls);
+  } catch (e) {
+    if (e instanceof KbImportError) return { error: e.message };
+    throw e;
+  }
+}
+
+async function runWebsiteImport(rawUrl?: string, extraUrls?: string): Promise<ImportResult> {
   const { account } = await requireAccount();
-  if (!aiConfigured()) throw new Error("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
+  if (!aiConfigured()) throw new KbImportError("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
   // Kostenbremse schon VOR dem Laden der Website (spart auch die Abrufe).
   await assertImportBudget(createAdminClient(), account.id);
 
@@ -183,19 +207,19 @@ export async function importFromWebsite(rawUrl?: string, extraUrls?: string): Pr
       .single();
     url = (theme?.source_url ?? "").trim();
   }
-  if (!url) throw new Error("Für dieses Konto ist keine Website hinterlegt. Bitte geben Sie eine Adresse an.");
+  if (!url) throw new KbImportError("Für dieses Konto ist keine Website hinterlegt. Bitte geben Sie eine Adresse an.");
 
   const start = normalizeInputUrl(url);
-  if (!start) throw new Error("Die angegebene Adresse ist ungültig.");
+  if (!start) throw new KbImportError("Die angegebene Adresse ist ungültig.");
 
   // Zusatz-Adressen vorab prüfen (klare Meldung statt stillem Überspringen).
   const extra = parseExtraUrls(typeof extraUrls === "string" ? extraUrls : "", start);
-  if (extra.error) throw new Error(extra.error);
+  if (extra.error) throw new KbImportError(extra.error);
 
   // Startadresse + Sitemap parallel laden (fetchChecked blockt interne/private Ziele -> SSRF).
   const [home, fromSitemap] = await Promise.all([loadPageText(start.href), sitemapPages(start)]);
   if (!home.html) {
-    throw new Error("Die Website konnte nicht geladen werden (blockiert oder nicht erreichbar).");
+    throw new KbImportError("Die Website konnte nicht geladen werden (blockiert oder nicht erreichbar).");
   }
 
   // Nach Weiterleitung (z. B. kanzlei.de -> www.kanzlei.de/start) gilt die END-Adresse als
@@ -228,7 +252,7 @@ export async function importFromWebsite(rawUrl?: string, extraUrls?: string): Pr
     .join("\n\n")
     .slice(0, MAX_TOTAL_CHARS);
   if (combined.trim().length < 100) {
-    throw new Error("Auf der Website wurde zu wenig lesbarer Text gefunden.");
+    throw new KbImportError("Auf der Website wurde zu wenig lesbarer Text gefunden.");
   }
 
   const result = await textToDraftArticles(createAdminClient(), account.id, start.hostname, combined);

@@ -58,7 +58,13 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
     }
     start(async () => {
       try {
+        // Erwartete Fehler kommen als { error } zurück (die Action wirft dafür nicht mehr,
+        // sonst antwortete sie mit HTTP 500 auf einen reinen Eingabefehler).
         const res = await importFromWebsite(target, extra);
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
         setWebOpen(false);
         successToast(res);
         router.refresh();

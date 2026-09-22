@@ -45,6 +45,19 @@ function mkBody(paragraphs: string[], bullets: string[]): { type: "doc"; content
 
 export type ImportResult = { count: number; titles: string[] };
 
+/**
+ * Erwarteter Import-Fehler (Eingabe/Quelle/Budget) — KEIN Serverfehler.
+ * Damit können Aufrufer sauber trennen: die API-Route antwortet mit 422 statt 500 und der
+ * Website-Import gibt die Meldung als Ergebnis zurück, statt die Server-Action scheitern zu
+ * lassen. So taucht ein Nutzerfehler nicht mehr in der Fehler-Überwachung auf.
+ */
+export class KbImportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KbImportError";
+  }
+}
+
 const SYSTEM =
   "Du hilfst einer Organisation, aus ihren eigenen Texten (Website oder Dokument) ein " +
   "strukturiertes Organisations-Wissen für einen Kunden-Chatbot zu erstellen. " +
@@ -54,14 +67,31 @@ const SYSTEM =
   "erfundenen Angaben. Wenn ein Fakt nicht im Text steht, lässt du ihn weg. " +
   "Sprich Kundinnen und Kunden höflich in der Sie-Form an.";
 
+/**
+ * Wie viele Artikel dürfen aus diesem Text entstehen? Kurze Quellen (ein paar Sätze) ergaben
+ * bisher drei fast gleiche Entwürfe — deshalb hängt die Obergrenze an der Textmenge.
+ * Rückgabe: [min, max].
+ */
+export function articleRange(chars: number): [number, number] {
+  if (chars < 800) return [1, 1];
+  if (chars < 2500) return [1, 3];
+  return [3, 8];
+}
+
 function buildUser(sourceLabel: string, text: string): string {
+  const [min, max] = articleRange(text.length);
+  const amount =
+    min === max
+      ? `Erzeuge GENAU ${min} Wissensartikel — der Text gibt nicht mehr her.`
+      : `Erzeuge ${min} bis ${max} EIGENSTÄNDIGE Wissensartikel; nimm die kleinere Zahl, wenn der Text wenig hergibt.`;
   return (
     `Quelle: „${sourceLabel}“.\n\n` +
     "Hier ist der extrahierte Text der Organisation:\n" +
     "---\n" +
     text +
     "\n---\n\n" +
-    "Erzeuge 3 bis 8 EIGENSTÄNDIGE Wissensartikel. Jeder Artikel behandelt genau EIN " +
+    amount +
+    " Jeder Artikel behandelt genau EIN " +
     "Thema (z. B. „Öffnungszeiten“, „Kontakt & Anfahrt“, „Unsere Leistungen“). " +
     "Antworte AUSSCHLIESSLICH als JSON-Objekt nach diesem Schema:\n" +
     "{\n" +
@@ -74,7 +104,11 @@ function buildUser(sourceLabel: string, text: string): string {
     "  ]\n" +
     "}\n\n" +
     "Regeln:\n" +
-    "- 3 bis 8 Artikel, je nachdem wie viel echtes Wissen im Text steckt.\n" +
+    `- ${min === max ? `Genau ${min} Artikel` : `${min} bis ${max} Artikel`}, je nachdem wie viel echtes Wissen im Text steckt.\n` +
+    "- Die Artikel dürfen sich inhaltlich NICHT überschneiden: jede Aussage steht in genau " +
+    "EINEM Artikel. Keine zwei Artikel mit fast gleichem Inhalt oder ähnlichem Titel.\n" +
+    "- Reicht der Text nur für ein Thema, dann gib genau EINEN Artikel zurück — lieber ein " +
+    "vollständiger Artikel als mehrere dünne.\n" +
     "- Nur Fakten aus dem Text. Nichts erfinden. Keine leeren/inhaltslosen Artikel.\n" +
     '- "paragraphs" ist Pflicht (mind. 1 Eintrag). "bullets" ist optional (kann [] sein).\n' +
     "- Kein Markdown, kein Text vor oder nach dem JSON."
@@ -83,7 +117,7 @@ function buildUser(sourceLabel: string, text: string): string {
 
 type RawArticle = { title: string; paragraphs: string[]; bullets: string[] };
 
-function coerceArticles(parsed: unknown): RawArticle[] {
+function coerceArticles(parsed: unknown, max: number): RawArticle[] {
   const list = (parsed as { articles?: unknown })?.articles;
   if (!Array.isArray(list)) return [];
   const asStrings = (v: unknown): string[] =>
@@ -96,7 +130,9 @@ function coerceArticles(parsed: unknown): RawArticle[] {
       bullets: asStrings(a.bullets).map((b) => b.trim()).filter(Boolean),
     }))
     .filter((a) => a.title && (a.paragraphs.length > 0 || a.bullets.length > 0))
-    .slice(0, 8);
+    // Harte Grenze passend zur Textmenge: hält die KI sich nicht daran, schneiden wir ab,
+    // damit aus zwei Sätzen keine drei fast gleichen Entwürfe entstehen.
+    .slice(0, Math.max(1, max));
 }
 
 /**
@@ -114,7 +150,7 @@ export async function assertImportBudget(admin: SupabaseClient, accountId: strin
     .eq("status", "draft")
     .gte("created_at", since);
   if (!error && (count ?? 0) >= IMPORT_DRAFTS_PER_HOUR) {
-    throw new Error(
+    throw new KbImportError(
       "Sie haben in der letzten Stunde schon viele Wissens-Entwürfe importiert. Bitte prüfen Sie diese zuerst oder versuchen Sie es in einer Stunde erneut.",
     );
   }
@@ -134,7 +170,7 @@ export async function textToDraftArticles(
   sourceLabel: string,
   text: string,
 ): Promise<ImportResult> {
-  if (!aiConfigured()) throw new Error("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
+  if (!aiConfigured()) throw new KbImportError("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
   await assertImportBudget(admin, accountId);
 
   // Unicode-Whitespace (NBSP, schmale/typografische Spaces, ZWSP, ideografisch) -> normal,
@@ -145,7 +181,7 @@ export async function textToDraftArticles(
     .trim()
     .slice(0, MAX_INPUT_CHARS);
   if (clean.length < 50) {
-    throw new Error("Es wurde zu wenig lesbarer Text gefunden, um Wissen abzuleiten.");
+    throw new KbImportError("Es wurde zu wenig lesbarer Text gefunden, um Wissen abzuleiten.");
   }
 
   let articles: RawArticle[];
@@ -160,14 +196,14 @@ export async function textToDraftArticles(
       max_completion_tokens: 2500,
     });
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-    articles = coerceArticles(parsed);
+    articles = coerceArticles(parsed, articleRange(clean.length)[1]);
   } catch (e) {
     console.error("[kb-import] KI-Fehler:", e instanceof Error ? e.message : e);
-    throw new Error("Die Wissens-Artikel konnten nicht erstellt werden. Bitte versuchen Sie es erneut.");
+    throw new KbImportError("Die Wissens-Artikel konnten nicht erstellt werden. Bitte versuchen Sie es erneut.");
   }
 
   if (!articles.length) {
-    throw new Error("Aus dieser Quelle ließ sich kein verwertbares Wissen ableiten.");
+    throw new KbImportError("Aus dieser Quelle ließ sich kein verwertbares Wissen ableiten.");
   }
 
   const rows = articles.map((a) => ({

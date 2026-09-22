@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { aiConfigured } from "@/lib/ai";
-import { textToDraftArticles } from "@/lib/kb-import";
+import { KbImportError, textToDraftArticles } from "@/lib/kb-import";
 
 // Datei-Extraktion (PDF via pdf.js) + ein KI-Call können über den Default laufen.
 export const maxDuration = 60;
@@ -100,9 +100,12 @@ export async function POST(req: NextRequest) {
     revalidatePath("/app/assistent/wissen");
     return NextResponse.json(result);
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Import fehlgeschlagen." },
-      { status: 500 },
-    );
+    // Erwartete Fälle (Quelle taugt nicht, KI aus, Budget) sind KEIN Serverfehler -> 422.
+    // Nur echte Störungen bleiben 500, damit die Fehler-Überwachung sauber bleibt.
+    if (e instanceof KbImportError) {
+      return NextResponse.json({ error: e.message }, { status: 422 });
+    }
+    console.error("[kb-import] Import fehlgeschlagen:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Import fehlgeschlagen." }, { status: 500 });
   }
 }
