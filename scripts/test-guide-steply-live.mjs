@@ -11,6 +11,7 @@
 // Nutzung:  node --env-file=.env.local scripts/test-guide-steply-live.mjs
 import { createClient } from "@supabase/supabase-js";
 import { spawn } from "node:child_process";
+import { TUTORIALS } from "./steply-help-content.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -66,14 +67,17 @@ try {
   ok(listRes.status === 200, `Liste -> 200 (war ${listRes.status})`);
   ok(listRes.headers.get("access-control-allow-origin") === "*", "Liste liefert CORS-Header *");
   const tuts = Array.isArray(listBody.tutorials) ? listBody.tutorials : [];
-  ok(tuts.length === 9, `Liste hat 9 veroeffentlichte Doku-Touren (war ${tuts.length})`);
+  // Erwartung aus der Doku-Quelle (Welle 52a: 53 Schritte statt 51) statt fester Zahlen.
+  const wantTours = TUTORIALS.length;
+  const wantSteps = TUTORIALS.reduce((n, t) => n + t.steps.length, 0);
+  ok(tuts.length === wantTours, `Liste hat ${wantTours} veroeffentlichte Doku-Touren (war ${tuts.length})`);
   ok(!tuts.some((t) => t.slug === draftSlug), "Entwurf erscheint NICHT in der Liste");
   const shapeOk = tuts.every((t) =>
     t && typeof t.id === "string" && typeof t.slug === "string" && typeof t.title === "string" &&
     ("category" in t) && typeof t.stepCount === "number" && typeof t.selectorCount === "number" &&
     Array.isArray(t.site_domains));
   ok(shapeOk, "Listen-Form { id, slug, title, category, stepCount, selectorCount, site_domains }");
-  ok(tuts.reduce((s, t) => s + t.stepCount, 0) === 51, `Gesamt-Schrittzahl = 51 (war ${tuts.reduce((s, t) => s + t.stepCount, 0)})`);
+  ok(tuts.reduce((s, t) => s + t.stepCount, 0) === wantSteps, `Gesamt-Schrittzahl = ${wantSteps} (war ${tuts.reduce((s, t) => s + t.stepCount, 0)})`);
 
   // (b) Detail einer echten Tour OHNE Token.
   const first = tuts[0];

@@ -797,6 +797,9 @@ function ToolBtn({
       type="button"
       onClick={onClick}
       title={title}
+      // Fester Name für Screenreader und die Live-Führung der Steply-Doku (Symbol-Knopf).
+      aria-label={title}
+      aria-pressed={active}
       className={`flex size-8 items-center justify-center rounded-md transition-colors ${
         active ? "bg-ink text-white" : "text-muted-foreground hover:bg-muted"
       }`}

@@ -59,15 +59,25 @@ export function appSiteDomains(appUrl) {
   return GENERIC_HOSTS.has(base) ? [host] : [base];
 }
 
-// Prod-Route je Shot -> page_url. null: keine stabile oeffentliche URL (Builder dynamisch,
-// oeffentliche Hub-Seiten liegen unter der KUNDEN-Domain, hier nur als Illustration).
+// Prod-Route je Shot -> page_url (Startseite der Live-Führung für diesen Schritt).
+// null: keine stabile Adresse — Editor (dynamische URL; die Führung sucht dann auf der gerade
+// offenen Editor-Seite), öffentliche Hilfe-Seiten (liegen unter der KUNDEN-Adresse, nur
+// Illustration) und Montagen mit der Seitenleiste der Steply-Erweiterung (kein App-Ziel).
+// Welle 52a: auf die neue Oberfläche (Welle 50) umgestellt — Einstellungen mit Seitenleiste.
 export const SHOT_ROUTES = {
   dashboard: "/app",
+  "dashboard-insights": "/app",
   "dashboard-job": "/app",
+  "new-dialog": "/app",
   "video-dialog": "/app",
   builder: null,
-  einbetten: "/app/settings/einbetten",
-  branding: "/app/settings/branding",
+  aussehen: "/app/settings/aussehen",
+  teilen: "/app/settings/teilen",
+  "teilen-iframe": "/app/settings/teilen",
+  chat: "/app/settings/chat",
+  sprachen: "/app/settings/sprachen",
+  "erweiterung-neu": "/app/settings/erweiterung",
+  erweiterung: "/app/settings/erweiterung",
   team: "/app/settings/team",
   eskalation: "/app/assistent/eskalation",
   knowledge: "/app/assistent/wissen",
@@ -76,6 +86,9 @@ export const SHOT_ROUTES = {
   hub: null,
   "hub-chat": null,
   "wizard-public": null,
+  "panel-start": null,
+  "panel-guides": null,
+  "panel-run": null,
 };
 
 // Reihenfolge der Kategorien (Position). Bestehende Namen beibehalten (alte Struktur).
@@ -84,34 +97,34 @@ export const CATEGORIES = ["Erste Schritte", "Veröffentlichen", "KI & Insights"
 // Reihenfolge der Tutorials = Anzeige-Reihenfolge im Hub (innerhalb der Kategorie nach
 // Einfuege-Reihenfolge). Sofort-Anleitung steht als STANDARD direkt hinter „Erste Schritte“.
 // slug: bestehende Slugs beibehalten, wo das Thema gleich bleibt (alte Links!).
+// Welle 52a: Texte + Klickfolge gegen die neue Oberfläche geprüft; Hand-Markierungen durch
+// Auto-Markierungen ersetzt (shoot-steply-help.mjs findet die Ziele jetzt selbst).
 export const TUTORIALS = [
   // ═══════════════════════ Erste Schritte ═══════════════════════
   {
     slug: "konto-und-hilfe-seite-einrichten",
     cat: "Erste Schritte",
     title: "Erste Schritte: Konto & Hilfe-Seite einrichten",
-    desc: "Konto einrichten, Design festlegen, eigene Hilfe-Seite ansehen.",
+    desc: "Organisation, Design und eigene Hilfe-Seite – in wenigen Minuten startklar.",
     steps: [
       { shot: "dashboard", target: "switcher",
         title: "Konto und Organisation",
-        body: "Bei der ersten Anmeldung legt Steply automatisch eine Organisation für Sie an – ihren Namen sehen Sie im Menü hinter Ihrem Profilbild oben rechts. Von hier aus verwalten Sie Anleitungen, Schulungen, Automationen, den KI-Assistenten und Ihre öffentliche Hilfe-Seite." },
-      { shot: "branding", target: null,
-        highlight: { x: 0.251, y: 0.211, w: 0.049, h: 0.036 }, // Hand (Welle 35): „Branding“-Reiter in den Einstellungen
+        body: "Bei der ersten Anmeldung legt Steply automatisch eine Organisation für Sie an – ihren Namen sehen Sie im Menü hinter Ihrem Profilbild oben rechts. Über das Hauptmenü erreichen Sie „Anleitungen“, „Schulungen“, „Automationen“ und den „KI-Assistenten“." },
+      { shot: "aussehen", target: "nav",
         title: "Aussehen öffnen",
-        body: "Unter „Einstellungen“ → „Hilfe-Seite“ → „Aussehen“ legen Sie Logo und Farben Ihrer Hilfe-Seite fest; Name und Adresse stehen unter „Allgemein“ bzw. „Adresse & Teilen“. Eine Vorschau zeigt jede Änderung sofort." },
-      { shot: "branding", target: "website",
-        title: "CI automatisch übernehmen (KI)",
-        body: "Sie müssen nichts von Hand einstellen: Geben Sie einfach Ihre Website-Adresse an und klicken Sie auf „Analysieren“. Die KI liest Farben, Schriften und Logo aus – zu helle Farben werden automatisch lesbar gemacht." },
-      { shot: "branding", target: "modus",
-        title: "Design-Quelle wählen",
-        body: "Sie entscheiden, welches Design live ist: Ihr manuelles Design, das KI-Design oder ein komplett generiertes Extrem-Design. Über die Vorschau prüfen Sie jede Variante, bevor Sie sie aktivieren." },
-      { shot: "hub", target: null,
-        highlight: { x: 0.021, y: 0.009, w: 0.313, h: 0.058 }, // Hand (Welle 35): Marken-Kopf (Logo + Name) der Hilfe-Seite
+        body: "Im Menü hinter Ihrem Profilbild öffnen Sie die „Einstellungen“ und wählen in der Seitenleiste unter „Hilfe-Seite“ den Punkt „Aussehen“. Den Namen Ihrer Organisation ändern Sie unter „Allgemein“, die Adresse der Hilfe-Seite unter „Adresse & Teilen“." },
+      { shot: "aussehen", target: "website",
+        title: "Design von Ihrer Website übernehmen (KI)",
+        body: "Sie müssen nichts von Hand einstellen: Geben Sie unter „Design von Ihrer Website übernehmen“ Ihre Website-Adresse ein und klicken Sie auf „Analysieren“. Die KI liest Farben, Schrift und Logo aus – zu helle Farben werden automatisch lesbar gemacht (Business)." },
+      { shot: "aussehen", target: "modus",
+        title: "Design-Grundlage wählen",
+        body: "Oben entscheiden Sie, welches Design live ist: „Steply-Standard“, „Von Ihrer Website“ oder „Nachgebaut“. Mit „Live-Vorschau“ prüfen Sie jede Variante, mit „Verwenden“ schalten Sie sie aktiv." },
+      { shot: "hub", target: "marke",
         title: "Ihre Hilfe-Seite ansehen",
-        body: "Ihre öffentliche Hilfe-Seite liegt unter Ihrer eigenen Adresse (steply.dev/h/…) im Look Ihrer Organisation. Über den Knopf „Hilfe-Seite“ in der Kopfleiste öffnen Sie sie jederzeit." },
-      { shot: "dashboard", target: "ausvideo",
+        body: "Ihre öffentliche Hilfe-Seite liegt unter Ihrer eigenen Adresse (…/h/ihr-name) im Look Ihrer Organisation. Über den Knopf „Hilfe-Seite“ oben in Steply öffnen Sie sie jederzeit in einem neuen Tab." },
+      { shot: "dashboard", target: "neu",
         title: "Jetzt mit Inhalten füllen",
-        body: "Als Nächstes füllen Sie die Seite mit Anleitungen. Am schnellsten geht das mit der Sofort-Anleitung per Steply-Erweiterung (nächstes Kapitel) – alternativ aus einem Video oder von Hand." },
+        body: "Als Nächstes füllen Sie die Seite mit Anleitungen. Am schnellsten geht das mit der Sofort-Anleitung per Steply-Erweiterung (nächstes Kapitel) – alternativ aus einem Video oder von Hand, jeweils über „Neue Anleitung“." },
     ],
   },
   {
@@ -120,28 +133,24 @@ export const TUTORIALS = [
     title: "Sofort-Anleitung mit der Steply-Erweiterung",
     desc: "Der schnellste Weg – und unser Standard: einfach klicken, fertige Anleitung.",
     steps: [
-      { shot: "dashboard", target: null,
-        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt (Standard-Empfehlung)
+      { shot: "new-dialog", target: "sofort",
         title: "Der schnellste Weg – und unser Standard",
-        body: "Die Sofort-Anleitung ist der empfohlene Standard-Weg: Die Steply-Erweiterung nimmt bei jedem Klick automatisch einen Screenshot auf und markiert das geklickte Element punktgenau. In Sekunden entsteht ein fertiger Entwurf – ohne Video, ohne Kommandos." },
-      { shot: "einbetten", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Ziel (Browser-Store/Recorder-Bereich) nicht im Screenshot
+        body: "Die Sofort-Anleitung ist der empfohlene Standard-Weg: Die Steply-Erweiterung nimmt bei jedem Klick automatisch einen Screenshot auf und markiert das geklickte Element. In Sekunden entsteht ein fertiger Entwurf – ohne Video, ohne Kommandos." },
+      { shot: "erweiterung-neu", target: "status",
         title: "Steply-Erweiterung installieren",
-        body: "Installieren Sie die Steply-Erweiterung einmalig für Chrome oder Edge. Danach erscheint sie als Seitenleiste in Ihrem Browser." },
-      { shot: "einbetten", target: "token",
+        body: "Unter „Einstellungen“ → „Steply-Erweiterung“ sehen Sie, ob die Erweiterung schon installiert ist. Falls nicht, klicken Sie auf „Erweiterung installieren“ und fügen Sie sie einmalig zu Chrome oder Edge hinzu." },
+      { shot: "erweiterung", target: "verbinden",
         title: "Mit Ihrem Konto verbinden",
-        body: "Unter „Einstellungen“ → „Steply-Erweiterung“ sehen Sie, ob die Erweiterung verbunden ist. Ein Klick auf „Jetzt verbinden“ koppelt sie mit Ihrem Konto – ganz ohne Code-Kopieren." },
-      { shot: "einbetten", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Ziel (Extension-Seitenleiste) nicht im Screenshot
-        title: "Aufnahme mit Titel und Kategorie starten",
-        body: "In der Seitenleiste klicken Sie auf „Aufnahme starten“. Führen Sie die Aufgabe dann einfach normal durch – jeder Klick wird zu einem Schritt. Titel und Kategorie vergeben Sie am Ende beim Prüfen." },
-      { shot: "builder", target: null,
-        highlight: { x: 0.592, y: 0.533, w: 0.023, h: 0.033 }, // Hand (Welle 35): „Verpixeln“-Werkzeug in der Editor-Leiste
-        title: "Automatische Verpixelung prüfen",
-        body: "Steply erkennt sensible Felder (z. B. Namen oder Beträge) und schlägt vor, sie zu verpixeln. Prüfen Sie die Vorschläge vor dem Hochladen – beim Veröffentlichen wird die Verpixelung unwiderruflich ins Bild gebrannt." },
+        body: "Ist die Erweiterung installiert, klicken Sie auf derselben Seite auf „Jetzt verbinden“ – schon ist sie mit Ihrem Konto gekoppelt, ganz ohne Code-Kopieren. Klappt das einmal nicht, hilft „Code manuell eingeben“." },
+      { shot: "panel-start", target: "aufnahme",
+        title: "Aufnahme starten",
+        body: "Öffnen Sie die Seite, auf der Ihr Ablauf beginnt, und dann die Seitenleiste der Steply-Erweiterung. Im Reiter „Aufnehmen“ klicken Sie auf „Aufnahme starten“ und führen die Aufgabe ganz normal durch – jeder Klick wird zu einem Schritt." },
       { shot: "dashboard-job", target: "karte",
-        title: "Entwurf erscheint unter „Anleitungen“",
-        body: "Nach dem Hochladen entsteht der Entwurf automatisch; unter „Anleitungen“ sehen Sie kurz „Wird erstellt …“ und danach die fertige Anleitung. Zum Feinschliff öffnen Sie sie im Editor." },
+        title: "Prüfen und hochladen",
+        body: "Mit „Fertig“ beenden Sie die Aufnahme. Im Prüfen-Bildschirm vergeben Sie Titel und Kategorie und klicken auf „Anleitung erstellen“ – der Entwurf erscheint dann automatisch unter „Anleitungen“, kurz mit „Wird erstellt …“." },
+      { shot: "builder", target: "verpixeln",
+        title: "Verpixelung prüfen",
+        body: "Steply erkennt sensible Felder (z. B. Namen oder Beträge) und verpixelt sie automatisch. Öffnen Sie den Entwurf im Editor und prüfen Sie die Stellen – mit „Verpixeln“ ergänzen Sie weitere. Beim Veröffentlichen wird die Verpixelung fest ins Bild gebrannt." },
     ],
   },
   {
@@ -150,25 +159,28 @@ export const TUTORIALS = [
     title: "Anleitung aus einem Video",
     desc: "Die Alternative, wenn Sie den Ablauf lieber einmal erzählen.",
     steps: [
-      { shot: "dashboard", target: "ausvideo",
+      { shot: "dashboard", target: "neu",
         title: "Wann sich Video lohnt",
-        body: "Die Alternative zur Sofort-Anleitung: Wenn Sie den Ablauf lieber einmal erzählen oder schon einen Screencast haben, baut Steply daraus die Anleitung. Klicken Sie auf „Neue Anleitung“ und dann auf „Aus Video“." },
+        body: "Die Alternative zur Sofort-Anleitung: Wenn Sie den Ablauf lieber einmal erzählen oder schon eine Bildschirmaufnahme haben, baut Steply daraus die Anleitung. Klicken Sie oben rechts auf „Neue Anleitung“." },
+      { shot: "new-dialog", target: "video",
+        title: "„Aus Video“ wählen",
+        body: "Im Fenster „Neue Anleitung“ wählen Sie „Aus Video“. In der Steply-Erweiterung finden Sie dasselbe im Hilfe-Menü (?) unter „Video mit Ton aufnehmen“." },
       { shot: "video-dialog", target: "aufnehmen",
         title: "Aufnahme starten",
-        body: "Klicken Sie auf „Jetzt aufnehmen“ und erlauben Sie Bildschirm und Mikrofon. Alternativ laden Sie eine fertige Videodatei hoch." },
+        body: "Klicken Sie auf „Jetzt aufnehmen (Bildschirm + Mikro)“ und erlauben Sie Bildschirm und Mikrofon." },
       { shot: "video-dialog", target: "infobox",
         title: "Vormachen und „Schnitt“ sagen",
         body: "Führen Sie die Aufgabe in Ruhe vor und erklären Sie sie wie einem Kollegen. Nach jedem fertigen Schritt sagen Sie einfach „Schnitt“ – das trennt die Schritte sauber." },
+      { shot: "video-dialog", target: "url",
+        title: "Auch möglich: Datei oder Link",
+        body: "Statt aufzunehmen laden Sie eine Videodatei hoch (auch mehrere auf einmal) oder holen über „Von URL importieren“ ein Video von einem direkten Link." },
       { shot: "dashboard-job", target: "karte",
         title: "Live zusehen, wie es entsteht",
         body: "Nach dem Hochladen wächst der Entwurf live mit („Schritt 3 von 6 …“). Sie können das Fenster schließen – die fertige Anleitung erscheint unter „Anleitungen“." },
-      { shot: "builder", target: "video",
-        highlight: null, // bewusst ohne (Welle 35): „Bild aus Video wählen“ fehlt (kein Quellvideo im Demo-Builder)
-        title: "Frame nachjustieren",
-        body: "Hat die KI den falschen Moment erwischt? „Bild aus Video wählen“ öffnet in jedem Schritt eine Zeitleiste, auf der Sie zum richtigen Frame ziehen." },
-      { shot: "video-dialog", target: "url",
-        title: "Auch möglich: Datei oder Link",
-        body: "Statt aufzunehmen können Sie eine Videodatei hochladen (auch mehrere auf einmal) oder einen direkten Video-Link importieren." },
+      { shot: "builder", target: null,
+        highlight: null, // bewusst ohne: „Bild aus Video wählen“ gibt es nur bei Anleitungen mit Quellvideo
+        title: "Bild nachjustieren",
+        body: "Hat die KI den falschen Moment erwischt? In Anleitungen aus einem Video öffnet „Bild aus Video wählen“ in jedem Schritt eine Zeitleiste, auf der Sie zum richtigen Bild ziehen." },
     ],
   },
   {
@@ -179,23 +191,22 @@ export const TUTORIALS = [
     steps: [
       { shot: "dashboard", target: "neu",
         title: "Wann von Hand?",
-        body: "Für Feinschliff, Sonderfälle und Ja/Nein-Verzweigungen bauen Sie eine Anleitung Schritt für Schritt selbst. Klicken Sie oben rechts auf „Neue Anleitung“ und vergeben Sie einen Titel." },
+        body: "Für Feinschliff, Sonderfälle und Ja/Nein-Verzweigungen bauen Sie eine Anleitung Schritt für Schritt selbst. Klicken Sie oben rechts auf „Neue Anleitung“, wählen Sie „Selbst bauen“ und vergeben Sie einen Titel." },
       { shot: "builder", target: "titel",
         title: "Schritt beschreiben",
         body: "Jeder Schritt hat einen kurzen Titel im Imperativ (z. B. „App öffnen“) und einen Erklärtext. Fett, Listen und Links sind im Text möglich." },
-      { shot: "builder", target: null,
-        highlight: { x: 0.49, y: 0.57, w: 0.338, h: 0.356 }, // Hand (Welle 35): Screenshot-Bereich des Schritt-Editors
+      { shot: "builder", target: "bild",
         title: "Screenshot hinzufügen",
         body: "Fügen Sie pro Schritt ein Bild hinzu: anklicken, per Drag & Drop ablegen oder mit Strg+V einfügen. Der Zuschnitt-Dialog hilft beim passenden Rahmen." },
       { shot: "builder", target: "rechteck",
         title: "Wichtiges markieren",
-        body: "Markieren Sie das Entscheidende direkt im Bild: Rechteck, Kreis oder Pfeil, dazu eine Lupe für Details. „Verpixeln“ macht sensible Daten unwiderruflich unkenntlich." },
+        body: "Markieren Sie das Entscheidende direkt im Bild: Rechteck, Kreis oder Pfeil – eine Markierung lässt sich zusätzlich als Lupe vergrößert zeigen. „Verpixeln“ macht sensible Daten unkenntlich." },
       { shot: "builder", target: "frage",
         title: "Ja/Nein-Verzweigung",
         body: "Der Schalter „Frage / Verzweigung“ lässt eine Anleitung eine Frage stellen (z. B. „App startet?“) und je nach Antwort unterschiedlich weiterführen." },
       { shot: "builder", target: "hoch",
         title: "Ordnen und Vorschau",
-        body: "Mit den Pfeilen im Schritt-Editor ordnen Sie Schritte um; über die Einfügepunkte im Ablauf setzen Sie neue Schritte genau an die richtige Stelle. Die „Vorschau“ oben rechts zeigt alles wie für den Kunden." },
+        body: "Mit den Pfeilen im Schritt-Editor ordnen Sie Schritte um; über die Einfügepunkte im Ablauf setzen Sie neue Schritte genau an die richtige Stelle. Die „Vorschau“ oben im Editor zeigt alles so, wie Ihre Kunden es sehen." },
     ],
   },
   // ═══════════════════════ Veröffentlichen ═══════════════════════
@@ -205,25 +216,22 @@ export const TUTORIALS = [
     title: "Anleitungen auf der Seite zeigen",
     desc: "Nutzer direkt auf der echten Seite Schritt für Schritt führen.",
     steps: [
-      { shot: "dashboard", target: null,
-        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt
+      { shot: "panel-run", target: null,
+        highlight: null, // bewusst ohne: reiner Hinweis-Schritt (Überblick)
         title: "Was „Auf der Seite zeigen“ bedeutet",
-        body: "Statt nur zu lesen, führt Steply Ihre Nutzer direkt auf der echten Website: Ein Overlay zeigt Schritt für Schritt, wohin sie klicken müssen. So finden auch ungeübte Nutzer sicher ans Ziel." },
-      { shot: "einbetten", target: "token",
+        body: "Statt nur zu lesen, führt Steply Ihre Nutzer direkt auf der echten Website: Schritt für Schritt wird markiert, wohin sie klicken müssen. So finden auch ungeübte Nutzer sicher ans Ziel." },
+      { shot: "erweiterung", target: "verbinden",
         title: "Voraussetzung: Steply-Erweiterung verbinden",
-        body: "Das Zeigen auf der Seite läuft über die Steply-Erweiterung. Verbinden Sie sie einmalig mit Ihrem Konto (siehe „Sofort-Anleitung“) – unter „Einstellungen“ → „Steply-Erweiterung“." },
-      { shot: "dashboard", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Ziel (Extension-Seitenleiste) nicht im Screenshot
+        body: "Das Zeigen auf der Seite läuft über die Steply-Erweiterung. Verbinden Sie sie einmalig unter „Einstellungen“ → „Steply-Erweiterung“ mit „Jetzt verbinden“ (siehe „Sofort-Anleitung“)." },
+      { shot: "panel-start", target: "seite",
         title: "„Für diese Seite“ öffnen",
-        body: "Öffnen Sie die Seitenleiste der Steply-Erweiterung. Unter „Für diese Seite“ listet Steply automatisch die Anleitungen, deren Website zur gerade geöffneten Seite passt." },
-      { shot: "wizard-public", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Ziel (Seitenleisten-Knopf) nicht im Screenshot
+        body: "Öffnen Sie die Seitenleiste der Steply-Erweiterung. „Für diese Seite“ zeigt, wie viele Anleitungen zur gerade geöffneten Website passen – welche Website das ist, legen Sie im Editor unter „Gilt für Website“ fest. Ein Klick öffnet die Liste im Reiter „Anleitungen“." },
+      { shot: "panel-guides", target: "zeigen",
         title: "Führung starten",
-        body: "Ein Klick auf „Auf der Seite zeigen“ startet das Overlay. Passt der aktuelle Tab nicht zur Anleitung, öffnet Steply automatisch die richtige Startseite." },
-      { shot: "wizard-public", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Ziel (Live-Overlay auf der echten Seite) nicht im Screenshot
+        body: "Wählen Sie eine Anleitung aus und klicken Sie auf „Auf der Seite zeigen“. Passt der aktuelle Tab nicht zur Anleitung, öffnet Steply automatisch die richtige Startseite." },
+      { shot: "panel-run", target: "ziel",
         title: "Schritt für Schritt auf der echten Seite",
-        body: "Das Overlay markiert das Ziel-Element live auf der Seite und begleitet jeden Schritt. Reine Hinweis-Schritte ohne Klick-Ziel zeigen ehrlich den hinterlegten Screenshot." },
+        body: "Steply markiert das Ziel-Element live auf der Seite und erklärt jeden Schritt in der Seitenleiste. Reine Hinweis-Schritte ohne Klick-Ziel zeigen ehrlich den hinterlegten Screenshot." },
     ],
   },
   {
@@ -232,24 +240,24 @@ export const TUTORIALS = [
     title: "Veröffentlichen & verbreiten",
     desc: "Ein Schalter, viele Wege zu Ihren Kunden.",
     steps: [
-      { shot: "dashboard", target: "toggle",
+      { shot: "builder", target: "status",
         title: "Veröffentlichen",
-        body: "Legen Sie den Schalter von „Entwurf“ auf „Veröffentlicht“ um – auf der Karte unter „Anleitungen“ oder oben im Editor. Dort wählen Sie auch „Hilfe-Seite“ oder „Nur Team“. Verpixelte Stellen werden beim Veröffentlichen fest ins Bild gebrannt." },
-      { shot: "einbetten", target: "link",
+        body: "Legen Sie oben im Editor den Schalter von „Entwurf“ auf „Veröffentlicht“ um – oder direkt auf der Karte unter „Anleitungen“. Daneben wählen Sie „Hilfe-Seite“ oder „Nur Team“. Verpixelte Stellen werden beim Veröffentlichen fest ins Bild gebrannt." },
+      { shot: "teilen", target: "link",
         title: "Weg 1: Der Link",
-        body: "Unter „Einstellungen“ → „Adresse & Teilen“ finden Sie den Link Ihrer Hilfe-Seite. Verlinken Sie ihn als Menüpunkt „Hilfe“ auf Ihrer Website – fertig, kein Webdesigner nötig." },
-      { shot: "einbetten", target: "iframe",
+        body: "Unter „Einstellungen“ → „Adresse & Teilen“ finden Sie bei „Link teilen“ die Adresse Ihrer Hilfe-Seite. Verlinken Sie sie als Menüpunkt „Hilfe“ auf Ihrer Website – fertig. Den Link zu einer einzelnen Anleitung kopieren Sie im Editor mit „Link kopieren“." },
+      { shot: "teilen-iframe", target: "iframe",
         title: "Weg 2: Einbetten (iFrame)",
-        body: "Soll die Hilfe direkt auf einer Unterseite erscheinen, kopieren Sie den iFrame-Code unter „Einstellungen“ → „Adresse & Teilen“." },
-      { shot: "einbetten", target: "bubble",
+        body: "Soll die Hilfe direkt auf einer Unterseite Ihrer Website erscheinen, kopieren Sie auf derselben Seite den Code unter „Auf Ihrer Website einbetten (iFrame)“." },
+      { shot: "chat", target: "bubble",
         title: "Weg 3: Der KI-Assistent auf Ihrer Website",
-        body: "Ein einziges Script-Tag (unter „Einstellungen“ → „Chat auf Ihrer Website“), und Ihr KI-Assistent schwebt auf jeder Seite Ihrer Website – im Look Ihrer Organisation." },
-      { shot: "einbetten", target: "qr",
+        body: "Unter „Einstellungen“ → „Chat auf Ihrer Website“ kopieren Sie eine einzige Zeile Code in Ihre Website – dann schwebt Ihr KI-Assistent unten rechts auf jeder Seite, im Look Ihrer Organisation." },
+      { shot: "teilen", target: "qr",
         title: "Weg 4: QR-Code",
-        body: "Für Briefe, Rechnungen oder den Aushang: Zu jeder Anleitung und zur Hilfe-Seite gibt es einen QR-Code zum Ausdrucken." },
+        body: "Für Briefe, Rechnungen oder den Aushang: Unter „Adresse & Teilen“ finden Sie den QR-Code zu Ihrer Hilfe-Seite. Den Code zu einer einzelnen Anleitung öffnen Sie im Menü ihrer Karte mit „QR-Code öffnen“." },
       { shot: "wizard-public", target: "drucken",
         title: "Druckansicht",
-        body: "Jede Anleitung hat eine Druckansicht mit allen Schritten untereinander – für Kunden, die lieber Papier mögen." },
+        body: "Jede Anleitung hat auf der Hilfe-Seite eine Druckansicht mit allen Schritten untereinander – für Kunden, die lieber Papier mögen." },
     ],
   },
   {
@@ -258,25 +266,22 @@ export const TUTORIALS = [
     title: "Mehrsprachig & Vorlesen",
     desc: "Hilfe-Seite in mehreren Sprachen und zum Anhören (Business).",
     steps: [
-      { shot: "branding", target: "sprachen",
+      { shot: "sprachen", target: "sprachen",
         title: "Sprachen aktivieren (Business)",
         body: "Unter „Einstellungen“ → „Sprachen & Vorlesen“ schalten Sie zusätzliche Sprachen ein (Englisch, Polnisch, Türkisch). Deutsch ist immer an." },
-      { shot: "branding", target: null,
-        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt (kein Bedien-Ziel im Branding-Shot)
+      { shot: "sprachen", target: "uebersetzung",
         title: "Automatische Übersetzung",
         body: "Beim Veröffentlichen wird eine Anleitung vollständig übersetzt; spätere Änderungen nur als Delta – jeweils automatisch im Hintergrund. Sie pflegen also nur die deutsche Fassung." },
-      { shot: "hub", target: null,
-        highlight: { x: 0.934, y: 0.036, w: 0.044, h: 0.024 }, // Hand (Welle 35): DE·EN-Sprachumschalter oben rechts
+      { shot: "hub", target: "sprache",
         title: "Sprachumschalter auf der Hilfe-Seite",
         body: "Besucher wählen ihre Sprache oben auf der Hilfe-Seite; die gewählte Sprache steckt in der Adresse und bleibt erhalten. Suchmaschinen erhalten passende hreflang-Angaben." },
       { shot: "wizard-public", target: "vorlesen",
-        highlight: null, // bewusst ohne (Welle 35): ▶-Symbol im Wizard-Shot nicht vorhanden (kein Audio im Demo)
         title: "Vorlesen (Business)",
-        body: "Jeder Schritt lässt sich vorlesen: Über das ▶-Symbol im Wizard hören Nutzer den Erklärtext. Steply erzeugt die Audios automatisch beim Veröffentlichen." },
+        body: "Jeder Schritt lässt sich vorlesen: Über das Lautsprecher-Symbol neben dem Schritt-Titel hören Nutzer den Erklärtext. Steply erzeugt die Audios automatisch beim Veröffentlichen." },
       { shot: "wizard-public", target: null,
-        highlight: null, // bewusst ohne (Welle 35): reiner Hinweis-Schritt
+        highlight: null, // bewusst ohne: reiner Hinweis-Schritt
         title: "Immer aktuell – ohne Doppelkosten",
-        body: "Ändert sich ein Text, frischt Steply Übersetzung und Audio automatisch nach. Ein Hash-Cache sorgt dafür, dass unveränderte Schritte nichts kosten." },
+        body: "Ändert sich ein Text, frischt Steply Übersetzung und Audio automatisch nach. Ein Zwischenspeicher sorgt dafür, dass unveränderte Schritte nichts kosten." },
     ],
   },
   // ═══════════════════════ KI & Insights ═══════════════════════
@@ -291,21 +296,22 @@ export const TUTORIALS = [
         body: "Der KI-Assistent auf Ihrer Hilfe-Seite beantwortet Kundenfragen ausschließlich aus Ihren veröffentlichten Anleitungen und Ihrer Wissensdatenbank – er erfindet nichts dazu. Testen Sie ihn mit einer echten Frage." },
       { shot: "knowledge", target: "neu",
         title: "Wissensdatenbank füllen",
-        body: "Unter „KI-Assistent“ → „Wissensdatenbank“ legen Sie freies Wissen an: Öffnungszeiten, Zuständigkeiten, FAQs. Aktive Artikel fließen automatisch in die Antworten ein." },
+        body: "Unter „KI-Assistent“ → „Wissensdatenbank“ legen Sie freies Wissen an: Öffnungszeiten, Zuständigkeiten, häufige Fragen. Veröffentlichte Artikel fließen automatisch in die Antworten ein." },
       { shot: "knowledge", target: "import",
         title: "Wissen importieren",
         body: "Statt alles zu tippen, importieren Sie „Von Ihrer Website“ oder aus einem Dokument (PDF/Word). Steply erzeugt daraus Entwürfe – nichts wird automatisch veröffentlicht." },
-      { shot: "eskalation", target: null,
-        highlight: { x: 0.172, y: 0.878, w: 0.115, h: 0.042 }, // Hand (Welle 35): „Person hinzufügen“ (Ansprechpartner & Schwerpunkte)
+      { shot: "eskalation", target: "person",
         title: "Ansprechpartner hinterlegen",
-        body: "Unter „KI-Assistent“ → „Kontakt & Eskalation“ legen Sie fest, an wen der KI-Assistent verweist, wenn er nicht weiterweiß – mit Terminbuchung, E-Mail und Telefon je Fachgebiet." },
-      { shot: "fragen", target: null,
-        highlight: null, // bewusst ohne (Welle 35): „Entwurf erstellen“ fehlt (leerer Zustand ohne offene Fragen)
+        body: "Unter „KI-Assistent“ → „Kontakt & Eskalation“ legen Sie fest, an wen der KI-Assistent verweist, wenn er nicht weiterweiß – mit „Person hinzufügen“ auch je Fachgebiet, mit Terminbuchung, E-Mail und Telefon." },
+      { shot: "fragen", target: "entwurf",
         title: "Offene Fragen zu Entwürfen machen",
         body: "Fragen, die der KI-Assistent nicht beantworten konnte, sammelt Steply unter „KI-Assistent“ → „Offene Fragen“. Neben jeder Frage baut „Entwurf erstellen“ ein Anleitungs-Gerüst, das Sie nur noch ergänzen." },
-      { shot: "dashboard", target: "insights",
+      { shot: "builder", target: "aktualitaet",
         title: "Aktualität prüfen",
-        body: "Steply prüft Ihre Anleitungen jede Woche automatisch gegen das Web und meldet über die Glocke, wenn sich z. B. eine Software-Oberfläche geändert hat; im Editor starten Sie die Prüfung mit „Aktualität prüfen“ auch sofort. Unter „Anleitungen“ sehen Sie außerdem die Nutzung der letzten 30 Tage." },
+        body: "Steply prüft Ihre Anleitungen jede Woche automatisch gegen das Web und meldet über die Glocke oben, wenn sich z. B. eine Software-Oberfläche geändert hat. Im Editor starten Sie die Prüfung mit „Aktualität prüfen“ auch sofort." },
+      { shot: "dashboard-insights", target: "insights",
+        title: "Nutzung im Blick",
+        body: "Unter „Anleitungen“ zeigt „Nutzung (letzte 30 Tage)“, wie oft Ihre Anleitungen aufgerufen wurden, was der KI-Assistent gefragt wurde und wie hilfreich Ihre Kunden die Anleitungen fanden – samt den offenen Fragen als Wissenslücken." },
     ],
   },
   // ═══════════════════════ Team ═══════════════════════
@@ -317,22 +323,19 @@ export const TUTORIALS = [
     steps: [
       { shot: "team", target: "einladen",
         title: "Team einladen",
-        body: "Unter „Einstellungen“ → „Team“ laden Sie Kolleginnen und Kollegen per E-Mail ein – als Inhaber (verwaltet alles) oder als Bearbeiter (pflegt Inhalte)." },
-      { shot: "team", target: null,
-        highlight: null, // bewusst ohne (Welle 35): Annahme-Flow (Einladungs-Link der eingeladenen Person) nicht im Team-Screenshot
+        body: "Unter „Einstellungen“ → „Team“ laden Sie Kolleginnen und Kollegen per E-Mail ein – als „Inhaber“ (verwaltet alles) oder als „Bearbeiter“ (pflegt Inhalte)." },
+      { shot: "team", target: "offen",
         title: "Einladung annehmen",
-        body: "Die eingeladene Person klickt den Link, legt ein Passwort fest (oder meldet sich an) und landet direkt in Ihrer Organisation." },
+        body: "Die eingeladene Person klickt den Link in der E-Mail, legt ein Passwort fest (oder meldet sich an) und landet direkt in Ihrer Organisation. Bis dahin steht sie bei den offenen Einladungen." },
       { shot: "dashboard", target: "switcher",
         title: "Mehrere Organisationen",
-        body: "Wer zu mehreren Organisationen gehört, wechselt im Menü hinter dem Profilbild oben rechts („Organisation wechseln“). Jede Organisation hat ihre eigene Hilfe-Seite, ihr eigenes Design und ihr eigenes Team." },
-      { shot: "builder", target: null,
-        highlight: { x: 0.404, y: 0.203, w: 0.204, h: 0.032 }, // Hand (Welle 35, Stand vor 50d): Zielgruppen-Wahl im Editor-Kopf — nach neuem Shoot anpassen
+        body: "Wer zu mehreren Organisationen gehört, wechselt im Menü hinter dem Profilbild oben rechts („Organisation wechseln“) oder unter „Einstellungen“ → „Allgemein“. Jede Organisation hat ihre eigene Hilfe-Seite, ihr eigenes Design und ihr eigenes Team." },
+      { shot: "builder", target: "audience",
         title: "Anleitungen nur fürs Team",
-        body: "Oben im Editor wählen Sie „Hilfe-Seite“ oder „Nur Team“. Anleitungen „Nur Team“ erscheinen nie auf der Hilfe-Seite und nie im KI-Assistenten, sondern nur für Ihr Team – mit Schulungsnachweis." },
-      { shot: "lernen", target: null,
-        highlight: { x: 0.158, y: 0.189, w: 0.682, h: 0.087 }, // Hand (Welle 35): Schulungskarte mit „0 von 2 im Team“-Nachweis
+        body: "Oben im Editor wählen Sie „Hilfe-Seite“ oder „Nur Team“ (Business). Anleitungen „Nur Team“ erscheinen nie auf der Hilfe-Seite und nie im KI-Assistenten, sondern nur in den Schulungen Ihres Teams. Öffentliche Anleitungen nehmen Sie mit „Mit Schulungsnachweis“ zusätzlich auf." },
+      { shot: "lernen", target: "karte",
         title: "Schulungen & Schulungsnachweis",
-        body: "Unter „Schulungen“ arbeitet das Team seine Anleitungen durch und markiert sie als absolviert. Inhaber sehen im Schulungsnachweis, wer was erledigt hat." },
+        body: "Unter „Schulungen“ arbeitet das Team seine Anleitungen durch und markiert sie als absolviert. Jede Karte zeigt, wie viele im Team schon fertig sind; Inhaber sehen in der Schulung, wer was wann erledigt hat." },
     ],
   },
 ];

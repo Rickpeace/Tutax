@@ -359,6 +359,30 @@ for (const f of readdirSync(path.join(ROOT, "extension")).filter((f) => f.endsWi
   scanHtml(path.join(ROOT, "extension", f));
 }
 
+// Welle 52a: die Steply-Selbstdoku (/h/steply, „Steply lernen“) ist ebenfalls Oberfläche —
+// Titel, Kurzbeschreibungen, Kategorien und Schritt-Texte aus scripts/steply-help-content.mjs.
+// Als „jsxText“ geprüft, damit auch gerade Anführungszeichen auffallen.
+const DOC_FILE = "scripts/steply-help-content.mjs";
+{
+  const { TUTORIALS, CATEGORIES } = await import(new URL("./steply-help-content.mjs", import.meta.url));
+  const docSrc = readFileSync(path.join(ROOT, DOC_FILE), "utf8").split("\n");
+  const lineOf = (text) => {
+    const probe = String(text).slice(0, 40);
+    const i = docSrc.findIndex((l) => l.includes(probe));
+    return i >= 0 ? i + 1 : 0;
+  };
+  const docText = (text) => texts.push({ file: DOC_FILE, line: lineOf(text), text: String(text), kind: "jsxText", ext: false });
+  CATEGORIES.forEach(docText);
+  for (const t of TUTORIALS) {
+    docText(t.title);
+    if (t.desc) docText(t.desc);
+    for (const st of t.steps) {
+      docText(st.title);
+      docText(st.body);
+    }
+  }
+}
+
 function excepted(hit, rule) {
   return EXCEPTIONS.find(
     (e) =>

@@ -8,6 +8,9 @@
 //
 // Ablauf empfohlen:  delete-steply-help.mjs  →  seed  →  shoot  →  backfill-tts.mjs
 // Nutzung:  node --env-file=.env.local scripts/seed-steply-help.mjs
+//           node --env-file=.env.local scripts/seed-steply-help.mjs --dry-run
+//   --dry-run (Welle 52a): liest nur und gibt aus, was geschrieben WÜRDE (Konto, Kategorien,
+//   Anleitungen, Schritte mit page_url) — kein Nutzer, keine Zeile, kein KB-Index.
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { TUTORIALS, CATEGORIES, SHOT_ROUTES, resolveAppUrl, appSiteDomains } from "./steply-help-content.mjs";
@@ -16,6 +19,8 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
   auth: { persistSession: false },
 });
 const uuid = () => crypto.randomUUID();
+const DRY = process.argv.includes("--dry-run");
+if (DRY) console.log("TROCKENLAUF — es wird nichts geschrieben.\n");
 const slugify = (s) =>
   s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
     .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-")
@@ -33,7 +38,15 @@ console.log("App-URL (Prod):", APP_URL, "· site_domains:", JSON.stringify(SITE_
 // ---------- Konto „Steply“ sicherstellen ----------
 const email = "hilfe@steply.dev";
 let uid;
-{
+if (DRY) {
+  // Nur lesen: bestehenden Nutzer suchen (seitenweise), nichts anlegen.
+  for (let page = 1; page <= 20 && !uid; page++) {
+    const { data } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    uid = (data?.users || []).find((u) => u.email === email)?.id;
+    if ((data?.users || []).length < 1000) break;
+  }
+  if (!uid) console.log("würde Nutzer anlegen:", email);
+} else {
   const { data: created, error } = await admin.auth.admin.createUser({
     email, password: crypto.randomUUID() + "Xx1!", email_confirm: true,
     user_metadata: { account_name: "Steply" },
@@ -44,15 +57,24 @@ let uid;
   } else if (error) { console.error(error.message); process.exit(1); }
   else uid = created.user.id;
 }
-const { data: mem } = await admin.from("account_members").select("account_id").eq("user_id", uid).limit(1).single();
-const ACC = mem.account_id;
+const { data: mem } = uid
+  ? await admin.from("account_members").select("account_id").eq("user_id", uid).limit(1).single()
+  : { data: null };
+const ACC = mem?.account_id ?? null;
 // business: Vorlesen (TTS) + Mehrsprachigkeit sind Business-Features, die die Doku erklärt.
-await admin.from("accounts").update({ slug: "steply", onboarded: true, plan: "business" }).eq("id", ACC);
+if (DRY) console.log("würde Konto setzen:", ACC ?? "(neu)", '{ slug: "steply", onboarded: true, plan: "business" }');
+else await admin.from("accounts").update({ slug: "steply", onboarded: true, plan: "business" }).eq("id", ACC);
 console.log("Konto Steply:", ACC, "→ /h/steply\n");
 
 // ---------- Kategorien in fester Reihenfolge ----------
 async function ensureCategory(name, pos) {
-  const { data } = await admin.from("categories").select("id").eq("account_id", ACC).eq("name", name);
+  const { data } = ACC
+    ? await admin.from("categories").select("id").eq("account_id", ACC).eq("name", name)
+    : { data: [] };
+  if (DRY) {
+    console.log(data?.length ? `= Kategorie (Position ${pos}):` : `＋ würde Kategorie anlegen (Position ${pos}):`, name);
+    return data?.[0]?.id ?? `(neu:${name})`;
+  }
   if (data?.length) {
     await admin.from("categories").update({ position: pos }).eq("id", data[0].id);
     return data[0].id;
@@ -102,8 +124,19 @@ async function indexTutorialInline(tutorialId, title, slug, category, stepRows) 
 
 // ---------- Seeden ----------
 for (const t of TUTORIALS) {
-  const { data: exists } = await admin.from("tutorials").select("id").eq("account_id", ACC).eq("title", t.title);
+  const { data: exists } = ACC
+    ? await admin.from("tutorials").select("id").eq("account_id", ACC).eq("title", t.title)
+    : { data: [] };
   if (exists?.length) { console.log("• übersprungen (existiert):", t.title); continue; }
+  if (DRY) {
+    const { data: s } = ACC
+      ? await admin.from("tutorials").select("id").eq("account_id", ACC).eq("slug", t.slug)
+      : { data: [] };
+    console.log(`✓ würde veröffentlichen: ${t.title} (${t.steps.length} Schritte, /${t.slug}${s?.length ? " — Slug belegt, bekäme Zähler!" : ""}) · Kategorie ${t.cat} · site_domains ${JSON.stringify(SITE_DOMAINS)}`);
+    t.steps.forEach((st, i) => console.log(`    ${i + 1}. ${st.title}  · page_url ${pageUrlFor(st.shot) ?? "—"}`));
+    console.log(`    ↳ würde KB-Index schreiben (${t.steps.length + 1} Abschnitte)${openai ? "" : " — übersprungen: kein OPENAI_API_KEY"}`);
+    continue;
+  }
   const tutId = uuid();
 
   // Slug: bevorzugt der vorgegebene (alte Links!); bei Kollision numerisch ausweichen.
@@ -137,5 +170,9 @@ for (const t of TUTORIALS) {
   await indexTutorialInline(tutId, t.title, slug, t.cat, rows);
 }
 
+if (DRY) {
+  console.log("\n✓ Trockenlauf fertig — nichts geschrieben.");
+  process.exit(0);
+}
 console.log("\n✓ Steply-Hilfe-Hub geseedet → /h/steply");
-console.log("→ Jetzt Screenshots + Selektoren: node --env-file=.env.local scripts/shoot-steply-help.mjs <pw-dir>");
+console.log("→ Jetzt Bilder + Selektoren: shoot-steply-help.mjs, dann apply-steply-help-shots.mjs");

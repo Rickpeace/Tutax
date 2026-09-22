@@ -11,11 +11,14 @@ export function AutoCi({
   compact,
   endpoint = "/api/theme/analyze",
   successMsg = "CI übernommen! Farben aktualisiert.",
+  inputLabel = "Adresse Ihrer Website",
 }: {
   initialUrl: string;
   compact?: boolean;
   endpoint?: string;
   successMsg?: string;
+  /** Name des Eingabefelds für Screenreader und die Live-Führung (zwei Felder je Seite). */
+  inputLabel?: string;
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, start] = useTransition();
@@ -51,6 +54,7 @@ export function AutoCi({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://www.firma.de"
+          aria-label={inputLabel}
           className="h-9"
         />
         <Button onClick={run} disabled={pending || !url} variant="outline" size="sm">
@@ -74,6 +78,7 @@ export function AutoCi({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://www.muster-gmbh.de"
+          aria-label={inputLabel}
         />
         <Button onClick={run} disabled={pending || !url} variant="outline">
           {pending ? "…" : "Analysieren"}

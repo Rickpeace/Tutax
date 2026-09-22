@@ -192,7 +192,12 @@ export function DesignModeSwitcher({
             <span className="text-[12.5px] font-extrabold text-ink-2">
               Von Ihrer Website – Farben, Schrift, Logo
             </span>
-            <AutoCi initialUrl={sourceUrl} compact successMsg="Design erstellt! Jetzt oben „Verwenden“ wählen." />
+            <AutoCi
+              initialUrl={sourceUrl}
+              compact
+              inputLabel="Adresse Ihrer Website für das KI-Design"
+              successMsg="Design erstellt! Jetzt oben „Verwenden“ wählen."
+            />
             <AiLogoUpload logoUrl={aiLogoUrl} />
           </div>
           <div className="grid content-start gap-1.5">
@@ -203,6 +208,7 @@ export function DesignModeSwitcher({
               initialUrl={sourceUrl}
               compact
               endpoint="/api/theme/extreme"
+              inputLabel="Adresse Ihrer Website für den Nachbau"
               successMsg="Nachbau erstellt! Jetzt oben „Verwenden“ wählen."
             />
           </div>
