@@ -21,7 +21,15 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Person/Konto: die am längsten ungenutzte fliegt. Gibt Token + öffentliche Kennung zurück
  * (id: null, solange Migration 0041 fehlt — dann gilt das alte Verhalten: eine je Person).
  */
-export async function rotateRecorderToken(opts?: { manual?: boolean }): Promise<
+export async function rotateRecorderToken(opts?: {
+  manual?: boolean;
+  /**
+   * Kennung eines zuvor in derselben Sitzung erzeugten Codes, den der neue ersetzen soll.
+   * Entfernt wird er NUR, wenn er nie benutzt wurde (last_used_at is null) und er dieser
+   * Person in diesem Konto gehört — eine echte, laufende Verbindung wird nie still getrennt.
+   */
+  replaceUnusedId?: string | null;
+}): Promise<
   { ok: true; token: string; id: string | null } | { ok: false; error: string }
 > {
   const { account, userId } = await requireAccount();
@@ -52,6 +60,20 @@ export async function rotateRecorderToken(opts?: { manual?: boolean }): Promise<
   }
 
   const newId = ins.data.id as string;
+  // „Neuen Code erzeugen“ ersetzt den Vorgänger aus derselben Sitzung, statt bei jedem
+  // Klick eine dauerhaft gültige Karteileiche zu hinterlassen. Die Bedingung
+  // last_used_at is null steht in der Abfrage selbst: eine bereits genutzte Verbindung
+  // bleibt dadurch auch bei einem falsch mitgeschickten Wert unberührt.
+  const replaceId = opts?.replaceUnusedId;
+  if (replaceId && replaceId !== newId && UUID_RE.test(replaceId)) {
+    await admin
+      .from("recorder_tokens")
+      .delete()
+      .eq("id", replaceId)
+      .eq("account_id", account.id)
+      .eq("user_id", userId)
+      .is("last_used_at", null);
+  }
   await pruneConnections(admin, account.id, userId, newId);
   revalidatePath("/app/settings", "layout");
   return { ok: true, token, id: newId };

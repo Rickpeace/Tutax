@@ -89,6 +89,10 @@ export function RecorderConnect({
   // Manueller Fallback (Code kopieren) — eingeklappt.
   const [showManual, setShowManual] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  // Kennung des zuletzt IN DIESER SITZUNG erzeugten manuellen Codes. „Neuen Code erzeugen“
+  // ersetzt genau diesen (und nur, solange er nie benutzt wurde) — sonst sammelten sich
+  // bei jedem Klick dauerhaft gültige, nie eingelöste Verbindungen an.
+  const [manualId, setManualId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [thisBrowserId, setThisBrowserId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -214,9 +218,15 @@ export function RecorderConnect({
     if (busy) return;
     setBusy(true);
     try {
-      const res = await rotateRecorderToken({ manual: true });
+      // Vorgänger nur dann zum Ersetzen anbieten, wenn er laut Liste noch nie genutzt
+      // wurde. Der Server prüft das zusätzlich selbst (last_used_at is null).
+      const prev = manualId;
+      const prevRow = prev ? connections.find((c) => c.id === prev) : undefined;
+      const replaceUnusedId = prev && (!prevRow || !prevRow.lastUsedAt) ? prev : null;
+      const res = await rotateRecorderToken({ manual: true, replaceUnusedId });
       if (res.ok) {
         setToken(res.token);
+        setManualId(res.id);
         router.refresh();
         toast.success("Verbindungs-Code erstellt. Jetzt in die Erweiterung einfügen.");
       } else {
@@ -382,6 +392,10 @@ export function RecorderConnect({
                 Neuen Code erzeugen
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Der neue Code ersetzt den hier eben erzeugten, solange dieser noch nicht
+              eingelöst wurde. Bereits verbundene Browser bleiben verbunden.
+            </p>
           </>
         ) : (
           <>
