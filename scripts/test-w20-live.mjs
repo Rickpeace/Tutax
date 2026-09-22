@@ -7,10 +7,13 @@
 //  (c) setTutorialAudience-Mapping (Nebenwirkungen der geteilten Sichtbarkeits-Logik):
 //      public+lernen ⇒ visibility public + in_lernen true (erscheint in der Lernen-Query);
 //      Haken1 aus ⇒ internal (public-Bilder weg, wie test-internal-trace);
-//      Business-Gate greift für nicht-Business.
+//      Business-Gate greift für nicht-Business; Tarif-Prüfung (lib/plan.ts audienceGateError,
+//      dieselbe Funktion wie in der Action): „Team“ zusätzlich zur Hilfe-Seite ab Pro, nur beim
+//      Einschalten — bestehende Schulungen bleiben, Abwählen geht immer.
 //  (d) video_jobs-Insert mit category_id + eigenem Titel → Row korrekt.
-// Nutzung:  node --env-file=.env.local scripts/test-w20-live.mjs
+// Nutzung:  node --env-file=.env.local scripts/test-w20-live.mjs   (Node ≥ 22.18: TS-Import ohne Flag)
 import { createClient } from "@supabase/supabase-js";
+import { audienceGateError, BUSINESS_REQUIRED, PRO_REQUIRED } from "../src/lib/plan.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -211,6 +214,27 @@ try {
   const { data: accFree } = await admin.from("accounts").select("plan").eq("id", accountId).single();
   const isBusiness = accFree.plan === "business";
   ok(!isBusiness, "c3) Konto ist nicht Business -> setTutorialAudience(internal) würde BUSINESS_REQUIRED werfen");
+
+  // c4) Tarif-Prüfung der Action (echte Funktion) gegen den ECHTEN Zustand der Anleitung.
+  const free = { plan: "free" }, pro = { plan: "pro" }, biz = { plan: "business" };
+  const both = { publicOn: true, lernenOn: true };
+  const helpOnly = { publicOn: true, lernenOn: false };
+  const teamOnly = { publicOn: false, lernenOn: true };
+  await admin.from("tutorials").update({ visibility: "public", in_lernen: false }).eq("id", tutId);
+  const plain = (await admin.from("tutorials").select("visibility, in_lernen").eq("id", tutId).single()).data;
+  ok(audienceGateError(free, plain, both) === PRO_REQUIRED, "c4) Kostenlos: „Team“ dazu einschalten → PRO_REQUIRED");
+  ok(audienceGateError(pro, plain, both) === null, "c4) Pro: „Team“ zusätzlich zur Hilfe-Seite erlaubt");
+  ok(audienceGateError(biz, plain, both) === null, "c4) Business: „Team“ zusätzlich erlaubt");
+  ok(audienceGateError(pro, plain, teamOnly) === BUSINESS_REQUIRED, "c4) Pro: „nur Team“ → BUSINESS_REQUIRED");
+  ok(audienceGateError(free, plain, helpOnly) === null, "c4) Kostenlos: nur Hilfe-Seite erlaubt");
+  // Bestand nach Downgrade: bereits gesetzte Schulung bleibt, Abwählen geht.
+  await admin.from("tutorials").update({ in_lernen: true }).eq("id", tutId);
+  const training = (await admin.from("tutorials").select("visibility, in_lernen").eq("id", tutId).single()).data;
+  ok(audienceGateError(free, training, both) === null, "c4) Kostenlos + bestehende Schulung: bleibt erlaubt (keine Datenänderung)");
+  ok(audienceGateError(free, training, helpOnly) === null, "c4) Kostenlos + bestehende Schulung: Abwählen erlaubt");
+  const internalRow = { visibility: "internal", in_lernen: false };
+  ok(audienceGateError(free, internalRow, both) === null, "c4) Kostenlos + interne Anleitung (Downgrade): wieder öffentlich mit Team erlaubt");
+  ok(audienceGateError(free, internalRow, helpOnly) === null, "c4) Kostenlos + interne Anleitung: nur öffentlich erlaubt");
   await admin.from("accounts").update({ plan: "business" }).eq("id", accountId);
 
   // ---------- (d) video_jobs mit category_id + eigenem Titel ----------

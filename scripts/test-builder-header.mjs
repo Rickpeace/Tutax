@@ -6,8 +6,9 @@
 //     leere Anleitung gesperrt („Erst Schritte anlegen“)
 //   - Zielgruppe: zwei Chips „Hilfe-Seite (für alle)“ / „Team“ (role=group, aria-pressed), alle
 //     3 Kombinationen in der DB (public+in_lernen / internal / public), letzter aktiver Chip nicht
-//     abwählbar (Tooltip), Hinweis „mit Schulungsnachweis“ (kein Schalter), Tastatur, Pro-Tarif
-//     sperrt „Team“; keine „·“-Trenner; einzeilig bei 1400 px
+//     abwählbar (Tooltip), Hinweis „mit Schulungsnachweis“ (kein Schalter), Tastatur; Tarife laut
+//     Tarifseite: Kostenlos sperrt „Team“ (Hinweis „ab dem Pro-Tarif“), Pro darf „Team“ zusätzlich
+//     zur Hilfe-Seite, aber nicht „nur Team“ (Business); keine „·“-Trenner; einzeilig bei 1400 px
 //   - Schritt-Panel: „Erweitert (für Automationen)" standardmäßig eingeklappt; ohne Änderungen
 //     nur „Gespeichert" (kein ausgegrauter Speichern-Knopf), mit Änderungen Speichern/Verwerfen
 //   - mobil 390 px (Entwurf + veröffentlicht): keine horizontale Scrollleiste, nichts ragt raus
@@ -343,20 +344,52 @@ try {
     await page.mouse.move(5, 5);
   }
 
-  // ---- Ohne Business: „Team“ gesperrt (Tarif-Hinweis), Hilfe-Seite bleibt ----
-  await admin.from("accounts").update({ plan: "pro" }).eq("id", accountId);
-  await page.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
-  await controls.waitFor({ timeout: 60_000 });
-  await page.waitForTimeout(1200);
-  ok((await chipTeam.getAttribute("aria-disabled")) === "true", "Pro-Tarif: „Team“ gesperrt");
+  // ---- Tarife (lib/pricing.ts): Kostenlos → „Team“ gesperrt (Pro-Hinweis) ----
+  const reopen = async () => {
+    await page.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
+    await controls.waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(1200);
+  };
+  const inLernenNow = async () => (await admin.from("tutorials").select("in_lernen").eq("id", tutorialId).single()).data.in_lernen;
+  await admin.from("accounts").update({ plan: "free" }).eq("id", accountId);
+  await reopen();
+  ok((await chipTeam.getAttribute("aria-disabled")) === "true", "Kostenlos: „Team“ gesperrt");
   await chipTeam.click({ force: true });
   await page.waitForTimeout(800);
-  ok((await admin.from("tutorials").select("in_lernen").eq("id", tutorialId).single()).data.in_lernen === false, "Pro-Tarif: Klick auf „Team“ ändert nichts (DB)");
+  ok((await inLernenNow()) === false, "Kostenlos: Klick auf „Team“ ändert nichts (DB)");
   await page.mouse.move(5, 5);
   await page.waitForTimeout(300);
   await chipTeam.hover();
-  ok(await page.getByText(/im Business-Tarif enthalten/).first().waitFor({ timeout: 5_000 }).then(() => true, () => false), "Hinweis (Toast/Tooltip) nennt den Business-Tarif");
+  ok(await page.getByText(/ab dem Pro-Tarif enthalten/).first().waitFor({ timeout: 5_000 }).then(() => true, () => false), "Hinweis (Tooltip) nennt den Pro-Tarif");
   await page.mouse.move(5, 5);
+
+  // ---- Pro: „Team“ zusätzlich zur Hilfe-Seite erlaubt, „nur Team“ bleibt Business ----
+  await admin.from("accounts").update({ plan: "pro" }).eq("id", accountId);
+  await reopen();
+  ok((await chipTeam.getAttribute("aria-disabled")) !== "true", "Pro: „Team“ wählbar");
+  await chipTeam.click();
+  ok((await dbWait(tutorialId, "in_lernen", true)) === true, "Pro: „Team“ dazu → in_lernen=true (DB)");
+  await page.waitForTimeout(500);
+  ok((await chipHelp.getAttribute("aria-disabled")) === "true", "Pro: „Hilfe-Seite“ abwählen (= nur Team) gesperrt");
+  await chipHelp.click({ force: true });
+  await page.waitForTimeout(800);
+  ok((await admin.from("tutorials").select("visibility").eq("id", tutorialId).single()).data.visibility === "public", "Pro: bleibt öffentlich (DB)");
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  await chipHelp.hover();
+  ok(await page.getByText(/im Business-Tarif enthalten/).first().waitFor({ timeout: 5_000 }).then(() => true, () => false), "Hinweis nennt für „nur Team“ den Business-Tarif");
+  await page.mouse.move(5, 5);
+
+  // ---- Downgrade auf Kostenlos: bestehende Schulung bleibt, Abwählen geht ----
+  await admin.from("accounts").update({ plan: "free" }).eq("id", accountId);
+  await reopen();
+  ok((await pressed(chipTeam)) && (await inLernenNow()) === true, "Kostenlos nach Downgrade: bestehendes „Team“ bleibt an (keine Datenänderung)");
+  ok((await chipTeam.getAttribute("aria-disabled")) !== "true", "… und lässt sich abwählen");
+  await chipTeam.click();
+  ok((await dbWait(tutorialId, "in_lernen", false)) === false, "Abwählen im kostenlosen Tarif: in_lernen=false (DB)");
+  await page.waitForTimeout(500);
+  ok((await chipTeam.getAttribute("aria-disabled")) === "true", "… danach wieder gesperrt");
+
   await admin.from("accounts").update({ plan: "business" }).eq("id", accountId);
   await page.goto(`${BASE}/app/tutorials/${tutorialId}`, { waitUntil: "domcontentloaded" });
   await controls.waitFor({ timeout: 60_000 });

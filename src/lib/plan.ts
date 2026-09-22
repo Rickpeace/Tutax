@@ -32,6 +32,28 @@ export const PRO_REQUIRED =
   "Dieses Feature ist ab dem Pro-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
 
 /**
+ * Tarif-Prüfung für die Zielgruppe einer Anleitung (setTutorialAudience). Liefert die
+ * Fehlermeldung oder null (= erlaubt). Regeln laut Tarifseite (lib/pricing.ts):
+ *  - „nur Team“ (publicOn=false → intern) ist Business;
+ *  - öffentlich + „Team“ (Schulungen mit Schulungsnachweis) ist Pro — aber nur beim
+ *    EINSCHALTEN: was schon Schulung ist (in_lernen oder intern, etwa nach einem Downgrade),
+ *    bleibt erlaubt; Abwählen geht immer. Bestehende Daten werden so nie angefasst.
+ * Rein und ohne Imports → auch aus Test-Skripten importierbar (node --experimental-strip-types).
+ */
+export function audienceGateError(
+  account: { plan?: string | null },
+  current: { visibility: string; in_lernen: boolean | null },
+  audience: { publicOn: boolean; lernenOn: boolean },
+): string | null {
+  if (!audience.publicOn && !isBusiness(account)) return BUSINESS_REQUIRED;
+  const alreadyTraining = !!current.in_lernen || current.visibility === "internal";
+  if (audience.publicOn && audience.lernenOn && !alreadyTraining && !isPro(account)) {
+    return PRO_REQUIRED;
+  }
+  return null;
+}
+
+/**
  * Wie viele Personen (alle Rollen, inkl. offener Einladungen) das Team haben darf.
  * Kostenlos = nur der Inhaber, Pro bis 5, Business unbegrenzt (Produktentscheid 22.09.2026).
  * Bestehende größere Teams werden nicht verkleinert — nur neue Einladungen gesperrt.

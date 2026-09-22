@@ -45,6 +45,14 @@ try {
   const tu = await user.from("tutorials").update({ visibility: "internal" }).eq("id", tp.data?.[0]?.id).select("id");
   ok(!!tu.error, `Kostenlos: Anleitung per REST auf „intern" stellen abgelehnt (${tu.error?.message ?? "KEIN Fehler"})`);
 
+  // Schulungsnachweis bei öffentlicher Anleitung (in_lernen) ist ab Pro — geprüft in der
+  // Server-Action (lib/plan.ts audienceGateError), NICHT per DB-Trigger. Hier nur als Befund
+  // ausgegeben (kein Fehlschlag), damit die Lücke „am App vorbei per REST“ sichtbar bleibt.
+  const tl = await user.from("tutorials").update({ in_lernen: true }).eq("id", tp.data?.[0]?.id).select("in_lernen");
+  console.log(
+    `· Hinweis: Kostenlos in_lernen per REST ${tl.error ? "abgelehnt (DB-Sperre vorhanden)" : "MÖGLICH – nur die App sperrt (DB-Sperre bräuchte Migration)"}`,
+  );
+
   // KI-Design (0038)
   const th = await user.from("themes").update({ mode: "ai" }).eq("account_id", aid).select("mode");
   ok(!!th.error, `Kostenlos: KI-Design per REST aktivieren abgelehnt (${th.error?.message ?? "KEIN Fehler"})`);
