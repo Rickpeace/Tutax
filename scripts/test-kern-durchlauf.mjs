@@ -49,7 +49,7 @@ const BASE = process.env.TEST_BASE || `http://localhost:${PORT}`;
 const OWN_SERVER = !process.env.TEST_BASE;
 const PW = "Test12345!";
 const stamp = String(process.hrtime.bigint()).slice(-8);
-const PHASES = (process.env.PHASES || "1,2,3,4,5,6,7,8,9").split(",").map((s) => s.trim());
+const PHASES = (process.env.PHASES || "1,2,3,4,5,6,7,8,9,10").split(",").map((s) => s.trim());
 const on = (p) => PHASES.includes(String(p));
 
 const findings = [];

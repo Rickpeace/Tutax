@@ -1,8 +1,9 @@
 ﻿// Ablaeufe des Kern-Durchlaufs (siehe test-kern-durchlauf.mjs).
 // Jede Phase kapselt ihre Fehler, damit ein Stolperstein den Rest nicht stoppt.
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -1254,6 +1255,293 @@ export async function run(c) {
     } catch (e) {
       bug("aergerlich", "Phase 9 abgebrochen", String(e && e.message ? e.message : e));
       await shot(page, "phase9-fehler");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Nachweis-Phase zu den behobenen Kern-Befunden (Welle 54):
+  //   1 leere Anleitung laesst sich weder ueber den Schalter NOCH serverseitig veroeffentlichen
+  //   2 Loeschen des letzten Schritts setzt eine veroeffentlichte Anleitung auf Entwurf
+  //   3 Doppelklick auf „+" legt genau EINEN Schritt an
+  //   4 keine Hydration-Fehler mehr in der Bibliothek (Zeitangaben kommen fertig vom Server)
+  //   5 Loesch-Abfrage beim einzigen Schritt nennt die richtige Folge
+  //   8 keine grauen Browser-Abfragen mehr (Steply-Dialog)
+  if (c.on(10)) {
+    setPhase("10 — Nachweise: leere Anleitung, letzter Schritt, Doppelklick, Abfragen");
+    const hydration = [];
+    const onConsole = (m) => {
+      if (m.type() === "error" && /hydrat/i.test(m.text())) hydration.push(m.text());
+    };
+    const onPageError = (e) => {
+      if (/hydrat/i.test(e.message)) hydration.push(e.message);
+    };
+    page.on("console", onConsole);
+    page.on("pageerror", onPageError);
+    const angelegt = [];
+    // Karten im Ablauf (erste Box des Builders), nicht die Vorschau im Schritt-Panel.
+    const flowKarten = () =>
+      page.locator("div.rounded-2xl").first().locator("button").filter({ has: page.locator("div.size-\\[38px\\]") });
+
+    async function neueAnleitung(titel) {
+      await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: /Neue Anleitung/i }).first().waitFor({ timeout: 90_000 });
+      await sleep(1200);
+      await page.getByRole("button", { name: /Neue Anleitung/i }).first().click();
+      await page.getByRole("dialog").waitFor({ timeout: 15_000 });
+      await page.getByRole("button", { name: "Selbst bauen" }).click();
+      await page.locator("#title").fill(titel);
+      await page.getByRole("button", { name: /Erstellen & bearbeiten/i }).click();
+      await page.waitForURL(/\/app\/tutorials\//, { timeout: 60_000 });
+      const id = page.url().split("/app/tutorials/")[1].split(/[?#]/)[0];
+      angelegt.push(id);
+      return id;
+    }
+
+    try {
+      // ── Befund 1a: Schalter auf der Karte ist bei 0 Schritten gesperrt ───────
+      const leerId = await neueAnleitung("Nachweis leer");
+      await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+      await page.getByText("Nachweis leer", { exact: true }).first().waitFor({ timeout: 60_000 });
+      await sleep(1500);
+      const leerCard = page.locator("div.group").filter({ hasText: "Nachweis leer" }).first();
+      const leerSw = leerCard.getByRole("switch").first();
+      const gesperrt = await leerSw.isDisabled();
+      const hinweis = await leerSw.getAttribute("title");
+      info(`Schalter der leeren Anleitung: gesperrt=${gesperrt}, Hinweis=„${hinweis}“`);
+      if (!gesperrt) {
+        bug("aergerlich", "Leere Anleitung: Schalter in der Bibliothek ist NICHT gesperrt", "Der Veroeffentlichen-Schalter der leeren Karte laesst sich weiterhin umlegen.");
+      } else {
+        ok("Leere Anleitung: Schalter in der Bibliothek ist gesperrt");
+      }
+      const tipAnker = leerCard.getByTestId("publish-blocked").first();
+      if (await tipAnker.count()) {
+        await tipAnker.hover().catch(() => {});
+        await sleep(900);
+        const sichtbar = (await page.locator("body").innerText()).includes("Erst Schritte anlegen");
+        info(`Tooltip „Erst Schritte anlegen“ sichtbar: ${sichtbar}`);
+        if (!sichtbar && hinweis !== "Erst Schritte anlegen") {
+          bug("kosmetisch", "Gesperrter Schalter nennt den Grund nicht", "Weder Tooltip noch Titel erklaeren, warum nicht veroeffentlicht werden kann.");
+        } else ok("Gesperrter Schalter erklaert den Grund");
+      }
+      await shot(page, "90-leere-anleitung-schalter-gesperrt");
+      const { data: leerNach } = await admin.from("tutorials").select("status").eq("id", leerId).single();
+      if (leerNach.status !== "draft") bug("blockierend", "Leere Anleitung steht trotz Sperre auf veroeffentlicht", `status=${leerNach.status}`);
+
+      // ── Befund 3: Doppelklick auf „+" legt genau EINEN Schritt an ────────────
+      await page.goto(`${BASE}/app/tutorials/${leerId}`, { waitUntil: "domcontentloaded" });
+      await page.getByTestId("empty-builder").waitFor({ timeout: 60_000 });
+      await page.getByRole("button", { name: /Schritt von Hand anlegen/i }).click();
+      await page.locator("#step-title").waitFor({ timeout: 30_000 });
+      await sleep(3000);
+      const plus = page.getByRole("button", { name: "Schritt hier einfügen" }).first();
+      await plus.waitFor({ timeout: 30_000 });
+      await plus.click({ clickCount: 2, delay: 40 });
+      await sleep(6000);
+      const { count: nachDoppel } = await admin
+        .from("steps")
+        .select("id", { count: "exact", head: true })
+        .eq("tutorial_id", leerId);
+      info(`Schritte nach Doppelklick auf „+“: ${nachDoppel} (erwartet 2)`);
+      await shot(page, "91-plus-doppelklick");
+      if (nachDoppel !== 2) {
+        bug("aergerlich", "Doppelklick auf „+“ legt nicht genau einen Schritt an", `Nach einem Schritt von Hand und EINEM Doppelklick stehen ${nachDoppel} Schritte in der Datenbank (erwartet 2).`);
+      } else ok("Doppelklick auf „+“ legt genau einen Schritt an");
+
+      // ── Befund 1b: Serverseitige Sperre (Oberflaeche umgangen) ──────────────
+      // Die echte Veroeffentlichen-Action mitschneiden und mit der ID einer LEEREN
+      // Anleitung wiederholen — so wird der Server geprueft, nicht die Oberflaeche.
+      let actionId = null;
+      let actionBody = null;
+      let actionUrl = null;
+      let actionHeaders = null;
+      const grab = (req) => {
+        if (req.method() !== "POST") return;
+        const h = req.headers();
+        if (!h["next-action"]) return;
+        const body = req.postData() || "";
+        if (!body.includes(leerId)) return;
+        actionId = h["next-action"];
+        actionBody = body;
+        actionUrl = req.url();
+        actionHeaders = h;
+      };
+      page.on("request", grab);
+      const pubBtn = page.getByTestId("publish-button");
+      await pubBtn.waitFor({ timeout: 30_000 });
+      await pubBtn.click();
+      await page.getByTestId("published-badge").waitFor({ timeout: 60_000 }).catch(() => {});
+      await sleep(2500);
+      page.off("request", grab);
+      const { data: pubTut } = await admin.from("tutorials").select("status").eq("id", leerId).single();
+      if (pubTut.status !== "published") bug("blockierend", "Anleitung mit Schritten laesst sich nicht mehr veroeffentlichen", `status=${pubTut.status} — die neue Server-Sperre darf nur leere Anleitungen treffen.`);
+      else ok("Anleitung MIT Schritten laesst sich weiterhin veroeffentlichen");
+
+      const leer2Id = await neueAnleitung("Nachweis leer zwei");
+      if (actionId && actionBody && actionBody.includes(leerId)) {
+        const headers = { "next-action": actionId };
+        for (const k of ["content-type", "accept", "next-router-state-tree"]) {
+          if (actionHeaders[k]) headers[k] = actionHeaders[k];
+        }
+        const resp = await page.request.post(actionUrl, {
+          headers,
+          data: actionBody.split(leerId).join(leer2Id),
+        });
+        await sleep(2500);
+        const { data: leer2 } = await admin.from("tutorials").select("status").eq("id", leer2Id).single();
+        info(`Nachgestellter Veroeffentlichen-Aufruf: HTTP ${resp.status()}; status der leeren Anleitung=${leer2.status}`);
+        if (leer2.status === "published") {
+          bug("blockierend", "Server veroeffentlicht eine leere Anleitung", "Die Veroeffentlichen-Action laesst sich an der Oberflaeche vorbei mit einer Anleitung ohne Schritte aufrufen.");
+        } else ok("Server lehnt das Veroeffentlichen einer leeren Anleitung ab (nicht nur die Oberflaeche)");
+      } else {
+        info("Veroeffentlichen-Action nicht mitgeschnitten — Server-Sperre diesmal nicht nachgestellt.");
+      }
+
+      // ── Befunde 2 + 5: letzten Schritt einer VEROEFFENTLICHTEN Anleitung loeschen ──
+      for (let runde = 0; runde < 3; runde++) {
+        const { count } = await admin
+          .from("steps")
+          .select("id", { count: "exact", head: true })
+          .eq("tutorial_id", leerId);
+        if (count <= 1) break;
+        await page.goto(`${BASE}/app/tutorials/${leerId}`, { waitUntil: "domcontentloaded" });
+        await page.getByTestId("editor-controls").waitFor({ timeout: 60_000 });
+        await sleep(2500);
+        await flowKarten().last().click();
+        await page.locator("#step-title").waitFor({ timeout: 30_000 });
+        await sleep(800);
+        await page.getByRole("button", { name: /Schritt löschen/ }).click();
+        const d = page.getByTestId("confirm-dialog");
+        await d.waitFor({ timeout: 15_000 });
+        await d.getByRole("button", { name: /löschen/i }).last().click();
+        await sleep(4000);
+      }
+      // Jetzt der EINZIGE Schritt: Abfrage muss die Folge nennen.
+      await page.goto(`${BASE}/app/tutorials/${leerId}`, { waitUntil: "domcontentloaded" });
+      await page.getByTestId("editor-controls").waitFor({ timeout: 60_000 });
+      await sleep(2500);
+      await flowKarten().first().click();
+      await page.locator("#step-title").waitFor({ timeout: 30_000 });
+      await sleep(800);
+      await page.getByRole("button", { name: /Schritt löschen/ }).click();
+      const dlg = page.getByTestId("confirm-dialog");
+      await dlg.waitFor({ timeout: 15_000 });
+      const dlgTxt = (await dlg.innerText()).replace(/\s+/g, " ").trim();
+      info(`Abfrage beim einzigen Schritt: ${dlgTxt}`);
+      await shot(page, "92-letzter-schritt-abfrage");
+      if (/endet danach beim vorigen Schritt/.test(dlgTxt)) {
+        bug("aergerlich", "Abfrage verweist auf einen vorigen Schritt, den es nicht gibt", dlgTxt);
+      } else if (!/keine Schritte mehr/.test(dlgTxt)) {
+        bug("aergerlich", "Abfrage nennt die Folge beim einzigen Schritt nicht", dlgTxt);
+      } else ok("Abfrage beim einzigen Schritt nennt die richtige Folge");
+      if (!/Entwurf/.test(dlgTxt)) {
+        bug("aergerlich", "Abfrage sagt das Zuruecksetzen auf Entwurf nicht an", dlgTxt);
+      } else ok("Abfrage sagt an, dass die Anleitung auf Entwurf zurueckgesetzt wird");
+
+      // Falls der Dialog zwischenzeitlich geschlossen wurde (Neu-Rendern des Panels): erneut oeffnen.
+      if (!(await dlg.isVisible().catch(() => false))) {
+        await page.getByRole("button", { name: /Schritt löschen/ }).first().click();
+        await dlg.waitFor({ timeout: 15_000 });
+      }
+      await dlg.getByRole("button", { name: /löschen/i }).last().click();
+      // Meldungen sofort einsammeln (sie blenden nach wenigen Sekunden wieder aus).
+      const meldungen = new Set();
+      for (let i = 0; i < 30; i++) {
+        for (const t of await page.locator("[data-sonner-toast]").allInnerTexts()) {
+          meldungen.add(t.replace(/\s+/g, " ").trim());
+        }
+        await sleep(400);
+      }
+      const meldung = [...meldungen].join(" / ") || null;
+      const { count: restSchritte } = await admin
+        .from("steps")
+        .select("id", { count: "exact", head: true })
+        .eq("tutorial_id", leerId);
+      const { data: leerDanach } = await admin.from("tutorials").select("status").eq("id", leerId).single();
+      info(`Nach dem Loeschen des letzten Schritts: Schritte=${restSchritte}, status=${leerDanach.status}, Meldung=${meldung}`);
+      await shot(page, "93-nach-letztem-schritt");
+      if (restSchritte !== 0) bug("aergerlich", "Letzter Schritt wurde nicht geloescht", `Es stehen noch ${restSchritte} Schritte in der Datenbank.`);
+      if (leerDanach.status === "published") {
+        bug("aergerlich", "Geleerte Anleitung bleibt veroeffentlicht", "Nach dem Loeschen des letzten Schritts steht die Anleitung weiterhin auf „veroeffentlicht“.");
+      } else ok("Geleerte Anleitung wird automatisch auf Entwurf zurueckgesetzt");
+      if (!meldung || !/Entwurf/i.test(meldung)) {
+        bug("kosmetisch", "Zuruecksetzen auf Entwurf wird nicht gemeldet", `Sichtbare Meldungen: ${meldung || "(keine)"}`);
+      } else ok("Das Zuruecksetzen auf Entwurf wird als Meldung angesagt");
+
+      // ── Befund 4: keine Hydration-Fehler in der Bibliothek ──────────────────
+      await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await sleep(2500);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await sleep(2500);
+      info(`Hydration-Meldungen in der Bibliothek: ${hydration.length}`);
+      if (hydration.length) {
+        bug("aergerlich", "Hydration-Fehler in der Bibliothek", hydration.slice(0, 2).join(" | ").slice(0, 400));
+      } else ok("Bibliothek laedt ohne Hydration-Fehler (Zeitangaben kommen fertig vom Server)");
+      await shot(page, "94-bibliothek-ohne-hydration");
+
+      // ── Befund 8: Steply-Abfragen statt grauer Browser-Dialoge ──────────────
+      await page.goto(`${BASE}/app/assistent/wissen`, { waitUntil: "domcontentloaded" });
+      await sleep(2000);
+      const anlegen = page.getByRole("button", { name: /Artikel anlegen|Neuer Artikel/ }).first();
+      await anlegen.waitFor({ timeout: 60_000 });
+      await anlegen.click();
+      await page.waitForURL(/\/app\/assistent\/wissen\/[0-9a-f-]{8,}/, { timeout: 60_000 });
+      const artikelId = page.url().split("/wissen/")[1].split(/[?#]/)[0];
+      await sleep(2000);
+      await page.getByRole("button", { name: /^Löschen$/ }).first().click();
+      const aDlg = page.getByTestId("confirm-dialog");
+      const aDa = await aDlg.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      if (!aDa) {
+        bug("aergerlich", "Artikel loeschen fragt nicht im Steply-Dialog", "Statt der Steply-Abfrage kommt weiterhin die graue Browser-Abfrage (oder gar keine).");
+      } else {
+        info(`Abfrage „Artikel loeschen“: ${(await aDlg.innerText()).replace(/\s+/g, " ").slice(0, 220)}`);
+        await shot(page, "95-artikel-loeschen-abfrage");
+        ok("Artikel loeschen fragt im Steply-Dialog");
+        await aDlg.getByRole("button", { name: /Abbrechen/ }).click();
+        await sleep(900);
+      }
+      await page.getByPlaceholder("Titel des Artikels").fill("Nachweis ungespeichert");
+      await sleep(600);
+      // Gezielt der Zurueck-Link IM Artikel-Editor (der Reiter im Menue heisst genauso).
+      await page.getByTestId("article-back").click();
+      const uDlg = page.getByTestId("confirm-dialog");
+      const uDa = await uDlg.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      if (!uDa) {
+        bug("aergerlich", "Ungespeicherte Artikel-Aenderungen fragen nicht im Steply-Dialog", "Beim Verlassen erscheint keine Steply-Abfrage.");
+      } else {
+        info(`Abfrage „ungespeicherte Aenderungen“: ${(await uDlg.innerText()).replace(/\s+/g, " ").slice(0, 220)}`);
+        await shot(page, "96-ungespeichert-abfrage");
+        ok("Ungespeicherte Artikel-Aenderungen fragen im Steply-Dialog");
+        await uDlg.getByRole("button", { name: /Weiter bearbeiten|Abbrechen/ }).click();
+        await sleep(700);
+      }
+      await admin.from("kb_articles").delete().eq("id", artikelId);
+
+      // Quelltext-Waechter: keine grauen Browser-Abfragen mehr in diesen Dateien.
+      // (Die Team-Verwaltung braucht dafuer ein zweites Konto-Mitglied — der Quelltext-
+      //  Nachweis haelt die Regel trotzdem fest.)
+      const wurzel = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+      const nativ = [];
+      for (const rel of [
+        "src/components/app/article-editor.tsx",
+        "src/components/app/team-manager.tsx",
+      ]) {
+        const src = readFileSync(path.join(wurzel, rel), "utf8");
+        for (const m of src.matchAll(/(?:window\.)?\bconfirm\s*\(\s*[`"']/g)) {
+          nativ.push(`${rel}: ${src.slice(m.index, m.index + 60).replace(/\s+/g, " ")}`);
+        }
+      }
+      if (nativ.length) {
+        bug("aergerlich", "Graue Browser-Abfragen noch im Quelltext", nativ.join(" | "));
+      } else ok("Keine grauen Browser-Abfragen mehr in Artikel-Editor und Team-Verwaltung");
+    } catch (e) {
+      bug("aergerlich", "Phase 10 abgebrochen", String(e && e.stack ? e.stack : e));
+      await shot(page, "phase10-fehler");
+    } finally {
+      page.off("console", onConsole);
+      page.off("pageerror", onPageError);
+      for (const id of angelegt) await admin.from("tutorials").delete().eq("id", id).then(() => {}, () => {});
     }
   }
 
