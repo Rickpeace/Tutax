@@ -4,6 +4,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai, embed } from "@/lib/openai";
 import { chatSystem } from "@/lib/ai-prompts";
 import { recordEvent } from "@/lib/events";
+import { safeEmail, safeHttpUrl, safePhone } from "@/lib/escalation";
 import { isExtraLang, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
 
 export const maxDuration = 30;
@@ -162,9 +163,10 @@ export async function POST(req: NextRequest) {
   const buildEscalation = (expertIdx?: number | null) => {
     if (!esc.enabled) return null;
     const p = typeof expertIdx === "number" ? experts[expertIdx] : undefined;
-    const calendarUrl = p?.calendarUrl || esc.calendarUrl;
-    const email = p?.email || esc.email;
-    const phone = p?.phone || esc.phone;
+    // Nur sichere Werte ausliefern (landen als href im Widget) — auch für Altdaten.
+    const calendarUrl = safeHttpUrl(p?.calendarUrl) ?? safeHttpUrl(esc.calendarUrl);
+    const email = safeEmail(p?.email) ?? safeEmail(esc.email);
+    const phone = safePhone(p?.phone) ?? safePhone(esc.phone);
     const name = p?.name || esc.contactName || account.name;
     const methods: { type: string; label: string; value: string }[] = [];
     if (calendarUrl)

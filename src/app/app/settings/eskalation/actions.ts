@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
+import { safeEmail, safeHttpUrl, safePhone } from "@/lib/escalation";
 
 type ExpertIn = {
   name?: string;
@@ -48,6 +49,17 @@ export async function saveEscalation(input: EscalationIn) {
     phone: clean(input.phone),
     experts,
   };
+
+  // Werte landen als Link im öffentlichen Chat -> nur gültige Formate speichern.
+  const check = (v: string, ok: (x: string) => string | null, what: string, who: string) => {
+    if (v && !ok(v)) throw new Error(`${what} ${who} ist ungültig: „${v}“`);
+  };
+  const people = [{ ...escalation, who: "(allgemeiner Kontakt)" }, ...experts.map((e) => ({ ...e, who: `(${e.name || "Person"})` }))];
+  for (const p of people) {
+    check(p.calendarUrl, safeHttpUrl, "Der Termin-Link", p.who);
+    check(p.email, safeEmail, "Die E-Mail-Adresse", p.who);
+    check(p.phone, safePhone, "Die Telefonnummer", p.who);
+  }
 
   const { error } = await supabase.from("accounts").update({ escalation }).eq("id", account.id);
   if (error) throw new Error(error.message);
