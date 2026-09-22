@@ -6,6 +6,24 @@ import type { Highlight } from "@/lib/types";
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
+/**
+ * Rechteck normalisieren: negative Breite/Höhe bedeuten „von rechts/unten aufgezogen“.
+ * Der Viewer zeigt sie längst richtig an (Math.min + Math.abs) — das Einbrennen muss
+ * exakt dieselbe Fläche treffen, sonst bliebe die öffentliche Bilddatei dort Klartext.
+ * Gibt null zurück, wenn Koordinaten fehlen/kaputt sind.
+ */
+export function normalizeRect(h: {
+  x?: unknown;
+  y?: unknown;
+  w?: unknown;
+  h?: unknown;
+}): { x: number; y: number; w: number; h: number } | null {
+  const nums = [h.x, h.y, h.w, h.h].map((v) => Number(v ?? 0));
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  const [x, y, w, hh] = nums;
+  return { x: Math.min(x, x + w), y: Math.min(y, y + hh), w: Math.abs(w), h: Math.abs(hh) };
+}
+
 /** Enthält die Highlight-Liste Blur-Markierungen, die eingebrannt werden müssen? */
 export function hasBlur(highlights: unknown): boolean {
   return (
@@ -41,13 +59,14 @@ export async function burnBlur(image: Buffer, highlights: unknown): Promise<Buff
   for (const b of blurs) {
     // Kaputte Koordinaten (nicht endlich) würden sharp werfen lassen — solche Einträge nimmt
     // updateStep gar nicht erst an; hier zusätzlich robust überspringen statt abzustürzen.
-    const nums = [b.x, b.y, b.w, b.h].map((v) => Number(v ?? 0));
-    if (nums.some((n) => !Number.isFinite(n))) continue;
-    const [bx, by, bw, bh] = nums;
-    const left = clamp(Math.round(bx * W), 0, W - 1);
-    const top = clamp(Math.round(by * H), 0, H - 1);
-    const width = clamp(Math.round(bw * W), 1, W - left);
-    const height = clamp(Math.round(bh * H), 1, H - top);
+    // Negative Breite/Höhe wird VOR dem Klemmen normalisiert (sonst klemmte width auf 1 und
+    // die Stelle bliebe in der öffentlichen Bilddatei lesbar).
+    const r = normalizeRect(b);
+    if (!r) continue;
+    const left = clamp(Math.round(r.x * W), 0, W - 1);
+    const top = clamp(Math.round(r.y * H), 0, H - 1);
+    const width = clamp(Math.round(r.w * W), 1, W - left);
+    const height = clamp(Math.round(r.h * H), 1, H - top);
     if (width < 2 || height < 2) continue;
 
     // Blockgröße ~1/12 der Region (mind. 1 px Kleinformat) -> grobe, unlesbare Kacheln.
@@ -76,6 +95,10 @@ export async function burnBlur(image: Buffer, highlights: unknown): Promise<Buff
  * Damit nie ein Schritt ohne Verpixelung die verpixelte Kopie eines anderen überschreibt,
  * wird die VEREINIGUNG aller Verpixelungen der Schritte mit diesem Bild eingebrannt
  * (lieber zu viel als zu wenig unkenntlich). Doppelte Rechtecke fallen weg.
+ *
+ * Die Rechtecke werden dabei normalisiert (negative Breite/Höhe → gleiche Fläche mit
+ * positiven Maßen), damit zwei Schreibweisen derselben Fläche als ein Eintrag gelten
+ * und burnBlur in jedem Fall die richtige Stelle trifft.
  */
 export function unionBlurs(lists: unknown[]): Highlight[] {
   const out: Highlight[] = [];
@@ -84,10 +107,12 @@ export function unionBlurs(lists: unknown[]): Highlight[] {
     if (!Array.isArray(list)) continue;
     for (const h of list as Highlight[]) {
       if (!h || typeof h !== "object" || h.type !== "blur") continue;
-      const key = [h.x, h.y, h.w, h.h].map((v) => Math.round((Number(v) || 0) * 1000)).join(",");
+      const r = normalizeRect(h);
+      if (!r) continue; // kaputte Koordinaten: burnBlur überspringt sie ohnehin
+      const key = [r.x, r.y, r.w, r.h].map((v) => Math.round(v * 1000)).join(",");
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(h);
+      out.push({ ...h, ...r });
     }
   }
   return out;

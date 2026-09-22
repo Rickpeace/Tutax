@@ -5,6 +5,10 @@ import { appBaseUrl } from "@/lib/url";
 // Sitemap: alle Account-Hubs (/h/{slug}) + veröffentlichte, eigene Tutorials
 // (/h/{acc}/{slug}). Bewusst simpel: nur echte Tutorials mit account_id — geteilte
 // Standard-Templates (account_id NULL) tauchen NICHT eigenständig auf.
+//
+// Datenschutz: NUR visibility='public'. Interne Anleitungen sind zwar inhaltlich
+// gesperrt, ihr aus dem Titel gebildeter Slug (z. B. „gehaltsabrechnung-…“) verriete
+// aber bereits Internes, sobald er Suchmaschinen aktiv gemeldet wird.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = appBaseUrl();
   const admin = createAdminClient();
@@ -15,6 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from("tutorials")
       .select("slug, account_id, updated_at")
       .eq("status", "published")
+      .eq("visibility", "public")
       .not("slug", "is", null)
       .not("account_id", "is", null),
   ]);

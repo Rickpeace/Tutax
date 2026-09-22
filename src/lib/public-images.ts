@@ -87,7 +87,11 @@ export async function rebuildPublicCopy(path: string): Promise<void> {
   }
 }
 
-/** Blur-Markierungen mit kaputten Koordinaten (nicht endlich) — beim Speichern ablehnen. */
+/**
+ * Verpixelungen mit kaputten Koordinaten (nicht endlich) — beim Speichern ablehnen.
+ * NEGATIVE Breite/Höhe gilt bewusst als gültig („von rechts/unten aufgezogen“): Anzeige
+ * (viewer-image) und Einbrennen (redact.normalizeRect) normalisieren sie identisch.
+ */
 export function hasInvalidBlur(highlights: unknown): boolean {
   if (!Array.isArray(highlights)) return false;
   return highlights.some((h) => {
