@@ -460,6 +460,42 @@ try {
     if (jD3b.tutorialId) tutorialIds.push(jD3b.tutorialId);
   }
 
+  // ---------- (f) Welle 53: Aufnahme in eine LEERE Anleitung (Anker = tutorialId) ----------
+  {
+    const { data: tutE } = await admin
+      .from("tutorials")
+      .insert({ account_id: accId, title: "Leer W53", status: "draft" })
+      .select("id")
+      .single();
+    tutorialIds.push(tutE.id);
+    const resE = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 2, "L"),
+      target: { tutorialId: tutE.id, anchor: { afterStepId: tutE.id } },
+    });
+    const jE = await resE.json().catch(() => ({}));
+    ok(
+      resE.status === 200 && jE.tutorialId === tutE.id && jE.inserted === true && !jE.fallback,
+      `(f) leere Anleitung: Aufnahme eingefuegt, kein fallback (${resE.status})`,
+    );
+    const { branches: brE, rootId: rootE } = await loadTut(tutE.id);
+    const orderE = rootE ? walkLinear(rootE, brE) : [];
+    ok(!!rootE && orderE.length === 2, `(f) root_step_id gesetzt + Kette aus 2 Schritten (war ${orderE.length})`);
+
+    // (f2) Anker „Anfang“ bei einer Anleitung MIT Schritten -> fallback, Ziel unveraendert.
+    const seedF = await seedLinearDraft(accId, ["X"]);
+    const resF2 = await post("/api/recorder/guide-complete", {
+      token,
+      steps: mkSteps(accId, 1, "F"),
+      target: { tutorialId: seedF.tutId, anchor: { afterStepId: seedF.tutId } },
+    });
+    const jF2 = await resF2.json().catch(() => ({}));
+    ok(resF2.status === 200 && jF2.fallback === true, `(f2) Anfang-Anker bei nicht leerer Anleitung -> fallback (${resF2.status})`);
+    const { count: fCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", seedF.tutId);
+    ok((fCount ?? 0) === 1, "(f2) Ziel unveraendert (1 Schritt)");
+    if (jF2.tutorialId) tutorialIds.push(jF2.tutorialId);
+  }
+
   // ---------- (e) >40-Grenze beim Einfuegen -> fallback:true, neues Tutorial ----------
   {
     const seedBig = await seedLinearDraft(accId, Array.from({ length: 39 }, (_, i) => `B${i + 1}`));

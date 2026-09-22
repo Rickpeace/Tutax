@@ -83,6 +83,7 @@ const SEL_ROLE_MAX = 40;
 // Extensions schicken kein `target` und verhalten sich exakt wie bisher.
 //
 //   anchor = { afterStepId }  -> lineare Kette hinter diesem Schritt einhängen
+//                                (afterStepId === tutorialId: Anfang einer LEEREN Anleitung)
 //   anchor = { branchId }     -> einen Verzweigungs-Ast füllen/verlängern
 //
 // parseGuideTarget prüft NUR die FORM (UUID-Strings, genau EIN Anker-Feld). Ob das

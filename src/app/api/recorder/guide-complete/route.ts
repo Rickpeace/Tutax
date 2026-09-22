@@ -290,6 +290,10 @@ async function insertIntoTarget(
   let anchorBranchId: string | null = null;
   let newBranchFrom: string | null = null; // afterStep OHNE ausgehende Kante (Blatt/Ende)
   let oldTarget: string | null = null;
+  // Anfang einer LEEREN Anleitung (Welle 53): afterStepId === tutorialId ist der vereinbarte
+  // Anker „ganz am Anfang“ (die Steply-Erweiterung reicht Anker-IDs unverändert durch). Nur
+  // gültig, solange die Anleitung wirklich keine Schritte hat; der erste neue Schritt wird Start.
+  let atStart = false;
 
   if ("branchId" in target.anchor) {
     const { data: br } = await admin
@@ -306,17 +310,28 @@ async function insertIntoTarget(
     oldTarget = (br.target_step_id as string | null) ?? null;
   } else {
     const afterStepId = target.anchor.afterStepId;
-    if (!stepIds.has(afterStepId)) {
+    atStart = afterStepId === target.tutorialId;
+    if (atStart && stepIds.size > 0) {
+      return {
+        ok: false,
+        reason: "Die Anleitung hat inzwischen Schritte — bitte an einer Stelle im Ablauf aufnehmen.",
+      };
+    }
+    if (!atStart && !stepIds.has(afterStepId)) {
       return { ok: false, reason: "Der Anker-Schritt gehört nicht zu dieser Anleitung." };
     }
     // Die (lineare) Verbindung, die bisher von afterStep weiterführte = erste ausgehende
     // Kante (nach position). Fehlt sie, ist afterStep ein Blatt -> neue Kante anlegen.
-    const { data: outs } = await admin
-      .from("step_branches")
-      .select("id, target_step_id, position")
-      .eq("step_id", afterStepId)
-      .order("position", { ascending: true });
-    if (outs && outs.length) {
+    const { data: outs } = atStart
+      ? { data: [] as { id: string; target_step_id: string | null; position: number }[] }
+      : await admin
+          .from("step_branches")
+          .select("id, target_step_id, position")
+          .eq("step_id", afterStepId)
+          .order("position", { ascending: true });
+    if (atStart) {
+      // keine Anker-Kante: die neue Kette wird selbst der Anfang (root_step_id unten)
+    } else if (outs && outs.length) {
       anchorBranchId = outs[0].id as string;
       oldTarget = (outs[0].target_step_id as string | null) ?? null;
     } else {
@@ -386,7 +401,18 @@ async function insertIntoTarget(
     }
   }
 
-  // root_step_id wird beim Einfügen NIE angefasst. Cache: Draft-Edits schonen den Kunden-
+  if (atStart) {
+    const { error: re } = await admin
+      .from("tutorials")
+      .update({ root_step_id: rows[0].id })
+      .eq("id", target.tutorialId);
+    if (re) {
+      await admin.from("steps").delete().in("id", rows.map((r) => r.id));
+      return { ok: false, reason: "Der Anfang der Anleitung konnte nicht gesetzt werden." };
+    }
+  }
+
+  // root_step_id wird beim Einfügen sonst NIE angefasst. Cache: Draft-Edits schonen den Kunden-
   // Cache (invalidateTutorialTags kehrt für Entwürfe früh zurück, wie die Nachbar-Mutationen).
   await invalidateTutorialTags(target.tutorialId);
 

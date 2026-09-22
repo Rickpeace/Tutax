@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Zap } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -813,14 +813,32 @@ export function Builder({
       />
     </div>
   ) : (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+    // Leere Anleitung (Welle 53): Aufnehmen ist der Standardweg; von Hand bleibt daneben.
+    // Aufnehmen nutzt denselben Dialog wie „Ab hier aufnehmen“ (inkl. Hinweis, wenn die
+    // Steply-Erweiterung fehlt); Anker = Anfang der Anleitung (afterStepId === tutorialId).
+    <div
+      className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center"
+      data-testid="empty-builder"
+    >
       <p className="max-w-sm text-sm text-muted-foreground">
-        Noch keine Schritte. Legen Sie den ersten Schritt an – er wird zum
-        Startpunkt der Anleitung.
+        Noch keine Schritte. Am schnellsten nehmen Sie den Ablauf mit der Steply-Erweiterung
+        auf – oder Sie legen die Schritte von Hand an.
       </p>
-      <Button className="mt-4" onClick={handleAddStep}>
-        <Plus className="size-4" /> Ersten Schritt anlegen
-      </Button>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <Button
+          onClick={() =>
+            setRecordTarget({
+              anchor: { afterStepId: tutorialId },
+              label: "am Anfang der Anleitung",
+            })
+          }
+        >
+          <Zap className="size-4" /> Mit der Steply-Erweiterung aufnehmen
+        </Button>
+        <Button variant="outline" onClick={handleAddStep}>
+          <Plus className="size-4" /> Schritt von Hand anlegen
+        </Button>
+      </div>
     </div>
   );
 
