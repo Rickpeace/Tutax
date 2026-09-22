@@ -270,7 +270,9 @@ try {
   const specialUi = await page.inputValue("#org-name");
   ok(specialUi === SPECIAL.trim(), `Sonderzeichen nach Neuladen unverändert im Feld`);
 
-  // 2c sehr lange Eingabe
+  // 2c sehr lange Eingabe — muss begrenzt werden (ORG_NAME_MAX = 80), sonst zerlegt der
+  // Name den Kopf der Hilfe-Seite. Erlaubt ist: Feld kappt beim Tippen ODER Meldung.
+  const ORG_NAME_MAX = 80;
   const LONG = "L".repeat(3000);
   await page.fill("#org-name", LONG);
   await saveBar(page).waitFor({ timeout: 6000 });
@@ -279,18 +281,28 @@ try {
   await page.waitForTimeout(2500);
   const longMsg = await toastText(page, 2000);
   const longDb = (await getAcc(owner.accountId, "name")).name;
+  await page.screenshot({ path: path.join(SHOT_DIR, "org-name-zu-lang.png"), fullPage: true });
   note(`3000-Zeichen-Name: DB-Länge ${longDb.length}, Meldung „${longMsg}“`);
   ok(
-    longDb.length <= 200 || longDb.length === 3000,
-    `Langer Name wird entweder begrenzt oder vollständig gespeichert (${longDb.length} Zeichen)`,
+    longDb.length <= ORG_NAME_MAX,
+    `Langer Name wird begrenzt (DB ${longDb.length} Zeichen, höchstens ${ORG_NAME_MAX})`,
   );
-  if (longDb.length === 3000) {
-    // Hilfe-Seite mit 3000-Zeichen-Namen ansehen
-    const slugNow = (await getAcc(owner.accountId, "slug")).slug;
-    const hubRes = await fetch(`${BASE}/h/${slugNow}`);
-    note(`Hilfe-Seite mit 3000-Zeichen-Namen: HTTP ${hubRes.status}`);
-    ok(hubRes.status === 200, `Hilfe-Seite verkraftet den 3000-Zeichen-Namen (HTTP ${hubRes.status})`);
-  }
+  ok(
+    longDb === "Audit Owner GmbH" || /höchstens/i.test(longMsg) || longDb.length === ORG_NAME_MAX,
+    `Zu langer Name: abgelehnt oder gekappt, mit Rückmeldung („${longMsg}“)`,
+  );
+  // Grenzwert: genau ORG_NAME_MAX muss durchgehen
+  await admin.from("accounts").update({ name: "Audit Owner GmbH" }).eq("id", owner.accountId);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await h1(page);
+  await page.waitForTimeout(700);
+  const EXACT = "M".repeat(ORG_NAME_MAX);
+  await page.fill("#org-name", EXACT);
+  await saveBar(page).waitFor({ timeout: 6000 });
+  await clearToasts(page);
+  await saveBar(page).getByRole("button", { name: "Speichern" }).click();
+  const exactDb = await pollDb(async () => (await getAcc(owner.accountId, "name")).name, (n) => n === EXACT);
+  ok(exactDb === EXACT, `Name mit genau ${ORG_NAME_MAX} Zeichen wird gespeichert`);
   // zurücksetzen
   await admin.from("accounts").update({ name: "Audit Owner GmbH" }).eq("id", owner.accountId);
 
@@ -301,19 +313,35 @@ try {
   await page.waitForTimeout(900);
   const slugBefore = (await getAcc(owner.accountId, "slug")).slug;
 
-  // 3a nur Sonderzeichen
+  // 3a nur Sonderzeichen — muss abgelehnt werden, die alte Adresse bleibt stehen.
   await page.fill("#hub-slug", "###");
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   const preview = await page.locator("p.break-all").first().innerText().catch(() => "");
-  note(`Vorschau bei Eingabe „###“: ${preview.replace(/\s+/g, " ")}`);
+  const junkHint = await page.locator("[role=alert]").first().innerText().catch(() => "");
+  note(`Vorschau bei Eingabe „###“: „${preview.replace(/\s+/g, " ")}“, Hinweis „${junkHint}“`);
+  ok(
+    /Buchstaben oder Zahlen/i.test(junkHint),
+    `Eingabe „###“: Hinweis erscheint sofort im Formular („${junkHint}“)`,
+  );
+  ok(!/\/h\/tutorial\b/.test(preview), `Vorschau erfindet keine Ersatz-Adresse („${preview}“)`);
+  await page.screenshot({ path: path.join(SHOT_DIR, "adresse-ungueltig.png"), fullPage: true });
   await clearToasts(page);
   await saveBar(page).getByRole("button", { name: "Speichern" }).click();
   await page.waitForTimeout(2500);
   const slugJunk = (await getAcc(owner.accountId, "slug")).slug;
-  const junkMsg = await toastText(page, 2000);
+  const junkMsg = await toastText(page, 3000);
+  ok(slugJunk === slugBefore, `Adresse „###“ ändert die gespeicherte Adresse nicht (DB „${slugJunk}“)`);
   ok(
-    slugJunk === slugBefore || /ungültig|nicht leer|erlaubt/i.test(junkMsg),
-    `Adresse „###“: entweder abgelehnt oder unverändert — tatsächlich DB-Slug „${slugJunk}“, Meldung „${junkMsg}“`,
+    /Buchstaben oder Zahlen/i.test(junkMsg),
+    `Adresse „###“: verständliche Meldung („${junkMsg}“)`,
+  );
+  // Server-Seite direkt: auch ohne Browser-Prüfung darf „###“ nichts überschreiben.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await h1(page);
+  await page.waitForTimeout(700);
+  ok(
+    (await page.inputValue("#hub-slug")) === slugBefore,
+    "Nach dem Neuladen steht wieder die alte Adresse im Feld",
   );
 
   // 3b gültige neue Adresse + alte Links
@@ -333,16 +361,17 @@ try {
   const hubNew = await fetch(`${BASE}/h/${newSlug}`);
   ok(hubNew.status === 200, `Hilfe-Seite unter neuer Adresse erreichbar (HTTP ${hubNew.status})`);
   const hubOld = await fetch(`${BASE}/h/${slugPre}`);
-  note(`Alte Adresse /h/${slugPre} → HTTP ${hubOld.status}`);
-  const oldBody = hubOld.status !== 200 ? (await hubOld.text()).slice(0, 4000) : "";
+  const oldBody = await hubOld.text();
+  const oldNoindex = /name="robots"[^>]*content="[^"]*noindex/i.test(oldBody);
+  note(`Alte Adresse /h/${slugPre} → HTTP ${hubOld.status}, noindex: ${oldNoindex}`);
+  // Bekanntes „weiches 404" unter PPR: Status 200, aber „Nicht gefunden"-Seite + noindex
+  // (bewusst so gelassen, Begründung in OVERVIEW.md → Fallstricke).
   ok(
-    hubOld.status === 404 || hubOld.status === 301 || hubOld.status === 308,
-    `Alter Link reagiert sinnvoll (HTTP ${hubOld.status})`,
+    hubOld.status === 404 || hubOld.status === 301 || hubOld.status === 308 || oldNoindex,
+    `Alter Link reagiert sinnvoll (HTTP ${hubOld.status}, noindex ${oldNoindex})`,
   );
-  if (hubOld.status === 404) {
-    const friendly = /nicht gefunden|nicht mehr|Hilfe-Seite|existiert/i.test(oldBody);
-    ok(friendly, `404-Seite des alten Links erklärt das Problem (${friendly ? "ja" : "generische 404"})`);
-  }
+  const friendly = /nicht gefunden|nicht mehr|Hilfe-Seite|existiert/i.test(oldBody);
+  ok(friendly, `Alter Link erklärt das Problem (${friendly ? "ja" : "generische Seite"})`);
   // Was SIEHT ein Besucher unter dem alten Link (im echten Browser)?
   const visitorCtx = await newCtx(browser);
   const visitor = await visitorCtx.newPage();
@@ -462,16 +491,29 @@ try {
   const stillOn = (await page.getByRole("switch", { name: "Englisch" }).getAttribute("aria-checked")) === "true";
   const nowDisabled = await page.locator("#lang-en").isDisabled();
   note(`Nach Downgrade auf free: EN angezeigt als ${stillOn ? "AN" : "aus"}, Schalter ${nowDisabled ? "gesperrt" : "frei"}`);
+  ok(stillOn, "Downgrade: bereits aktive Sprache bleibt sichtbar an");
+  ok(!nowDisabled, "Downgrade: aktive Sprache ist NICHT gesperrt (Abschalten muss gehen)");
+  // Eine NICHT aktive Sprache bleibt ohne Business gesperrt (kein Schlupfloch).
   ok(
-    !(stillOn && nowDisabled) || true,
-    `Downgrade: EN bleibt an (${stillOn}) und ist gesperrt (${nowDisabled}) — Abwählen ${stillOn && nowDisabled ? "NICHT möglich" : "möglich"}`,
+    await page.locator("#lang-pl").isDisabled(),
+    "Downgrade: nicht aktive Sprache bleibt ohne Business gesperrt",
   );
-  if (stillOn && nowDisabled) {
-    findings.push(
-      "Downgrade free: aktive Zusatzsprache bleibt an, Schalter ist gesperrt → der Kunde kann sie nicht mehr abschalten (Abschalten ist laut Code eigentlich immer erlaubt).",
+  ok(
+    (await page.getByText("Business", { exact: false }).count()) > 0,
+    "Downgrade: Hinweis auf den Business-Tarif bleibt sichtbar",
+  );
+  await page.screenshot({ path: path.join(SHOT_DIR, "sprachen-downgrade.png"), fullPage: true });
+  if (!nowDisabled) {
+    await clearToasts(page);
+    await page.getByRole("switch", { name: "Englisch" }).click();
+    const offDb = await pollDb(
+      async () => (await getAcc(owner.accountId, "languages")).languages,
+      (l) => Array.isArray(l) && !l.includes("en"),
     );
-    failed = true;
-    console.log("✗ Downgrade: aktive Sprache lässt sich nicht mehr abschalten (Schalter gesperrt)");
+    ok(
+      Array.isArray(offDb) && !offDb.includes("en"),
+      `Downgrade: EN lässt sich abschalten und ist gespeichert (${JSON.stringify(offDb)})`,
+    );
   }
   await admin.from("accounts").update({ languages: [] }).eq("id", owner.accountId);
 
@@ -525,9 +567,32 @@ try {
     .eq("user_id", owner.userId);
   note(`Nach 3× „Code erzeugen“: ${(conns3.data ?? []).length} Verbindungen in der DB`);
   ok(
-    (conns3.data ?? []).length <= 1,
-    `„Neuen Code erzeugen“ ersetzt den alten Code statt Karteileichen anzulegen (${(conns3.data ?? []).length} Verbindungen)`,
+    (conns3.data ?? []).length === 1,
+    `„Neuen Code erzeugen“ ersetzt den ungenutzten Vorgänger statt Karteileichen anzulegen (${(conns3.data ?? []).length} Verbindungen)`,
   );
+
+  // GEGENPROBE: eine bereits GENUTZTE Verbindung darf nie still getrennt werden.
+  const usedId = conns3.data?.[0]?.id;
+  if (usedId) {
+    await admin
+      .from("recorder_tokens")
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("id", usedId);
+    await page.getByRole("button", { name: "Neuen Code erzeugen" }).click();
+    await page.waitForTimeout(3000);
+    const conns4 = await admin
+      .from("recorder_tokens")
+      .select("id, last_used_at")
+      .eq("account_id", owner.accountId)
+      .eq("user_id", owner.userId);
+    const survived = (conns4.data ?? []).some((c) => c.id === usedId);
+    await page.screenshot({ path: path.join(SHOT_DIR, "verbindungs-code.png"), fullPage: true });
+    ok(survived, "Eine bereits genutzte Verbindung überlebt „Neuen Code erzeugen“");
+    ok(
+      (conns4.data ?? []).length === 2,
+      `Nach dem Ersetzen einer genutzten Verbindung: genutzte + neue (${(conns4.data ?? []).length} Verbindungen)`,
+    );
+  }
 
   // Trennen
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -535,7 +600,12 @@ try {
   await page.getByTestId("recorder-connections").waitFor({ timeout: 20_000 });
   const rows = page.getByTestId("recorder-connection");
   const rowCount = await rows.count();
-  ok(rowCount === (conns3.data ?? []).length, `Liste zeigt alle ${rowCount} Verbindungen`);
+  const connsNow = await admin
+    .from("recorder_tokens")
+    .select("id")
+    .eq("account_id", owner.accountId)
+    .eq("user_id", owner.userId);
+  ok(rowCount === (connsNow.data ?? []).length, `Liste zeigt alle ${rowCount} Verbindungen`);
   await clearToasts(page);
   await rows.first().getByRole("button", { name: /trennen/i }).click();
   await page.waitForTimeout(2500);
@@ -985,13 +1055,22 @@ try {
     await page.waitForTimeout(400);
     const input = page.locator("main input").first();
     await input.fill("   ");
+    await clearToasts(page);
     await page.getByRole("button", { name: "Speichern" }).first().click();
     await page.waitForTimeout(2000);
+    const emptyMsg = await toastText(page, 3000);
     const titleAfterEmpty = (await admin.from("automations").select("title").eq("id", conv.automationId).single()).data
       ?.title;
     ok(titleAfterEmpty === "Audit-Ablauf umbenannt", `Leerer Automations-Name wird nicht gespeichert (DB: „${titleAfterEmpty}“)`);
+    ok(
+      /Bitte einen Namen eingeben/i.test(emptyMsg),
+      `Leerer Automations-Name: Rückmeldung statt stillem Schließen („${emptyMsg}“)`,
+    );
+    await page.screenshot({ path: path.join(SHOT_DIR, "automation-name-leer.png"), fullPage: true });
     const stillEditing = await page.locator("main input.text-lg").count();
-    note(`Nach leerem Namen: Eingabefeld ${stillEditing ? "noch offen" : "geschlossen"}, Rückmeldung an den Nutzer?`);
+    ok(stillEditing > 0, "Nach leerem Namen bleibt das Eingabefeld offen (korrigierbar)");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
   }
 
   // Fremde Automation (anderes Konto) → 404
@@ -1004,7 +1083,19 @@ try {
   const badTxt = (await page.locator("body").innerText()).replace(/\s+/g, " ").trim();
   note(`Unbekannte Automation: HTTP ${badRes?.status()}, sichtbar „${badTxt.slice(0, 140)}“`);
   ok(/nicht gefunden/i.test(badTxt), `Unbekannte Automation zeigt eine 404-Seite (HTTP ${badRes?.status()})`);
-  ok(badRes?.status() === 404, `Unbekannte Automation liefert HTTP 404 (ist: ${badRes?.status()})`);
+  // „Weiches 404": PPR schickt die Hülle raus, bevor notFound() greift — der Status bleibt
+  // deshalb 200. Bewusst so gelassen (Begründung in OVERVIEW.md, Abschnitt Fallstricke).
+  // Geprüft wird stattdessen, dass Suchmaschinen die Seite nicht indexieren.
+  const badNoindex = await page
+    .locator('meta[name="robots"]')
+    .first()
+    .getAttribute("content")
+    .catch(() => null);
+  note(`Unbekannte Automation: robots-Meta „${badNoindex}“ (HTTP ${badRes?.status()} = bekanntes weiches 404, siehe OVERVIEW.md)`);
+  ok(
+    badRes?.status() === 404 || /noindex/i.test(badNoindex ?? ""),
+    `Unbekannte Automation: echtes 404 ODER noindex (Status ${badRes?.status()}, robots „${badNoindex}“)`,
+  );
 
   // Lauf-Historie
   const runIns = await admin.from("automation_runs").insert({
@@ -1099,6 +1190,31 @@ try {
   note(`Normaler Nutzer auf /admin: HTTP ${adminRes?.status()} → ${adminPath}; sichtbar „${adminTxt.slice(0, 120)}“`);
   ok(adminPath === "/app", `Normaler Nutzer wird von /admin weggeleitet (${adminPath})`);
   ok(!/Vorlage|Template/i.test(adminTxt) || adminPath === "/app", "Keine Admin-Inhalte sichtbar");
+
+  // OHNE Anmeldung: sauber zur Anmeldung, nicht 200 mit Admin-Kopfleiste.
+  const anonAdmin = await fetch(`${BASE}/admin`, { redirect: "manual" });
+  const anonLoc = anonAdmin.headers.get("location") ?? "";
+  note(`/admin ohne Anmeldung: HTTP ${anonAdmin.status} → ${anonLoc || "(keine Weiterleitung)"}`);
+  ok(
+    anonAdmin.status >= 300 && anonAdmin.status < 400 && /\/login\?next=/.test(anonLoc),
+    `/admin ohne Anmeldung leitet auf die Anmeldung (HTTP ${anonAdmin.status}, „${anonLoc}“)`,
+  );
+  const anonTech = await fetch(`${BASE}/admin/technik`, { redirect: "manual" });
+  ok(
+    anonTech.status >= 300 && anonTech.status < 400,
+    `/admin/technik ohne Anmeldung leitet weiter (HTTP ${anonTech.status})`,
+  );
+  // Im Browser darf keine Admin-Kopfleiste aufblitzen.
+  const anonCtx = await newCtx(browser);
+  const anonPage = await anonCtx.newPage();
+  await anonPage.goto(`${BASE}/admin`, { waitUntil: "networkidle", timeout: 60_000 }).catch(() => {});
+  await anonPage.waitForTimeout(1200);
+  const anonPath = new URL(anonPage.url()).pathname;
+  const anonTxt = (await anonPage.locator("body").innerText()).replace(/\s+/g, " ").trim();
+  await anonPage.screenshot({ path: path.join(SHOT_DIR, "admin-ohne-anmeldung.png"), fullPage: true });
+  ok(anonPath === "/login", `/admin ohne Anmeldung landet auf /login (${anonPath})`);
+  ok(!/\bAdmin\b/.test(anonTxt), `Keine Admin-Kopfleiste für Ausgeloggte („${anonTxt.slice(0, 80)}“)`);
+  await anonCtx.close();
 
   // ============ 12. Fehler-Sammlung ============
   console.log("\n--- 12. Gesammelte Browser-/HTTP-Fehler ---");
