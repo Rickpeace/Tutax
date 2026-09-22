@@ -295,6 +295,23 @@ importScripts, 5-min-Cache, URLs bleiben lokal. (F) „Bring mich hin": Führung
 öffnet bei fremder Seite einen Tab zur page_url von Schritt 1 und bindet sich
 daran. Tests grün auf gemergtem Stand (guide-resolve erweitert um Feld-Fälle,
 guide-api-live um category, recorder-Regression).
+**Opus Welle 51 a/b (22.09.2026, v2.18.1):** 🧩 **KUNDENWÜNSCHE Susann + Max** (aus agent-bridge,
+außer Du/Sie + Video-KI): Video-Dialog schließt · echte Unschärfe im Editor/Großansicht (svg-marks)
+· fluide Editor-Vorschau · „Link kopieren“ (Slug war schon stabil) · Markierungen in Firmenfarbe
+(Standardfarben #ef6a4e/#111827/leer → --brand-accent, highlight-color.ts) · „Bild in neuen Schritt
+übernehmen“ (geteilter image_path) · Verpixelung vom Vorgänger als Vorschlag · Einrasten/Zentrieren
+· gescheiterte Videos sichtbar (Bibliothek/Glocke/Erweiterung + /api/recorder/video-status) ·
+Video-Server: Aufnahmen OHNE Tonspur + ungerade Maße (media.mjs — wirkt erst nach deploy.sh!) · keine
+verlorenen Schritte bei schnellen Klicks (Chromium-Kontingent 2/s statt Kappung) · Edge-Hinweis ·
+Wissens-Import 12 Unterseiten + Sitemap + eigene Unterseiten. Funde: refreshPublicImage war nie
+wirksam (zwei FK steps↔tutorials) → nachträgliche Verpixelung blieb öffentlich lesbar; updateStep
+nahm fremde Bildpfade an. Sicherheitsprüfung → public-images.ts (Neuaufbau entfernt Kopie bei
+Fehler + wirft, Aufräumen bei Ersetzen/Löschen/Zurückziehen nur wenn kein anderer veröffentlichter
+Schritt den Pfad nutzt, Cache-Control 60), SSRF (IPv4-in-IPv6, NAT64, Multicast …), Import liest
+gekappt + 60 Entwürfe/h, Upload-IDs UUID. Live-Aufräumen (Richard freigegeben): 6 verwaiste
+öffentliche Schritt-Bilder gelöscht, 1 verpixelte Kopie neu eingebrannt. Tests: test-editor-wishes,
+-video-failed, -public-images, -ssrf, -kb-import-links, -video-normalize (neu) + alle bisherigen grün.
+OFFEN: deploy.sh Video-Server; wackliger test-inpage-advance-e2e (schon vor W51, ~1/3); /h/steply neu.
 **Opus Welle 50 a/b/c/d (22.09.2026, v2.18.0):** 🎨 **MAKEOVER EXTENSION + APP** — Richard:
 „Extension zu vollgestopft, Liste springt nach 5 s auf; alles stimmig nach Industriestandard.“
 Vorgehen: Audit (2 Agenten, Screenshots jedes Bildschirms) → 2 Entwurfs-Artifacts → Freigabe
