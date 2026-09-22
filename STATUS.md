@@ -29,7 +29,7 @@ Letztes Update: 2026-09-22 (Editor-Überarbeitung + KI-Texte + Eingaben, s. §7i
 > - **Geparkt:** „Aktualität prüfen“-Umbau (Text vs. Screenshot) auf Branch
 >   `welle-53-drift-text-vs-screenshot` — Richard: „erstmal weglassen“.
 > - **Parallel (andere Sitzung):** Team-Rollen Inhaber/Bearbeiter/Mitarbeiter, Migrationen 0037–0040.
-> - **Mehrere Erweiterungs-Verbindungen je Person (22.09.2026):** Migration **0041** (`recorder_multi_connection`) liegt bereit, **noch NICHT angewendet**. Code läuft mit und ohne 0041 (ohne: altes Verhalten, eine Verbindung je Person). Reihenfolge: Code deployen → 0041 anwenden → `test-recorder-connections-live.mjs` + `test-team-live.mjs` (TEAM_PROD=1) laufen lassen.
+> - **Mehrere Erweiterungs-Verbindungen je Person (22.09.2026):** Migration **0041** (`recorder_multi_connection`) am 22.09.2026 LIVE angewendet (nach Code-Deploy); `test-recorder-connections-live` (26/26), `test-recorder-live`, `test-team-live` grün. Extension v2.18.6 (inkl. TradingView-Schalter-Fix: role=row/treeitem/aria-checked/aria-pressed gelten als interaktiv).
 
 ## 7h. Live-Führung + Seiten-Erkennung (06.07.2026, Wellen 31a–d) — LIVE, Extension v2.5.1
 > Tango-Prinzip: Die Extension führt Tutorials DIREKT auf der echten Website — Panel
