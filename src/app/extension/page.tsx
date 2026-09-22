@@ -9,6 +9,7 @@ import {
   Plug,
   ArrowRight,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/marketing/site-header";
@@ -17,7 +18,7 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 export const metadata: Metadata = {
   title: "Steply-Erweiterung installieren",
   description:
-    "Die Steply-Erweiterung für Chrome: Klick-Anleitungen und Videos aufnehmen und direkt zu Steply hochladen.",
+    "Die Steply-Erweiterung für Chrome und Microsoft Edge: Klick-Anleitungen und Videos aufnehmen und direkt zu Steply hochladen.",
 };
 
 // Statische, cachebare Seite (keine dynamischen Daten). Die Versionsnummer lesen wir zur
@@ -43,7 +44,7 @@ export default function ExtensionPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-12">
         {/* Hero */}
         <div className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-card px-3 py-1 text-xs font-extrabold text-ink-2">
-          <Zap className="size-3.5 text-primary" /> Für Google Chrome · v{VERSION}
+          <Zap className="size-3.5 text-primary" /> Für Google Chrome und Microsoft Edge · v{VERSION}
         </div>
         <h1 className="mt-4 text-3xl font-black tracking-tight text-ink sm:text-4xl">
           Steply-Erweiterung
@@ -63,7 +64,7 @@ export default function ExtensionPage() {
             <Download className="size-4" /> Steply-Erweiterung herunterladen
           </Button>
           <span className="text-xs font-semibold text-muted-foreground">
-            ZIP · v{VERSION} · für Google Chrome ab Version 114
+            ZIP · v{VERSION} · für Chrome und Edge ab Version 114
           </span>
         </div>
 
@@ -118,6 +119,25 @@ export default function ExtensionPage() {
             desc="Klicken Sie auf „Entpackt laden“ und wählen Sie den entpackten Ordner. Fertig – das Steply-Symbol erscheint in der Symbolleiste."
             illustration={<LoadUnpackedArt />}
           />
+        </div>
+
+        {/* Microsoft Edge (Welle 51): gleiche ZIP, andere Adresse/Beschriftung. Edge ist Chromium
+            und kennt alle genutzten Schnittstellen (u. a. die Seitenleiste chrome.sidePanel ab 114). */}
+        <div
+          className="mt-6 flex items-start gap-3 rounded-card border-2 border-line bg-card p-5"
+          data-testid="edge-hint"
+        >
+          <Globe className="mt-0.5 size-5 shrink-0 text-primary" />
+          <div>
+            <div className="font-black text-ink">Auch in Microsoft Edge</div>
+            <p className="mt-1 text-sm text-ink-2">
+              Dieselbe ZIP-Datei funktioniert in Edge (ab Version 114): ZIP entpacken →{" "}
+              <b className="text-ink">edge://extensions</b> öffnen → links den{" "}
+              <b className="text-ink">„Entwicklermodus“</b> einschalten →{" "}
+              <b className="text-ink">„Entpackte Erweiterung laden“</b> → Ordner wählen. Die
+              Steply-Erweiterung öffnet sich dort in der Edge-Seitenleiste.
+            </p>
+          </div>
         </div>
 
         {/* Verbinden-Hinweis */}

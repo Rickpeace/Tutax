@@ -7,18 +7,22 @@ import { LibraryBrowser, type LibraryCategory } from "@/components/app/library-b
 import type { LibraryTutorial } from "@/components/app/tutorial-card";
 import { TemplateSection, type TemplateItem } from "@/components/app/template-section";
 import { InsightsCard } from "@/components/app/insights-card";
+import { FailedVideoNotices } from "@/components/app/failed-video-notices";
+import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
+import { relativeDe } from "@/lib/format";
 import { Loader2 } from "lucide-react";
 
 /**
  * Bibliothek (Design-Handoff 07/2026, Option 2a/2b): Kategorien-Sidebar +
  * Kartenraster mit Bereichs-/Status-Filter. Laufende Video-Jobs über dem
- * Raster; Nutzung/Insights und Standard-Vorlagen darunter.
+ * Raster; Nutzung/Insights und Standard-Vorlagen darunter. Gescheiterte Video-Aufträge
+ * der letzten 7 Tage erscheinen als Hinweiskarte darüber (Welle 51).
  */
 export default async function DashboardPage() {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }, { data: activeJobs }] =
+  const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }, { data: activeJobs }, { data: failedRows }] =
     await Promise.all([
       supabase
         .from("tutorials")
@@ -53,6 +57,17 @@ export default async function DashboardPage() {
         .eq("account_id", account.id)
         .in("status", ["queued", "processing"])
         .order("created_at", { ascending: true }),
+      // Gescheiterte Video→Anleitung-Aufträge der letzten 7 Tage (Welle 51). Nur kind=create:
+      // Video-Export-Fehler (render) zeigt der Export-Dialog selbst.
+      supabase
+        .from("video_jobs")
+        .select("id, title, error, created_at, updated_at")
+        .eq("account_id", account.id)
+        .eq("status", "failed")
+        .eq("kind", "create")
+        .gte("updated_at", failedVideoSince())
+        .order("updated_at", { ascending: false })
+        .limit(10),
     ]);
 
   const allOwn = tutorials ?? [];
@@ -127,6 +142,10 @@ export default async function DashboardPage() {
 
   const browserCats: LibraryCategory[] = cats.map((c) => ({ id: c.id, name: c.name }));
   const jobs = activeJobs ?? [];
+  const failedJobs = (failedRows ?? []).map((r) => {
+    const f = toFailedVideoJob(r);
+    return { ...f, when: relativeDe(f.at) };
+  });
 
   return (
     <LibraryBrowser
@@ -135,29 +154,34 @@ export default async function DashboardPage() {
       accountId={account.id}
       accountSlug={account.slug}
       topSlot={
-        jobs.length > 0 ? (
-          <div className="mb-4 space-y-2">
-            {jobs.map((j) => (
-              <div
-                key={j.id}
-                className="flex items-center gap-3 rounded-card border-2 border-primary/25 bg-accent/60 px-4 py-3"
-              >
-                <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-ink">
-                    {j.title?.trim() || "Anleitung"} wird erstellt …
-                  </p>
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    {j.status === "queued"
-                      ? "In der Warteschlange …"
-                      : j.progress
-                      ? `${j.progress} …`
-                      : "KI verarbeitet das Video …"}
-                  </p>
-                </div>
+        jobs.length > 0 || failedJobs.length > 0 ? (
+          <>
+            <FailedVideoNotices jobs={failedJobs} />
+            {jobs.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {jobs.map((j) => (
+                  <div
+                    key={j.id}
+                    className="flex items-center gap-3 rounded-card border-2 border-primary/25 bg-accent/60 px-4 py-3"
+                  >
+                    <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-extrabold text-ink">
+                        {j.title?.trim() || "Anleitung"} wird erstellt …
+                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        {j.status === "queued"
+                          ? "In der Warteschlange …"
+                          : j.progress
+                            ? `${j.progress} …`
+                            : "KI verarbeitet das Video …"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         ) : undefined
       }
     >

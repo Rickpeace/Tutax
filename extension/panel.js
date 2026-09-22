@@ -193,6 +193,9 @@ const els = {
   uploadBox: document.getElementById("uploadBox"),
   uploadProgress: document.getElementById("uploadProgress"),
   uploadDone: document.getElementById("uploadDone"),
+  uploadDoneText: document.getElementById("uploadDoneText"),
+  videoDoneTitle: document.getElementById("videoDoneTitle"),
+  videoRetry: document.getElementById("videoRetry"),
   openApp: document.getElementById("openApp"),
   downloadBox: document.getElementById("downloadBox"),
   fileVideo: document.getElementById("fileVideo"),
@@ -1067,6 +1070,7 @@ function onRecorderStop() {
   });
 
   show("videoDone");
+  setVideoDoneState("recorded");
 
   // Mit Token: Direkt-Upload. Ohne Token: die zwei Dateien herunterladen.
   if (cfg.token) {
@@ -1183,6 +1187,116 @@ async function uploadToSteply(videoBlob) {
       chrome.tabs.create({ url: base + "/app", active: true });
     };
   }
+  // Welle 51: Stand des Auftrags verfolgen, solange das Panel offen ist — vorher endete
+  // „wird erstellt“ still, auch wenn die Verarbeitung scheiterte.
+  watchVideoJob(done.jobId, base);
+}
+
+// ── Auftrags-Status nach dem Upload (Welle 51) ─────────────────────────────
+// Fragt GET /api/recorder/video-status?id= alle VIDEO_POLL_MS ab (max. VIDEO_POLL_MAX_MS).
+// Fertig -> „Fertig – in Steply öffnen“ (direkt in die Anleitung), gescheitert -> Grund in
+// Klartext + „Erneut aufnehmen“. Eine neue Aufnahme / ein Reset beendet die Abfrage
+// (Generationszähler), 401/404 ebenfalls; Netzfehler werden bis zum Zeitlimit wiederholt.
+const VIDEO_POLL_MS = 4000;
+const VIDEO_POLL_MAX_MS = 15 * 60 * 1000;
+let videoWatchGen = 0;
+let videoWatchTimer = null;
+
+function stopVideoWatch() {
+  videoWatchGen++;
+  if (videoWatchTimer) clearTimeout(videoWatchTimer);
+  videoWatchTimer = null;
+}
+
+// Kopf/Icon/Texte des Fertig-Bildschirms je Zustand.
+function setVideoDoneState(state, info) {
+  const failed = state === "failed";
+  if (els.videoDoneTitle) {
+    els.videoDoneTitle.textContent =
+      state === "done" ? "Anleitung erstellt" : failed ? "Verarbeitung fehlgeschlagen" : "Aufnahme fertig";
+  }
+  const iconBox = els.videoDone && els.videoDone.querySelector(".done > .ok, .done > .err");
+  if (iconBox) {
+    iconBox.className = failed ? "err" : "ok";
+    iconBox.textContent = "";
+    iconBox.appendChild(icon(failed ? "x" : "check", true));
+  }
+  if (els.videoRetry) els.videoRetry.hidden = !failed;
+  if (els.openApp) els.openApp.hidden = failed;
+  if (!els.uploadDoneText) return;
+  if (state === "queued") {
+    els.uploadDoneText.textContent = "Hochgeladen – Steply erstellt jetzt die Anleitung. In der Warteschlange …";
+  } else if (state === "processing") {
+    const p = info && info.progress ? String(info.progress).slice(0, 80) : "";
+    els.uploadDoneText.textContent = "Die KI verarbeitet das Video" + (p ? " – " + p : "") + " …";
+  } else if (state === "done") {
+    els.uploadDoneText.textContent = "Fertig – die Anleitung liegt als Entwurf in Steply.";
+  } else if (failed) {
+    const reason = (info && info.reason) || "bei der Verarbeitung ist ein Fehler aufgetreten";
+    els.uploadDoneText.textContent =
+      "Das Video konnte nicht verarbeitet werden – " + reason + ". Bitte erneut aufnehmen.";
+  } else {
+    els.uploadDoneText.textContent = "Hochgeladen – Steply erstellt jetzt die Anleitung.";
+  }
+}
+
+function watchVideoJob(jobId, base) {
+  stopVideoWatch();
+  if (!jobId || !cfg.token) return;
+  const gen = videoWatchGen;
+  const startedAt = Date.now();
+  setVideoDoneState("queued");
+  const next = () => {
+    if (gen !== videoWatchGen) return;
+    if (Date.now() - startedAt > VIDEO_POLL_MAX_MS) return; // Text bleibt „wird erstellt“
+    videoWatchTimer = setTimeout(tick, VIDEO_POLL_MS);
+  };
+  const tick = async () => {
+    if (gen !== videoWatchGen) return;
+    let res;
+    let data = {};
+    try {
+      res = await fetch(base + "/api/recorder/video-status?id=" + encodeURIComponent(jobId), {
+        headers: { Authorization: "Bearer " + cfg.token },
+        cache: "no-store",
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (err) {
+      return next(); // Netz weg -> später erneut
+    }
+    if (gen !== videoWatchGen) return;
+    if (res.status === 401 || res.status === 404) return; // Verbindung/Auftrag weg: still aufhören
+    if (!res.ok) return next();
+    if (data.status === "done") {
+      setVideoDoneState("done");
+      setStatus("");
+      if (els.openApp) {
+        els.openApp.onclick = () => {
+          const path = data.tutorialId ? "/app/tutorials/" + encodeURIComponent(data.tutorialId) : "/app";
+          chrome.tabs.create({ url: base + path, active: true });
+        };
+      }
+      notifyAppTabs();
+      return;
+    }
+    if (data.status === "failed") {
+      setVideoDoneState("failed", { reason: data.reason });
+      setStatus("");
+      notifyAppTabs(); // offene Bibliothek zeigt den Fehler-Hinweis ohne F5
+      return;
+    }
+    setVideoDoneState(data.status === "processing" ? "processing" : "queued", data);
+    next();
+  };
+  videoWatchTimer = setTimeout(tick, VIDEO_POLL_MS);
+}
+
+function retryVideoRecording() {
+  stopVideoWatch();
+  cleanupStreams();
+  stopTimer();
+  resetVideo();
+  goVideoSetup();
 }
 
 // ============================================================================
@@ -1191,25 +1305,66 @@ async function uploadToSteply(videoBlob) {
 // aktiven (sichtbaren) Tab des Fensters, in dem geklickt wurde - egal in welchem Tab.
 // Der Aufruf laeuft ueber background.js (Chromium-Bug im Panel-Kontext, s. captureFor).
 //
-// RATENLIMIT: captureVisibleTab ist ~2/s begrenzt. Wir serialisieren die Captures ueber
-// eine kleine FIFO-Warteschlange (Kappe GUIDE_QUEUE_CAP; bei Ueberlauf faellt der aelteste
-// wartende Schritt heraus). So gehen Eingabe- + Klick-Schritt, die kurz nacheinander
-// eintreffen (pointerdown-Flush), NICHT verloren. OPTIMIERUNG: kommen zwei Schritte im
-// COALESCE_WINDOW an, teilen sie sich EINEN Screenshot - so zeigt der Klick-Schritt nicht
-// versehentlich schon die Folgeseite (die Rects unterscheiden sich ja).
+// RATENLIMIT (Welle 51 überarbeitet): Chromium erlaubt captureVisibleTab 2× je Zeitfenster von
+// 1 s (MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND; das Fenster beginnt mit dem ersten Aufruf nach
+// Ablauf des vorigen). Wir bilden das nach (guideCaptureSlotWait): zwei schnelle Klicks bekommen
+// SOFORT je einen eigenen Screenshot — vorher erzwang ein fester Abstand von 550 ms, dass der
+// zweite Klick (z. B. die Option im gerade geöffneten Filter-Menü) erst NACH seiner Wirkung
+// fotografiert wurde. Meldet Chromium trotzdem „Kontingent erschöpft“, warten wir das Fenster ab.
+//
+// KEIN STILLER SCHRITT-VERLUST (Welle 51): Die Warteschlange ist nicht mehr gekappt (vorher
+// flog bei >4 wartenden Schritten der älteste heraus). Staut es sich (sehr schnelle Klickfolge),
+// teilen sich die schon verspäteten Schritte desselben Fensters EINEN Screenshot und werden als
+// „Bild ggf. ungenau“ markiert (imprecise) — der Nutzer sieht beim Prüfen, was er kontrollieren
+// sollte. Das Teilen im COALESCE_WINDOW gilt nur noch für Eingabe-Flush + Klick (Welle-24-
+// Absicht: der Klick zeigt die fertige Eingabe), NICHT mehr für zwei echte Klicks.
 // ============================================================================
 
 const MAX_GUIDE_STEPS = 40;
-const CAPTURE_MIN_INTERVAL = 550; // ms Mindestabstand zwischen Captures (captureVisibleTab ~2/s)
-const GUIDE_QUEUE_CAP = 4; // max. wartende Schritte; bei Ueberlauf aeltesten verwerfen
-const COALESCE_WINDOW = 300; // ms: Eingabe + direkt folgender Klick teilen sich EINEN Screenshot
+const CAPTURE_WINDOW_MS = 1000 + 120; // Chromium-Zeitfenster + Sicherheitsabstand (Uhr/IPC)
+const CAPTURES_PER_WINDOW = 2; // captureVisibleTab-Aufrufe je Zeitfenster
+const COALESCE_WINDOW = 300; // ms: Eingabe-Flush + direkt folgender Klick teilen sich EINEN Screenshot
+const GUIDE_LATE_MS = 600; // Screenshot später als so lange nach dem Klick -> „Bild ggf. ungenau“
 
 let guideActive = false;
-let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, fileMeta, ts, blob, width, height, thumbUrl }
-let guideQueue = []; // FIFO: [{ step, tabId, windowId }] - wartende Schritte (Kappe GUIDE_QUEUE_CAP)
+let guideSteps = []; // { rect, label, action, url, title, selector, sensitive, fileMeta, ts, blob, width, height, thumbUrl, imprecise }
+let guideQueue = []; // FIFO: [{ step, tabId, windowId, at }] - wartende Schritte (at = Eingang im Panel)
 let guideCapturing = false;
-let guideLastCaptureAt = 0;
+let guideCapWinStart = 0; // Beginn des aktuellen captureVisibleTab-Zeitfensters (Panel-Uhr)
+let guideCapWinCount = 0; // Aufrufe im aktuellen Zeitfenster
+let guideLastImage = null; // letzter erfolgreicher Screenshot { blob, width, height, windowId }
 let guideFinishing = false;
+
+// Wie lange bis zum nächsten erlaubten captureVisibleTab-Aufruf (0 = sofort)?
+function guideCaptureSlotWait(now) {
+  if (now - guideCapWinStart >= CAPTURE_WINDOW_MS) return 0;
+  if (guideCapWinCount < CAPTURES_PER_WINDOW) return 0;
+  return guideCapWinStart + CAPTURE_WINDOW_MS - now;
+}
+
+// Einen Aufruf verbuchen (vor dem Senden — das Browser-Fenster beginnt eher später).
+function guideNoteCapture(now) {
+  if (now - guideCapWinStart >= CAPTURE_WINDOW_MS) {
+    guideCapWinStart = now;
+    guideCapWinCount = 1;
+  } else {
+    guideCapWinCount++;
+  }
+}
+
+async function guideWaitCaptureSlot() {
+  for (;;) {
+    const w = guideCaptureSlotWait(Date.now());
+    if (w <= 0) return;
+    await new Promise((r) => setTimeout(r, w));
+  }
+}
+
+// Chromium-Meldung „This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota.“
+function isCaptureQuotaError(err) {
+  const m = err && err.message ? err.message : String(err || "");
+  return /MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND|quota/i.test(m);
+}
 
 // ── Datei-Brücke (Welle 39): Download-Erkennung während der Aufnahme ────────────────────────
 // Beginnt binnen ~3s nach einem erfassten Klick ein Download, ordnen wir dem Klick-Schritt
@@ -1761,10 +1916,6 @@ async function captureImage(pending) {
     setStatus("Maximale Schrittzahl (" + MAX_GUIDE_STEPS + ") erreicht.", "error");
     return null;
   }
-  // Ratenlimit einhalten.
-  const wait = CAPTURE_MIN_INTERVAL - (Date.now() - guideLastCaptureAt);
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-
   // Fenster des Klicks bevorzugen; Fallback: Panel-Fenster.
   const targetWindowId =
     pending.windowId != null
@@ -1776,18 +1927,30 @@ async function captureImage(pending) {
   // WICHTIG: Der Screenshot laeuft ueber den Hintergrund-Worker, NICHT direkt hier -
   // captureVisibleTab scheitert im Seitenleisten-Kontext an einem Chromium-Bug
   // (crbug.com/40916430). Zwei Versuche (kurze Pause dazwischen faengt Seitenwechsel/
-  // Fokuswechsel ab), danach ein letzter Direktversuch aus dem Panel.
+  // Fokuswechsel ab), danach ein letzter Direktversuch aus dem Panel. Jeder Versuch wartet auf
+  // einen freien Platz im Kontingent; „Kontingent erschöpft“ zählt nicht als Fehlversuch
+  // (höchstens 3× — danach wie ein echter Fehler).
   let dataUrl = null;
   let lastErr = null;
+  let quotaRetries = 0;
   for (let attempt = 0; attempt < 2 && !dataUrl; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 350));
+    await guideWaitCaptureSlot();
+    guideNoteCapture(Date.now());
     try {
       dataUrl = await captureViaBackground(targetWindowId);
     } catch (err) {
       lastErr = err;
+      if (isCaptureQuotaError(err) && quotaRetries < 3) {
+        quotaRetries++;
+        guideCapWinCount = CAPTURES_PER_WINDOW; // Fenster als voll betrachten, Ablauf abwarten
+        attempt--;
+      }
     }
   }
   if (!dataUrl) {
+    await guideWaitCaptureSlot();
+    guideNoteCapture(Date.now());
     try {
       dataUrl = await chrome.tabs.captureVisibleTab(
         targetWindowId == null ? undefined : targetWindowId,
@@ -1807,14 +1970,15 @@ async function captureImage(pending) {
     );
     return null;
   }
-  guideLastCaptureAt = Date.now();
 
   // Klick-Puls im ausloesenden Tab - ERST NACH dem Screenshot, damit er nie mit im Bild
   // landet. Multi-Tab: gezielt an sender.tab.id des Schritts (nicht an einen fixen Tab).
   pulseTab(pending.tabId);
 
   try {
-    return await pngDataUrlToWebp(dataUrl);
+    const img = await pngDataUrlToWebp(dataUrl);
+    if (img) guideLastImage = { blob: img.blob, width: img.width, height: img.height, windowId: targetWindowId };
+    return img;
   } catch (err) {
     console.warn("Steply: WebP-Konvertierung fehlgeschlagen:", err && err.message);
     return null;
@@ -1823,7 +1987,7 @@ async function captureImage(pending) {
 
 // Einen erfassten Schritt (Rohdaten + fertiges Bild) in die Liste aufnehmen. Bei geteiltem
 // Screenshot (Coalesce) bekommt jeder Schritt einen EIGENEN Objekt-URL (sauberes Revoke).
-function addGuideStep(src, img, tabId) {
+function addGuideStep(src, img, tabId, imprecise) {
   if (guideSteps.length >= MAX_GUIDE_STEPS) return;
   // Nachtraege (Welle 48b), die eintrafen, WAEHREND dieser Schritt fotografiert wurde:
   // zurueckgenommen -> gar nicht aufnehmen; patch/frame-geo -> jetzt einmischen.
@@ -1856,6 +2020,9 @@ function addGuideStep(src, img, tabId) {
     width: img.width,
     height: img.height,
     thumbUrl: null,
+    // Welle 51: Screenshot kam verspätet/geteilt (Rückstau) oder ersatzweise vom vorigen Bild.
+    // Nur Panel-Hinweis beim Prüfen — wird nicht hochgeladen.
+    imprecise: !!imprecise,
   };
 
   // Dedupe/Fold (Welle 39): Ein Upload-Schritt faltet den davor erfassten „Datei auswählen"-
@@ -1890,28 +2057,72 @@ function addGuideStep(src, img, tabId) {
   setStatus("");
 }
 
-// FIFO-Queue abarbeiten (Serialisierung + Ratenlimit). OPTIMIERUNG: Schritte, die im
-// ~COALESCE_WINDOW nach dem ersten ankamen (pointerdown-Flush: Eingabe + Klick), teilen
-// sich DENSELBEN Screenshot - so zeigt der Klick-Schritt nicht schon die Folgeseite.
+// Darf `next` den Screenshot der Gruppe mitbenutzen? (Welle 51)
+//  (a) Eingabe-Flush + Klick (Welle 24): einer der beiden ist eine Eingabe, Abstand ≤ COALESCE_WINDOW
+//      — der Klick-Screenshot zeigt die fertige Eingabe, die Folgeseite ist noch nicht da.
+//  (b) Rückstau: `next` wartet schon länger als GUIDE_LATE_MS (sein Moment ist ohnehin vorbei).
+// Beides nur im selben Fenster. Zwei echte Klicks kurz nacheinander teilen sich KEIN Bild mehr.
+function guideIsFlushPair(prev, next, first) {
+  if (next.windowId !== first.windowId) return false;
+  const typeInvolved = prev.step.action === "type" || next.step.action === "type";
+  return typeInvolved && Math.abs((next.step.ts || 0) - (prev.step.ts || 0)) <= COALESCE_WINDOW;
+}
+function guideCanShare(prev, next, first, now) {
+  if (guideIsFlushPair(prev, next, first)) return true;
+  return next.windowId === first.windowId && now - (next.at || now) > GUIDE_LATE_MS;
+}
+
+// FIFO-Queue abarbeiten (Serialisierung + Kontingent). Jeder Schritt landet in der Liste —
+// mit eigenem, geteiltem (Eingabe+Klick / Rückstau) oder notfalls dem letzten Bild.
 async function drainGuideQueue() {
   if (guideCapturing) return;
   guideCapturing = true;
   try {
     while (guideQueue.length && guideActive) {
+      if (guideSteps.length >= MAX_GUIDE_STEPS) {
+        setStatus("Maximale Schrittzahl (" + MAX_GUIDE_STEPS + ") erreicht.", "error");
+        guideQueue = [];
+        break;
+      }
+      // Erst auf einen freien Screenshot-Platz warten, DANN die Gruppe bilden: Was in der
+      // Wartezeit „zu spät“ geworden ist, fährt im selben Screenshot mit.
+      await guideWaitCaptureSlot();
+      if (!guideQueue.length || !guideActive) break; // evtl. inzwischen zurückgenommen
+      const now = Date.now();
       const first = guideQueue.shift();
-      const img = await captureImage(first);
-      if (!img) continue;
-      addGuideStep(first.step, img, first.tabId);
+      const group = [first];
       while (
         guideQueue.length &&
-        guideActive &&
-        guideSteps.length < MAX_GUIDE_STEPS &&
-        Math.abs((guideQueue[0].step.ts || 0) - (first.step.ts || 0)) <= COALESCE_WINDOW
+        guideSteps.length + group.length < MAX_GUIDE_STEPS &&
+        guideCanShare(group[group.length - 1], guideQueue[0], first, now)
       ) {
-        const shared = guideQueue.shift();
-        pulseTab(shared.tabId);
-        addGuideStep(shared.step, img, shared.tabId);
+        group.push(guideQueue.shift());
       }
+      let img = await captureImage(first);
+      const capturedAt = Date.now();
+      // Der Klick zu einer Eingabe (Flush) trifft als eigene Nachricht meist erst WÄHREND des
+      // Screenshots ein — wie bisher (Welle 24) noch in dieses Bild aufnehmen.
+      while (
+        guideQueue.length &&
+        guideSteps.length + group.length < MAX_GUIDE_STEPS &&
+        guideIsFlushPair(group[group.length - 1], guideQueue[0], first)
+      ) {
+        group.push(guideQueue.shift());
+      }
+      let fallback = false;
+      const firstWin = first.windowId != null ? first.windowId : panelWindowId;
+      if (!img && guideLastImage && guideLastImage.windowId === firstWin) {
+        // Screenshot gescheitert: Schritt NICHT verwerfen, sondern mit dem letzten Bild
+        // desselben Fensters behalten (als ungenau markiert). Der Status nennt den Fehler.
+        img = guideLastImage;
+        fallback = true;
+      }
+      if (!img) continue; // noch gar kein Bild (erster Schritt) -> Fehlermeldung steht im Status
+      group.forEach((e, k) => {
+        if (k > 0) pulseTab(e.tabId);
+        const late = fallback || capturedAt - (e.at || capturedAt) > GUIDE_LATE_MS;
+        addGuideStep(e.step, img, e.tabId, late);
+      });
     }
   } finally {
     guideCapturing = false;
@@ -1963,9 +2174,18 @@ function renderGuideSteps() {
     lbl.textContent = guideStepLabel(s, i);
     lbl.title = lbl.textContent;
     const host = stepHost(s.url);
-    if (host) {
+    if (host || s.imprecise) {
       const small = document.createElement("small");
-      small.textContent = host;
+      small.textContent = host || "";
+      if (s.imprecise) {
+        // Welle 51: Bild kam verspätet (sehr schnelle Klickfolge) — bitte prüfen.
+        const warn = document.createElement("span");
+        warn.className = "img-warn";
+        warn.textContent = (host ? " · " : "") + "Bild ggf. ungenau";
+        warn.title =
+          "Der Screenshot entstand erst nach weiteren Klicks. Bitte prüfen – oder den Schritt entfernen und langsamer erneut aufnehmen.";
+        small.appendChild(warn);
+      }
       lbl.appendChild(small);
     }
 
@@ -3104,14 +3324,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   // Kleine FIFO-Queue statt Einzel-Slot: schnelle Folgen (Eingabe + Klick) gehen NICHT
   // verloren. windowId des Klick-Tabs merken: Screenshot gezielt aus DIESEM Fenster
   // (robuster als das beim Panel-Start ermittelte Fenster, z. B. bei mehreren Fenstern).
-  guideQueue.push({ step: msg.step, tabId: sender.tab.id, windowId: sender.tab.windowId });
-  // Ueberlauf: aeltesten wartenden Schritt verwerfen (+ dezenter Hinweis).
-  if (guideQueue.length > GUIDE_QUEUE_CAP) {
-    guideQueue.shift();
-    setStatus("Zu viele Klicks in Folge – ein Schritt wurde übersprungen.", "error");
-  } else if (guideCapturing) {
-    guideBusyHint();
-  }
+  // Welle 51: keine Kappe mehr — jeder Schritt bleibt erhalten (s. drainGuideQueue).
+  guideQueue.push({ step: msg.step, tabId: sender.tab.id, windowId: sender.tab.windowId, at: Date.now() });
+  if (guideCapturing) guideBusyHint();
   drainGuideQueue();
 });
 
@@ -3392,6 +3607,7 @@ function resetGuide() {
   });
   guideSteps = [];
   guideQueue = [];
+  guideLastImage = null;
   guideCapturing = false;
   guideFinishing = false;
   guideActive = false;
@@ -3407,6 +3623,8 @@ function resetGuide() {
 }
 
 function resetVideo() {
+  stopVideoWatch();
+  setVideoDoneState("recorded");
   mediaRecorder = null;
   recordedChunks = [];
   clicks = [];
@@ -6665,6 +6883,7 @@ els.guideTitle.addEventListener("input", guideMetaSave);
 els.guideCategory.addEventListener("change", onGuideCategoryChange);
 els.guideCategoryNew.addEventListener("input", guideMetaSave);
 els.again.addEventListener("click", newRecording);
+if (els.videoRetry) els.videoRetry.addEventListener("click", retryVideoRecording);
 els.guideAgain.addEventListener("click", newRecording);
 els.guideRetry.addEventListener("click", () => runGuideUpload());
 els.guideBackReview.addEventListener("click", guideBackToReview);

@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadOpenGaps } from "@/lib/gaps";
 import { relativeDe } from "@/lib/format";
 import { userDisplayName } from "@/lib/user-name";
+import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
 
 /**
  * App-Shell (Welle 50b): 60px-Kopfleiste für alle /app-Seiten; mobil übernimmt
@@ -142,11 +143,13 @@ type BellAlertRow = {
  * Glocke: je die 3 neuesten offenen Hinweise („Aktualität prüfen“) und die 3
  * häufigsten offenen Fragen + Gesamtzahlen. Beide Abfragen parallel; Zeitangaben
  * werden hier (Server) formatiert, damit der Client nichts neu berechnet.
+ * Welle 51: dazu gescheiterte Video-Aufträge der letzten 7 Tage (10 laden — der Client
+ * filtert die im Browser ausgeblendeten heraus und zeigt höchstens 3).
  */
 async function BellSlot() {
   const { account } = await requireAccount();
   const supabase = await createClient();
-  const [{ data: alertRows, count: alertCount }, gaps] = await Promise.all([
+  const [{ data: alertRows, count: alertCount }, gaps, { data: failedRows }] = await Promise.all([
     supabase
       .from("change_alerts")
       .select("id, summary, detected_at, tutorial_id, tutorials!inner(title, account_id)", {
@@ -159,6 +162,15 @@ async function BellSlot() {
     // Wie „Offene Fragen“ (bis 25) — Zähler = Anzahl dieser Liste.
     // 26 laden, 25 anzeigen: so erkennt die Glocke „mehr als 25“ (Anzeige „25+“).
     loadOpenGaps(account.id, 26),
+    supabase
+      .from("video_jobs")
+      .select("id, title, error, created_at, updated_at")
+      .eq("account_id", account.id)
+      .eq("status", "failed")
+      .eq("kind", "create")
+      .gte("updated_at", failedVideoSince())
+      .order("updated_at", { ascending: false })
+      .limit(10),
   ]);
   const alerts = ((alertRows ?? []) as unknown as BellAlertRow[]).map((a) => ({
     id: a.id,
@@ -178,6 +190,10 @@ async function BellSlot() {
       }))}
       gapTotal={Math.min(gaps.length, 25)}
       gapsMore={gaps.length > 25}
+      failedVideos={(failedRows ?? []).map((r) => {
+        const f = toFailedVideoJob(r);
+        return { ...f, when: relativeDe(f.at) };
+      })}
     />
   );
 }

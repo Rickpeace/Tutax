@@ -395,12 +395,13 @@
         <div class="body">
           <div class="done">
             <div class="ok"><svg class="i"><use href="#i-check"/></svg></div>
-            <h3>Aufnahme fertig</h3>
+            <h3 id="videoDoneTitle">Aufnahme fertig</h3>
             <div id="uploadBox" hidden>
               <p id="uploadProgress" role="status" aria-live="polite"></p>
               <div id="uploadDone" hidden>
-                <p>Hochgeladen – Steply erstellt jetzt die Anleitung.</p>
+                <p id="uploadDoneText" role="status" aria-live="polite">Hochgeladen – Steply erstellt jetzt die Anleitung.</p>
                 <button id="openApp" class="btn primary" type="button"><svg class="i s"><use href="#i-ext"/></svg>In Steply öffnen</button>
+                <button id="videoRetry" class="btn primary" type="button" hidden>Erneut aufnehmen</button>
               </div>
             </div>
             <div id="downloadBox" hidden>

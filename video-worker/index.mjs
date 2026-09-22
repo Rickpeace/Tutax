@@ -11,6 +11,8 @@ import path from "node:path";
 import { analyzeStructure, planWiring } from "./structure.mjs";
 // Welle 18: Video-Export (Tutorial -> MP4). Reine Render-Bausteine + Orchestrierung.
 import { renderVideo } from "./render.mjs";
+// Welle 51: testbare ffmpeg-Bausteine (Audiospur-Erkennung, Dauer-Fallback, robuste Normalisierung).
+import { hasAudioStream, probeDuration as probeVideoDuration, normalizeVideo } from "./media.mjs";
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -204,8 +206,8 @@ async function rewireLinear(tutId, rows) {
 }
 
 async function buildTutorial(job, videoPath, dir) {
-  let duration = NaN;
-  try { duration = parseFloat(sh("ffprobe", ["-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", videoPath]).trim()); } catch { /* unten abgefangen */ }
+  // Dauer aus dem Header, sonst aus dem letzten Paket (WebM ohne Dauer-Metadaten).
+  const duration = probeVideoDuration(videoPath);
   if (!isFinite(duration) || duration < 1) throw new Error("Video konnte nicht gelesen werden (evtl. Aufnahme unvollständig/zu kurz). Bitte erneut aufnehmen.");
   let vdim = [null, null];
   try {
@@ -219,11 +221,22 @@ async function buildTutorial(job, videoPath, dir) {
   } catch { /* dims optional */ }
 
   // 1) Audio -> Whisper (mit Wort-Zeitstempeln für die Marker-Erkennung)
-  const audio = path.join(dir, "audio.mp3");
-  sh("ffmpeg", ["-y","-i", videoPath, "-vn","-ac","1","-ar","16000","-b:a","64k", audio]);
-  // prompt: "Schnitt" biast Whisper darauf, das Marker-Wort sauber zu erkennen. Neuer
-  // ReadStream je Versuch (ein verbrauchter Stream lässt sich nicht erneut senden).
-  const tr = await withRetry(() => openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de", prompt: "Schnitt", timestamp_granularities: ["segment", "word"] }));
+  //    Welle 51: Aufnahmen „Ohne Ton“ (Erweiterung, Mikro abgewählt/verweigert) haben KEINE
+  //    Audiospur. Früher scheiterte hier ffmpeg („Output file does not contain any stream“)
+  //    und der Job endete als „evtl. unvollständige Aufnahme“ — obwohl das Video vollständig
+  //    war (belegt am Job vom 21.07.: 125 s VP9, 29 Klicks, keine Audiospur). Ohne Ton gibt es
+  //    schlicht kein Transkript: Klick-Modus/Szenen-Erkennung/Gleichverteilung tragen allein.
+  const EMPTY_TRANSCRIPT = { text: "", segments: [], words: [] };
+  let tr = EMPTY_TRANSCRIPT;
+  if (hasAudioStream(videoPath)) {
+    const audio = path.join(dir, "audio.mp3");
+    sh("ffmpeg", ["-y","-i", videoPath, "-vn","-ac","1","-ar","16000","-b:a","64k", audio]);
+    // prompt: "Schnitt" biast Whisper darauf, das Marker-Wort sauber zu erkennen. Neuer
+    // ReadStream je Versuch (ein verbrauchter Stream lässt sich nicht erneut senden).
+    tr = await withRetry(() => openai.audio.transcriptions.create({ file: fs.createReadStream(audio), model: "whisper-1", response_format: "verbose_json", language: "de", prompt: "Schnitt", timestamp_granularities: ["segment", "word"] }));
+  } else {
+    console.log("  Keine Audiospur (Aufnahme ohne Ton) -> ohne Transkript weiter.");
+  }
   const segs = (tr.segments || []).map((s) => ({ start: +s.start.toFixed(1), text: s.text.trim() }));
 
   // 2) Schritte bestimmen. Jeder Schritt liefert: { shot (Screenshot-Sekunde), tB (Vorher-Frame), narration }.
@@ -305,7 +318,8 @@ async function buildTutorial(job, videoPath, dir) {
   // (B) FALLBACK ohne "Schnitt": KI segmentiert aus dem Transkript; Screenshot ~2s nach Ansage.
   if (!segSteps.length) {
     const tsText = segs.map((s) => `[${s.start}s] ${s.text}`).join("\n") || tr.text || "";
-    let llm = (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`${topicLine}Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
+    // Ohne Transkript (stumme Aufnahme) nichts zu segmentieren -> direkt zur Szenen-Erkennung.
+    let llm = !tsText.trim() ? [] : (await json("gpt-5.4-mini", [{ role:"system", content: SEG_SYS }, { role:"user", content:`${topicLine}Erzählung:\n${tsText}\n\nVideolänge: ${duration.toFixed(0)}s` }], 700)).steps || [];
     llm = llm.filter((s) => typeof s.t === "number").sort((a,b)=>a.t-b.t);
     if (llm.length >= 2) {
       for (let i = 0; i < llm.length; i++) {
@@ -732,15 +746,14 @@ async function processJob(job) {
     if (error) throw new Error("Download: " + error.message);
     fs.writeFileSync(raw, Buffer.from(await data.arrayBuffer()));
     // Auf MP4/H.264 normalisieren (webm-Aufnahmen, krumme Codecs -> zuverlässiges Seeking/ffprobe).
-    let vpath = raw;
-    try {
-      const norm = path.join(tmp, "norm.mp4");
-      sh("ffmpeg", ["-y", "-i", raw, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-movflags", "+faststart", norm]);
-      vpath = norm;
-    } catch (e) {
+    // Welle 51: gerade Maße erzwingen (Fenster-Aufnahmen mit ungerader Breite ließen libx264
+    // scheitern), genpts; Fallback verlustfreies Umpacken nach MKV, zuletzt das Original.
+    const normRes = normalizeVideo(raw, tmp);
+    const vpath = normRes.path;
+    if (normRes.method !== "encode") {
       // Gerade krumme Aufnahmen brauchen die Normalisierung am nötigsten -> Fehler sichtbar loggen
       // (buildTutorial wirft klar, falls auch das Original nicht lesbar ist).
-      console.error(`  Normalisierung fehlgeschlagen, nutze Original: ${String(e?.message || e).slice(0, 200)}`);
+      console.error(`  Normalisierung fehlgeschlagen (${normRes.method}): ${normRes.error || "?"}`);
     }
     const res = await buildTutorial(job, vpath, tmp);
     console.log(`✓ Job ${job.id} -> Tutorial "${res.title}" (${res.count} Schritte, ${res.tutId})`);

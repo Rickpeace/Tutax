@@ -15,6 +15,8 @@ import {
   MessageCircleQuestion,
   UserRound,
   ArrowLeftRight,
+  VideoOff,
+  X,
 } from "lucide-react";
 import { Wordmark } from "@/components/wordmark";
 import {
@@ -49,6 +51,8 @@ import { cn } from "@/lib/utils";
 import { setActiveAccount } from "@/app/app/actions";
 import { signOut } from "@/app/(auth)/actions";
 import type { Membership } from "@/lib/account";
+import { dismissVideoJob, useDismissedVideoJobs } from "@/lib/dismissed-video-jobs";
+import type { FailedVideoNotice } from "@/components/app/failed-video-notices";
 
 /**
  * App-Shell (Welle 50b, Entwurf „App-Makeover“ Abschnitt 1): 60px-Kopfleiste —
@@ -162,11 +166,14 @@ export type BellAlert = {
   when: string;
 };
 export type BellGap = { question: string; count: number; when: string };
+export type BellFailedVideo = FailedVideoNotice;
 
 /**
  * Glocke (Entwurf Abschnitt 1): öffnet eine Übersicht mit „Aktualität prüfen“
  * (offene change_alerts) und „Offene Fragen“ (unbeantwortete Chat-Fragen), je
  * höchstens 3 Einträge + „Alle“-Link. Zähler = Summe beider Listen.
+ * Welle 51: dritter Abschnitt „Fehlgeschlagene Videos“ (nur wenn es welche gibt, max. 3),
+ * ausgeblendete (localStorage, geteilt mit der Bibliothek) zählen nicht mit.
  */
 export function BellPopover({
   alerts,
@@ -174,6 +181,7 @@ export function BellPopover({
   gaps,
   gapTotal,
   gapsMore = false,
+  failedVideos = [],
 }: {
   alerts: BellAlert[];
   alertTotal: number;
@@ -181,9 +189,14 @@ export function BellPopover({
   gapTotal: number;
   /** Es gibt mehr offene Fragen als geladen (Anzeige „+“). */
   gapsMore?: boolean;
+  /** Gescheiterte Video-Aufträge der letzten 7 Tage (vor dem Ausblenden-Filter). */
+  failedVideos?: BellFailedVideo[];
 }) {
   const [open, setOpen] = useState(false);
-  const total = alertTotal + gapTotal;
+  const dismissed = useDismissedVideoJobs();
+  // Bis bekannt ist, was ausgeblendet wurde (Server/erster Render): Fehlschläge nicht zählen.
+  const failed = dismissed ? failedVideos.filter((f) => !dismissed.includes(f.id)) : [];
+  const total = alertTotal + gapTotal + failed.length;
   const totalLabel = total > 99 ? "99+" : gapsMore ? `${total}+` : String(total);
   const close = () => setOpen(false);
 
@@ -250,6 +263,31 @@ export function BellPopover({
             ))
           )}
         </BellSection>
+        {failed.length > 0 && (
+          <BellSection title="Fehlgeschlagene Videos" href="/app" onNavigate={close}>
+            {failed.slice(0, 3).map((f) => (
+              <div key={f.id} className="flex items-start" data-testid="bell-failed-video">
+                <BellNote
+                  href="/app"
+                  onNavigate={close}
+                  tone="red"
+                  icon={<VideoOff className="size-3.5" />}
+                  title={`„${f.title}“ konnte nicht verarbeitet werden`}
+                  meta={`${f.reason[0].toUpperCase()}${f.reason.slice(1)}. Bitte erneut aufnehmen. · ${f.when}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => dismissVideoJob(f.id)}
+                  aria-label={`Hinweis zu „${f.title}“ ausblenden`}
+                  title="Ausblenden"
+                  className="mt-1.5 grid size-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-line-2 hover:text-ink"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </BellSection>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -297,7 +335,7 @@ function BellNote({
 }: {
   href: string;
   onNavigate: () => void;
-  tone: "amber" | "violet";
+  tone: "amber" | "violet" | "red";
   icon: React.ReactNode;
   title: string;
   meta: string;
@@ -306,12 +344,16 @@ function BellNote({
     <Link
       href={href}
       onClick={onNavigate}
-      className="flex items-start gap-2.5 rounded-[10px] p-2 text-[13px] transition-colors hover:bg-line-2"
+      className="flex min-w-0 flex-1 items-start gap-2.5 rounded-[10px] p-2 text-[13px] transition-colors hover:bg-line-2"
     >
       <span
         className={cn(
           "grid size-7 shrink-0 place-items-center rounded-[9px]",
-          tone === "amber" ? "bg-amber-soft text-amber-text" : "bg-violet-soft text-violet-text",
+          tone === "amber"
+            ? "bg-amber-soft text-amber-text"
+            : tone === "red"
+              ? "bg-destructive/10 text-destructive"
+              : "bg-violet-soft text-violet-text",
         )}
       >
         {icon}

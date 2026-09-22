@@ -104,6 +104,15 @@ Das ZIP wird per `node scripts/build-extension-zip.mjs` erzeugt (nach
 zugleich das Upload-ZIP für den Chrome Web Store (siehe `store/LISTING.md`). Chrome ab
 Version 114 (Seitenleiste).
 
+**Auch in Microsoft Edge** (ab Version 114): ZIP entpacken → `edge://extensions` →
+**Entwicklermodus** (links) einschalten → **Entpackte Erweiterung laden** → Ordner wählen.
+Edge ist Chromium-basiert; alle genutzten Schnittstellen (`sidePanel`, `scripting`,
+`downloads`, `storage`, `alarms`, `notifications`, `tabs.captureVisibleTab`) gibt es dort
+ebenfalls — die Seitenleiste erscheint in Edges Seitenbereich. Kein Edge-spezifischer Code.
+Hinweis: Browser-Seiten heißen dort `edge://…` statt `chrome://…`; sie sind wie in Chrome
+nicht aufnehmbar (die Erkennung prüft ohnehin nur auf http/https). Nicht auf echtem Edge
+automatisiert getestet.
+
 ### Für Entwickler (aus dem Repo)
 
 1. Chrome öffnen und `chrome://extensions` aufrufen.
