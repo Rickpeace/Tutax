@@ -8,7 +8,13 @@
 // leicht testbar und die Regeln liegen an EINER Stelle.
 import "server-only";
 import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
-import { displayKeyDe, dropLabelOf, hoverLabelOf } from "@/lib/interaction-text";
+import {
+  displayKeyDe,
+  dropLabelOf,
+  hoverLabelOf,
+  modifierKeysDe,
+  modifierPhraseDe,
+} from "@/lib/interaction-text";
 import { DEFAULT_HIGHLIGHT_COLOR } from "@/lib/highlight-color";
 import { CATEGORY_NAME_MAX } from "@/lib/category-name";
 
@@ -33,7 +39,11 @@ export type GuideSelector = {
 };
 
 const SHADOW_DEPTH_MAX = 5;
-const INTERACTION_VARIANTS = ["right", "double", "drag", "key"] as const;
+// Welle 55: "nav" (Seitenwechsel ohne Klick), "spot" (Klick ohne brauchbares Element),
+// "result" (Abschluss-Bild) kommen dazu. Alle drei tragen NIE einen Selektor.
+const INTERACTION_VARIANTS = ["right", "double", "drag", "key", "nav", "spot", "result"] as const;
+const INTERACTION_MODIFIERS = ["ctrl", "meta", "alt", "shift"] as const;
+const INTERACTION_NAV_KINDS = ["back", "reload", "goto"] as const;
 
 // Ein normalisiertes sensibles Rechteck (Auto-Schwärzung, Welle 28) – wie rect, 0..1.
 export type SensitiveRect = { x: number; y: number; w: number; h: number };
@@ -211,9 +221,28 @@ export function validateInteraction(raw: unknown, action: GuideAction): StepInte
         const dl = cleanSelectorString(r.dropLabel, LABEL_MAX);
         if (dl) out.dropLabel = dl;
       }
+    } else if (variant === "nav") {
+      // Seitenwechsel ohne Klick (Welle 55, L1): die Art MUSS bekannt sein, sonst wäre der
+      // Schritt textlos. Kaputt → variant fällt weg (der Schritt bleibt als schlichter Schritt).
+      const kind = typeof r.nav === "string" ? r.nav.trim().toLowerCase() : "";
+      if (INTERACTION_NAV_KINDS.includes(kind as never)) {
+        out.variant = "nav";
+        out.nav = kind as NonNullable<StepInteraction["nav"]>;
+      }
     } else {
       out.variant = variant;
     }
+  }
+  // Zusatztasten beim Klick (Welle 55, L3): nur bekannte Namen, ohne Dubletten, feste
+  // Reihenfolge (ctrl→meta→alt→shift), damit Texte und Wiedergabe deterministisch sind.
+  if (action === "click" && Array.isArray(r.modifiers)) {
+    const seen = new Set<string>();
+    for (const m of r.modifiers.slice(0, 8)) {
+      const k = typeof m === "string" ? m.trim().toLowerCase() : "";
+      if (INTERACTION_MODIFIERS.includes(k as never)) seen.add(k);
+    }
+    const mods = INTERACTION_MODIFIERS.filter((m) => seen.has(m));
+    if (mods.length) out.modifiers = [...mods];
   }
   const hover = validateSelector(r.hover);
   if (hover) {
@@ -519,6 +548,21 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   if (step.action === "click" && it?.variant === "key" && it.key) {
     return `Drücken Sie ${displayKeyDe(it.key)}`.slice(0, TITLE_MAX);
   }
+  // Welle 55 — Schritte OHNE Element (kein Selektor): Seitenwechsel, markierte Stelle,
+  // Abschluss-Bild. Sie brauchen kein Label und dürfen nie als „Schritt n" enden.
+  if (step.action === "click" && it?.variant === "nav") {
+    if (it.nav === "back") return "Zur vorigen Seite zurückgehen";
+    if (it.nav === "reload") return "Seite neu laden";
+    const page = step.title ? labelHead(step.title) : "";
+    if (page) return wrapOne([(p) => `Weiter zu „${p}“`], page);
+    return "Zur nächsten Seite wechseln";
+  }
+  if (step.action === "click" && it?.variant === "result") return "Ergebnis";
+  if (step.action === "click" && it?.variant === "spot") {
+    const where = step.label ? labelHead(step.label) : "";
+    if (where) return wrapOne([(l) => `In „${l}“ auf die markierte Stelle klicken`], where);
+    return "Auf die markierte Stelle klicken";
+  }
   // Eingabe (Welle 54): mit getipptem Wert „„account“ in „Suche“ eingeben“ bzw. „„account“
   // eingeben“; ohne Wert „Feld „Suche“ ausfüllen“ (verständlicher als „Tragen Sie „Suche“ ein“).
   if (step.action === "type") {
@@ -547,6 +591,15 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   }
   if (step.action === "click" && it?.variant === "double") {
     return wrapOne([(l) => `Doppelklicken Sie auf „${l}“`], label);
+  }
+  // Mehrfach-/Bereichsauswahl (Welle 55, L3): die gedrückte Zusatztaste gehört in den TITEL —
+  // ohne sie verliert der Leser seine bisherige Auswahl.
+  const modKeys = modifierKeysDe(it);
+  if (step.action === "click" && modKeys && !it?.variant) {
+    const lead = modKeys.includes("+")
+      ? `Mit gedrückten ${modKeys}-Tasten`
+      : `Mit gedrückter ${modKeys}-Taste`;
+    return wrapOne([(l) => `${lead} auf „${l}“ klicken`, (l) => `${modKeys}+Klick auf „${l}“`], label);
   }
   // Hover-Menü (Welle 48): ausführlich, wenn es passt; sonst „Klicken Sie im Menü „H“ auf „X““.
   const hover = hoverLabelOf(it);
@@ -665,7 +718,32 @@ function variantSentence(step: GuideStepInput): string | null {
       ? `Drücken Sie die Tastenkombination ${k}.`
       : `Drücken Sie die Taste ${k}.`;
   }
+  // Welle 55 — Schritte ohne Element.
+  if (it.variant === "nav") {
+    if (it.nav === "back") return "Gehen Sie mit dem Zurück-Knopf des Browsers zur vorigen Seite.";
+    if (it.nav === "reload") return "Laden Sie die Seite neu (Taste F5).";
+    return step.title
+      ? `Die Seite wechselt zu „${step.title.slice(0, 60)}“ – ohne dass Sie etwas anklicken.`
+      : "Die Seite wechselt – ohne dass Sie etwas anklicken.";
+  }
+  if (it.variant === "result") return "So sieht das Ergebnis am Ende aus.";
+  if (it.variant === "spot") {
+    return step.label
+      ? `Klicken Sie in „${step.label}“ auf die markierte Stelle.`
+      : "Klicken Sie auf die markierte Stelle im Bild.";
+  }
   return null;
+}
+
+/** Zusatz-Satz für die gedrückten Zusatztasten eines Klicks (Welle 55, L3). "" = keine. */
+function modifierSentence(step: GuideStepInput): string {
+  if (step.action !== "click") return "";
+  const phrase = modifierPhraseDe(step.interaction);
+  if (!phrase) return "";
+  const target = step.label ? `„${step.label}“` : "die markierte Stelle";
+  return step.interaction?.variant
+    ? `Halten Sie dabei ${phrase} gedrückt.`
+    : `Halten Sie ${phrase} gedrückt und klicken Sie auf ${target} – so bleibt die bisherige Auswahl erhalten.`;
 }
 
 /**
@@ -680,7 +758,14 @@ export function templateBodyText(
   step: GuideStepInput,
   prev: GuideStepInput | null,
 ): string {
-  const changedPage = !!step.title && step.title !== (prev?.title ?? "");
+  const noElement =
+    step.action === "click" &&
+    (step.interaction?.variant === "nav" ||
+      step.interaction?.variant === "result" ||
+      step.interaction?.variant === "spot");
+  // Welle 55: „Auf der Seite „X": Die Seite wechselt zu „X"" wäre doppelt gemoppelt — Schritte
+  // ohne Element beschreiben den Seitenwechsel selbst und bekommen darum keinen Kontext-Vorspann.
+  const changedPage = !noElement && !!step.title && step.title !== (prev?.title ?? "");
   const context = changedPage ? `Auf der Seite „${step.title}“: ` : "";
   // Datei-Brücke (Welle 39): Upload-/Download-Schritte bekommen einen passenden Hinweistext.
   if (step.file_meta?.role === "upload") {
@@ -701,6 +786,10 @@ export function templateBodyText(
   } else {
     core = variant ?? extraBodySentence(step);
   }
+  // Zusatztasten (Welle 55, L3): ohne Variante IST der Modifikator-Satz der Kern, mit Variante
+  // (Rechts-/Doppelklick) kommt er als Zusatz dahinter.
+  const modSentence = modifierSentence(step);
+  if (modSentence) core = step.interaction?.variant && core ? `${core} ${modSentence}` : modSentence;
   if (core) return `${context}${core}`;
   // Nichts Zusätzliches: nur beim Seitenwechsel den Kontext + den schlichten Satz, sonst leer.
   return context ? `${context}${plainBodySentence(step)}` : "";

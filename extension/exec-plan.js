@@ -108,15 +108,40 @@
   // Vertrag s. extension/content.js „INTERACTION-Vertrag". TOLERANT (wirft NIE): nur bekannte
   // Schlüssel überleben, Strings gekappt, kaputt/leer → null. enter nur bei Eingabe-Aktionen
   // (fill; „type" = Aufnahme-Form), variant nur bei Klick-Aktionen. NIE Feldinhalte.
-  var INTERACTION_VARIANTS = { right: 1, double: 1, drag: 1, key: 1 };
+  // Welle 55: nav/spot/result beschreiben Schritte OHNE Element (Seitenwechsel ohne Klick,
+  // Klick auf eine bloße Stelle, Abschluss-Bild). Sie tragen nie einen Selektor und werden
+  // darum schon bei der Umwandlung in eine Automation aussortiert (lib/automations.ts) —
+  // hier nur durchgereicht, damit Detail-Chips/Texte sie benennen können.
+  var INTERACTION_VARIANTS = { right: 1, double: 1, drag: 1, key: 1, nav: 1, spot: 1, result: 1 };
+  var INTERACTION_NAV = { back: 1, reload: 1, goto: 1 };
+  var INTERACTION_MODS = ["ctrl", "meta", "alt", "shift"];
   function parseInteraction(raw, action) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     var out = {};
     var isInput = action === "fill" || action === "type";
     var isClick = action == null || action === "click";
     if (raw.enter === true && isInput) out.enter = true;
+    if (isClick && Array.isArray(raw.modifiers)) {
+      // Zusatztasten beim Klick (Welle 55, L3): bekannte Namen, ohne Dubletten, feste Reihenfolge.
+      var seen = {};
+      for (var mi = 0; mi < raw.modifiers.length && mi < 8; mi++) {
+        var mk = typeof raw.modifiers[mi] === "string" ? raw.modifiers[mi].trim().toLowerCase() : "";
+        if (INTERACTION_MODS.indexOf(mk) >= 0) seen[mk] = 1;
+      }
+      var mods = [];
+      for (var mj = 0; mj < INTERACTION_MODS.length; mj++) {
+        if (seen[INTERACTION_MODS[mj]]) mods.push(INTERACTION_MODS[mj]);
+      }
+      if (mods.length) out.modifiers = mods;
+    }
     if (isClick && typeof raw.variant === "string" && INTERACTION_VARIANTS[raw.variant] === 1) {
-      if (raw.variant === "key") {
+      if (raw.variant === "nav") {
+        var nav = typeof raw.nav === "string" ? raw.nav.trim().toLowerCase() : "";
+        if (INTERACTION_NAV[nav] === 1) {
+          out.variant = "nav";
+          out.nav = nav;
+        }
+      } else if (raw.variant === "key") {
         var key = cleanStr(raw.key, 40);
         if (key) {
           out.variant = "key";

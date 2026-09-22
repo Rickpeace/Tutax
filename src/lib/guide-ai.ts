@@ -11,7 +11,13 @@ import {
   type GuideStepInput,
 } from "@/lib/guide";
 import { normalizeDomain } from "@/lib/site-domains";
-import { describeInteractionForAi, displayKeyDe, dropLabelOf, hoverLabelOf } from "@/lib/interaction-text";
+import {
+  describeInteractionForAi,
+  displayKeyDe,
+  dropLabelOf,
+  hoverLabelOf,
+  modifierKeysDe,
+} from "@/lib/interaction-text";
 import type { StepInteraction } from "@/lib/types";
 import {
   GUIDE_REFINE_SYSTEM,
@@ -354,16 +360,35 @@ export function quotesBalanced(s: string): boolean {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-/** Bleibt die Art der Bedienung in Titel/Text erhalten? */
-function keepsInteraction(text: string, it: StepInteraction | null | undefined): boolean {
+/** Bleibt die Art der Bedienung in Titel/Text erhalten? (exportiert fuer Tests) */
+export function keepsInteraction(text: string, it: StepInteraction | null | undefined): boolean {
   if (!it) return true;
   if (it.enter && !/enter|eingabetaste|↵/i.test(text)) return false;
   if (it.variant === "right" && !/recht/i.test(text)) return false;
   if (it.variant === "double" && !/doppel/i.test(text)) return false;
   if (it.variant === "drag" && !/zieh|drag/i.test(text)) return false;
   if (it.variant === "key" && it.key && !text.toLowerCase().includes(displayKeyDe(it.key).toLowerCase())) return false;
+  // Welle 55 — Schritte OHNE Element: die KI darf daraus keinen Klick machen.
+  if (it.variant === "nav") {
+    if (it.nav === "back" && !/zurück|vorherig|vorig/i.test(text)) return false;
+    if (it.nav === "reload" && !/neu\s*lad|\bneu\b|aktualisier|\bf5\b/i.test(text)) return false;
+    if (it.nav === "goto" && !/seite|wechsel|weiter/i.test(text)) return false;
+  }
+  if (it.variant === "spot" && !/markiert/i.test(text)) return false;
+  if (it.variant === "result" && !/ergebnis|abschluss|fertig/i.test(text)) return false;
+  // Zusatztasten (L3): ohne sie ist die Anleitung falsch (Auswahl geht verloren).
+  const mods = modifierKeysDe(it);
+  if (mods && !mods.split("+").every((k) => text.toLowerCase().includes(k.toLowerCase()))) return false;
   if (it.hover && !/maus|fahren|zeige|hover|beweg/i.test(text)) return false;
   return true;
+}
+
+/**
+ * Abschluss-Bild (Welle 55, L2 Variante A): reines Ergebnis-Bild ohne Bedienung. Es geht GAR
+ * NICHT erst an die KI — es gibt nichts zu formulieren und „Ergebnis“ soll stabil bleiben.
+ */
+export function isResultStep(s: { interaction?: StepInteraction | null }): boolean {
+  return s.interaction?.variant === "result";
 }
 
 /**

@@ -96,8 +96,19 @@ export type StepJump = {
 export type InteractionSelector = { css?: string; text?: string; role?: string; shadow?: string[] };
 export type StepInteraction = {
   enter?: boolean; // Eingabe per Enter abgeschickt (nur type/fill)
-  variant?: "right" | "double" | "drag" | "key"; // Rechts-/Doppelklick, Ziehen, Tastenkürzel
+  /**
+   * Rechts-/Doppelklick, Ziehen, Tastenkürzel (Welle 48) sowie Welle 55:
+   *  • "nav"    Seitenwechsel OHNE Klick (Zurück-Knopf, Neuladen, Weiterleitung/SPA-Route)
+   *  • "spot"   Klick auf eine Stelle OHNE brauchbares Element (Canvas, geschlossenes Shadow DOM)
+   *  • "result" Abschluss-Bild am Ende der Aufnahme (zeigt nur das Ergebnis)
+   * "nav"/"spot"/"result" tragen NIE einen Selektor → weder automatisierbar noch live führbar.
+   */
+  variant?: "right" | "double" | "drag" | "key" | "nav" | "spot" | "result";
   key?: string; // variant key: Anzeige-Form „Ctrl+S"
+  /** Gedrückte Zusatztasten beim Klick (Welle 55, L3), Reihenfolge ctrl→meta→alt→shift. */
+  modifiers?: ("ctrl" | "meta" | "alt" | "shift")[];
+  /** Art des Seitenwechsels (nur variant "nav", Welle 55, L1). */
+  nav?: "back" | "reload" | "goto";
   drop?: InteractionSelector; // variant drag: Ablage-Ziel
   dropLabel?: string;
   hover?: InteractionSelector; // vorher mit der Maus über dieses Element (Menü öffnen)

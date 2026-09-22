@@ -26,6 +26,7 @@ import {
   refineGuideSteps,
   refineStepFromGuide,
   refineContextFromGuide,
+  isResultStep,
   type RefineStep,
 } from "@/lib/guide-ai";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
@@ -229,7 +230,10 @@ async function applyGuideCategory(
  * Prompt durch {{WERT}} und setzt ihn danach wieder ein; so werden auch Eingaben geglättet.
  */
 function refineInput(steps: GuideStepInput[], rows: { id: string }[]): SavedStep[] {
-  return rows.map((r, i) => ({ id: r.id, ...refineStepFromGuide(steps, i) }));
+  return rows
+    .map((r, i) => ({ id: r.id, ...refineStepFromGuide(steps, i) }))
+    // Abschluss-Bild (Welle 55): kein KI-Feinschliff — „Ergebnis“ bleibt stehen.
+    .filter((_, i) => !isResultStep(steps[i]));
 }
 
 /** Feinschliff im Hintergrund starten (Titel des Ziel-Tutorials wird dafür nachgeschlagen). */
