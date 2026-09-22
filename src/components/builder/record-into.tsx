@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Zap, CheckCircle2, ArrowRight, Crosshair } from "lucide-react";
 import {
@@ -9,54 +9,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useRecorderExtension } from "@/lib/use-recorder-extension";
 
 // „Ab hier mit Extension aufnehmen" (Welle 27): der Builder öffnet diesen Dialog an einem
 // Einfügepunkt (+ zwischen Schritten / Ast einer Verzweigung). Bei installierter Extension
 // öffnet ein Klick die Aufnahme-Seitenleiste UND übergibt Kontext (Tutorial + Stelle) per
 // window.postMessage — content.js reicht es (origin-gebunden) an die Extension weiter, die
 // die Aufnahme beim Fertigstellen an GENAU dieser Stelle einhängt. Nicht installiert →
-// Link auf /extension. Muster: components/app/new-tutorial-button.tsx (Sofort-Anleitung-Karte).
+// Link auf die Einrichtungs-Seite in der App (Einstellungen → Steply-Erweiterung, gleicher Tab).
+// Muster: components/app/new-tutorial-button.tsx (Sofort-Anleitung-Karte).
 
 /** Ziel-Anker im Ziel-Tutorial (genau EIN Feld gesetzt). */
 export type RecordAnchor = { afterStepId: string } | { branchId: string };
 /** Was der Builder an den Dialog übergibt: Anker + menschlich lesbare Beschriftung. */
 export type RecordTarget = { anchor: RecordAnchor; label: string };
-
-/**
- * Erkennt die installierte Recorder-Extension am DOM-Marker `data-steply-recorder`
- * (content.js setzt ihn früh; isolated world → nur das DOM ist geteilt). Identisch zur
- * Erkennung in new-tutorial-button.tsx. Läuft beim Mount des (immer sichtbaren) Dialogs,
- * damit die Erkennung fertig ist, bevor der Nutzer einen Einfügepunkt öffnet.
- */
-function useRecorderExtension() {
-  const [installed, setInstalled] = useState<boolean | null>(null);
-  const [version, setVersion] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      if (cancelled) return true;
-      const v = document.documentElement.getAttribute("data-steply-recorder");
-      if (v != null) {
-        setInstalled(true);
-        setVersion(v);
-        return true;
-      }
-      return false;
-    };
-    const t0 = setTimeout(() => {
-      if (!read()) setInstalled(false);
-    }, 0);
-    const t1 = setTimeout(read, 500);
-    const t2 = setTimeout(read, 1500);
-    return () => {
-      cancelled = true;
-      clearTimeout(t0);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
-  return { installed, version };
-}
 
 export function RecordIntoDialog({
   tutorialId,
@@ -147,8 +113,8 @@ export function RecordIntoDialog({
           </button>
         ) : installed === false ? (
           <Link
-            href="/extension"
-            target="_blank"
+            href="/app/settings/erweiterung"
+            onClick={() => onOpenChange(false)}
             className="mt-1 flex items-center gap-3 rounded-xl border-2 border-dashed border-primary/30 bg-card p-4 text-left transition-colors hover:border-primary/60 hover:bg-accent/30"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">

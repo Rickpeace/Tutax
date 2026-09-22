@@ -26,44 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createTutorial } from "@/app/app/actions";
 import { VideoUpload } from "@/components/app/video-upload";
-
-/**
- * Erkennt clientseitig (nach Mount) die installierte Recorder-Extension am DOM-Marker
- * `data-steply-recorder` (content.js setzt ihn frueh; isolated world -> nur das DOM ist
- * geteilt). Gibt {installed, version} zurueck. Kurze Nachkontrollen fangen eine gerade
- * erst installierte Extension ab.
- */
-function useRecorderExtension() {
-  const [installed, setInstalled] = useState<boolean | null>(null);
-  const [version, setVersion] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      if (cancelled) return true;
-      const v = document.documentElement.getAttribute("data-steply-recorder");
-      if (v != null) {
-        setInstalled(true);
-        setVersion(v);
-        return true;
-      }
-      return false;
-    };
-    // setState ASYNCHRON planen (kein synchrones setState im Effekt-Body): erste Pruefung
-    // + zwei Nachkontrollen, falls die Extension gerade erst installiert wurde.
-    const t0 = setTimeout(() => {
-      if (!read()) setInstalled(false);
-    }, 0);
-    const t1 = setTimeout(read, 500);
-    const t2 = setTimeout(read, 1500);
-    return () => {
-      cancelled = true;
-      clearTimeout(t0);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
-  return { installed, version };
-}
+import { useRecorderExtension } from "@/lib/use-recorder-extension";
 
 /**
  * „Neues Tutorial" (Welle 20): öffnet zuerst eine Weiche mit zwei Karten —
@@ -139,7 +102,11 @@ export function NewTutorialButton({
                   empfohlene Normalfall — „Selbst bauen" und „Aus Video" sind die Alternativen.
                   Kein Navigations-Ziel bei installierter Extension: die Aufnahme laeuft in
                   der Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek. */}
-              <SofortAnleitungCard installed={extInstalled} version={extVersion} />
+              <SofortAnleitungCard
+                installed={extInstalled}
+                version={extVersion}
+                onNavigate={() => setOpen(false)}
+              />
               <div className="mt-1 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
@@ -223,14 +190,19 @@ export function NewTutorialButton({
 /**
  * Sofort-Anleitung-Karte im „Neue Anleitung"-Dialog. Installiert -> Kurzanleitung (kein
  * Navigations-Ziel: die Aufnahme laeuft in der Seitenleiste); nicht installiert -> Link
- * auf /extension. Warm-Redesign-Optik (Koralle-Akzent, 2px-Border, rounded-xl).
+ * auf die Einrichtungs-Seite IN der App (Einstellungen → Steply-Erweiterung, gleicher Tab —
+ * nicht die öffentliche /extension mit Marketing-Kopf). Der Dialog hängt im App-Layout und
+ * überlebt die Navigation, daher schließt `onNavigate` ihn beim Klick.
+ * Warm-Redesign-Optik (Koralle-Akzent, 2px-Border, rounded-xl).
  */
 function SofortAnleitungCard({
   installed,
   version,
+  onNavigate,
 }: {
   installed: boolean | null;
   version: string;
+  onNavigate: () => void;
 }) {
   // Waehrend der Erkennung (installed === null) neutral-installiert-freundlich rendern:
   // wir zeigen die Kurzanleitung erst bei bestaetigter Installation, sonst den Install-Link.
@@ -283,8 +255,8 @@ function SofortAnleitungCard({
 
   return (
     <Link
-      href="/extension"
-      target="_blank"
+      href="/app/settings/erweiterung"
+      onClick={onNavigate}
       className="mt-3 flex items-center gap-3 rounded-xl border-2 border-dashed border-primary/30 bg-card p-4 text-left transition-colors hover:border-primary/60 hover:bg-accent/30"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
@@ -298,8 +270,8 @@ function SofortAnleitungCard({
           </span>
         </span>
         <span className="block text-xs text-muted-foreground">
-          Klicken statt filmen: Steply-Erweiterung installieren, dann entsteht bei jedem
-          Klick ein Schritt.
+          Klicken statt filmen: Steply-Erweiterung in 3 Schritten einrichten, dann entsteht
+          bei jedem Klick ein Schritt.
         </span>
       </span>
       <ArrowRight className="size-4 shrink-0 text-primary" />
