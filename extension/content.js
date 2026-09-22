@@ -337,10 +337,16 @@
 
   // Interaktive Elemente (fuer Klick-Aufloesung UND Dead-Click-Filter). Deckt neben den
   // nativen Widgets auch ARIA-Rollen ab (Checkbox/Switch/Slider/Tab/Option/Combobox).
+  // v2.18.5: Zeilen/Eintraege zusammengesetzter Widgets mit Roving-Focus (role=row/treeitem
+  // MIT tabindex, auch -1) und Elemente mit Schalt-Zustand (aria-checked/aria-pressed) — so baut
+  // z. B. TradingView sein Menue: <div role="row" tabindex="-1" aria-checked aria-label="Dark
+  // theme"> im role=treegrid, cursor:default. Ohne diese Eintraege warf der Dead-Click-Filter
+  // jeden Klick auf „Dark theme"/„Drawings panel"/Sprachwahl weg (Richards Bug).
   const INTERACTIVE_SELECTOR =
     'button, a, [role="button"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], ' +
     '[role="menuitemradio"], [role="tab"], [role="option"], [role="checkbox"], [role="radio"], ' +
     '[role="switch"], [role="slider"], [role="combobox"], input, textarea, select, summary, ' +
+    '[role="row"][tabindex], [role="treeitem"], [aria-checked], [aria-pressed], ' +
     "label, [onclick]";
 
   // Das "sinnvolle" Element fuer einen Klick (fuer Label UND Bounding-Box): das naechste
