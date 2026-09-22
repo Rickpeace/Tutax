@@ -86,6 +86,7 @@ export default async function EditorPage({
         translationsStale={translationsStale}
         accountSlug={account.slug}
         slug={tutorial.slug}
+        hasSteps={(steps ?? []).length > 0}
       />
 
       <Builder

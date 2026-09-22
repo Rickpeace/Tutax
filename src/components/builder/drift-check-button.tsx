@@ -6,7 +6,14 @@ import { toast } from "sonner";
 import { ShieldQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function DriftCheckButton({ tutorialId }: { tutorialId: string }) {
+export function DriftCheckButton({
+  tutorialId,
+  disabled = false,
+}: {
+  tutorialId: string;
+  /** z. B. solange die Anleitung noch keine Schritte hat (Hinweis kommt vom Aufrufer). */
+  disabled?: boolean;
+}) {
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -47,8 +54,8 @@ export function DriftCheckButton({ tutorialId }: { tutorialId: string }) {
       variant="outline"
       size="sm"
       onClick={run}
-      disabled={pending}
-      title="Prüft per KI, ob die Anleitung noch zur Website passt"
+      disabled={pending || disabled}
+      title={disabled ? undefined : "Prüft per KI, ob die Anleitung noch zur Website passt"}
     >
       <ShieldQuestion className="size-4" /> {pending ? "Prüft …" : "Aktualität prüfen"}
     </Button>

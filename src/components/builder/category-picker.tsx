@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Tag, Plus, Check, ChevronDown } from "lucide-react";
 import {
   createCategory,
   setTutorialCategory,
 } from "@/app/app/tutorials/[id]/actions";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Cat = { id: string; name: string };
 
@@ -24,6 +25,7 @@ export function CategoryPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const searchId = useId();
 
   const selected = cats.find((c) => c.id === selectedId) ?? null;
   const term = query.trim().toLowerCase();
@@ -62,66 +64,71 @@ export function CategoryPicker({
   }
 
   return (
-    <div className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex max-w-full items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1 text-[12.5px] font-extrabold text-ink-2 transition-colors hover:border-[#e3d7c2] hover:text-ink"
+    // Popover (Base UI) wie der Website-Picker: Esc schließt, aria-expanded am Auslöser,
+    // Fokus springt ins Suchfeld und beim Schließen zurück.
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQuery("");
+      }}
+    >
+      <PopoverTrigger
+        className="flex max-w-full items-center gap-1.5 rounded-full border-2 border-line bg-card px-3 py-1 text-[12.5px] font-extrabold text-ink-2 outline-none transition-colors hover:border-[#e3d7c2] hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50"
         aria-label="Kategorie wählen"
       >
         <Tag className="size-3.5 text-muted-foreground" />
         {selected ? selected.name : <span className="text-muted-foreground">Kategorie</span>}
         <ChevronDown className="size-3.5 text-muted-foreground" />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-40 mt-1 w-60 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !exact && query.trim()) create();
-              }}
-              placeholder="Suchen oder neu anlegen …"
-              className="w-full border-b border-line-2 px-3 py-2 text-sm outline-none"
-            />
-            <div className="max-h-52 overflow-auto py-1">
-              <button
-                type="button"
-                onClick={() => choose(null)}
-                className="flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                <span className="text-muted-foreground">Keine Kategorie</span>
-                {selectedId === null && <Check className="size-4 text-primary" />}
-              </button>
-              {filtered.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => choose(c.id)}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-muted"
-                >
-                  <span className="truncate">{c.name}</span>
-                  {selectedId === c.id && <Check className="size-4 shrink-0 text-primary" />}
-                </button>
-              ))}
-              {query.trim() && !exact && (
-                <button
-                  type="button"
-                  onClick={create}
-                  disabled={busy}
-                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-accent"
-                >
-                  <Plus className="size-4" /> Anlegen: „{query.trim()}“
-                </button>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-60 gap-0 overflow-hidden p-0">
+        <label htmlFor={searchId} className="sr-only">
+          Kategorie suchen oder neu anlegen
+        </label>
+        <input
+          id={searchId}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !exact && query.trim()) create();
+          }}
+          placeholder="Suchen oder neu anlegen …"
+          autoComplete="off"
+          className="w-full border-b border-line-2 px-3 py-2 text-sm outline-none"
+        />
+        <div className="max-h-52 overflow-auto py-1">
+          {/* „Sonstiges“ = derselbe Begriff wie in der Anleitungs-Übersicht für Anleitungen ohne Kategorie. */}
+          <button
+            type="button"
+            onClick={() => choose(null)}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+          >
+            <span className="text-muted-foreground">Sonstiges</span>
+            {selectedId === null && <Check className="size-4 text-primary" />}
+          </button>
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => choose(c.id)}
+              className="flex w-full items-center justify-between px-3 py-1.5 text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+            >
+              <span className="truncate">{c.name}</span>
+              {selectedId === c.id && <Check className="size-4 shrink-0 text-primary" />}
+            </button>
+          ))}
+          {query.trim() && !exact && (
+            <button
+              type="button"
+              onClick={create}
+              disabled={busy}
+              className="flex w-full items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary outline-none hover:bg-accent focus-visible:bg-accent"
+            >
+              <Plus className="size-4" /> Anlegen: „{query.trim()}“
+            </button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

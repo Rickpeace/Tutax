@@ -20,11 +20,11 @@ import { DriftCheckButton } from "@/components/builder/drift-check-button";
 import {
   setTutorialTitle,
   setTutorialDescription,
-  countUnreviewedBlurSteps,
+  listUnreviewedBlurSteps,
 } from "@/app/app/tutorials/[id]/actions";
 import { translateTutorial } from "@/app/app/actions-translate";
 import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/app/actions";
-import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
+import { LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import type { TutorialVisibility } from "@/lib/types";
 
@@ -52,6 +52,7 @@ export function TutorialHeader({
   translationsStale,
   accountSlug,
   slug: initialSlug,
+  hasSteps,
 }: {
   tutorialId: string;
   initialTitle: string;
@@ -68,6 +69,8 @@ export function TutorialHeader({
   /** Welle 51a: für „Link kopieren“ (/h/<accountSlug>/<slug>). */
   accountSlug: string;
   slug: string | null;
+  /** Leere Anleitung: Übersetzen, Aktualität prüfen und Veröffentlichen sind gesperrt. */
+  hasSteps: boolean;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
@@ -86,8 +89,8 @@ export function TutorialHeader({
   const [visBusy, setVisBusy] = useState(false);
   const [trBusy, setTrBusy] = useState(false);
   const [stale, setStale] = useState(translationsStale);
-  // Auto-Verpixelung (Welle 28): Anzahl Schritte mit ungeprüften Verpixelungen (>0 = Gate offen).
-  const [blurGate, setBlurGate] = useState<number | null>(null);
+  // Auto-Verpixelung (Welle 28): Schritte (Anzeigenamen) mit ungeprüften Verpixelungen (Gate offen).
+  const [blurGate, setBlurGate] = useState<string[] | null>(null);
   // Slug entsteht beim ersten Veröffentlichen (ensureSlug) und bleibt danach gleich.
   const [slug, setSlug] = useState<string | null>(initialSlug);
   const shareable = published && publicOn && !!slug;
@@ -105,7 +108,7 @@ export function TutorialHeader({
     try {
       const res = await translateTutorial(tutorialId);
       setStale(false);
-      const names = res.languages.map((l) => LANG_LABEL[l]).join(", ");
+      const names = res.languages.map((l) => LANG_NAME[l]).join(", ");
       toast.success(names ? `Übersetzt in ${names}` : "Übersetzt");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Übersetzen fehlgeschlagen");
@@ -175,15 +178,15 @@ export function TutorialHeader({
     // und die Prüfung selbst darf das Veröffentlichen niemals verhindern (fail-open).
     if (next) {
       setBusy(true);
-      let unreviewed = 0;
+      let unreviewed: string[] = [];
       try {
-        unreviewed = await countUnreviewedBlurSteps(tutorialId);
+        unreviewed = await listUnreviewedBlurSteps(tutorialId);
       } catch {
-        unreviewed = 0;
+        unreviewed = [];
       } finally {
         setBusy(false);
       }
-      if (unreviewed > 0) {
+      if (unreviewed.length > 0) {
         setBlurGate(unreviewed);
         return;
       }
@@ -228,6 +231,7 @@ export function TutorialHeader({
 
   // Nur Team ist Business. Wer (nach einem Downgrade) schon Nur Team hat, darf zurück.
   const teamLocked = !isBusiness && publicOn;
+  const noSteps = !hasSteps;
 
   return (
     <div className="mb-6">
@@ -338,20 +342,25 @@ export function TutorialHeader({
         className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2.5"
         data-testid="editor-controls"
       >
-        <StatusSwitch
-          on={published}
-          onToggle={togglePublish}
-          disabled={busy}
-          busy={busy}
-          className="text-[13px]"
-          title={
-            published
-              ? "Ist veröffentlicht – antippen für Entwurf"
-              : publicOn
-                ? "Ist Entwurf – antippen, um auf der Hilfe-Seite zu veröffentlichen"
-                : "Ist Entwurf – antippen, um für Ihr Team zu veröffentlichen"
-          }
-        />
+        {/* Leere Anleitung: Veröffentlichen gesperrt (Zurück auf Entwurf bleibt immer möglich). */}
+        <EmptyLock locked={noSteps && !published}>
+          <StatusSwitch
+            on={published}
+            onToggle={togglePublish}
+            disabled={busy || (noSteps && !published)}
+            busy={busy}
+            className="text-[13px]"
+            title={
+              noSteps && !published
+                ? undefined
+                : published
+                  ? "Ist veröffentlicht – antippen für Entwurf"
+                  : publicOn
+                    ? "Ist Entwurf – antippen, um auf der Hilfe-Seite zu veröffentlichen"
+                    : "Ist Entwurf – antippen, um für Ihr Team zu veröffentlichen"
+            }
+          />
+        </EmptyLock>
         <ControlSep />
 
         <div
@@ -408,7 +417,14 @@ export function TutorialHeader({
         <SiteDomainsPicker tutorialId={tutorialId} initialDomains={siteDomains} />
 
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          {languages.length > 0 && (
+          {languages.length > 0 && noSteps && (
+            <EmptyLock locked>
+              <Button variant="outline" size="sm" disabled>
+                <Languages className="size-4" /> Übersetzen
+              </Button>
+            </EmptyLock>
+          )}
+          {languages.length > 0 && !noSteps && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -433,7 +449,7 @@ export function TutorialHeader({
               <TooltipContent>
                 {stale
                   ? "Übersetzungen sind veraltet oder unvollständig – jetzt aktualisieren."
-                  : `Übersetzt automatisch nach ${languages.map((l) => LANG_LABEL[l]).join(", ")}. Knopf = manuell nachziehen.`}
+                  : `Wird automatisch übersetzt in: ${languages.map((l) => LANG_NAME[l]).join(", ")}. Klicken, um jetzt zu aktualisieren.`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -471,7 +487,9 @@ export function TutorialHeader({
               <ExternalLink className="size-4" /> Öffnen
             </Button>
           )}
-          <DriftCheckButton tutorialId={tutorialId} />
+          <EmptyLock locked={noSteps}>
+            <DriftCheckButton tutorialId={tutorialId} disabled={noSteps} />
+          </EmptyLock>
           <Button
             variant="outline"
             size="sm"
@@ -490,14 +508,26 @@ export function TutorialHeader({
           <DialogHeader>
             <DialogTitle>Ungeprüfte automatische Verpixelungen</DialogTitle>
             <DialogDescription>
-              {blurGate === 1
+              {blurGate?.length === 1
                 ? "1 Schritt enthält eine ungeprüfte automatische Verpixelung."
-                : `${blurGate} Schritte enthalten ungeprüfte automatische Verpixelungen.`}{" "}
+                : `${blurGate?.length ?? 0} Schritte enthalten ungeprüfte automatische Verpixelungen.`}{" "}
               Bitte prüfen Sie die markierten Stellen im Editor (verschieben, anpassen oder
               löschen), bevor Sie veröffentlichen — oder veröffentlichen Sie trotzdem. Die
               Verpixelungen werden in jedem Fall in die veröffentlichten Bilder eingebrannt.
             </DialogDescription>
           </DialogHeader>
+          {blurGate && blurGate.length > 0 && (
+            <ul
+              className="max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-sm text-ink-2"
+              data-testid="blur-gate-steps"
+            >
+              {blurGate.map((name, i) => (
+                <li key={`${i}:${name}`} className="break-words">
+                  {name}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => setBlurGate(null)}>
               Abbrechen
@@ -514,6 +544,22 @@ export function TutorialHeader({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * Gesperrtes Bedienelement bei leerer Anleitung: Hinweis „Erst Schritte anlegen“ als Tooltip.
+ * Der Auslöser ist ein Span, weil deaktivierte Knöpfe selbst keine Maus-Ereignisse melden.
+ */
+function EmptyLock({ locked, children }: { locked: boolean; children: React.ReactNode }) {
+  if (!locked) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" tabIndex={0} data-testid="empty-lock" />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>Erst Schritte anlegen</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -546,7 +592,7 @@ function SegmentButton({
       disabled={disabled && !active}
       onClick={onClick}
       title={title}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-extrabold outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? "bg-card text-ink shadow-[0_1px_3px_rgba(51,41,31,0.12)]"
           : "text-ink-2 hover:text-ink"
