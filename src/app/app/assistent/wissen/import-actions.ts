@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { aiConfigured } from "@/lib/ai";
 import { safeFetch } from "@/lib/ssrf";
-import { textToDraftArticles, type ImportResult } from "@/lib/kb-import";
+import { assertImportBudget, textToDraftArticles, type ImportResult } from "@/lib/kb-import";
 import {
   MAX_SUBPAGES,
   allocateBudget,
@@ -62,6 +62,29 @@ async function fetchChecked(url: string, accept: string): Promise<Response | nul
   return null;
 }
 
+/**
+ * Antwort-Text höchstens bis `maxBytes` lesen und dann abbrechen (Sicherheitsprüfung Welle 51,
+ * M3): `resp.text()` läse eine beliebig große/endlos streamende Antwort komplett in den Speicher.
+ */
+async function readCapped(resp: Response, maxBytes: number): Promise<string> {
+  const reader = resp.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let out = "";
+  let bytes = 0;
+  try {
+    while (bytes < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      bytes += value.byteLength;
+      out += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return out.slice(0, maxBytes);
+}
+
 /** Eine Seite laden, Text extrahieren. Wirft nicht — leerer String bei Fehler. */
 async function loadPageText(url: string): Promise<{ text: string; html: string; finalUrl: string }> {
   try {
@@ -69,7 +92,7 @@ async function loadPageText(url: string): Promise<{ text: string; html: string; 
     if (!resp) return { text: "", html: "", finalUrl: url };
     const ct = (resp.headers.get("content-type") ?? "").toLowerCase();
     if (!resp.ok || !ct.includes("text/html")) return { text: "", html: "", finalUrl: url };
-    const html = (await resp.text()).slice(0, MAX_HTML_PER_PAGE);
+    const html = await readCapped(resp, MAX_HTML_PER_PAGE);
     return { text: htmlToText(html), html, finalUrl: resp.url || url };
   } catch {
     return { text: "", html: "", finalUrl: url };
@@ -81,7 +104,7 @@ async function loadText(url: string, accept: string): Promise<string> {
   try {
     const resp = await fetchChecked(url, accept);
     if (!resp || !resp.ok) return "";
-    return (await resp.text()).slice(0, MAX_SITEMAP_BYTES);
+    return await readCapped(resp, MAX_SITEMAP_BYTES);
   } catch {
     return "";
   }
@@ -145,6 +168,8 @@ function labelOf(url: string): string {
 export async function importFromWebsite(rawUrl?: string, extraUrls?: string): Promise<ImportResult> {
   const { account } = await requireAccount();
   if (!aiConfigured()) throw new Error("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
+  // Kostenbremse schon VOR dem Laden der Website (spart auch die Abrufe).
+  await assertImportBudget(createAdminClient(), account.id);
 
   const supabase = await createClient();
 

@@ -100,6 +100,27 @@ function coerceArticles(parsed: unknown): RawArticle[] {
 }
 
 /**
+ * Kostenbremse (Sicherheitsprüfung Welle 51, M3): Jeder Import ist ein KI-Aufruf mit bis zu
+ * ~40 000 Zeichen. Ohne Grenze könnte ein Konto beliebig viele auslösen. Ohne neue Spalte gezählt:
+ * Entwürfe, die das Konto in der letzten Stunde angelegt hat (ein Import erzeugt mehrere).
+ */
+export const IMPORT_DRAFTS_PER_HOUR = 60;
+export async function assertImportBudget(admin: SupabaseClient, accountId: string): Promise<void> {
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await admin
+    .from("kb_articles")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .eq("status", "draft")
+    .gte("created_at", since);
+  if (!error && (count ?? 0) >= IMPORT_DRAFTS_PER_HOUR) {
+    throw new Error(
+      "Sie haben in der letzten Stunde schon viele Wissens-Entwürfe importiert. Bitte prüfen Sie diese zuerst oder versuchen Sie es in einer Stunde erneut.",
+    );
+  }
+}
+
+/**
  * Aus Rohtext KI-Wissensartikel extrahieren und als Drafts in kb_articles anlegen.
  * @param admin  Admin-Client (RLS umgehen, aber Insert immer mit account_id begrenzt).
  * @param accountId  Ziel-Konto.
@@ -114,6 +135,7 @@ export async function textToDraftArticles(
   text: string,
 ): Promise<ImportResult> {
   if (!aiConfigured()) throw new Error("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
+  await assertImportBudget(admin, accountId);
 
   // Unicode-Whitespace (NBSP, schmale/typografische Spaces, ZWSP, ideografisch) -> normal,
   // dann Mehrfach-Spaces/Tabs eindampfen und auf das harte Zeichenbudget kappen.

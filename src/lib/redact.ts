@@ -39,10 +39,15 @@ export async function burnBlur(image: Buffer, highlights: unknown): Promise<Buff
 
   const overlays: OverlayOptions[] = [];
   for (const b of blurs) {
-    const left = clamp(Math.round((b.x ?? 0) * W), 0, W - 1);
-    const top = clamp(Math.round((b.y ?? 0) * H), 0, H - 1);
-    const width = clamp(Math.round((b.w ?? 0) * W), 1, W - left);
-    const height = clamp(Math.round((b.h ?? 0) * H), 1, H - top);
+    // Kaputte Koordinaten (nicht endlich) würden sharp werfen lassen — solche Einträge nimmt
+    // updateStep gar nicht erst an; hier zusätzlich robust überspringen statt abzustürzen.
+    const nums = [b.x, b.y, b.w, b.h].map((v) => Number(v ?? 0));
+    if (nums.some((n) => !Number.isFinite(n))) continue;
+    const [bx, by, bw, bh] = nums;
+    const left = clamp(Math.round(bx * W), 0, W - 1);
+    const top = clamp(Math.round(by * H), 0, H - 1);
+    const width = clamp(Math.round(bw * W), 1, W - left);
+    const height = clamp(Math.round(bh * H), 1, H - top);
     if (width < 2 || height < 2) continue;
 
     // Blockgröße ~1/12 der Region (mind. 1 px Kleinformat) -> grobe, unlesbare Kacheln.

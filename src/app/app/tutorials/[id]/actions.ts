@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
-import { burnBlur, unionBlurs } from "@/lib/redact";
+import { hasInvalidBlur, rebuildPublicCopy, removeUnusedPublicCopies } from "@/lib/public-images";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
   markTranslationsStale,
@@ -32,7 +32,7 @@ import type { Highlight } from "@/lib/types";
  * Welle 51a „Bild in neuen Schritt übernehmen“: `opts.imageFromStepId` übernimmt Bild + Maße
  * eines Schritts DERSELBEN Anleitung (serverseitig per RLS gelesen — nie ein vom Client
  * gelieferter Pfad), `opts.highlights` die mitgegebenen Markierungen (übernommene Verpixelung).
- * Der Pfad wird geteilt; Löschen eines Schritts entfernt keine Storage-Objekte (deleteStep).
+ * Der Pfad wird geteilt; Löschen entfernt die öffentliche Kopie nur, wenn sie niemand mehr nutzt.
  */
 export async function addStep(
   tutorialId: string,
@@ -57,6 +57,7 @@ export async function addStep(
   const highlights = Array.isArray(opts?.highlights)
     ? opts.highlights.filter((h) => h && typeof h === "object" && typeof h.type === "string")
     : null;
+  if (hasInvalidBlur(highlights)) throw new Error("Ungültige Verpixelung.");
   const { error } = await supabase.from("steps").insert({
     id: step.id,
     tutorial_id: tutorialId,
@@ -86,11 +87,7 @@ export async function addStep(
   }
   // Geteiltes Bild in einer veröffentlichten Anleitung: öffentliche Kopie mit allen
   // Verpixelungen neu erzeugen (no-op bei Entwürfen).
-  if (image) {
-    await refreshPublicImage(step.id).catch((e) =>
-      console.error("Public-Bild-Refresh fehlgeschlagen:", e instanceof Error ? e.message : e),
-    );
-  }
+  if (image) await refreshPublicImage(step.id); // wirft sichtbar; Kopie ist dann entfernt
   await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
   await markTranslationsStale(tutorialId); // neuer Schritt -> Übersetzungen unvollständig
 }
@@ -110,6 +107,16 @@ export async function updateStep(
 ) {
   const supabase = await createClient();
   if (Object.keys(patch).length === 0) return;
+  if ("highlights" in patch && hasInvalidBlur(patch.highlights)) {
+    throw new Error("Ungültige Verpixelung.");
+  }
+  // Alten Bildpfad merken: wird das Bild ersetzt oder entfernt, muss seine öffentliche Kopie weg
+  // (Sicherheitsprüfung Welle 51, H2) — sonst bliebe z. B. ein entfernter Screenshot abrufbar.
+  let oldImagePath: string | null = null;
+  if ("image_path" in patch) {
+    const { data: before } = await supabase.from("steps").select("image_path").eq("id", stepId).maybeSingle();
+    oldImagePath = (before?.image_path as string | null) ?? null;
+  }
   // SICHERHEIT: Ein Bildpfad kommt vom Browser. Er muss im Ordner des KONTOS dieser Anleitung
   // liegen (`<account_id>/…`, wie /api/upload-url ihn vergibt) — sonst könnte man einen fremden
   // Pfad eintragen, den das Veröffentlichen dann mit Admin-Rechten öffentlich kopiert.
@@ -130,10 +137,13 @@ export async function updateStep(
   // Ist das Tutorial VERÖFFENTLICHT und Bild/Markierungen haben sich geändert,
   // muss die öffentliche Bild-Kopie nachgezogen werden — inkl. eingebranntem Blur.
   // Sonst bliebe z. B. eine nachträglich geschwärzte Stelle öffentlich lesbar.
+  if (oldImagePath && oldImagePath !== patch.image_path) {
+    await removeUnusedPublicCopies([oldImagePath]);
+  }
   if ("image_path" in patch || "highlights" in patch) {
-    await refreshPublicImage(stepId).catch((e) =>
-      console.error("Public-Bild-Refresh fehlgeschlagen:", e instanceof Error ? e.message : e),
-    );
+    // Wirft sichtbar („Speichern fehlgeschlagen“), wenn die öffentliche Kopie nicht sicher neu
+    // erzeugt werden konnte — die Kopie ist dann bereits entfernt (nie Klartext stehen lassen).
+    await refreshPublicImage(stepId);
   }
   await invalidateStepTags(stepId); // nur wirksam, wenn veröffentlicht
   // Nur Text-Änderungen entwerten Übersetzungen (Bild/Markierungen sind sprachneutral).
@@ -163,22 +173,8 @@ async function refreshPublicImage(stepId: string) {
   // Nur öffentliche, veröffentlichte Tutorials haben eine public Bild-Kopie.
   if (tut?.status !== "published" || tut?.visibility !== "public") return;
 
-  const admin = createAdminClient();
-  if (!step.image_path) return; // Bild entfernt -> unpublish räumt public auf
-  const { data: blob } = await admin.storage.from("tutorial-images").download(step.image_path);
-  if (!blob) return;
-  let buf: Buffer = Buffer.from(await blob.arrayBuffer());
-  // Welle 51a: Teilen sich mehrere Schritte das Bild, gibt es nur EINE öffentliche Kopie —
-  // Vereinigung aller Verpixelungen einbrennen, nie die eines anderen Schritts verlieren.
-  const { data: sharing } = await supabase
-    .from("steps")
-    .select("highlights")
-    .eq("image_path", step.image_path);
-  const blurs = unionBlurs([step.highlights, ...(sharing ?? []).map((s) => s.highlights)]);
-  if (blurs.length) buf = await burnBlur(buf, blurs);
-  await admin.storage
-    .from("tutorial-images-public")
-    .upload(step.image_path, buf, { upsert: true, contentType: "image/webp" });
+  if (!step.image_path) return; // Bild entfernt: alte Kopie räumt updateStep auf
+  await rebuildPublicCopy(step.image_path);
 }
 
 /** Frage an/aus. Server spiegelt exakt die optimistische Client-Logik. */
@@ -290,7 +286,7 @@ export async function deleteStep(
   // ist der Pfad weg; der DB-Row-Delete wird durch das Nullen nicht behindert).
   const { data: victim } = await supabase
     .from("steps")
-    .select("id, audio_path")
+    .select("id, audio_path, image_path")
     .eq("id", stepId)
     .maybeSingle();
   if (victim?.audio_path) await removeStepAudio({ id: victim.id, audio_path: victim.audio_path });
@@ -309,6 +305,9 @@ export async function deleteStep(
 
   const { error } = await supabase.from("steps").delete().eq("id", stepId);
   if (error) throw new Error(error.message);
+  // Öffentliche Bildkopie des gelöschten Schritts entfernen, sofern kein anderer veröffentlichter
+  // Schritt sie noch nutzt (Sicherheitsprüfung Welle 51, H2/M1).
+  if (victim?.image_path) await removeUnusedPublicCopies([victim.image_path as string]);
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
 }

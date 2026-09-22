@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
   const { tutorialId, stepId } = body;
   if (!tutorialId || !stepId)
     return NextResponse.json({ error: "tutorialId/stepId fehlt" }, { status: 400 });
+  // Beide fließen in den Speicherpfad — nur echte UUIDs (kein „../“ o. ä.).
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID.test(tutorialId) || !UUID.test(stepId))
+    return NextResponse.json({ error: "Ungültige ID" }, { status: 400 });
 
   // RLS: zeigt das Tutorial nur, wenn es dem User gehört.
   const { data: tutorial } = await supabase

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
+import { removeUnusedPublicCopies } from "@/lib/public-images";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
@@ -149,6 +150,13 @@ export async function deleteTutorial(id: string) {
   const supabase = await createClient();
   await removeTutorialEmbeddings(supabase, id).catch(() => {});
   await invalidateTutorialTags(id); // VOR dem Delete (danach ist der Slug-Lookup weg)
+  // Bildpfade VOR dem Delete merken: danach die öffentlichen Kopien entfernen, die keine andere
+  // veröffentlichte Anleitung mehr nutzt (Sicherheitsprüfung Welle 51, H2).
+  const { data: goneSteps } = await supabase
+    .from("steps")
+    .select("image_path")
+    .eq("tutorial_id", id)
+    .not("image_path", "is", null);
   // SCHUTZRIEGEL (Incident 06.07.): NUR eigene Tutorials. Der Plattform-Admin hat via
   // RLS-Policy „admin manage template tutorials" auch Löschrecht auf GLOBALE Templates
   // (account_id NULL) — ohne diese Scopung konnte ein (Bulk-)Löschen in der Bibliothek
@@ -160,6 +168,10 @@ export async function deleteTutorial(id: string) {
     .eq("id", id)
     .eq("account_id", account.id);
   if (error) throw new Error(error.message);
+  await removeUnusedPublicCopies(
+    (goneSteps ?? []).map((s) => s.image_path as string | null),
+    { exceptTutorialId: id },
+  ).catch((e) => console.error("Öffentliche Bilder nicht entfernt:", e instanceof Error ? e.message : e));
   revalidatePath("/app");
 }
 
@@ -330,9 +342,10 @@ async function copyImagesToPublic(
           throw new Error("Veröffentlichen abgebrochen: Die Verpixelung konnte nicht angewendet werden.");
         }
       }
-      await admin.storage
+      const { error: upErr } = await admin.storage
         .from(PUBLIC_BUCKET)
-        .upload(path, buf, { upsert: true, contentType: "image/webp" });
+        .upload(path, buf, { upsert: true, contentType: "image/webp", cacheControl: "60" });
+      if (upErr) throw new Error("Veröffentlichen abgebrochen: Ein Bild konnte nicht hochgeladen werden.");
     }
   }
 }
@@ -347,11 +360,11 @@ async function removePublicImages(
     .select("image_path")
     .eq("tutorial_id", tutorialId)
     .not("image_path", "is", null);
-  const paths = (steps ?? []).map((s) => s.image_path).filter(Boolean) as string[];
-  if (paths.length) {
-    const admin = createAdminClient();
-    await admin.storage.from(PUBLIC_BUCKET).remove(paths);
-  }
+  // Nur Kopien entfernen, die keine ANDERE veröffentlichte Anleitung nutzt (geteilte Pfade, M1).
+  await removeUnusedPublicCopies(
+    (steps ?? []).map((s) => s.image_path as string | null),
+    { exceptTutorialId: tutorialId },
+  );
 }
 
 /**
@@ -582,11 +595,11 @@ export async function unpublishTutorial(tutorialId: string) {
     .eq("tutorial_id", tutorialId)
     .not("image_path", "is", null);
 
-  const paths = (steps ?? []).map((s) => s.image_path).filter(Boolean) as string[];
-  if (paths.length) {
-    const admin = createAdminClient();
-    await admin.storage.from(PUBLIC_BUCKET).remove(paths);
-  }
+  // Nur Kopien entfernen, die keine ANDERE veröffentlichte Anleitung nutzt (geteilte Pfade, M1).
+  await removeUnusedPublicCopies(
+    (steps ?? []).map((s) => s.image_path as string | null),
+    { exceptTutorialId: tutorialId },
+  );
 
   const { error } = await supabase
     .from("tutorials")
