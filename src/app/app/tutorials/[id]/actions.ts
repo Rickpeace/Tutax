@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
-import { burnBlur, hasBlur } from "@/lib/redact";
+import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
   markTranslationsStale,
@@ -20,26 +20,51 @@ import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
+import type { Highlight } from "@/lib/types";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
 // Hintergrund. IDs für Inserts kommen vom Client (crypto.randomUUID), damit
 // das Einfügen ohne Roundtrip sichtbar ist.
 
-/** Neuen Schritt anlegen (Client liefert id + Verdrahtung). */
+/**
+ * Neuen Schritt anlegen (Client liefert id + Verdrahtung).
+ * Welle 51a „Bild in neuen Schritt übernehmen“: `opts.imageFromStepId` übernimmt Bild + Maße
+ * eines Schritts DERSELBEN Anleitung (serverseitig per RLS gelesen — nie ein vom Client
+ * gelieferter Pfad), `opts.highlights` die mitgegebenen Markierungen (übernommene Verpixelung).
+ * Der Pfad wird geteilt; Löschen eines Schritts entfernt keine Storage-Objekte (deleteStep).
+ */
 export async function addStep(
   tutorialId: string,
   step: { id: string; title: string; position: number },
   setRoot: boolean,
   wire: { branchId: string; fromStepId: string } | null,
+  opts?: { imageFromStepId?: string; highlights?: Highlight[] },
 ) {
   const supabase = await createClient();
+  let image: { image_path: string; image_width: number | null; image_height: number | null } | null = null;
+  if (opts?.imageFromStepId) {
+    const { data: src } = await supabase
+      .from("steps")
+      .select("tutorial_id, image_path, image_width, image_height")
+      .eq("id", opts.imageFromStepId)
+      .maybeSingle();
+    if (!src || src.tutorial_id !== tutorialId || !src.image_path) {
+      throw new Error("Bild des Schritts nicht gefunden");
+    }
+    image = { image_path: src.image_path, image_width: src.image_width, image_height: src.image_height };
+  }
+  const highlights = Array.isArray(opts?.highlights)
+    ? opts.highlights.filter((h) => h && typeof h === "object" && typeof h.type === "string")
+    : null;
   const { error } = await supabase.from("steps").insert({
     id: step.id,
     tutorial_id: tutorialId,
     title: step.title,
     position: step.position,
     is_decision: false,
+    ...(image ?? {}),
+    ...(highlights ? { highlights } : {}),
   });
   if (error) throw new Error(error.message);
 
@@ -58,6 +83,13 @@ export async function addStep(
       position: 0,
     });
     if (be) throw new Error(be.message);
+  }
+  // Geteiltes Bild in einer veröffentlichten Anleitung: öffentliche Kopie mit allen
+  // Verpixelungen neu erzeugen (no-op bei Entwürfen).
+  if (image) {
+    await refreshPublicImage(step.id).catch((e) =>
+      console.error("Public-Bild-Refresh fehlgeschlagen:", e instanceof Error ? e.message : e),
+    );
   }
   await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
   await markTranslationsStale(tutorialId); // neuer Schritt -> Übersetzungen unvollständig
@@ -106,7 +138,10 @@ async function refreshPublicImage(stepId: string) {
   // RLS-sichtbarer Read: liefert nur Schritte aus eigenen Tutorials.
   const { data: step } = await supabase
     .from("steps")
-    .select("image_path, highlights, tutorials!inner(status, visibility)")
+    // FK explizit: steps↔tutorials hat ZWEI Beziehungen (steps.tutorial_id und
+    // tutorials.root_step_id). Ohne Hinweis antwortet PostgREST mit „more than one
+    // relationship“ -> data null -> die öffentliche Kopie wurde NIE nachgezogen (Welle 51a).
+    .select("image_path, highlights, tutorials!steps_tutorial_id_fkey!inner(status, visibility)")
     .eq("id", stepId)
     .maybeSingle();
   if (!step) return;
@@ -119,7 +154,14 @@ async function refreshPublicImage(stepId: string) {
   const { data: blob } = await admin.storage.from("tutorial-images").download(step.image_path);
   if (!blob) return;
   let buf: Buffer = Buffer.from(await blob.arrayBuffer());
-  if (hasBlur(step.highlights)) buf = await burnBlur(buf, step.highlights);
+  // Welle 51a: Teilen sich mehrere Schritte das Bild, gibt es nur EINE öffentliche Kopie —
+  // Vereinigung aller Verpixelungen einbrennen, nie die eines anderen Schritts verlieren.
+  const { data: sharing } = await supabase
+    .from("steps")
+    .select("highlights")
+    .eq("image_path", step.image_path);
+  const blurs = unionBlurs([step.highlights, ...(sharing ?? []).map((s) => s.highlights)]);
+  if (blurs.length) buf = await burnBlur(buf, blurs);
   await admin.storage
     .from("tutorial-images-public")
     .upload(step.image_path, buf, { upsert: true, contentType: "image/webp" });

@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { slugify } from "@/lib/slug";
 import { indexTutorial, removeTutorialEmbeddings } from "@/lib/kb";
-import { burnBlur, hasBlur } from "@/lib/redact";
+import { burnBlur, unionBlurs } from "@/lib/redact";
 import { invalidateTutorialTags, invalidateHubTag } from "@/lib/cache-tags";
 import { markTranslationsStale } from "@/lib/translate-stale";
 import { translateTutorial, translateTitleDelta } from "@/app/app/actions-translate";
@@ -297,15 +297,33 @@ async function copyImagesToPublic(
     .eq("tutorial_id", tutorialId)
     .not("image_path", "is", null);
 
+  // Welle 51a: Schritte können sich ein Bild teilen („Bild in neuen Schritt übernehmen“, auch
+  // Duplikate). Die öffentliche Kopie gibt es je Pfad nur einmal -> je Pfad EINMAL kopieren und
+  // die Vereinigung ALLER Verpixelungen der Schritte mit diesem Bild einbrennen (RLS: eigene).
+  const paths = [...new Set((steps ?? []).map((s) => s.image_path).filter(Boolean) as string[])];
+  const blursByPath = new Map<string, unknown[]>();
+  if (paths.length) {
+    const { data: sharing } = await supabase
+      .from("steps")
+      .select("image_path, highlights")
+      .in("image_path", paths);
+    for (const s of [...(steps ?? []), ...(sharing ?? [])]) {
+      if (!s.image_path) continue;
+      const list = blursByPath.get(s.image_path) ?? [];
+      list.push(s.highlights);
+      blursByPath.set(s.image_path, list);
+    }
+  }
+
   const admin = createAdminClient();
-  for (const s of steps ?? []) {
-    if (!s.image_path) continue;
-    const { data: blob } = await admin.storage.from(PRIVATE_BUCKET).download(s.image_path);
+  for (const path of paths) {
+    const { data: blob } = await admin.storage.from(PRIVATE_BUCKET).download(path);
     if (blob) {
       let buf: Buffer = Buffer.from(await blob.arrayBuffer());
-      if (hasBlur(s.highlights)) {
+      const blurs = unionBlurs(blursByPath.get(path) ?? []);
+      if (blurs.length) {
         try {
-          buf = await burnBlur(buf, s.highlights);
+          buf = await burnBlur(buf, blurs);
         } catch (e) {
           // Lieber Abbruch als unredigierte Daten veröffentlichen.
           console.error("Blur-Einbrennen fehlgeschlagen:", e instanceof Error ? e.message : e);
@@ -314,7 +332,7 @@ async function copyImagesToPublic(
       }
       await admin.storage
         .from(PUBLIC_BUCKET)
-        .upload(s.image_path, buf, { upsert: true, contentType: "image/webp" });
+        .upload(path, buf, { upsert: true, contentType: "image/webp" });
     }
   }
 }

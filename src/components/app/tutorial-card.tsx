@@ -16,6 +16,7 @@ import {
   Film,
   Zap,
   Globe,
+  Link2,
 } from "lucide-react";
 import { useCleanup } from "@/components/app/bulk-cleanup";
 import { StatusSwitch } from "@/components/app/status-switch";
@@ -37,6 +38,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { relativeDe } from "@/lib/format";
+import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import {
   categoryColor,
   categoryStripes,
@@ -103,6 +105,11 @@ export function TutorialCard({
   useEffect(() => setLive(tutorial.status === "published"), [tutorial.status]);
   const stale = tutorial.freshness === "stale";
   const internal = tutorial.visibility === "internal";
+  // Slug entsteht beim ersten Veröffentlichen — direkt übernehmen, damit „Link kopieren“
+  // ohne Neuladen erscheint (Welle 51a). Danach bleibt er gleich (ensureSlug).
+  const [slug, setSlug] = useState(tutorial.slug);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: mit neuem Server-Stand resyncen, kein Cascade
+  useEffect(() => setSlug(tutorial.slug), [tutorial.slug]);
 
   const color = categoryName ? categoryColor(categoryName) : CATEGORY_NEUTRAL;
 
@@ -157,6 +164,7 @@ export function TutorialCard({
             });
             return;
           }
+          setSlug(res.slug);
           const url = `${window.location.origin}/h/${res.accountSlug}/${res.slug}`;
           toast.success("Veröffentlicht! 🎉", {
             description: url,
@@ -200,7 +208,7 @@ export function TutorialCard({
   );
   const menu = (
     <TutorialMenu
-      tutorial={tutorial}
+      tutorial={{ ...tutorial, slug }}
       accountSlug={accountSlug}
       live={live}
       internal={internal}
@@ -285,7 +293,7 @@ export function TutorialCard({
   );
   // Video-Export: Status-/Download-Zeile + Stil-Dialog (nur öffentlich veröffentlichte).
   // empty:hidden: ohne sichtbaren Inhalt darf der Wrapper kein Phantom-Padding erzeugen.
-  const videoExport = live && !internal && tutorial.slug && (
+  const videoExport = live && !internal && slug && (
     <div className={layout === "card" ? "px-3.5 pb-3 empty:hidden" : "px-4 pb-2.5 empty:hidden"}>
       <VideoExport tutorialId={tutorial.id} open={exportOpen} onOpenChange={setExportOpen} />
     </div>
@@ -497,6 +505,21 @@ function TutorialMenu({
             }}
           >
             <QrCode className="size-4" /> QR-Code öffnen
+          </DropdownMenuItem>
+        )}
+        {publicLive && (
+          <DropdownMenuItem
+            title={STABLE_LINK_HINT}
+            onClick={async () => {
+              const url = hubTutorialUrl(accountSlug, tutorial.slug!);
+              if (await copyText(url)) {
+                toast.success("Link kopiert", { description: `${url} – ${STABLE_LINK_HINT}` });
+              } else {
+                toast.error("Kopieren nicht möglich – bitte „Auf der Hilfe-Seite öffnen“ nutzen.");
+              }
+            }}
+          >
+            <Link2 className="size-4" /> Link kopieren
           </DropdownMenuItem>
         )}
         {publicLive && (

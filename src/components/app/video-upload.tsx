@@ -437,7 +437,7 @@ export function VideoUpload({
             <div className="flex items-center gap-2 text-no">
               <Circle className="size-3 animate-pulse fill-current" /> <span className="font-mono text-lg">{mmss}</span>
             </div>
-            <p className="text-sm text-muted-foreground">Aufnahme läuft – mach den Schritt, sag dann <b>„Schnitt“</b>. So entsteht jeder Schritt sauber.</p>
+            <p className="text-sm text-muted-foreground">Aufnahme läuft – führen Sie den Schritt aus und sagen Sie dann <b>„Schnitt“</b>. So entsteht jeder Schritt sauber.</p>
             {noMic && (
               <div className="flex items-start gap-2 rounded-lg border border-no/30 bg-no/5 p-2.5 text-left text-xs text-no">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
@@ -543,9 +543,23 @@ export function VideoUpload({
               </div>
             )}
             {tutorialId && (
-              <Link href={`/app/tutorials/${tutorialId}`} className="w-full">
-                <Button className="w-full">Im Builder öffnen &amp; anpassen</Button>
-              </Link>
+              // Der Dialog hängt im dauerhaften App-Kopf (Layout) — ohne explizites Schließen
+              // bliebe er nach der Navigation offen über dem Editor stehen (Kundin Susann).
+              <Button
+                className="w-full"
+                nativeButton={false}
+                render={
+                  <Link
+                    href={`/app/tutorials/${tutorialId}`}
+                    onClick={() => {
+                      setOpen(false);
+                      reset();
+                    }}
+                  />
+                }
+              >
+                Im Editor öffnen &amp; anpassen
+              </Button>
             )}
             <Button variant="ghost" size="sm" onClick={reset}>Noch ein Video</Button>
           </div>

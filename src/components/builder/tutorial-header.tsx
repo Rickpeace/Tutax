@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Eye, Globe, Languages, Loader2, Lock, Pencil } from "lucide-react";
+import { ChevronLeft, ExternalLink, Eye, Globe, Languages, Link2, Loader2, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import {
 import { translateTutorial } from "@/app/app/actions-translate";
 import { publishTutorial, setTutorialAudience, unpublishTutorial } from "@/app/app/actions";
 import { LANG_LABEL, type ExtraLang } from "@/lib/i18n-hub";
+import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import type { TutorialVisibility } from "@/lib/types";
 
 /**
@@ -49,6 +50,8 @@ export function TutorialHeader({
   siteDomains,
   languages,
   translationsStale,
+  accountSlug,
+  slug: initialSlug,
 }: {
   tutorialId: string;
   initialTitle: string;
@@ -62,6 +65,9 @@ export function TutorialHeader({
   siteDomains: string[];
   languages: ExtraLang[];
   translationsStale: boolean;
+  /** Welle 51a: für „Link kopieren“ (/h/<accountSlug>/<slug>). */
+  accountSlug: string;
+  slug: string | null;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [saved, setSaved] = useState(initialTitle);
@@ -82,6 +88,16 @@ export function TutorialHeader({
   const [stale, setStale] = useState(translationsStale);
   // Auto-Verpixelung (Welle 28): Anzahl Schritte mit ungeprüften Verpixelungen (>0 = Gate offen).
   const [blurGate, setBlurGate] = useState<number | null>(null);
+  // Slug entsteht beim ersten Veröffentlichen (ensureSlug) und bleibt danach gleich.
+  const [slug, setSlug] = useState<string | null>(initialSlug);
+  const shareable = published && publicOn && !!slug;
+
+  async function copyLink() {
+    if (!slug) return;
+    const url = hubTutorialUrl(accountSlug, slug);
+    if (await copyText(url)) toast.success("Link kopiert", { description: url });
+    else toast.error("Kopieren nicht möglich – bitte den Link über „Öffnen“ aufrufen.");
+  }
 
   async function translate() {
     if (trBusy) return;
@@ -135,8 +151,10 @@ export function TutorialHeader({
   async function doPublish(next: boolean) {
     setBusy(true);
     try {
-      if (next) await publishTutorial(tutorialId);
-      else await unpublishTutorial(tutorialId);
+      if (next) {
+        const res = await publishTutorial(tutorialId);
+        if ("slug" in res && res.slug) setSlug(res.slug);
+      } else await unpublishTutorial(tutorialId);
       setPublished(next);
       const liveMsg = publicOn
         ? "Anleitung ist jetzt veröffentlicht"
@@ -418,6 +436,40 @@ export function TutorialHeader({
                   : `Übersetzt automatisch nach ${languages.map((l) => LANG_LABEL[l]).join(", ")}. Knopf = manuell nachziehen.`}
               </TooltipContent>
             </Tooltip>
+          )}
+          {shareable && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyLink}
+                    data-testid="copy-link"
+                  />
+                }
+              >
+                <Link2 className="size-4" /> Link kopieren
+              </TooltipTrigger>
+              <TooltipContent>{STABLE_LINK_HINT}</TooltipContent>
+            </Tooltip>
+          )}
+          {shareable && (
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={
+                <Link
+                  href={`/h/${accountSlug}/${slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Auf der Hilfe-Seite öffnen"
+                />
+              }
+            >
+              <ExternalLink className="size-4" /> Öffnen
+            </Button>
           )}
           <DriftCheckButton tutorialId={tutorialId} />
           <Button

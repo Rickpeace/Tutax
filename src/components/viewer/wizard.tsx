@@ -405,7 +405,7 @@ export function Wizard({
           bei Verzweigungen gibt es keine ehrliche Gesamtliste. */}
       {linearPath && (
         <aside
-          className="hidden w-[250px] shrink-0 flex-col self-stretch border-r-2 lg:flex"
+          className="hidden w-[210px] shrink-0 flex-col self-stretch border-r-2 lg:flex xl:w-[250px]"
           style={{
             borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)",
           }}

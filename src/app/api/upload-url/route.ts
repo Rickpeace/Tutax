@@ -35,9 +35,20 @@ export async function POST(req: NextRequest) {
   if (!tutorial?.account_id)
     return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
 
-  const path = `${tutorial.account_id}/${tutorialId}/${stepId}.webp`;
+  let path = `${tutorial.account_id}/${tutorialId}/${stepId}.webp`;
 
   const admin = createAdminClient();
+  // Welle 51a — geteilte Bilder („Bild in neuen Schritt übernehmen“, Duplikate, Automations-
+  // Schnappschüsse): Nutzt ein ANDERER Schritt den Standard-Pfad dieses Schritts, würde das
+  // Überschreiben (upsert) dessen Bild still mit austauschen. Dann eigenen, neuen Pfad vergeben.
+  const [{ count: stepRefs }, { count: autoRefs }] = await Promise.all([
+    admin.from("steps").select("id", { count: "exact", head: true }).eq("image_path", path).neq("id", stepId),
+    admin.from("automation_steps").select("id", { count: "exact", head: true }).eq("image_path", path),
+  ]);
+  if ((stepRefs ?? 0) > 0 || (autoRefs ?? 0) > 0) {
+    path = `${tutorial.account_id}/${tutorialId}/${stepId}-${crypto.randomUUID().slice(0, 8)}.webp`;
+  }
+
   const { data, error } = await admin.storage
     .from(BUCKET)
     .createSignedUploadUrl(path, { upsert: true });

@@ -44,6 +44,7 @@ export function StepPanel({
   onDeleteStep,
   onOpenStep,
   onInsertIntoBranch,
+  onDuplicateImage,
   onClose,
 }: {
   step: Step;
@@ -82,6 +83,8 @@ export function StepPanel({
   onDeleteStep: (id: string) => void;
   onOpenStep: (id: string) => void;
   onInsertIntoBranch: (branchId: string) => void;
+  /** Welle 51a: neuen Schritt direkt danach mit demselben Bild anlegen. */
+  onDuplicateImage?: (stepId: string) => void;
   onClose?: () => void;
 }) {
   const [title, setTitle] = useState(step.title ?? "");
@@ -220,6 +223,9 @@ export function StepPanel({
         hasSourceVideo={hasSourceVideo}
         onSetImage={onSetImage}
         onSetHighlights={onSetHighlights}
+        onDuplicateImage={
+          onDuplicateImage ? () => guardedNav(() => onDuplicateImage(step.id), "weiter") : undefined
+        }
       />
 
       <button
