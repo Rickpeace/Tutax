@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -143,99 +144,117 @@ export function CropDialog({
     { h: "se", cls: "right-0 bottom-0 translate-x-1/2 translate-y-1/2", cursor: "nwse-resize" },
   ];
 
+  // Eigener (Base-UI-)Dialog statt eines schlichten fixed-Divs: Er rendert per Portal an
+  // document.body — sonst lag er im Stapelkontext des sticky Editor-Panels UNTER der
+  // App-Kopfzeile. Base UI liefert Esc, Fokusfalle und (in der mobilen Schublade) korrektes
+  // Verschachteln: Esc schließt nur den Zuschnitt, nicht die Schublade darunter.
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-black/80 p-4">
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
-        <div className="mb-2 text-center text-sm font-semibold text-white">
-          Bereich zuschneiden
-        </div>
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(o) => {
+        if (!o && !busy) onCancel();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-[100] bg-black/80" />
+        <DialogPrimitive.Popup
+          data-testid="crop-dialog"
+          className="fixed inset-0 z-[100] flex flex-col p-4 outline-none"
+        >
+          <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+            <DialogPrimitive.Title className="mb-2 text-center text-sm font-semibold text-white">
+              Bereich zuschneiden
+            </DialogPrimitive.Title>
 
-        {/* Seitenverhältnis */}
-        <div className="mb-3 flex flex-wrap justify-center gap-1.5">
-          {RATIOS.map((r) => (
-            <button
-              key={r.label}
-              type="button"
-              onClick={() => setAspect(r.r)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                aspect === r.r ? "bg-white text-ink" : "bg-white/15 text-white hover:bg-white/25"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-1 items-center justify-center overflow-hidden">
-          {src && (
-            <div
-              className="relative max-h-full select-none"
-              style={{ touchAction: "none" }}
-              onPointerMove={onMove}
-              onPointerUp={onUp}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                ref={imgRef}
-                src={src}
-                alt="Zuschneiden"
-                draggable={false}
-                className="block max-h-[68vh] w-auto max-w-full"
-                onLoad={(e) =>
-                  setNatural({
-                    w: e.currentTarget.naturalWidth,
-                    h: e.currentTarget.naturalHeight,
-                  })
-                }
-              />
-              <div
-                className="absolute border-2 border-white"
-                style={{
-                  left: `${box.x * 100}%`,
-                  top: `${box.y * 100}%`,
-                  width: `${box.w * 100}%`,
-                  height: `${box.h * 100}%`,
-                  boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)",
-                  cursor: "move",
-                  touchAction: "none",
-                }}
-                onPointerDown={(e) => onDown(e, null)}
-              >
-                {handles.map((hd) => (
-                  <div
-                    key={hd.h}
-                    className={`absolute ${hd.cls} flex size-7 items-center justify-center`}
-                    style={{ cursor: hd.cursor, touchAction: "none" }}
-                    onPointerDown={(e) => onDown(e, hd.h)}
-                  >
-                    <span className="size-3.5 rounded-full border-2 border-primary bg-white" />
-                  </div>
-                ))}
-              </div>
+            {/* Seitenverhältnis */}
+            <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+              {RATIOS.map((r) => (
+                <button
+                  key={r.label}
+                  type="button"
+                  onClick={() => setAspect(r.r)}
+                  aria-pressed={aspect === r.r}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold outline-none transition-colors focus-visible:ring-3 focus-visible:ring-white/60 ${
+                    aspect === r.r ? "bg-white text-ink" : "bg-white/15 text-white hover:bg-white/25"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <Button variant="outline" onClick={onCancel} disabled={busy} className="bg-white">
-            <X className="size-4" /> Abbrechen
-          </Button>
-          <button
-            type="button"
-            onClick={() => {
-              setAspect(null);
-              setBox({ x: 0, y: 0, w: 1, h: 1 });
-            }}
-            className="text-sm font-medium text-white/80 hover:text-white"
-          >
-            Ganzes Bild
-          </button>
-          <Button onClick={confirm} disabled={busy}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{" "}
-            Übernehmen
-          </Button>
-        </div>
-      </div>
-    </div>
+            <div className="flex flex-1 items-center justify-center overflow-hidden">
+              {src && (
+                <div
+                  className="relative max-h-full select-none"
+                  style={{ touchAction: "none" }}
+                  onPointerMove={onMove}
+                  onPointerUp={onUp}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    ref={imgRef}
+                    src={src}
+                    alt="Zuschneiden"
+                    draggable={false}
+                    className="block max-h-[68vh] w-auto max-w-full"
+                    onLoad={(e) =>
+                      setNatural({
+                        w: e.currentTarget.naturalWidth,
+                        h: e.currentTarget.naturalHeight,
+                      })
+                    }
+                  />
+                  <div
+                    className="absolute border-2 border-white"
+                    style={{
+                      left: `${box.x * 100}%`,
+                      top: `${box.y * 100}%`,
+                      width: `${box.w * 100}%`,
+                      height: `${box.h * 100}%`,
+                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)",
+                      cursor: "move",
+                      touchAction: "none",
+                    }}
+                    onPointerDown={(e) => onDown(e, null)}
+                  >
+                    {handles.map((hd) => (
+                      <div
+                        key={hd.h}
+                        className={`absolute ${hd.cls} flex size-7 items-center justify-center`}
+                        style={{ cursor: hd.cursor, touchAction: "none" }}
+                        onPointerDown={(e) => onDown(e, hd.h)}
+                      >
+                        <span className="size-3.5 rounded-full border-2 border-primary bg-white" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <Button variant="outline" onClick={onCancel} disabled={busy} className="bg-white">
+                <X className="size-4" /> Abbrechen
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAspect(null);
+                  setBox({ x: 0, y: 0, w: 1, h: 1 });
+                }}
+                className="rounded-md text-sm font-medium text-white/80 outline-none hover:text-white focus-visible:ring-3 focus-visible:ring-white/60"
+              >
+                Ganzes Bild
+              </button>
+              <Button onClick={confirm} disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{" "}
+                Übernehmen
+              </Button>
+            </div>
+          </div>
+        </DialogPrimitive.Popup>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
