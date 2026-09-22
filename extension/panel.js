@@ -1577,6 +1577,10 @@ async function guideBeginCapture(fresh) {
     guidePausedMs += Date.now() - guidePauseAt;
   }
   guidePauseAt = 0;
+  // Abschluss-Bild (Welle 55): beim „Weiter aufnehmen" fliegt das alte wieder raus — am Ende
+  // entsteht GENAU EINES, nie eine Kette von Ergebnis-Bildern mitten in der Anleitung.
+  guideDropResultStep();
+  renderGuideSteps();
   guidePhase = "recording";
   guideActive = true;
   show("guideLive");
@@ -1592,6 +1596,10 @@ async function guideBeginCapture(fresh) {
     await chrome.storage.local.set({
       rec: { startedAt: startEpoch, mode: "guide", nonce: guideRecNonce() },
     });
+    // guideLastStepAt (Welle 55, L1): Zeitstempel des letzten Schritts — bei einer NEUEN
+    // Aufnahme den Rest der vorigen wegräumen (sonst könnte er einen Seitenwechsel-Schritt
+    // ganz am Anfang fälschlich als „Folge eines Klicks“ unterdrücken).
+    if (fresh) await chrome.storage.local.remove("guideLastStepAt").catch(() => {});
   } catch (err) {
     console.warn("Steply: Aufnahmezustand (guide) nicht gesetzt:", err);
   }
@@ -1630,6 +1638,12 @@ function guideHalt(nextPhase) {
     guideQueue = [];
     guideRemoveDownloadWatch();
     renderGuidePhase();
+    // Abschluss-Bild (Welle 55): nur beim „Fertig" (Prüfen), nicht beim Pausieren. Läuft
+    // bewusst NACH renderGuidePhase — der Mensch sieht den Prüfen-Bildschirm sofort, das Bild
+    // trudelt eine knappe Sekunde später ein. Fehler werden geschluckt.
+    if (nextPhase === "stopped") {
+      await guideAppendResultShot(seq).catch(() => {});
+    }
   })();
   const tracked = run.finally(() => {
     if (guideHaltPromise === tracked) guideHaltPromise = null;
@@ -2132,6 +2146,120 @@ async function drainGuideQueue() {
   } finally {
     guideCapturing = false;
   }
+}
+
+// ── Abschluss-Bild (Welle 55, Lücke L2 „Variante A") ────────────────────────────────────────
+// PROBLEM: Jeder Screenshot entsteht im Moment des KLICKS — das Ergebnis des LETZTEN Klicks
+// („12 Buchungen gefunden") ist damit in keiner Anleitung zu sehen.
+// LÖSUNG: Beim „Fertig" EINMAL den aktuellen Zustand des aufgenommenen Tabs fotografieren und
+// als letzten Schritt anhängen: ohne Selektor, ohne Markierung, Titel „Ergebnis". Damit ist er —
+// wie alle Schritte ohne Selektor — nicht automatisierbar und wird in der Führung nur gezeigt.
+// GRENZEN (bewusst): nie bei 0 Schritten, nie beim Verwerfen, immer nur EINES (beim „Weiter
+// aufnehmen" fliegt das alte wieder raus), und bei Fehlern (Tab zu, Kontingent) einfach keines —
+// die Aufnahme darf daran NIE scheitern. Bei aktivem Aufnahme-Anker (Einfügen in eine bestehende
+// Anleitung) entsteht KEINES: das Panel weiß nicht, ob der Anker am Ende der Kette hängt — ein
+// „Ergebnis"-Bild mitten in einer fremden Anleitung wäre schlechter als gar keines.
+const GUIDE_RESULT_SETTLE_MS = 700; // kurz warten, damit das Ergebnis wirklich auf dem Schirm ist
+const GUIDE_RESULT_MAX_MS = 2000; // länger warten wir nie (der Mensch soll nicht warten)
+
+function guideResultIndex() {
+  for (let i = guideSteps.length - 1; i >= 0; i--) {
+    const it = guideSteps[i].interaction;
+    if (it && typeof it === "object" && it.variant === "result") return i;
+  }
+  return -1;
+}
+
+// Ein vorhandenes Abschluss-Bild entfernen (vor „Weiter aufnehmen" und vor einem neuen).
+function guideDropResultStep() {
+  const i = guideResultIndex();
+  if (i < 0) return;
+  const s = guideSteps[i];
+  if (s.thumbUrl) {
+    try {
+      URL.revokeObjectURL(s.thumbUrl);
+    } catch (err) {
+      /* egal */
+    }
+  }
+  guideSteps.splice(i, 1);
+}
+
+// Warten, bis der Tab „complete" meldet (max. GUIDE_RESULT_MAX_MS). Gibt den Tab zurück
+// oder null (Tab weg).
+async function guideWaitTabIdle(tabId) {
+  const start = Date.now();
+  // Grundruhe: dem Ergebnis kurz Zeit geben (Animation/Nachladen), aber spürbar bleibt es nicht.
+  await guideSleep(GUIDE_RESULT_SETTLE_MS);
+  let tab = null;
+  for (;;) {
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch (err) {
+      return null; // Tab geschlossen
+    }
+    if (!tab) return null;
+    if (tab.status === "complete") return tab;
+    if (Date.now() - start >= GUIDE_RESULT_MAX_MS) return tab; // Deckel: lieber ein Bild als keines
+    await guideSleep(150);
+  }
+}
+
+// Den Abschluss-Schritt anhängen. seq = guideSeq-Stand beim Anhalten: Wird zwischendurch
+// fortgesetzt („Weiter aufnehmen"), bricht das hier folgenlos ab.
+async function guideAppendResultShot(seq) {
+  if (guideSteps.length === 0) return; // nichts aufgenommen → kein Abschluss-Bild
+  if (guideSteps.length >= MAX_GUIDE_STEPS) return; // kein Platz mehr
+  if (pendingTarget) return; // Aufnahme-Anker: s. Erklärung oben
+  guideDropResultStep(); // nie zwei (Stopp → Weiter aufnehmen → Stopp)
+  const last = guideSteps[guideSteps.length - 1];
+  const tabId = last && last.tabId != null ? last.tabId : null;
+  if (tabId == null) return;
+  const tab = await guideWaitTabIdle(tabId);
+  if (seq !== guideSeq || guidePhase !== "stopped") return; // inzwischen fortgesetzt/verworfen
+  if (!tab) return; // Tab geschlossen → einfach kein Abschluss-Bild
+  let img = null;
+  try {
+    await guideWaitCaptureSlot();
+    guideNoteCapture(Date.now());
+    const dataUrl = await captureViaBackground(tab.windowId);
+    img = await pngDataUrlToWebp(dataUrl);
+  } catch (err) {
+    // Kontingent/Fehler → still ohne Abschluss-Bild weiter (nie die Aufnahme blockieren).
+    console.warn("Steply: Abschluss-Bild nicht möglich:", err && err.message);
+    return;
+  }
+  if (!img) return;
+  if (seq !== guideSeq || guidePhase !== "stopped") return;
+  if (guideSteps.length >= MAX_GUIDE_STEPS) return;
+  const step = {
+    rect: { x: 0, y: 0, w: 0, h: 0 }, // keine Markierung — es wird nichts bedient
+    label: "",
+    action: "click",
+    url: typeof tab.url === "string" ? tab.url.slice(0, 500) : "",
+    title: typeof tab.title === "string" ? tab.title.slice(0, 200) : "",
+    selector: null, // ohne Selektor → nicht automatisierbar, keine Live-Markierung
+    sensitive: null,
+    fileMeta: null,
+    interaction: { variant: "result" },
+    typedValue: "",
+    ts: Date.now(),
+    tabId,
+    frameKey: null,
+    blob: img.blob,
+    width: img.width,
+    height: img.height,
+    thumbUrl: null,
+    imprecise: false,
+  };
+  try {
+    step.thumbUrl = URL.createObjectURL(step.blob);
+  } catch (err) {
+    step.thumbUrl = null;
+  }
+  guideSteps.push(step);
+  renderGuideSteps();
+  renderGuidePhase();
 }
 
 function removeGuideStep(step) {
@@ -3532,8 +3660,24 @@ function guideStepLabel(s, i) {
     text = "Doppelklick: " + base;
   } else if (it.variant === "drag") {
     text = "Ziehen: " + base + " → " + (it.dropLabel || "Ziel");
+  } else if (it.variant === "nav") {
+    // Welle 55: Seitenwechsel ohne Klick.
+    text =
+      it.nav === "back"
+        ? "Zurück zur vorigen Seite"
+        : it.nav === "reload"
+          ? "Seite neu laden"
+          : "Seitenwechsel" + (s.title ? ": " + s.title : "");
+  } else if (it.variant === "spot") {
+    text = "Markierte Stelle" + (s.label ? " in " + s.label : "");
+  } else if (it.variant === "result") {
+    text = "Ergebnis (Abschluss-Bild)";
   } else if (it.enter) {
     text = base + " ↵";
+  }
+  if (Array.isArray(it.modifiers) && it.modifiers.length && it.variant !== "key") {
+    const MOD_DE = { ctrl: "Strg", meta: "Cmd", alt: "Alt", shift: "Umschalt" };
+    text = it.modifiers.map((m) => MOD_DE[m] || m).join("+") + "+Klick: " + text;
   }
   if (it.hoverLabel && it.variant !== "key") text = it.hoverLabel + " › " + text;
   return text;
