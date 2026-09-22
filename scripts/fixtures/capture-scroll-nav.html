@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Steply Lueckentest — Scrollen und Seitenwechsel</title>
+    <style>
+      body { margin: 0; font: 14px sans-serif; }
+      #sticky { position: sticky; top: 0; background: #eef; padding: 8px; z-index: 5; }
+      #fixedbar { position: fixed; bottom: 0; left: 0; right: 0; background: #fee; padding: 8px; z-index: 6; }
+      .filler { height: 900px; background: linear-gradient(#fff, #f5f5f5); }
+      #box { height: 120px; overflow: auto; border: 1px solid #ccc; margin: 8px; }
+      #box .inner { height: 600px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="sticky">Kopfzeile (sticky) <button id="stickybtn">Oben speichern</button></div>
+
+    <section>
+      <button id="top">Ganz oben</button>
+      <button id="spa">SPA-Route wechseln</button>
+      <button id="reloadbtn">Seite neu laden</button>
+      <button id="timernav">Weiterleitung nach 300 ms</button>
+      <a id="blank" href="/zweite.html" target="_blank">In neuem Tab öffnen</a>
+      <button id="winopen">window.open</button>
+      <a id="dl" href="/datei.csv" download="export.csv">Export herunterladen</a>
+    </section>
+
+    <!-- Element in scrollbarem Container -->
+    <section>
+      <div id="box">
+        <div class="inner">
+          <div style="height: 480px"></div>
+          <button id="inbox">Knopf im Container</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="filler"></div>
+
+    <!-- Element weit unten -->
+    <button id="deep">Ganz unten bestätigen</button>
+
+    <div class="filler"></div>
+
+    <!-- Unendliches Nachladen -->
+    <ul id="list" style="margin: 0; padding: 0; list-style: none"></ul>
+    <div id="sentinel" style="height: 20px"></div>
+
+    <div id="fixedbar">Fußleiste (fixed) <button id="fixedbtn">Unten senden</button></div>
+
+    <script>
+      window.__log = [];
+      var list = document.getElementById("list");
+      var n = 0;
+      function addRows(count) {
+        for (var i = 0; i < count; i++) {
+          n++;
+          var li = document.createElement("li");
+          li.innerHTML = '<button id="row' + n + '">Zeile ' + n + "</button>";
+          list.appendChild(li);
+        }
+      }
+      addRows(5);
+      try {
+        new IntersectionObserver(function (es) {
+          if (es.some(function (e) { return e.isIntersecting; })) {
+            addRows(5);
+            window.__log.push("nachgeladen:" + n);
+          }
+        }).observe(document.getElementById("sentinel"));
+      } catch (e) { /* egal */ }
+
+      document.getElementById("spa").addEventListener("click", function () {
+        history.pushState({ p: 1 }, "", "/uebersicht");
+        document.title = "Übersicht";
+        window.__log.push("spa");
+      });
+      document.getElementById("timernav").addEventListener("click", function () {
+        setTimeout(function () { location.href = "/zweite.html"; }, 300);
+      });
+      document.getElementById("reloadbtn").addEventListener("click", function () { location.reload(); });
+      document.getElementById("winopen").addEventListener("click", function () {
+        window.open("/zweite.html", "_blank");
+      });
+
+      window.__probe = function () {
+        return {
+          scrollY: Math.round(window.scrollY),
+          url: location.pathname,
+          title: document.title,
+          rows: n,
+          log: window.__log.slice(-2),
+        };
+      };
+    </script>
+  </body>
+</html>

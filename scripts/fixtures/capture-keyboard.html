@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Steply Lueckentest — Tastatur, Auswahl, Zwischenablage</title>
+    <style>
+      body { margin: 0; font: 14px sans-serif; }
+      section { padding: 8px; border-bottom: 1px solid #eee; }
+      [hidden] { display: none !important; }
+      [role="option"][aria-selected="true"] { background: #def; }
+      #ctxmenu { position: absolute; background: #fff; border: 1px solid #999; padding: 4px; }
+    </style>
+  </head>
+  <body>
+    <!-- Tastatur-Bedienung: Tab + Enter/Leertaste -->
+    <section>
+      <button id="kb1" onclick="window.__log.push('kb1')">Speichern</button>
+      <a id="kb2" href="#x" onclick="window.__log.push('kb2'); event.preventDefault()">Zur Übersicht</a>
+      <div id="kb3" role="button" tabindex="0"
+        onkeydown="if (event.key === 'Enter' || event.key === ' ') { window.__log.push('kb3'); }"
+        onclick="window.__log.push('kb3-click')">Eigener Knopf (div)</div>
+    </section>
+
+    <!-- Pfeiltasten in einer Listbox (Roving Focus) -->
+    <section>
+      <div id="lb" role="listbox" tabindex="0" aria-label="Mandant" aria-activedescendant="o1">
+        <div id="o1" role="option" aria-selected="true">Mandant Müller</div>
+        <div id="o2" role="option" aria-selected="false">Mandant Schulze</div>
+        <div id="o3" role="option" aria-selected="false">Mandant Yildiz</div>
+      </div>
+    </section>
+
+    <!-- Menue per Pfeiltasten -->
+    <section>
+      <button id="mtrig" aria-haspopup="menu" aria-expanded="false" aria-controls="menu">Aktionen</button>
+      <ul id="menu" role="menu" hidden style="margin: 0">
+        <li role="none"><button role="menuitem" id="mi1">Umbenennen</button></li>
+        <li role="none"><button role="menuitem" id="mi2">Archivieren</button></li>
+      </ul>
+    </section>
+
+    <!-- Escape schliesst ein Overlay -->
+    <section>
+      <button id="ovtrig">Overlay öffnen</button>
+      <div id="overlay" hidden role="dialog" aria-label="Hinweis">Overlay offen</div>
+    </section>
+
+    <!-- Text markieren / kopieren / ausschneiden / einfuegen -->
+    <section>
+      <p id="para">Steuernummer 143/815/47110 zum Markieren und Kopieren.</p>
+      <label for="src">Quelle</label><input id="src" value="Kopiertext 4711" />
+      <label for="dst">Ziel</label><input id="dst" placeholder="Hier einfügen" />
+    </section>
+
+    <!-- Rechtsklick: einmal mit eigenem Menue, einmal ohne (Browser-Menue) -->
+    <section>
+      <div id="ownctx" style="display: inline-block; padding: 6px; border: 1px solid #ccc">
+        Eigenes Kontextmenü
+      </div>
+      <div id="browserctx" style="display: inline-block; padding: 6px; border: 1px solid #ccc">
+        Browser-Kontextmenü
+      </div>
+      <div id="ctxmenu" hidden><button id="ctxdel">Löschen</button></div>
+    </section>
+
+    <script>
+      window.__log = [];
+      var lb = document.getElementById("lb");
+      var opts = ["o1", "o2", "o3"];
+      lb.addEventListener("keydown", function (e) {
+        var cur = opts.indexOf(lb.getAttribute("aria-activedescendant"));
+        if (e.key === "ArrowDown") cur = Math.min(opts.length - 1, cur + 1);
+        else if (e.key === "ArrowUp") cur = Math.max(0, cur - 1);
+        else return;
+        e.preventDefault();
+        opts.forEach(function (id, i) {
+          document.getElementById(id).setAttribute("aria-selected", i === cur ? "true" : "false");
+        });
+        lb.setAttribute("aria-activedescendant", opts[cur]);
+        window.__log.push("lb:" + opts[cur]);
+      });
+
+      var mtrig = document.getElementById("mtrig");
+      var menu = document.getElementById("menu");
+      function openMenu() {
+        menu.hidden = false;
+        mtrig.setAttribute("aria-expanded", "true");
+        document.getElementById("mi1").focus();
+      }
+      mtrig.addEventListener("click", openMenu);
+      mtrig.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); openMenu(); }
+      });
+      menu.addEventListener("keydown", function (e) {
+        var items = [document.getElementById("mi1"), document.getElementById("mi2")];
+        var i = items.indexOf(document.activeElement);
+        if (e.key === "ArrowDown") { e.preventDefault(); items[Math.min(1, i + 1)].focus(); }
+        if (e.key === "Escape") { menu.hidden = true; mtrig.setAttribute("aria-expanded", "false"); }
+      });
+
+      var ov = document.getElementById("overlay");
+      document.getElementById("ovtrig").addEventListener("click", function () { ov.hidden = false; });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { ov.hidden = true; window.__log.push("esc"); }
+      });
+
+      var ctxmenu = document.getElementById("ctxmenu");
+      document.getElementById("ownctx").addEventListener("contextmenu", function (e) {
+        e.preventDefault();
+        ctxmenu.hidden = false;
+        ctxmenu.style.left = e.clientX + "px";
+        ctxmenu.style.top = e.clientY + "px";
+      });
+
+      window.__probe = function () {
+        return {
+          log: window.__log.slice(-3),
+          sel: (function () { try { return String(document.getSelection()); } catch (e) { return ""; } })(),
+          dst: document.getElementById("dst").value,
+          overlay: !ov.hidden,
+          menu: !menu.hidden,
+          ctx: !ctxmenu.hidden,
+        };
+      };
+    </script>
+  </body>
+</html>

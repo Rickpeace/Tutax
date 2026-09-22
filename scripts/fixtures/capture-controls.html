@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Steply Lueckentest — Formular-Bedienelemente</title>
+    <style>
+      body { margin: 0; font: 14px sans-serif; }
+      section { padding: 8px; border-bottom: 1px solid #eee; }
+      label { display: inline-block; min-width: 140px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <!-- 1) natives <select> -->
+    <section>
+      <label for="sel">Rechtsform</label>
+      <select id="sel">
+        <option value="">Bitte wählen</option>
+        <option value="gmbh">GmbH</option>
+        <option value="ug">UG (haftungsbeschränkt)</option>
+        <option value="ek">Einzelunternehmen</option>
+      </select>
+    </section>
+
+    <!-- 2) <datalist> -->
+    <section>
+      <label for="dl">Finanzamt</label>
+      <input id="dl" list="aemter" placeholder="Finanzamt suchen" />
+      <datalist id="aemter">
+        <option value="Finanzamt München"></option>
+        <option value="Finanzamt Hamburg"></option>
+        <option value="Finanzamt Berlin"></option>
+      </datalist>
+    </section>
+
+    <!-- 3) spezielle input-Typen -->
+    <section>
+      <label for="dt">Stichtag</label><input id="dt" type="date" />
+    </section>
+    <section>
+      <label for="tm">Uhrzeit</label><input id="tm" type="time" />
+    </section>
+    <section>
+      <label for="col">Mandantenfarbe</label><input id="col" type="color" value="#112233" />
+    </section>
+    <section>
+      <label for="rng">Beteiligung</label><input id="rng" type="range" min="0" max="100" value="10" />
+    </section>
+    <section>
+      <label for="num">Betrag</label><input id="num" type="number" value="0" />
+    </section>
+    <section>
+      <label for="fil">Beleg</label><input id="fil" type="file" />
+    </section>
+
+    <!-- 4) Kontrollkaestchen + Radios -->
+    <section>
+      <input id="cb1" type="checkbox" /><label for="cb1">Kleinunternehmer</label>
+    </section>
+    <section>
+      <label id="cb2wrap"><input id="cb2" type="checkbox" /> Umsatzsteuerpflichtig</label>
+    </section>
+    <section>
+      <input id="cb3" type="checkbox" />
+      <span id="cb3text">Ohne Label (nur Text daneben)</span>
+    </section>
+    <section>
+      <input id="r1" type="radio" name="art" value="a" /><label for="r1">Monatlich</label>
+      <input id="r2" type="radio" name="art" value="b" /><label for="r2">Quartalsweise</label>
+    </section>
+
+    <!-- 5) Schalter in einer Liste (ARIA-Switch) -->
+    <section>
+      <ul role="list" style="margin: 0; padding: 0; list-style: none">
+        <li role="listitem" style="display: flex; gap: 8px; align-items: center">
+          <span id="swtext">E-Mail-Benachrichtigung</span>
+          <button id="sw" role="switch" aria-checked="false" aria-labelledby="swtext"
+            onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true')">
+            <span aria-hidden="true">•</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <script>
+      window.__state = {};
+      var sel = document.getElementById("sel");
+      sel.addEventListener("change", function () { window.__state.sel = sel.value; });
+      document.getElementById("rng").addEventListener("change", function (e) {
+        window.__state.rng = e.target.value;
+      });
+      // Probe: Zustand der Seite GENAU in dem Moment, in dem ein Schritt gemeldet wird
+      // (= der Moment, in dem das Panel den Screenshot macht).
+      window.__probe = function () {
+        return {
+          sel: sel.value,
+          rng: document.getElementById("rng").value,
+          col: document.getElementById("col").value,
+          cb1: document.getElementById("cb1").checked,
+          cb2: document.getElementById("cb2").checked,
+          cb3: document.getElementById("cb3").checked,
+          r1: document.getElementById("r1").checked,
+          sw: document.getElementById("sw").getAttribute("aria-checked"),
+          dt: document.getElementById("dt").value,
+        };
+      };
+    </script>
+  </body>
+</html>

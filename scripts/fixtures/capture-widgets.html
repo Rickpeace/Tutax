@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Steply Lueckentest — Widgets, Dialoge, Canvas, Shadow DOM</title>
+    <style>
+      body { margin: 0; font: 14px sans-serif; }
+      section { padding: 8px; border-bottom: 1px solid #eee; }
+      [hidden] { display: none !important; }
+      #tip { position: absolute; background: #333; color: #fff; padding: 2px 6px; }
+      .sel { background: #def; }
+      td { border: 1px solid #ccc; padding: 4px; }
+    </style>
+  </head>
+  <body>
+    <!-- Shadow DOM offen / geschlossen -->
+    <section>
+      <x-open id="sopen"></x-open>
+      <x-closed id="sclosed"></x-closed>
+    </section>
+
+    <!-- Canvas-Oberflaeche (Google-Docs-Muster) -->
+    <section>
+      <canvas id="cv" width="300" height="80" style="border: 1px solid #999"></canvas>
+      <div id="cvout">Canvas: nichts</div>
+    </section>
+
+    <!-- SVG als Knopf -->
+    <section>
+      <svg id="svgbtn" width="40" height="40" role="button" aria-label="Löschen" tabindex="0">
+        <rect x="2" y="2" width="36" height="36" fill="#eee" stroke="#999"></rect>
+        <path id="svgpath" d="M10 10 L30 30 M30 10 L10 30" stroke="#c00" stroke-width="3"></path>
+      </svg>
+      <svg id="svgplain" width="40" height="40">
+        <circle id="svgcircle" cx="20" cy="20" r="16" fill="#cfc"></circle>
+      </svg>
+    </section>
+
+    <!-- Hover-Tooltip ohne Klick -->
+    <section>
+      <span id="hov" style="border-bottom: 1px dotted #666">Was ist die Steuernummer?</span>
+      <span id="tip" hidden>Die Steuernummer steht im letzten Bescheid.</span>
+    </section>
+
+    <!-- Doppelklick zum Bearbeiten in einer Tabelle + contenteditable -->
+    <section>
+      <table>
+        <tr>
+          <td id="cell">Doppelklick zum Bearbeiten</td>
+          <td id="cell2" tabindex="0">Bedienbare Zelle (tabindex)</td>
+        </tr>
+      </table>
+      <div id="rte" contenteditable="true" style="border: 1px solid #ccc; min-height: 24px">
+        Inline bearbeiten
+      </div>
+    </section>
+
+    <!-- Dialoge -->
+    <section>
+      <button id="dlgopen">Modal öffnen</button>
+      <dialog id="dlg">
+        <p>Wirklich löschen?</p>
+        <button id="dlgok">Ja, löschen</button>
+        <button id="dlgno">Abbrechen</button>
+      </dialog>
+      <button id="confirmbtn">Mit confirm() bestätigen</button>
+      <button id="alertbtn">alert() zeigen</button>
+      <button id="promptbtn">prompt() zeigen</button>
+      <button id="printbtn">Drucken</button>
+      <div id="dlgout">-</div>
+    </section>
+
+    <!-- Overlay-Dialog (kein <dialog>) -->
+    <section>
+      <button id="ovopen">Overlay-Dialog</button>
+      <div id="ov" hidden role="dialog" aria-modal="true" style="border: 1px solid #333; padding: 6px">
+        <button id="ovok">Übernehmen</button>
+      </div>
+    </section>
+
+    <!-- Mehrfachauswahl per Strg/Shift-Klick -->
+    <section>
+      <ul id="multi" role="listbox" aria-multiselectable="true" style="margin: 0; padding: 0; list-style: none">
+        <li role="option" id="m1" tabindex="-1">Beleg 1</li>
+        <li role="option" id="m2" tabindex="-1">Beleg 2</li>
+        <li role="option" id="m3" tabindex="-1">Beleg 3</li>
+        <li role="option" id="m4" tabindex="-1">Beleg 4</li>
+      </ul>
+    </section>
+
+    <!-- Langes Laden: Ergebnis erst nach Verzoegerung -->
+    <section>
+      <button id="slow">Auswertung starten</button>
+      <div id="slowout">noch kein Ergebnis</div>
+    </section>
+
+    <!-- Formular: Absenden per Knopf, per Enter, Fehlermeldung -->
+    <section>
+      <form id="form">
+        <label for="mail">E-Mail</label><input id="mail" name="mail" />
+        <button id="submit" type="submit">Absenden</button>
+      </form>
+      <div id="formerr" hidden>Bitte eine gültige E-Mail eingeben.</div>
+    </section>
+
+    <script>
+      window.__log = [];
+      // Browser-eigene Tastenkuerzel (Strg+P/S/O …) im Test unterdruecken — das Content-Script
+      // lauscht in der CAPTURE-Phase am document und sieht sie trotzdem.
+      document.addEventListener("keydown", function (e) {
+        if (e.ctrlKey || e.metaKey) e.preventDefault();
+      });
+
+      // --- Shadow DOM -------------------------------------------------------------------
+      class XOpen extends HTMLElement {
+        connectedCallback() {
+          const r = this.attachShadow({ mode: "open" });
+          r.innerHTML = '<button id="sb">Offener Schatten-Knopf</button>';
+          r.getElementById("sb").addEventListener("click", function () { window.__log.push("open"); });
+        }
+      }
+      class XClosed extends HTMLElement {
+        connectedCallback() {
+          const r = this.attachShadow({ mode: "closed" });
+          r.innerHTML = '<button id="cb" style="width:180px">Geschlossener Knopf</button>';
+          r.getElementById("cb").addEventListener("click", function () { window.__log.push("closed"); });
+          window.__closedRoot = r; // nur fuer den Test (Klick-Koordinaten)
+        }
+      }
+      customElements.define("x-open", XOpen);
+      customElements.define("x-closed", XClosed);
+
+      // --- Canvas -----------------------------------------------------------------------
+      var cv = document.getElementById("cv");
+      var ctx = cv.getContext("2d");
+      ctx.fillStyle = "#eef";
+      ctx.fillRect(0, 0, 300, 80);
+      ctx.fillStyle = "#333";
+      ctx.fillText("Speichern", 20, 40);
+      ctx.fillText("Teilen", 200, 40);
+      cv.addEventListener("click", function (e) {
+        var r = cv.getBoundingClientRect();
+        var which = e.clientX - r.left < 150 ? "Speichern" : "Teilen";
+        document.getElementById("cvout").textContent = "Canvas: " + which;
+        window.__log.push("cv:" + which);
+      });
+
+      document.getElementById("svgbtn").addEventListener("click", function () { window.__log.push("svgbtn"); });
+      document.getElementById("svgcircle").addEventListener("click", function () { window.__log.push("svgcircle"); });
+
+      // --- Hover-Tooltip ------------------------------------------------------------------
+      var tip = document.getElementById("tip");
+      var hov = document.getElementById("hov");
+      hov.addEventListener("mouseenter", function () { tip.hidden = false; });
+      hov.addEventListener("mouseleave", function () { tip.hidden = true; });
+
+      // --- Doppelklick zum Bearbeiten -----------------------------------------------------
+      var cell = document.getElementById("cell");
+      cell.addEventListener("dblclick", function () {
+        cell.innerHTML = '<input id="celledit" value="Doppelklick zum Bearbeiten">';
+        document.getElementById("celledit").focus();
+        window.__log.push("dblcell");
+      });
+      document.getElementById("cell2").addEventListener("dblclick", function () {
+        window.__log.push("dblcell2");
+      });
+
+      // --- Dialoge --------------------------------------------------------------------------
+      var dlg = document.getElementById("dlg");
+      document.getElementById("dlgopen").addEventListener("click", function () { dlg.showModal(); });
+      document.getElementById("dlgok").addEventListener("click", function () {
+        dlg.close();
+        document.getElementById("dlgout").textContent = "gelöscht";
+      });
+      document.getElementById("dlgno").addEventListener("click", function () { dlg.close(); });
+      document.getElementById("confirmbtn").addEventListener("click", function () {
+        var r = window.confirm("Wirklich fortfahren?");
+        document.getElementById("dlgout").textContent = "confirm=" + r;
+        window.__log.push("confirm:" + r);
+      });
+      document.getElementById("alertbtn").addEventListener("click", function () { window.alert("Gespeichert."); });
+      document.getElementById("promptbtn").addEventListener("click", function () {
+        var v = window.prompt("Name?", "");
+        window.__log.push("prompt:" + v);
+      });
+      document.getElementById("printbtn").addEventListener("click", function () { window.__log.push("print"); });
+
+      var ov = document.getElementById("ov");
+      document.getElementById("ovopen").addEventListener("click", function () { ov.hidden = false; });
+      document.getElementById("ovok").addEventListener("click", function () { ov.hidden = true; });
+
+      // --- Mehrfachauswahl -------------------------------------------------------------------
+      var multi = document.getElementById("multi");
+      var lastIdx = -1;
+      var items = ["m1", "m2", "m3", "m4"];
+      multi.addEventListener("click", function (e) {
+        var li = e.target.closest('[role="option"]');
+        if (!li) return;
+        var idx = items.indexOf(li.id);
+        if (e.shiftKey && lastIdx >= 0) {
+          var a = Math.min(lastIdx, idx), b = Math.max(lastIdx, idx);
+          for (var i = a; i <= b; i++) document.getElementById(items[i]).classList.add("sel");
+        } else if (e.ctrlKey || e.metaKey) {
+          li.classList.toggle("sel");
+        } else {
+          items.forEach(function (id) { document.getElementById(id).classList.remove("sel"); });
+          li.classList.add("sel");
+        }
+        lastIdx = idx;
+        window.__log.push("multi:" + li.id);
+      });
+
+      // --- Langes Laden ---------------------------------------------------------------------
+      document.getElementById("slow").addEventListener("click", function () {
+        document.getElementById("slowout").textContent = "lädt …";
+        setTimeout(function () {
+          document.getElementById("slowout").textContent = "Ergebnis: 12 Buchungen";
+          window.__log.push("slowdone");
+        }, 1200);
+      });
+
+      // --- Formular ---------------------------------------------------------------------------
+      document.getElementById("form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var v = document.getElementById("mail").value;
+        var bad = v.indexOf("@") < 0;
+        document.getElementById("formerr").hidden = !bad;
+        window.__log.push("submit:" + (bad ? "fehler" : "ok"));
+      });
+
+      window.__probe = function () {
+        return {
+          log: window.__log.slice(-2),
+          cvout: document.getElementById("cvout").textContent,
+          slowout: document.getElementById("slowout").textContent,
+          dlgOpen: document.getElementById("dlg").open === true,
+          ovOpen: !document.getElementById("ov").hidden,
+          tip: !document.getElementById("tip").hidden,
+          sel: Array.prototype.filter.call(document.querySelectorAll("#multi li"), function (l) {
+            return l.classList.contains("sel");
+          }).map(function (l) { return l.id; }).join(","),
+          err: !document.getElementById("formerr").hidden,
+        };
+      };
+    </script>
+  </body>
+</html>

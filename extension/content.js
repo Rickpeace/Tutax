@@ -720,7 +720,44 @@
     if (tag === "input" && /^(button|submit|reset)$/.test(type) && el.value && String(el.value).trim()) {
       return clampLabel(el.value, 60); // Button-Caption (keine getippte Eingabe)
     }
+    // Kontrollkaestchen/Radio/Schalter OHNE jede Verknuepfung: der beschreibende Text steht
+    // fast immer DAHINTER (<input><span>Text</span>) — nearbyCaptionText schaut nur nach vorn.
+    // Ohne das hiess der Schritt frueher „Klicken Sie auf „input"" (Welle 55).
+    const role = roleFor(el);
+    if (/^(checkbox|radio|switch)$/.test(role)) {
+      const after = followingCaptionText(el);
+      if (after) return clampLabel(after, 60);
+      if (role === "checkbox") return "Kontrollkästchen";
+      if (role === "radio") return "Auswahl";
+      return "Schalter";
+    }
     return clampLabel(tag, 60);
+  }
+
+  // Kurzer, beschreibender Text in den bis zu 2 FOLGENDEN Geschwistern (Gegenstueck zu
+  // nearbyCaptionText). Bewusst konservativ: kurz (<=40), kein Code, keine Geschwister, die
+  // selbst Bedienelemente enthalten.
+  function followingCaptionText(el) {
+    let sib = el.nextElementSibling;
+    let hops = 0;
+    while (sib && hops < 2) {
+      let skip = false;
+      try {
+        skip = !!(
+          (sib.matches && sib.matches("input, textarea, select, button, a, [role='button'], [role='link']")) ||
+          (sib.querySelector && sib.querySelector("input, textarea, select, button"))
+        );
+      } catch (err) {
+        skip = true;
+      }
+      if (!skip) {
+        const t = visibleText(sib);
+        if (t && t.length <= 40 && !looksLikeCode(t)) return t;
+      }
+      sib = sib.nextElementSibling;
+      hops++;
+    }
+    return "";
   }
 
   // Kuerzester sinnvoller Text fuer das geklickte/verlassene Element (editierbar vs. Klick).
@@ -822,6 +859,16 @@
     if (aria) {
       const sel = tag + '[aria-label="' + cssEscapeAttr(aria) + '"]';
       if (isUnique(sel)) return cap(sel);
+    }
+    // <label for="feld">: stabiler Anker (Welle 55). Ohne ihn bekam der Klick auf eine
+    // Feldbeschriftung einen reinen Positionspfad („body > section:nth-of-type(9) > label"),
+    // der beim kleinsten Umbau der Seite bricht. Nur bei stabiler Ziel-Id.
+    if (tag === "label") {
+      const forId = attr("for");
+      if (forId && isStableId(forId)) {
+        const sel = 'label[for="' + cssEscapeAttr(forId) + '"]';
+        if (isUnique(sel)) return cap(sel);
+      }
     }
     return cap(nthOfTypePath(el));
   }
@@ -1687,11 +1734,13 @@
     const info = editableInfo(controlForLabel(el));
     if (info.editable) return;
 
-    // Schieberegler (input type=range): der Schritt entsteht beim change (Endposition im
-    // Screenshot), nicht beim Anfassen.
+    // Schieberegler (input type=range) und Farbwaehler (type=color): der Schritt entsteht beim
+    // change (Endposition/gewaehlte Farbe im Screenshot), nicht beim Anfassen. Beim Farbwaehler
+    // ist das Auswahlfenster ohnehin Betriebssystem — ein Klick-Schritt davor zeigte nur die
+    // alte Farbe (Welle 55).
     const elTag = (el.tagName || "").toLowerCase();
     const elType = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
-    if (elTag === "input" && elType === "range") return;
+    if (elTag === "input" && (elType === "range" || elType === "color")) return;
 
     const x = event.clientX || 0;
     const y = event.clientY || 0;
@@ -2096,6 +2145,50 @@
     emitStep(el, "click", { interaction: { variant: "key", key: combo }, label: el ? "" : combo });
   }
 
+  // ---- Reine Tastatur-Bedienung (Welle 55) -------------------------------------------------
+  // Enter/Leertaste auf einem FOKUSSIERTEN Bedienelement loest dessen Aktion aus, feuert aber
+  // KEIN pointerdown — bis hierher entstand dafuer kein Schritt (Tastatur-Nutzer, Screenreader,
+  // Power-User). Der vom Browser danach erzeugte click traegt keinen Zeiger, ein Doppel-Schritt
+  // kann also nicht entstehen. Bewusst konservativ: nur Elemente, die Enter bzw. Leertaste auch
+  // wirklich ausloesen — sonst entstuenden Schritte fuer Tastendruecke in beliebigen
+  // fokussierbaren Containern (Leertaste scrollt dort z. B. nur).
+  const KEY_ACTIVATE_COMMON =
+    'button, summary, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], ' +
+    '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], ' +
+    '[role="option"], input[type="button"], input[type="submit"], input[type="reset"], ' +
+    'input[type="checkbox"], input[type="radio"], input[type="file"], input[type="image"]';
+  const KEY_ENTER_SEL = KEY_ACTIVATE_COMMON + ', a[href], [role="link"]';
+  const KEY_SPACE_SEL = KEY_ACTIVATE_COMMON;
+
+  function keyboardActivate(isEnter) {
+    const active = deepActiveElement();
+    if (!active || active.nodeType !== 1) return;
+    if (active === document.body || active === document.documentElement) return;
+    if (active.isContentEditable === true) return;
+    let hit = false;
+    try {
+      hit = !!(active.matches && active.matches(isEnter ? KEY_ENTER_SEL : KEY_SPACE_SEL));
+    } catch (err) {
+      hit = false;
+    }
+    if (!hit) return;
+    if (editableInfo(active).editable) return; // Textfeld mit role=… -> gehoert dem Enter-Pfad
+    // Hover-Menue wie beim Mausklick beruecksichtigen; der Klick-Puls bekommt die Elementmitte.
+    const opts = {};
+    const g = rectOf(active).px;
+    opts.cx = g.cx;
+    opts.cy = g.cy;
+    const hover = hoverFor(active);
+    if (hover) {
+      opts.interaction = { hover: hover.selector };
+      if (hover.label) opts.interaction.hoverLabel = hover.label;
+    }
+    emitStep(active, "click", opts);
+    // Ein per Tastatur geoeffnetes Menue gilt — wie nach einem Klick — nicht als Hover-Menue.
+    recentClicks.push({ el: active, at: Date.now() });
+    if (recentClicks.length > 12) recentClicks.shift();
+  }
+
   // keydown: Tastenkuerzel (s. o.) und Enter. Enter in einem einzeiligen Feld: die Seite
   // schickt gleich ab und navigiert weg — blur kommt dann NIE. Den Eingabe-Schritt darum JETZT
   // melden (Screenshot zeigt noch das ausgefuellte Feld). Auch ein Enter ohne Aenderung
@@ -2109,7 +2202,17 @@
       onShortcut(event, target);
       return;
     }
-    if (event.key !== "Enter" || event.shiftKey) return;
+    const isEnter = event.key === "Enter";
+    const isSpace = event.key === " " || event.key === "Spacebar" || event.code === "Space";
+    if (!isEnter && !isSpace) return;
+    // Liegt der Fokus NICHT in einem Feld, ist Enter/Leertaste eine Bedienung per Tastatur
+    // (Welle 55) — sonst der bekannte Enter-Pfad im Feld.
+    const info = editableInfo(target);
+    if (!info.editable) {
+      if (!event.repeat && !event.shiftKey) keyboardActivate(isEnter);
+      return;
+    }
+    if (isSpace || event.shiftKey) return; // Leerzeichen/Zeilenumbruch IM Feld = kein Schritt
     const fe = adoptEditable(target, false);
     if (!fe || fe.settled) return;
     if (enterSubmits(fe)) {
@@ -2142,7 +2245,8 @@
   }
   document.addEventListener("focusout", onFocusOut, true);
 
-  // change: native <select> und Schieberegler (input type=range) -> ein „type"-Schritt
+  // change: native <select>, Schieberegler (input type=range) und Farbwaehler (type=color,
+  // Welle 55) -> ein „type"-Schritt
   // (sichtbare UI-Auswahl/-Position, kein Getipptes). Range feuert change je Raststufe
   // (Tastatur) bzw. beim Loslassen — pro Element gedrosselt, damit Feinjustieren nicht
   // zehn Schritte erzeugt (der Screenshot zeigt dann die letzte erfasste Position).
@@ -2163,7 +2267,8 @@
     }
     const isSelect = tag === "select";
     const isRange = tag === "input" && type === "range";
-    if (!isSelect && !isRange) return;
+    const isColor = tag === "input" && type === "color";
+    if (!isSelect && !isRange && !isColor) return;
     if (isRange) {
       const now = Date.now();
       if (lastRangeStep.el === el && now - lastRangeStep.t < 1200) {

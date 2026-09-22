@@ -1092,3 +1092,22 @@ interne Tutorials + Nachweis → Freigabe-Workflow. Danach: Pipeline-„Danach"-
 
 **Bewusst zurückgestellt:** M7 updatePassword-Recovery (Plan liegt in F),
 getClaims-Middleware (nur bei Bedarf), Nordstern-Extension (nach Welle 6).
+
+---
+
+## 📋 Sofort-Aufnahme: belegte Lückenliste (22.09.2026, v2.18.7)
+
+Eigenes Dokument: **[`REVIEW-aufnahme-luecken.md`](REVIEW-aufnahme-luecken.md)** — 62 Bedien-Muster
+headless mit der echten `content.js` durchgespielt (`node scripts/test-capture-gaps.mjs`,
+`--strict` als Regressionsschutz), Ergebnis 45 erfasst / 6 teilweise / 11 nicht erfasst,
+sauber getrennt in **Browser-Grenze** (nicht behebbar) und **behebbar**.
+
+- [x] Tastatur-Bedienung (Tab + Enter/Leertaste auf Knopf/Link/Kästchen) erzeugt jetzt Schritte
+- [x] Farbwähler: Schritt beim `change` statt Klick davor (Screenshot zeigt die gewählte Farbe)
+- [x] Kontrollkästchen ohne Label: Text von rechts statt „input“
+- [x] `label[for=…]` als stabiler Selektor-Anker
+- [ ] 🟠 **L1** Seitenwechsel ohne Klick (Zurück-Knopf, F5, Weiterleitung) erzeugt keinen Schritt
+- [ ] 🟠 **L3** Strg-/Shift-Klick: Modifikator fehlt im Schritt (falsche Anleitung + Automation)
+- [ ] 🟠 **L2** Ergebnis nach langem Laden ist in keinem Screenshot (zweites Bild je Schritt)
+- [ ] 🟡 **L4** Pfeiltasten-Menüs · **L5** Canvas · **L6** geschlossenes Shadow DOM · **L7** Doppelklick in Tabellenzellen
+- [ ] ⚪ **L9** reines Scrollen · **L10** Markierung bei Strg+C · **L11** Hover-Tooltips
