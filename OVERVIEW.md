@@ -93,7 +93,8 @@ Status-Chips: Veröffentlicht = Teal-Pastell, Entwurf = Amber-Pastell.
 - **`builder.tsx`** – Orchestrator: State aller Schritte/Branches, Zwei-Spalten-Layout (Ablauf links, Editor angedockt rechts ab ≥1024px; Sheet auf schmal), Vor/Zurück-Navigation, Schritt anlegen/löschen/einfügen (auch in Äste).
 - **`flow.tsx`** – der „Karten-Flow" (Signature-Diagramm mit verschachtelten Ja/Nein-Ästen), `+`-Einfüge-Punkte.
 - **`step-panel.tsx`** – der Schritt-Editor (Titel, Screenshot, Erklärtext, Frage/Verzweigung-Toggle, Antwort-Optionen mit „→ Öffnen/anlegen", Vor/Zurück, Ungespeichert-Dialog).
-- **`highlight-editor.tsx`** – Screenshot annotieren: Rechteck/Kreis/Pfeil/**Blur**, Farben, Verschieben/Resizen, **Lupe** (Zoom). Koordinaten relativ 0..1.
+- **`highlight-editor.tsx`** – Screenshot annotieren: Rechteck/Kreis/Pfeil/**Blur**, Farben, Verschieben/Resizen, **Lupe** (Zoom). Koordinaten relativ 0..1. Welle 51a: Verpixeln = echte Unschärfe (gemeinsame SVG-Bausteine `viewer/svg-marks.tsx`, auch in der Lupe), **Einrasten** (Bildmitte + Kanten anderer Markierungen, ±1,5 %, Hilfslinien, Alt = frei), **Zentrieren**, erstes Farbfeld = „Firmenfarbe“.
+- **Ein Bild, mehrere Schritte** (Welle 51a): „Bild in neuen Schritt übernehmen“ (image-field → `builder.tsx` → `addStep(…, { imageFromStepId })`) teilt den `image_path`; Verpixelungen des Vorgängers werden als Vorschlag (`suggested` + `suggestedFrom: "previous"`) übernommen — auch beim Upload/Frame-Picker mit gleichen Bildmaßen. Geteilte Pfade: `/api/upload-url` vergibt dann einen eigenen Pfad (kein stilles Überschreiben), die öffentliche Kopie brennt die Vereinigung aller Verpixelungen ein (`unionBlurs`).
 - **`image-field.tsx`** – Screenshot hochladen/ersetzen/entfernen, **Zuschneiden** (`crop-dialog.tsx`), **„Groß bearbeiten"** (Vollbild-Overlay).
 - **`tutorial-header.tsx`** – Kopf: Zurück-Breadcrumb, **editierbarer Titel** (Stift), **Veröffentlicht-Schalter**, Kategorie, Jetzt-prüfen/Vorschau.
 - **`rich-text.tsx`** – Erklärtext-Editor (Fett/Kursiv/Listen). Anzeige: `viewer/rich-text-view.tsx`.
@@ -172,7 +173,9 @@ Status-Chips: Veröffentlicht = Teal-Pastell, Entwurf = Amber-Pastell.
 | `format.ts` | Formatierungen (`relativeDe`, `dateDe`) |
 | `cache-tags.ts` | hubTag/tutTag + Invalidierungs-Helfer (cacheComponents) |
 | `plan.ts` / `pricing.ts` | Tarif-Gates (isPro/isBusiness) / PLANS-Tabelle |
-| `redact.ts` | `burnBlur()` — Blur unwiderruflich einbrennen (Publish) |
+| `redact.ts` | `burnBlur()` — Blur unwiderruflich einbrennen (Publish); `unionBlurs()` für geteilte Bilder |
+| `highlight-color.ts` | Standard-Markierungsfarbe → Kunden-Akzent (`markColor()`, `var(--brand-accent)`), eigene Farben bleiben |
+| `share-link.ts` | „Link kopieren“: `hubTutorialUrl()`, `copyText()` (Editor-Kopf + ⋮-Menü) |
 | `ssrf.ts` / `clicks.ts` / `recorder.ts` | safeFetch (SSRF) / clicks.json-Validierung / Recorder-Token+CORS |
 | `translate.ts` / `translate-core.ts` / `translate-stale.ts` / `i18n-hub.ts` | Übersetzungs-Kern + stale + UI-Wörterbuch |
 | `tts.ts` / `tts-core.ts` | Vorlesen (server-only Wrapper / import-freier Kern für Tests) |

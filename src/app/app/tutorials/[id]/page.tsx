@@ -68,7 +68,9 @@ export default async function EditorPage({
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-6">
+    // Breiter als die übrigen App-Seiten (Welle 51a): Ablauf + angedocktes Schritt-Panel teilen
+    // sich die Fläche; bei großen Bildschirmen wächst das Panel (Bild) mit statt fix zu bleiben.
+    <main className="mx-auto w-full max-w-[1440px] flex-1 px-5 py-6">
       <TutorialHeader
         tutorialId={id}
         initialTitle={tutorial.title}
@@ -82,6 +84,8 @@ export default async function EditorPage({
         siteDomains={tutorial.site_domains ?? []}
         languages={languages}
         translationsStale={translationsStale}
+        accountSlug={account.slug}
+        slug={tutorial.slug}
       />
 
       <Builder

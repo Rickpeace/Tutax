@@ -64,3 +64,26 @@ export async function burnBlur(image: Buffer, highlights: unknown): Promise<Buff
 
   return await base.composite(overlays).toBuffer();
 }
+
+/**
+ * Welle 51a — geteilte Bilder („Bild in neuen Schritt übernehmen“): Mehrere Schritte können
+ * denselben image_path nutzen, die öffentliche Kopie liegt aber nur EINMAL unter diesem Pfad.
+ * Damit nie ein Schritt ohne Verpixelung die verpixelte Kopie eines anderen überschreibt,
+ * wird die VEREINIGUNG aller Verpixelungen der Schritte mit diesem Bild eingebrannt
+ * (lieber zu viel als zu wenig unkenntlich). Doppelte Rechtecke fallen weg.
+ */
+export function unionBlurs(lists: unknown[]): Highlight[] {
+  const out: Highlight[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const h of list as Highlight[]) {
+      if (!h || typeof h !== "object" || h.type !== "blur") continue;
+      const key = [h.x, h.y, h.w, h.h].map((v) => Math.round((Number(v) || 0) * 1000)).join(",");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(h);
+    }
+  }
+  return out;
+}

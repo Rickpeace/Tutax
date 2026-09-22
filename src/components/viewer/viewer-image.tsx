@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Highlight } from "@/lib/types";
-
-const ZOOM = 2;
+import { markColor, markColorKey } from "@/lib/highlight-color";
+import { BlurFilterDef, BlurLayer, LensLayer, boxPx } from "@/components/viewer/svg-marks";
 
 /** Read-only Darstellung eines Schritt-Bildes mit Highlights, Lupe & Blur. */
 export function ViewerImage({
@@ -26,6 +26,10 @@ export function ViewerImage({
   // Markierungen erst zeigen, wenn das Bild wirklich da ist — der aspect-ratio-Wrapper
   // reserviert die Fläche sofort, sonst schweben Highlights über leerem Grund.
   const [loaded, setLoaded] = useState(false);
+  // Eindeutige SVG-IDs je Instanz: Schritt-Bild und Lightbox zeigen dieselben Markierungen
+  // gleichzeitig — doppelte IDs ließen clipPath/Marker der falschen Instanz greifen.
+  const uid = `vi${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const blurs = highlights.filter((h) => h.type === "blur");
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -68,27 +72,32 @@ export function ViewerImage({
       {loaded && size.w > 0 && (
         <svg width={size.w} height={size.h} className="pointer-events-none absolute inset-0">
           <defs>
-            <filter id="vi-blur">
-              <feGaussianBlur stdDeviation={Math.max(5, size.w * 0.012)} />
-            </filter>
-            {[...new Set(highlights.map((h) => h.color ?? "#111827"))].map((c) => (
-              <marker
-                key={c}
-                id={`vi-arrow-${c.replace("#", "")}`}
-                viewBox="0 0 10 10"
-                refX="8"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={c} />
-              </marker>
-            ))}
+            <BlurFilterDef id={`${uid}-blur`} width={size.w} />
+            {[...new Set(highlights.map((h) => markColorKey(h.color)))].map((key) => {
+              const h = highlights.find((x) => markColorKey(x.color) === key)!;
+              return (
+                <marker
+                  key={key}
+                  id={`${uid}-arrow-${key}`}
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: markColor(h.color) }} />
+                </marker>
+              );
+            })}
           </defs>
-          {highlights.map((h) => (
-            <ViewShape key={h.id} h={h} url={url} size={size} />
-          ))}
+          {/* Verpixelungen zuerst (unter Rahmen/Pfeilen), dann die übrigen Markierungen. */}
+          <BlurLayer blurs={blurs} url={url} size={size} filterId={`${uid}-blur`} idPrefix={uid} />
+          {highlights
+            .filter((h) => h.type !== "blur")
+            .map((h) => (
+              <ViewShape key={h.id} h={h} url={url} size={size} blurs={blurs} uid={uid} />
+            ))}
         </svg>
       )}
     </div>
@@ -99,107 +108,70 @@ function ViewShape({
   h,
   url,
   size,
+  blurs,
+  uid,
 }: {
   h: Highlight;
   url: string;
   size: { w: number; h: number };
+  blurs: Highlight[];
+  uid: string;
 }) {
-  const stroke = h.color ?? "#111827";
+  // Standardfarbe ⇒ Firmenfarbe des Kunden (--brand-accent); eigene Farben bleiben (Welle 51a).
+  const stroke = markColor(h.color);
   const sw = h.strokeWidth ?? 3;
-  const px = h.x * size.w;
-  const py = h.y * size.h;
-  const pw = h.w * size.w;
-  const ph = h.h * size.h;
 
   if (h.type === "arrow") {
+    const px = h.x * size.w;
+    const py = h.y * size.h;
     return (
       <line
+        data-mark={h.type}
         x1={px}
         y1={py}
-        x2={px + pw}
-        y2={py + ph}
-        stroke={stroke}
+        x2={px + h.w * size.w}
+        y2={py + h.h * size.h}
+        style={{ stroke }}
         strokeWidth={sw}
         strokeLinecap="round"
-        markerEnd={`url(#vi-arrow-${stroke.replace("#", "")})`}
+        markerEnd={`url(#${uid}-arrow-${markColorKey(h.color)})`}
       />
     );
   }
 
-  const nx = Math.min(px, px + pw);
-  const ny = Math.min(py, py + ph);
-  const nw = Math.abs(pw);
-  const nh = Math.abs(ph);
-  const clipId = `vi-clip-${h.id}`;
-  const ccx = nx + nw / 2;
-  const ccy = ny + nh / 2;
-
-  if (h.type === "blur") {
-    return (
-      <g>
-        <clipPath id={clipId}>
-          <rect x={nx} y={ny} width={nw} height={nh} rx={h.rounded ? 4 : 0} />
-        </clipPath>
-        <image
-          href={url}
-          x={0}
-          y={0}
-          width={size.w}
-          height={size.h}
-          preserveAspectRatio="none"
-          clipPath={`url(#${clipId})`}
-          filter="url(#vi-blur)"
-        />
-      </g>
-    );
-  }
-
+  const b = boxPx(h, size);
   const shape =
     h.type === "ellipse" ? (
       <ellipse
-        cx={ccx}
-        cy={ccy}
-        rx={nw / 2}
-        ry={nh / 2}
+        data-mark={h.type}
+        cx={b.x + b.w / 2}
+        cy={b.y + b.h / 2}
+        rx={b.w / 2}
+        ry={b.h / 2}
         fill="none"
-        stroke={stroke}
+        style={{ stroke }}
         strokeWidth={sw}
       />
     ) : (
       <rect
-        x={nx}
-        y={ny}
-        width={nw}
-        height={nh}
+        data-mark={h.type}
+        x={b.x}
+        y={b.y}
+        width={b.w}
+        height={b.h}
         rx={h.rounded ? 6 : 0}
         fill="none"
-        stroke={stroke}
+        style={{ stroke }}
         strokeWidth={sw}
       />
     );
 
   if (!h.zoom) return shape;
 
-  // Lupe: Inhalt unter der Form 2× vergrößert
+  // Lupe: Inhalt unter der Form 2× vergrößert (inkl. Verpixelungen)
   return (
     <g>
-      <clipPath id={clipId}>
-        {h.type === "ellipse" ? (
-          <ellipse cx={ccx} cy={ccy} rx={nw / 2} ry={nh / 2} />
-        ) : (
-          <rect x={nx} y={ny} width={nw} height={nh} rx={h.rounded ? 6 : 0} />
-        )}
-      </clipPath>
-      <rect x={nx} y={ny} width={nw} height={nh} fill="#fff" clipPath={`url(#${clipId})`} />
-      <image
-        href={url}
-        x={ccx * (1 - ZOOM)}
-        y={ccy * (1 - ZOOM)}
-        width={size.w * ZOOM}
-        height={size.h * ZOOM}
-        preserveAspectRatio="none"
-        clipPath={`url(#${clipId})`}
-      />
+      <LensLayer h={h} url={url} size={size} blurs={blurs} filterId={`${uid}-blur`} idPrefix={uid} />
       {shape}
     </g>
   );

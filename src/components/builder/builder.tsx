@@ -52,6 +52,23 @@ function useMedia(query: string) {
   return match;
 }
 
+/** Vorbelegung eines neuen Schritts mit einem vorhandenen Bild (Welle 51a). */
+type ImageSeed = {
+  fields: Pick<Step, "image_path" | "image_width" | "image_height" | "highlights">;
+  server: { imageFromStepId: string; highlights: Highlight[] };
+};
+
+/** Verpixelungen eines Schritts als Vorschlag für einen Folgeschritt (neue IDs, prüfen!). */
+function inheritedBlursFrom(step: Step): Highlight[] {
+  return (step.highlights ?? [])
+    .filter((h) => h.type === "blur")
+    .map((h) => {
+      const copy: Highlight = { ...h, id: crypto.randomUUID(), suggested: true, suggestedFrom: "previous" };
+      delete copy.zoom;
+      return copy;
+    });
+}
+
 function mkStep(id: string, tutorialId: string, position: number): Step {
   return {
     id,
@@ -187,14 +204,15 @@ export function Builder({
   }, [steps, branches, tutorialId, persist]);
 
   // §7.4: Schritt gezielt in einen Ast einfügen (B → N → altes Ziel).
-  function insertIntoBranch(branchId: string) {
+  // `seed` (Welle 51a): Bild eines Schritts + übernommene Verpixelung für den neuen Schritt.
+  function insertIntoBranch(branchId: string, seed?: ImageSeed) {
     const branch = branches.find((b) => b.id === branchId);
     if (!branch) return;
     const id = crypto.randomUUID();
     const weiterId = crypto.randomUUID();
     const position = steps.reduce((m, s) => Math.max(m, s.position), 0) + 1;
     const oldTarget = branch.target_step_id;
-    setSteps((prev) => [...prev, mkStep(id, tutorialId, position)]);
+    setSteps((prev) => [...prev, { ...mkStep(id, tutorialId, position), ...(seed?.fields ?? {}) }]);
     setBranches((prev) =>
       prev
         .map((b) => (b.id === branchId ? { ...b, target_step_id: id } : b))
@@ -209,7 +227,7 @@ export function Builder({
         }),
     );
     persist(async () => {
-      await addStep(tutorialId, { id, title: "Neuer Schritt", position }, false, null);
+      await addStep(tutorialId, { id, title: "Neuer Schritt", position }, false, null, seed?.server);
       await updateBranch(branchId, { target_step_id: id });
       await addBranch({
         id: weiterId,
@@ -224,18 +242,18 @@ export function Builder({
   }
 
   // §7.4: Schritt nach einer Karte einfügen. Linear -> dazwischen; Blatt -> anhängen.
-  function insertAfter(stepId: string) {
+  function insertAfter(stepId: string, seed?: ImageSeed) {
     const own = branches
       .filter((b) => b.step_id === stepId)
       .sort((a, b) => a.position - b.position);
     if (own.length) {
-      insertIntoBranch(own[0].id);
+      insertIntoBranch(own[0].id, seed);
       return;
     }
     const id = crypto.randomUUID();
     const weiterId = crypto.randomUUID();
     const position = steps.reduce((m, s) => Math.max(m, s.position), 0) + 1;
-    setSteps((prev) => [...prev, mkStep(id, tutorialId, position)]);
+    setSteps((prev) => [...prev, { ...mkStep(id, tutorialId, position), ...(seed?.fields ?? {}) }]);
     setBranches((prev) => [
       ...prev,
       {
@@ -254,9 +272,34 @@ export function Builder({
         { id, title: "Neuer Schritt", position },
         false,
         { branchId: weiterId, fromStepId: stepId },
+        seed?.server,
       ),
     );
     setSelectedId(id);
+  }
+
+  // ── Welle 51a: „Bild in neuen Schritt übernehmen“ ─────────────────────────────
+  // Legt direkt NACH dem Schritt einen neuen an, der DASSELBE Bild (gleicher image_path +
+  // Maße) nutzt. Markierungen werden NICHT übernommen, Verpixelungen schon — als Vorschlag
+  // (suggested + suggestedFrom), sichtbar und mit einem Klick entfernbar.
+  function duplicateImageToNewStep(stepId: string) {
+    const src = steps.find((s) => s.id === stepId);
+    if (!src?.image_path) return;
+    const blurs = inheritedBlursFrom(src);
+    insertAfter(stepId, {
+      fields: {
+        image_path: src.image_path,
+        image_width: src.image_width,
+        image_height: src.image_height,
+        highlights: blurs,
+      },
+      server: { imageFromStepId: src.id, highlights: blurs },
+    });
+    toast.success(
+      blurs.length
+        ? "Neuer Schritt mit demselben Bild – Verpixelung übernommen, bitte prüfen"
+        : "Neuer Schritt mit demselben Bild angelegt",
+    );
   }
 
   const handleSetDecision = useCallback(
@@ -486,6 +529,20 @@ export function Builder({
     [swapPair, outgoingOf, incomingOf, rootId, tutorialId, persist],
   );
 
+  // Welle 51a: „voriger Schritt“ = Vorgänger im Ablauf (eingehende Kante), sonst der
+  // vorherige in der Fluss-Reihenfolge. Ref, weil `ordered` erst weiter unten entsteht.
+  const orderedRef = useRef<Step[]>([]);
+  const previousOf = useCallback(
+    (stepId: string): Step | null => {
+      const incoming = branches.find((b) => b.target_step_id === stepId);
+      if (incoming) return steps.find((s) => s.id === incoming.step_id) ?? null;
+      const list = orderedRef.current;
+      const idx = list.findIndex((s) => s.id === stepId);
+      return idx > 0 ? list[idx - 1] : null;
+    },
+    [branches, steps],
+  );
+
   const setStepImage = useCallback(
     (
       stepId: string,
@@ -495,12 +552,34 @@ export function Builder({
         image_height: number | null;
       },
     ) => {
-      setSteps((prev) => prev.map((s) => (s.id === stepId ? { ...s, ...img } : s)));
+      // Verpixelung vom vorigen Schritt übernehmen (Welle 51a): nur wenn dieser Schritt noch
+      // keine eigene hat und das Bild aus derselben Quelle stammt (gleiche Bildmaße — einfache,
+      // ehrliche Heuristik). Immer als Vorschlag, nie stillschweigend.
+      const cur = steps.find((s) => s.id === stepId);
+      const prev = previousOf(stepId);
+      let highlights: Highlight[] | null = null;
+      if (
+        cur &&
+        prev &&
+        img.image_path &&
+        img.image_width &&
+        img.image_height &&
+        prev.image_width === img.image_width &&
+        prev.image_height === img.image_height &&
+        !(cur.highlights ?? []).some((h) => h.type === "blur")
+      ) {
+        const blurs = inheritedBlursFrom(prev);
+        if (blurs.length) highlights = [...(cur.highlights ?? []), ...blurs];
+      }
+      setSteps((p) =>
+        p.map((s) => (s.id === stepId ? { ...s, ...img, ...(highlights ? { highlights } : {}) } : s)),
+      );
       // Thumbnail neu laden lassen, auch wenn der Pfad identisch bleibt.
       setImgBust((m) => ({ ...m, [stepId]: (m[stepId] ?? 0) + 1 }));
-      persist(() => updateStep(stepId, img));
+      persist(() => updateStep(stepId, highlights ? { ...img, highlights } : img));
+      if (highlights) toast("Verpixelung vom vorigen Schritt übernommen – bitte prüfen");
     },
-    [persist],
+    [persist, steps, previousOf],
   );
 
   const setStepHighlights = useCallback(
@@ -543,6 +622,9 @@ export function Builder({
     return [...inFlow, ...rest];
   }, [tree, steps]);
   const selIndex = selectedId ? ordered.findIndex((s) => s.id === selectedId) : -1;
+  useEffect(() => {
+    orderedRef.current = ordered;
+  }, [ordered]);
 
   // ── „Ab hier mit Extension aufnehmen" (Welle 27) ─────────────────────────────
   // Einen Einfügepunkt in ein Aufnahme-Ziel übersetzen (Anker + menschlich lesbare
@@ -616,6 +698,7 @@ export function Builder({
         onDeleteStep={handleDeleteStep}
         onOpenStep={(id) => setSelectedId(id)}
         onInsertIntoBranch={insertIntoBranch}
+        onDuplicateImage={duplicateImageToNewStep}
         onClose={withClose ? closeEditor : undefined}
       />
     ) : null;
@@ -672,7 +755,12 @@ export function Builder({
 
         {wide && selectedStep && (
           // top-[4.5rem] = unter dem 56px hohen, stickyen App-Header (sonst verschwindet der Panel-Kopf dahinter).
-          <aside className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[440px] shrink-0 flex-col self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm xl:w-[520px]">
+          // Breite fließend (Welle 51a, Kundin Susann): Anteil der Seitenbreite statt fester
+          // 440/520 px — zwischen 1024 und 1440 px weder Überlauf noch gequetschter Ablauf.
+          <aside
+            data-testid="step-editor-panel"
+            className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[clamp(360px,44%,600px)] shrink-0 flex-col self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          >
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
               {renderPanel(true)}
             </div>

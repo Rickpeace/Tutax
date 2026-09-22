@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   MousePointer2,
   Square,
@@ -9,32 +9,125 @@ import {
   EyeOff,
   Trash2,
   ZoomIn,
+  AlignHorizontalJustifyCenter,
+  AlignVerticalJustifyCenter,
+  Check,
 } from "lucide-react";
 import type { Highlight } from "@/lib/types";
+import { DEFAULT_HIGHLIGHT_COLOR, markColor, markColorKey } from "@/lib/highlight-color";
+import { BlurFilterDef, BlurLayer, LensLayer, boxPx } from "@/components/viewer/svg-marks";
 
 type Tool = "select" | "rect" | "ellipse" | "arrow" | "blur";
 type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | "start" | "end";
+type Guides = { x: number[]; y: number[] };
 
-const COLORS = ["#111827", "#d6455d", "#3d4ee6", "#0f9d72"];
+// Erstes Feld = Standard: erscheint auf der Hilfe-Seite in der Firmenfarbe des Kunden
+// (lib/highlight-color.ts). Dunkel ist jetzt die Tinte #33291f (bleibt bewusst dunkel).
+const COLORS: { value: string; label: string }[] = [
+  { value: DEFAULT_HIGHLIGHT_COLOR, label: "Firmenfarbe (Standard) – auf der Hilfe-Seite in Ihrer Akzentfarbe" },
+  { value: "#33291f", label: "Dunkel" },
+  { value: "#d6455d", label: "Rot" },
+  { value: "#3d4ee6", label: "Blau" },
+  { value: "#0f9d72", label: "Grün" },
+];
 const MIN = 0.01;
-const ZOOM = 2;
+// Magnetisches Einrasten (Welle 51a): Toleranz relativ zur Bildgröße.
+const SNAP = 0.015;
+const NO_GUIDES: Guides = { x: [], y: [] };
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 // Werkzeug + Farbe überleben den Schrittwechsel (Modul-Gedächtnis für die Sitzung):
 // wer zehn Schritte hintereinander markiert, will nicht jedes Mal neu wählen.
 let lastTool: Tool = "rect";
-let lastColor = COLORS[0];
+let lastColor = COLORS[0].value;
 
 // Auto-Schwärzung (Welle 28): Sobald der Autor die Markierungen eines Schritts speichert
 // (= irgendeine Änderung), gelten die automatisch vorgeschlagenen Blurs als GEPRÜFT — der
 // `suggested`-Marker fällt weg (Feld ganz entfernen, damit die DB kein `suggested:false` hält).
+// Gilt genauso für vom vorigen Schritt übernommene Verpixelungen (Welle 51a, suggestedFrom).
 function markReviewed(list: Highlight[]): Highlight[] {
   return list.map((h) => {
-    if (!h.suggested) return h;
+    if (!h.suggested && !h.suggestedFrom) return h;
     const next = { ...h };
     delete next.suggested;
+    delete next.suggestedFrom;
     return next;
   });
+}
+
+/** Kanten + Mitte einer Markierung (für das Einrasten an anderen Markierungen). */
+function anchorsOf(h: Highlight): { x: number[]; y: number[] } {
+  const x1 = Math.min(h.x, h.x + h.w);
+  const x2 = Math.max(h.x, h.x + h.w);
+  const y1 = Math.min(h.y, h.y + h.h);
+  const y2 = Math.max(h.y, h.y + h.h);
+  return { x: [x1, (x1 + x2) / 2, x2], y: [y1, (y1 + y2) / 2, y2] };
+}
+
+/** Bester Einrast-Versatz: welcher eigene Anker liegt am nächsten an welchem Ziel? */
+function bestSnap(own: number[], targets: number[]): { delta: number; line: number } | null {
+  let best: { delta: number; line: number } | null = null;
+  for (const a of own) {
+    for (const t of targets) {
+      const d = t - a;
+      if (Math.abs(d) <= SNAP && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, line: t };
+    }
+  }
+  return best;
+}
+
+/**
+ * Einrasten einer Box (Rechteck/Kreis/Verpixelung) beim Verschieben, Größe-Ändern oder
+ * Aufziehen: an der Bildmitte (0,5) und an Kanten/Mitten der anderen Markierungen.
+ * handle null = Verschieben (ganze Box), sonst die gezogene(n) Kante(n).
+ */
+export function snapBox(
+  box: Highlight,
+  handle: Handle | null,
+  others: Highlight[],
+): { box: Highlight; guides: Guides } {
+  const tx = [0.5];
+  const ty = [0.5];
+  for (const o of others) {
+    const a = anchorsOf(o);
+    tx.push(...a.x);
+    ty.push(...a.y);
+  }
+  const guides: Guides = { x: [], y: [] };
+  const { w, h } = box;
+  let { x, y } = box;
+
+  if (handle === null) {
+    const a = anchorsOf({ ...box, x, y });
+    const sx = bestSnap(a.x, tx);
+    if (sx) {
+      x = Math.min(Math.max(0, 1 - w), Math.max(0, x + sx.delta));
+      guides.x.push(sx.line);
+    }
+    const sy = bestSnap(a.y, ty);
+    if (sy) {
+      y = Math.min(Math.max(0, 1 - h), Math.max(0, y + sy.delta));
+      guides.y.push(sy.line);
+    }
+    return { box: { ...box, x, y }, guides };
+  }
+
+  // Größe ändern / Aufziehen: nur die bewegten Kanten rasten ein.
+  let left = x;
+  let right = x + w;
+  let top = y;
+  let bottom = y + h;
+  const snapEdge = (v: number, targets: number[], axis: "x" | "y") => {
+    const s = bestSnap([v], targets);
+    if (!s) return v;
+    guides[axis].push(s.line);
+    return clamp01(v + s.delta);
+  };
+  if (handle.includes("w")) left = snapEdge(left, tx, "x");
+  if (handle.includes("e")) right = snapEdge(right, tx, "x");
+  if (handle.includes("n")) top = snapEdge(top, ty, "y");
+  if (handle.includes("s")) bottom = snapEdge(bottom, ty, "y");
+  return { box: { ...box, x: left, y: top, w: right - left, h: bottom - top }, guides };
 }
 
 export function HighlightEditor({
@@ -62,12 +155,16 @@ export function HighlightEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Highlight | null>(null);
   const [live, setLive] = useState<Highlight | null>(null);
+  const [guides, setGuides] = useState<Guides>(NO_GUIDES);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // Eindeutige SVG-IDs: kleiner Editor und Großansicht dürfen sich nie IDs teilen.
+  const uid = `he${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // Jede gespeicherte Highlight-Liste läuft durch markReviewed: eine Änderung an den
   // Markierungen gilt als Prüfung der Auto-Schwärzungen (Welle 28).
   const commit = (list: Highlight[]) => onChange(markReviewed(list));
-  const hasSuggested = highlights.some((h) => h.suggested);
+  const inherited = highlights.filter((h) => h.suggested && h.suggestedFrom === "previous");
+  const hasAutoSuggested = highlights.some((h) => h.suggested && !h.suggestedFrom);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const drawStart = useRef<{ x: number; y: number } | null>(null);
@@ -174,17 +271,37 @@ export function HighlightEditor({
   }
 
   function onCanvasMove(e: React.PointerEvent) {
+    // Alt gedrückt = frei ziehen, ohne Einrasten.
+    const snapOn = !e.altKey;
     if (draft && drawStart.current) {
       const { x, y } = rel(e);
-      setDraft({ ...draft, w: x - drawStart.current.x, h: y - drawStart.current.y });
+      let next: Highlight = { ...draft, w: x - drawStart.current.x, h: y - drawStart.current.y };
+      if (snapOn && next.type !== "arrow") {
+        // Aufziehen = die „bewegte Ecke“ rastet ein (Richtung je nach Zugrichtung).
+        const handle = `${next.h < 0 ? "n" : "s"}${next.w < 0 ? "w" : "e"}` as Handle;
+        const n = normalize(next);
+        const r = snapBox(n, handle, highlights);
+        next = r.box;
+        setGuides(r.guides);
+      }
+      setDraft(next);
     } else if (manip.current) {
       const { x, y } = rel(e);
       const m = manip.current;
-      setLive(applyManip(m.orig, m.handle, x - m.x, y - m.y));
+      let next = applyManip(m.orig, m.handle, x - m.x, y - m.y);
+      if (snapOn && next.type !== "arrow") {
+        const r = snapBox(next, m.handle, highlights.filter((h) => h.id !== next.id));
+        next = r.box;
+        setGuides(r.guides);
+      } else {
+        setGuides(NO_GUIDES);
+      }
+      setLive(next);
     }
   }
 
   function onCanvasUp() {
+    setGuides(NO_GUIDES);
     if (draft) {
       const n = normalize(draft);
       if (Math.abs(n.w) >= MIN || Math.abs(n.h) >= MIN) {
@@ -239,9 +356,25 @@ export function HighlightEditor({
     commit(highlights.map((h) => (h.id === selectedId ? { ...h, zoom: !h.zoom } : h)));
   }
 
+  // Zentrieren (Welle 51a): Mitte der Markierung auf die Bildmitte — x = (1 − w) / 2.
+  function center(axis: "x" | "y") {
+    if (!selectedId) return;
+    commit(
+      highlights.map((h) => {
+        if (h.id !== selectedId) return h;
+        return axis === "x" ? { ...h, x: 0.5 - h.w / 2 } : { ...h, y: 0.5 - h.h / 2 };
+      }),
+    );
+  }
+
   const selected = highlights.find((h) => h.id === selectedId) ?? null;
   const rendered = highlights.map((h) => (live && h.id === live.id ? live : h));
   const shapes = draft ? [...rendered, draft] : rendered;
+  const blurs = shapes.filter((h) => h.type === "blur");
+  // Je Farb-Schlüssel EIN Pfeilspitzen-Marker (alle Standardfarben teilen sich „default“).
+  const markerColors = [
+    ...new Map([...shapes.map((h) => h.color), color].map((c) => [markColorKey(c), c])).values(),
+  ];
 
   return (
     <div className="space-y-2">
@@ -272,43 +405,68 @@ export function HighlightEditor({
         <div className="flex gap-1">
           {COLORS.map((c) => (
             <button
-              key={c}
+              key={c.value}
               type="button"
-              onClick={() => setColor(c)}
-              className={`size-5 rounded-full border-2 ${color === c ? "border-ink" : "border-transparent"}`}
-              style={{ background: c }}
-              aria-label={`Farbe ${c}`}
+              onClick={() => setColor(c.value)}
+              className={`size-5 rounded-full border-2 ${color === c.value ? "border-ink" : "border-transparent"}`}
+              style={{ background: c.value }}
+              title={c.label}
+              aria-label={`Farbe: ${c.label}`}
+              aria-pressed={color === c.value}
             />
           ))}
         </div>
-        {selected && (
-          <div className="ml-auto flex items-center gap-1">
-            {selected.type !== "arrow" && (
-              <button
-                type="button"
-                onClick={toggleZoom}
-                title="Diesen Bereich als Lupe vergrößert zeigen"
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                  selected.zoom ? "bg-accent text-primary" : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                <ZoomIn className="size-3.5" /> Lupe
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={deleteSelected}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-no hover:bg-no-soft"
-            >
-              <Trash2 className="size-3.5" /> Löschen
-            </button>
-          </div>
-        )}
+        {/* Aktionen für die ausgewählte Form: IMMER gerendert (nur deaktiviert ohne Auswahl),
+            damit die Leiste beim Anklicken einer Form nicht umbricht und das Bild unter dem
+            Mauszeiger verrutscht (sonst springt die Form beim Ziehen). */}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => center("x")}
+            disabled={!selected}
+            title="Waagerecht auf die Bildmitte zentrieren"
+            aria-label="Waagerecht zentrieren"
+            className="flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+          >
+            <AlignHorizontalJustifyCenter className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => center("y")}
+            disabled={!selected}
+            title="Senkrecht auf die Bildmitte zentrieren"
+            aria-label="Senkrecht zentrieren"
+            className="flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+          >
+            <AlignVerticalJustifyCenter className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleZoom}
+            disabled={!selected || selected.type === "arrow" || selected.type === "blur"}
+            title="Diesen Bereich als Lupe vergrößert zeigen"
+            aria-pressed={!!selected?.zoom}
+            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-35 ${
+              selected?.zoom ? "bg-accent text-primary" : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <ZoomIn className="size-3.5" /> Lupe
+          </button>
+          <button
+            type="button"
+            onClick={deleteSelected}
+            disabled={!selected}
+            title="Ausgewählte Form löschen (Entf)"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-no hover:bg-no-soft disabled:pointer-events-none disabled:opacity-35"
+          >
+            <Trash2 className="size-3.5" /> Löschen
+          </button>
+        </div>
       </div>
 
       {/* Auto-Schwärzung (Welle 28): dezenter Hinweis, solange vorgeschlagene Blurs
           ungeprüft sind. Verschwindet, sobald der Autor die Markierungen speichert. */}
-      {hasSuggested && (
+      {hasAutoSuggested && (
         <div className="flex items-start gap-2 rounded-lg border-2 border-primary/30 bg-accent px-3 py-2 text-xs text-ink">
           <EyeOff className="mt-0.5 size-3.5 shrink-0 text-primary" />
           <span>
@@ -319,9 +477,40 @@ export function HighlightEditor({
         </div>
       )}
 
+      {/* Welle 51a: vom vorigen Schritt übernommene Verpixelung — nie stillschweigend:
+          sichtbar, mit einem Klick bestätigen oder entfernen. */}
+      {inherited.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-lg border-2 border-primary/30 bg-accent px-3 py-2 text-xs text-ink"
+          data-testid="inherited-blur-hint"
+        >
+          <EyeOff className="size-3.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <b>Verpixelung vom vorigen Schritt übernommen – bitte prüfen.</b>
+          </span>
+          <button
+            type="button"
+            onClick={() => commit(highlights)}
+            className="flex items-center gap-1 rounded-md bg-card px-2 py-1 font-bold text-ink hover:bg-muted"
+          >
+            <Check className="size-3.5" /> Passt
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              commit(highlights.filter((h) => !(h.suggested && h.suggestedFrom === "previous")))
+            }
+            className="flex items-center gap-1 rounded-md bg-card px-2 py-1 font-bold text-no hover:bg-no-soft"
+          >
+            <Trash2 className="size-3.5" /> Entfernen
+          </button>
+        </div>
+      )}
+
       {/* Bild + Overlay */}
       <div
         ref={wrapRef}
+        data-testid="highlight-canvas"
         className="relative overflow-hidden rounded-lg border border-border select-none"
         style={{ touchAction: "none", cursor: tool === "select" ? "default" : "crosshair" }}
         onPointerDown={onCanvasDown}
@@ -329,14 +518,15 @@ export function HighlightEditor({
         onPointerUp={onCanvasUp}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt="Screenshot" className="block w-full" draggable={false} />
+        <img src={url} alt="Screenshot" className="block w-full max-w-full" draggable={false} />
         {size.w > 0 && (
           <svg width={size.w} height={size.h} className="pointer-events-none absolute inset-0">
             <defs>
-              {COLORS.map((c) => (
+              <BlurFilterDef id={`${uid}-blur`} width={size.w} />
+              {markerColors.map((c) => (
                 <marker
-                  key={c}
-                  id={`arrow-${c.replace("#", "")}`}
+                  key={markColorKey(c)}
+                  id={`${uid}-arrow-${markColorKey(c)}`}
                   viewBox="0 0 10 10"
                   refX="8"
                   refY="5"
@@ -344,19 +534,50 @@ export function HighlightEditor({
                   markerHeight="6"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill={c} />
+                  <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: markColor(c) }} />
                 </marker>
               ))}
             </defs>
+            {/* Echte Unschärfe wie auf der Hilfe-Seite (vorher: nur halbdurchsichtige Fläche). */}
+            <BlurLayer blurs={blurs} url={url} size={size} filterId={`${uid}-blur`} idPrefix={uid} />
             {shapes.map((h) => (
               <Shape
                 key={h.id}
                 h={h}
                 url={url}
                 size={size}
+                uid={uid}
+                blurs={blurs}
                 selected={selectedId === h.id && h.id !== draft?.id}
                 onDown={(e) => startManip(e, h.id, null)}
                 onHandle={(e, handle) => startManip(e, h.id, handle)}
+              />
+            ))}
+            {/* Hilfslinien beim Einrasten */}
+            {guides.x.map((gx) => (
+              <line
+                key={`gx${gx}`}
+                data-testid="snap-guide"
+                x1={gx * size.w}
+                x2={gx * size.w}
+                y1={0}
+                y2={size.h}
+                stroke="#18a999"
+                strokeWidth={1}
+                strokeDasharray="5 4"
+              />
+            ))}
+            {guides.y.map((gy) => (
+              <line
+                key={`gy${gy}`}
+                data-testid="snap-guide"
+                x1={0}
+                x2={size.w}
+                y1={gy * size.h}
+                y2={gy * size.h}
+                stroke="#18a999"
+                strokeWidth={1}
+                strokeDasharray="5 4"
               />
             ))}
           </svg>
@@ -365,7 +586,8 @@ export function HighlightEditor({
       <p className="text-xs text-muted-foreground">
         Werkzeug wählen, dann über dem Bild ziehen. Form anklicken zum Verschieben,
         an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern.
-        „Verpixeln“ macht sensible Daten unkenntlich.
+        „Verpixeln“ macht sensible Daten unkenntlich. Formen rasten an der Bildmitte und an
+        anderen Markierungen ein (mit gedrückter Alt-Taste frei ziehen).
       </p>
     </div>
   );
@@ -375,6 +597,8 @@ function Shape({
   h,
   url,
   size,
+  uid,
+  blurs,
   selected,
   onDown,
   onHandle,
@@ -382,26 +606,26 @@ function Shape({
   h: Highlight;
   url: string;
   size: { w: number; h: number };
+  uid: string;
+  blurs: Highlight[];
   selected: boolean;
   onDown: (e: React.PointerEvent) => void;
   onHandle: (e: React.PointerEvent, handle: Handle) => void;
 }) {
   const sw = h.strokeWidth ?? 3;
-  const stroke = h.color ?? "#111827";
+  const stroke = markColor(h.color);
   const common = {
     onPointerDown: onDown,
-    style: { cursor: "move", pointerEvents: "all" as const },
-    stroke,
+    style: { cursor: "move", pointerEvents: "all" as const, stroke },
     strokeWidth: sw,
     fill: "transparent",
   };
 
-  const px = h.x * size.w;
-  const py = h.y * size.h;
-  const pw = h.w * size.w;
-  const ph = h.h * size.h;
-
   if (h.type === "arrow") {
+    const px = h.x * size.w;
+    const py = h.y * size.h;
+    const pw = h.w * size.w;
+    const ph = h.h * size.h;
     return (
       <g>
         <line
@@ -410,7 +634,7 @@ function Shape({
           y1={py}
           x2={px + pw}
           y2={py + ph}
-          markerEnd={`url(#arrow-${stroke.replace("#", "")})`}
+          markerEnd={`url(#${uid}-arrow-${markColorKey(h.color)})`}
           strokeLinecap="round"
         />
         <line
@@ -433,14 +657,11 @@ function Shape({
     );
   }
 
-  const nx = Math.min(px, px + pw);
-  const ny = Math.min(py, py + ph);
-  const nw = Math.abs(pw);
-  const nh = Math.abs(ph);
+  const { x: nx, y: ny, w: nw, h: nh } = boxPx(h, size);
 
   const lens =
     h.zoom && (h.type === "rect" || h.type === "ellipse") ? (
-      <Lens id={h.id} type={h.type} url={url} nx={nx} ny={ny} nw={nw} nh={nh} rounded={!!h.rounded} size={size} />
+      <LensLayer h={h} url={url} size={size} blurs={blurs} filterId={`${uid}-blur`} idPrefix={uid} />
     ) : null;
 
   const handles = selected ? <BoxHandles nx={nx} ny={ny} nw={nw} nh={nh} onHandle={onHandle} /> : null;
@@ -456,17 +677,21 @@ function Shape({
   }
 
   if (h.type === "blur") {
+    // Die Unschärfe selbst zeichnet der BlurLayer darunter; hier nur die greifbare Fläche
+    // (Verschieben/Griffe) mit dezentem Rand, damit der Autor den Bereich erkennt.
     return (
       <g>
         <rect
+          data-blur-frame={h.id}
           x={nx}
           y={ny}
           width={nw}
           height={nh}
           rx={h.rounded ? 4 : 0}
-          fill="rgba(15,23,42,0.45)"
-          stroke="rgba(15,23,42,0.6)"
+          fill="transparent"
+          stroke={h.suggested ? "#ef6a4e" : "rgba(51,41,31,0.45)"}
           strokeWidth={1}
+          strokeDasharray="4 3"
           style={{ cursor: "move", pointerEvents: "all" }}
           onPointerDown={onDown}
         />
@@ -551,53 +776,6 @@ function Dot({
         fill="#fff"
         stroke="#3d4ee6"
         strokeWidth={1.5}
-      />
-    </g>
-  );
-}
-
-function Lens({
-  id,
-  type,
-  url,
-  nx,
-  ny,
-  nw,
-  nh,
-  rounded,
-  size,
-}: {
-  id: string;
-  type: "rect" | "ellipse";
-  url: string;
-  nx: number;
-  ny: number;
-  nw: number;
-  nh: number;
-  rounded: boolean;
-  size: { w: number; h: number };
-}) {
-  const clipId = `lens-${id}`;
-  const ccx = nx + nw / 2;
-  const ccy = ny + nh / 2;
-  return (
-    <g style={{ pointerEvents: "none" }}>
-      <clipPath id={clipId}>
-        {type === "ellipse" ? (
-          <ellipse cx={ccx} cy={ccy} rx={nw / 2} ry={nh / 2} />
-        ) : (
-          <rect x={nx} y={ny} width={nw} height={nh} rx={rounded ? 6 : 0} />
-        )}
-      </clipPath>
-      <rect x={nx} y={ny} width={nw} height={nh} fill="#fff" clipPath={`url(#${clipId})`} />
-      <image
-        href={url}
-        x={ccx * (1 - ZOOM)}
-        y={ccy * (1 - ZOOM)}
-        width={size.w * ZOOM}
-        height={size.h * ZOOM}
-        preserveAspectRatio="none"
-        clipPath={`url(#${clipId})`}
       />
     </g>
   );

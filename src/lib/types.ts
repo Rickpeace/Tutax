@@ -64,6 +64,9 @@ export type Highlight = {
   // Bleibt gesetzt, bis der Autor die Markierungen des Schritts einmal geprüft/gespeichert
   // hat. Rein additiv — Viewer/Brenn-Logik ignorieren das Feld (Blur wird normal behandelt).
   suggested?: boolean;
+  // Welle 51a: Herkunft eines Vorschlags. "previous" = Verpixelung vom vorigen Schritt (gleiche
+  // Bildquelle) übernommen. Nur zusammen mit `suggested`; fällt beim Prüfen mit weg.
+  suggestedFrom?: "previous";
 };
 
 // ── Bedingte Schritte (Welle 42) ──────────────────────────────────────────────

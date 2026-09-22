@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X, Film } from "lucide-react";
+import { ImagePlus, Loader2, RefreshCw, Trash2, Maximize2, X, Film, CopyPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,6 +29,7 @@ export function ImageField({
   hasSourceVideo = false,
   onSetImage,
   onSetHighlights,
+  onDuplicateImage,
 }: {
   tutorialId: string;
   stepId: string;
@@ -46,6 +47,8 @@ export function ImageField({
     },
   ) => void;
   onSetHighlights: (stepId: string, highlights: Highlight[]) => void;
+  /** Welle 51a: „Bild in neuen Schritt übernehmen“ (ein Screenshot für mehrere Schritte). */
+  onDuplicateImage?: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -245,6 +248,17 @@ export function ImageField({
                   <Film className="size-4" />
                 )}{" "}
                 Bild aus Video wählen
+              </Button>
+            )}
+            {onDuplicateImage && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={onDuplicateImage}
+                title="Legt direkt nach diesem Schritt einen neuen Schritt mit demselben Bild an. Markierungen bleiben hier, Verpixelungen werden als Vorschlag übernommen."
+              >
+                <CopyPlus className="size-4" /> Bild in neuen Schritt übernehmen
               </Button>
             )}
             <Button

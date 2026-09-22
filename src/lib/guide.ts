@@ -9,6 +9,7 @@
 import "server-only";
 import type { Highlight, StepCondition, StepInteraction, StepJump } from "@/lib/types";
 import { displayKeyDe, dropLabelOf, hoverLabelOf } from "@/lib/interaction-text";
+import { DEFAULT_HIGHLIGHT_COLOR } from "@/lib/highlight-color";
 
 // Obergrenzen (Kostenbremse + Speicher): eine Anleitung hat höchstens so viele Schritte.
 export const MAX_GUIDE_STEPS = 40;
@@ -16,7 +17,8 @@ const LABEL_MAX = 60;
 const TITLE_MAX = 60;
 
 // Primärfarbe (Koralle, Design-Handoff 07/2026) für das eine Highlight-Rechteck je Schritt.
-export const GUIDE_HIGHLIGHT_COLOR = "#ef6a4e";
+// Gilt als Standardfarbe -> erscheint auf der Hilfe-Seite in der Firmenfarbe (lib/highlight-color.ts).
+export const GUIDE_HIGHLIGHT_COLOR = DEFAULT_HIGHLIGHT_COLOR;
 
 export type GuideAction = "click" | "type";
 
