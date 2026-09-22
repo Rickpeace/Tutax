@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 import { InviteConfirm } from "@/components/auth/invite-confirm";
+import { INVITE_VALID_DAYS, isInviteExpired } from "@/lib/invitations";
 
 export const metadata = { title: "Einladung", robots: { index: false } };
 
@@ -19,7 +20,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   const { data: inv } = await admin
     .from("invitations")
-    .select("id, account_id, role, status, email, accounts(name)")
+    .select("id, account_id, role, status, email, created_at, accounts(name)")
     .eq("token", token)
     .maybeSingle();
 
@@ -32,6 +33,20 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   // oder zurückgezogene Links -> eingeloggte Nutzer in die App, sonst zur Anmeldung.
   // (verhindert Re-Join eines entfernten Mitglieds über einen alten Link).
   if (!inv || inv.status !== "pending") redirect(user ? "/app" : "/login?error=invite");
+  // Abgelaufen (14 Tage, lib/invitations.ts) -> erklären statt Formular zeigen.
+  if (isInviteExpired(inv.created_at)) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col justify-center px-5 py-10">
+        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-extrabold text-ink">Einladung abgelaufen</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Einladungen sind {INVITE_VALID_DAYS} Tage gültig. Bitten Sie den Inhaber, Ihnen die Einladung neu zu
+            senden.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
   const role = inv.role ?? "editor";

@@ -65,6 +65,55 @@ function extractAnswer(raw: string): { text: string; closed: boolean } | null {
   return { text: out, closed };
 }
 
+/**
+ * Themenüberblick des Kontos für die off_topic-Entscheidung: Titel aller öffentlich
+ * veröffentlichten Anleitungen, aktiven Standard-Anleitungen, Kategorien und
+ * veröffentlichten Wissensartikel. Daraus leitet die KI das Tätigkeitsfeld ab
+ * (Steply ist branchenneutral — eine Kanzlei und eine Software-Firma grenzen
+ * unterschiedlich ab). Immer aktuell, kein zusätzlicher KI-Aufruf. Wirft nie.
+ */
+async function loadTopicOverview(
+  admin: ReturnType<typeof createAdminClient>,
+  accountId: string,
+): Promise<string> {
+  try {
+    const [tuts, cats, arts, tpls] = await Promise.all([
+      admin
+        .from("tutorials")
+        .select("title")
+        .eq("account_id", accountId)
+        .eq("status", "published")
+        .eq("visibility", "public")
+        .order("updated_at", { ascending: false })
+        .limit(60),
+      admin.from("categories").select("name").eq("account_id", accountId).limit(30),
+      admin
+        .from("kb_articles")
+        .select("title")
+        .eq("account_id", accountId)
+        .eq("status", "published")
+        .limit(30),
+      admin.from("account_templates").select("template_id").eq("account_id", accountId).eq("enabled", true),
+    ]);
+    const tplIds = (tpls.data ?? []).map((r) => r.template_id as string);
+    const tplTitles = tplIds.length
+      ? ((await admin.from("tutorials").select("title").in("id", tplIds).eq("visibility", "public")).data ?? [])
+      : [];
+    const clean = (xs: (string | null | undefined)[]) =>
+      [...new Set(xs.map((x) => (x ?? "").replace(/\s+/g, " ").trim().slice(0, 80)).filter(Boolean))];
+    const titles = clean([...(tuts.data ?? []), ...tplTitles].map((t) => t.title as string)).slice(0, 60);
+    const categories = clean((cats.data ?? []).map((c) => c.name as string));
+    const articles = clean((arts.data ?? []).map((a) => a.title as string));
+    const parts: string[] = [];
+    if (categories.length) parts.push(`Kategorien: ${categories.join(" · ")}`);
+    if (titles.length) parts.push(`Anleitungen: ${titles.join(" · ")}`);
+    if (articles.length) parts.push(`Wissensartikel: ${articles.join(" · ")}`);
+    return parts.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const accountSlug = String(body.accountSlug ?? "").trim();
@@ -141,7 +190,7 @@ export async function POST(req: NextRequest) {
     // Folgefragen verstehen: letzte Nutzer-Nachrichten in die Suchanfrage einbeziehen.
     const priorUser = history.filter((h) => h.role === "user").map((h) => String(h.text));
     const embedInput = [...priorUser.slice(-2), question].join("\n");
-    const qVec = await embed(embedInput);
+    const [qVec, topics] = await Promise.all([embed(embedInput), loadTopicOverview(admin, account.id)]);
     const { data: matches } = await admin.rpc("match_kb", {
       p_account: account.id,
       p_embedding: JSON.stringify(qVec),
@@ -175,7 +224,10 @@ export async function POST(req: NextRequest) {
           .join("\n\n")
       : "(keine passenden Inhalte gefunden)";
 
-    const expertsText = experts.length
+    // Weiterleitung nur ankündigen/Experten nur nennen, wenn es wirklich einen Kontaktweg gibt.
+    const canEscalate =
+      buildEscalation(null) !== null || experts.some((_, i) => buildEscalation(i) !== null);
+    const expertsText = canEscalate && experts.length
       ? `\n\nAnsprechpartner (für mögliche Weiterleitung):\n${experts
           .map((e, i) => `[${i}] ${e.name ?? "?"}${e.expertise ? " – " + e.expertise : ""}`)
           .join("\n")}`
@@ -190,7 +242,12 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "system",
-          content: chatSystem(account.name, lang === "de" ? "Deutsch" : LANG_TARGET[lang]),
+          content: chatSystem(
+            account.name,
+            lang === "de" ? "Deutsch" : LANG_TARGET[lang],
+            canEscalate, // nur mit echtem Kontaktweg eine Weiterleitung ankündigen
+            topics,
+          ),
         },
         ...history.map((h) => ({
           role: h.role === "bot" ? ("assistant" as const) : ("user" as const),

@@ -8,6 +8,7 @@ import { dateLongDe } from "@/lib/format";
 import { userDisplayName } from "@/lib/user-name";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { LernenViewer } from "@/components/app/lernen-viewer";
+import { trainingImageUrls } from "@/lib/training-images";
 
 export default async function LernenDetailPage({
   params,
@@ -61,18 +62,10 @@ export default async function LernenDetailPage({
       .maybeSingle(),
   ]);
 
-  // Bilder: SIGNIERTE URLs aus dem PRIVATEN Bucket (interne Tutorials haben keine
-  // public Kopie). Parallel signieren -> kein Wasserfall.
+  // Bilder: signierte URLs aus dem PRIVATEN Bucket — bei Verpixelung auf eine Kopie mit
+  // EINGEBRANNTER Verpixelung (verpixelt bleibt verpixelt, auch beim Öffnen der Bild-URL).
   const admin = createAdminClient();
-  const imageUrls: Record<string, string> = {};
-  const withImage = (steps ?? []).filter((s) => s.image_path);
-  const signed = await Promise.all(
-    withImage.map((s) => admin.storage.from("tutorial-images").createSignedUrl(s.image_path!, 3600)),
-  );
-  withImage.forEach((s, i) => {
-    const url = signed[i].data?.signedUrl;
-    if (url) imageUrls[s.id] = url;
-  });
+  const imageUrls = await trainingImageUrls(account.id, steps ?? []);
 
   // Owner-Zusatz: Schulungsnachweis-Tabelle (alle Mitglieder + Status).
   const trainingRecord = isOwner ? await loadTrainingRecord(account.id, id, admin) : [];

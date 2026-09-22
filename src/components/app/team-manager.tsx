@@ -10,13 +10,14 @@ import {
   revokeInvitation,
   removeMember,
   changeMemberRole,
+  resendInvitation,
   type InviteResult,
 } from "@/app/app/settings/team/actions";
 import { ROLES, ROLE_HINT, ROLE_LABEL, asRole } from "@/lib/roles";
 import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/settings-ui";
 
 type Member = { userId: string; role: string; email: string; isYou: boolean };
-type Invitation = { id: string; email: string; role: string; token: string };
+type Invitation = { id: string; email: string; role: string; token: string; expired: boolean; expiresAt: string };
 
 const roleLabel = (role: string) => ROLE_LABEL[asRole(role)];
 
@@ -249,12 +250,41 @@ export function TeamManager({
           <ul className="-mx-[18px] -mb-4 divide-y-2 divide-line-2 border-t-2 border-line-2">
             {invitations.map((inv) => (
               <li key={inv.id} className="flex flex-wrap items-center gap-2 px-[18px] py-3">
-                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{inv.email}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                  {inv.email}
+                  <span
+                    className={`block text-xs font-semibold ${inv.expired ? "text-no" : "text-muted-foreground"}`}
+                    data-testid="invite-expiry"
+                  >
+                    {inv.expired
+                      ? "Abgelaufen – bitte neu senden"
+                      : `Gültig bis ${new Date(inv.expiresAt).toLocaleDateString("de-DE")}`}
+                  </span>
+                </span>
                 <RolePill role={inv.role} />
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" onClick={() => copy(inv.token)}>
-                    <Copy className="size-4" /> Link
-                  </Button>
+                  {!inv.expired && (
+                    <Button variant="outline" size="sm" onClick={() => copy(inv.token)}>
+                      <Copy className="size-4" /> Link
+                    </Button>
+                  )}
+                  {isOwner && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        start(async () => {
+                          const r = await resendInvitation(inv.id);
+                          setResult(r);
+                          if (r.ok) toast.success(`Neue Einladung an ${inv.email} – gültig 14 Tage.`);
+                          else toast.error(r.message);
+                        })
+                      }
+                    >
+                      <Mail className="size-4" /> Neu senden
+                    </Button>
+                  )}
                   {isOwner && (
                     <Button
                       variant="ghost"

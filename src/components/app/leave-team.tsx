@@ -1,0 +1,44 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { leaveTeam } from "@/app/app/settings/team/actions";
+
+/**
+ * „Organisation verlassen" (Profil). Jede Rolle darf gehen — außer dem letzten Inhaber
+ * (Server prüft das und erklärt es). Danach frisch in die nächste Organisation; gibt es
+ * keine mehr, meldet die App ab und erklärt es auf der Anmeldeseite.
+ */
+export function LeaveTeam({ orgName, blockedReason }: { orgName: string; blockedReason?: string }) {
+  const [busy, setBusy] = useState(false);
+
+  async function leave() {
+    if (!confirm(`„${orgName}“ wirklich verlassen? Sie verlieren sofort den Zugriff auf diese Organisation.`)) return;
+    setBusy(true);
+    try {
+      const res = await leaveTeam();
+      if (!res.ok) {
+        toast.error(res.error);
+        setBusy(false);
+        return;
+      }
+      window.location.assign(res.hasOtherOrg ? "/app" : "/logout?next=" + encodeURIComponent("/login?error=verlassen"));
+    } catch {
+      toast.error("Verlassen hat nicht geklappt – bitte Seite neu laden und erneut versuchen.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      {blockedReason && <p className="text-xs text-muted-foreground">{blockedReason}</p>}
+      <div>
+        <Button type="button" variant="outline" size="sm" disabled={busy || !!blockedReason} onClick={leave}>
+          <LogOut className="size-4" /> {orgName} verlassen
+        </Button>
+      </div>
+    </div>
+  );
+}

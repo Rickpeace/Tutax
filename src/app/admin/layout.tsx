@@ -27,7 +27,7 @@ export default function AdminLayout({
           </span>
           <nav className="ml-2 flex gap-4 text-sm font-medium text-white/70">
             <Link href="/admin" className="hover:text-white">Templates</Link>
-            <Link href="/admin/alerts" className="hover:text-white">Hinweise</Link>
+            <Link href="/admin/technik" className="hover:text-white">Technik</Link>
           </nav>
           <Button
             variant="ghost"

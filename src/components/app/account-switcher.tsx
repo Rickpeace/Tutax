@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { setActiveAccount } from "@/app/app/actions";
+import { setActiveAccount } from "@/app/app/account-actions";
 
 type Membership = { id: string; name: string; role: string };
 

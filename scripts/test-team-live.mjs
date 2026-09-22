@@ -333,6 +333,32 @@ try {
   const sIns = await admin.from("steps").insert({ id: stepId, tutorial_id: tutId, title: "Einziger Schritt", body: null, position: 1, is_decision: false });
   if (sIns.error) throw sIns.error;
   await admin.from("tutorials").update({ root_step_id: stepId }).eq("id", tutId);
+  // Bild mit Verpixelung: Rauschen, damit man „verpixelt" messen kann (Blockfläche = glatt).
+  const sharp = (await import("sharp")).default;
+  const W = 400, H = 300;
+  const noise = Buffer.alloc(W * H * 3);
+  for (let i = 0; i < noise.length; i++) noise[i] = Math.floor(Math.random() * 256);
+  const original = await sharp(noise, { raw: { width: W, height: H, channels: 3 } }).webp({ lossless: true }).toBuffer();
+  const imgPath = `${ownerAid}/${tutId}/${stepId}.webp`;
+  const up = await admin.storage.from("tutorial-images").upload(imgPath, original, { contentType: "image/webp", upsert: true });
+  if (up.error) throw up.error;
+  const BLUR = { id: crypto.randomUUID(), type: "blur", x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+  await admin.from("steps").update({ image_path: imgPath, image_width: W, image_height: H, highlights: [BLUR] }).eq("id", stepId);
+  // Schwankung der Pixel im verpixelten Bereich (Original ~74, eingebrannt deutlich kleiner).
+  async function regionStdev(buf) {
+    const { data, info } = await sharp(buf)
+      .extract({ left: 110, top: 85, width: 180, height: 130 })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let s = 0, s2 = 0;
+    const n = info.width * info.height * info.channels;
+    for (let i = 0; i < n; i++) { s += data[i]; s2 += data[i] * data[i]; }
+    return Math.sqrt(s2 / n - (s / n) ** 2);
+  }
+  // Entwurf + Hinweis, die ein Mitarbeiter NICHT lesen darf
+  const draftId = crypto.randomUUID();
+  await admin.from("tutorials").insert({ id: draftId, account_id: ownerAid, title: `Entwurf ${stamp}`, status: "draft", visibility: "public" });
+  await admin.from("change_alerts").insert({ tutorial_id: tutId, status: "open", summary: "Test-Hinweis" });
 
   const mp = await newPage();
   await mp.goto(`${BASE}/invite/${invMit.token}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
@@ -372,6 +398,39 @@ try {
   const toastErr = await mp.locator("[data-sonner-toast][data-type=error]").allInnerTexts().catch(() => []);
   if (toastErr.length) console.log("  ℹ Fehler-Meldung beim Abschließen:", toastErr.join(" | "));
   ok(comp.length === 1, "Mitarbeiter: Schulung (öffentlich mit Nachweis) als absolviert gespeichert");
+  // Verpixelt bleibt verpixelt: das Schulungs-Bild ist eine eingebrannte Kopie
+  await mp.goto(`${BASE}/app/lernen/${tutId}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await mp.locator('img[src*="tutorial-images"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
+  const imgSrc = await mp.locator('img[src*="tutorial-images"]').first().getAttribute("src").catch(() => null);
+  ok(!!imgSrc && imgSrc.includes("_verpixelt"), `Schulung zeigt die verpixelte Kopie (${imgSrc ? imgSrc.split("?")[0].split("/").slice(-2).join("/") : "kein Bild"})`);
+  if (imgSrc) {
+    const shown = Buffer.from(await (await fetch(imgSrc.startsWith("http") ? imgSrc : `${BASE}${imgSrc}`)).arrayBuffer());
+    const sdOrig = await regionStdev(original), sdShown = await regionStdev(shown);
+    ok(sdShown < sdOrig * 0.5, `Verpixelter Bereich ist im Bild wirklich unkenntlich (Schwankung ${sdShown.toFixed(1)} statt ${sdOrig.toFixed(1)})`);
+  }
+
+  // Mitarbeiter lesen per Direktzugriff nur, was Schulungen brauchen (0039)
+  const mr = await asUser(E.mit);
+  const rDraft = await mr.from("tutorials").select("id").eq("id", draftId);
+  ok(!(rDraft.data ?? []).length, "DB: Mitarbeiter sieht KEINE Entwürfe");
+  const rPub = await mr.from("tutorials").select("id").eq("id", tutId);
+  ok((rPub.data ?? []).length === 1, "DB: Mitarbeiter sieht die veröffentlichte Schulung");
+  const rAlert = await mr.from("change_alerts").select("id").eq("tutorial_id", tutId);
+  ok(!(rAlert.data ?? []).length, "DB: Mitarbeiter sieht KEINE Hinweise");
+  const rOrig = await mr.storage.from("tutorial-images").download(imgPath);
+  ok(!!rOrig.error || !rOrig.data, "Speicher: Mitarbeiter kann das unverpixelte Original NICHT laden");
+  const rSign = await mr.storage.from("tutorial-images").createSignedUrl(imgPath, 60);
+  ok(!rSign.data?.signedUrl, "Speicher: Mitarbeiter kann sich KEINEN Link aufs Original erzeugen");
+  await admin.from("tutorial_completions").insert({ tutorial_id: tutId, user_id: owner.uid, account_id: ownerAid });
+  const rComp = await mr.from("tutorial_completions").select("user_id").eq("account_id", ownerAid);
+  ok((rComp.data ?? []).every((c) => c.user_id === mitUid) && (rComp.data ?? []).length === 1,
+    "DB: Mitarbeiter sieht nur den EIGENEN Schulungsnachweis");
+  const eDraft = await (await asUser(E.neu)).from("tutorials").select("id").eq("id", draftId);
+  ok((eDraft.data ?? []).length === 1, "DB: Bearbeiter sieht Entwürfe weiterhin");
+  await mp.goto(`${BASE}/app/lernen`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  const countText = await mp.getByText(/\d+ von \d+ im Team/).first().innerText().catch(() => "");
+  ok(countText.trim().startsWith("2 von"), `Schulungen: Team-Zählung stimmt auch für Mitarbeiter („${countText}“, erwartet 2 von …)`);
+
   // Angriff am UI vorbei: direkt mit eigenem Login in die DB schreiben
   const mc = await asUser(E.mit);
   const upd = await mc.from("tutorials").update({ title: "gehackt" }).eq("id", tutId).select("id");
@@ -402,6 +461,38 @@ try {
   ok((await memberships(neuUid)).find((m) => m.account_id === ownerAid)?.role === "editor", "Rolle ändern: zurück zu Bearbeiter");
   await makeCode(np); // wieder Bearbeiter -> neue Verbindung für den Entfernen-Test
   const tEditor2 = (await admin.from("recorder_tokens").select("token").eq("account_id", ownerAid).eq("user_id", neuUid).maybeSingle()).data?.token;
+
+  // ================= 6d2) Einladungen laufen nach 14 Tagen ab =================
+  await invite(op, mail("alt"), "editor");
+  const invAlt = await pendingToken(ownerAid, mail("alt"));
+  await admin.from("invitations").update({ created_at: new Date(Date.now() - 15 * 86400_000).toISOString() }).eq("token", invAlt.token);
+  const ap = await newPage();
+  await ap.goto(`${BASE}/invite/${invAlt.token}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  ok((await ap.getByText("Einladung abgelaufen").count()) > 0, "Ablauf: Link nach 15 Tagen zeigt „Einladung abgelaufen“");
+  await op.goto(`${BASE}/app/settings/team`, { waitUntil: "domcontentloaded" });
+  const altRow = op.locator("li", { hasText: mail("alt") });
+  ok((await altRow.getByTestId("invite-expiry").innerText()).includes("Abgelaufen"), "Ablauf: Team-Tab markiert die Einladung als abgelaufen");
+  await altRow.getByRole("button", { name: /Neu senden/ }).click();
+  await op.getByText(/Neue Einladung an/).first().waitFor({ timeout: 30_000 });
+  const invAlt2 = await pendingToken(ownerAid, mail("alt"));
+  ok(!!invAlt2 && invAlt2.token !== invAlt.token, "Neu senden: frischer Link erzeugt");
+  await ap.goto(`${BASE}/invite/${invAlt.token}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await ap.waitForURL((u) => u.pathname === "/login", { timeout: 30_000 }).catch(() => {});
+  ok(new URL(ap.url()).pathname === "/login", "Neu senden: alter Link ist ungültig");
+  await ap.goto(`${BASE}/invite/${invAlt2.token}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  ok((await ap.getByText("Passwort festlegen").count()) > 0, "Neu senden: neuer Link funktioniert");
+
+  // ================= 6d3) Organisation verlassen =================
+  // Bestehender Nutzer (hat eigene Org) verlässt das Team -> landet in seiner eigenen Org
+  await bp.goto(`${BASE}/app/settings/profil`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  bp.once("dialog", (d) => d.accept());
+  await bp.getByRole("button", { name: /verlassen/ }).click();
+  await bp.waitForURL((u) => u.pathname === "/app", { timeout: 60_000 }).catch(() => {});
+  ok(!(await memberships(best.uid)).some((m) => m.account_id === ownerAid), "Verlassen: Mitgliedschaft entfernt");
+  ok((await activeMeta(best.uid)) === best.aid, "Verlassen: danach ist die eigene Organisation aktiv");
+  // Einziger Inhaber (eigene Org ohne weitere Inhaber) kann nicht gehen
+  await xp.goto(`${BASE}/app/settings/profil`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  ok(await xp.getByRole("button", { name: /verlassen/ }).isDisabled(), "Verlassen: einziger Inhaber ist gesperrt (mit Grund)");
 
   // ================= 6e) Team-Grenze je Tarif =================
   await admin.from("accounts").update({ plan: "pro" }).eq("id", ownerAid);
@@ -454,7 +545,7 @@ try {
   if (browser) await browser.close().catch(() => {});
   if (server) killPort(PORT);
   // Aufräumen: alle Test-Nutzer + deren eigene Orgs (+ Team-Org samt Einladungen via cascade).
-  for (const k of Object.keys(E).concat(["fremd", "offen", "frei", "platzx"], [0, 1, 2, 3, 4, 5].map((i) => `platz${i}`))) {
+  for (const k of Object.keys(E).concat(["fremd", "offen", "frei", "platzx", "alt"], [0, 1, 2, 3, 4, 5].map((i) => `platz${i}`))) {
     const id = await uidByEmail(E[k] ?? mail(k)).catch(() => null);
     if (id) createdUsers.add(id);
   }

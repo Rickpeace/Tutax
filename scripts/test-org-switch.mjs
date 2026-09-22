@@ -37,7 +37,8 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
 });
 
 const PORT = Number(process.env.PORT_ORGSWITCH || 3031);
-const BASE = `http://localhost:${PORT}`;
+// ORGSWITCH_BASE=https://… -> gegen eine laufende (z. B. Live-)Instanz statt lokalem Server.
+const BASE = process.env.ORGSWITCH_BASE || `http://localhost:${PORT}`;
 const PW = "Test12345!";
 const stamp = String(process.hrtime.bigint()).slice(-8);
 const emailA = `tutax-orgswitch-a-${stamp}@example.com`;
@@ -112,12 +113,14 @@ try {
   if (ins.error) throw ins.error;
   await admin.auth.admin.updateUserById(a.uid, { user_metadata: { active_account_id: a.aid } });
 
-  server = spawn("npx", ["next", process.env.ORGSWITCH_PROD ? "start" : "dev", "-p", String(PORT)], {
-    cwd: path.join(__dirname, ".."),
-    shell: true,
-    stdio: "ignore",
-  });
-  console.log("… Server startet auf", PORT, "…");
+  if (!process.env.ORGSWITCH_BASE) {
+    server = spawn("npx", ["next", process.env.ORGSWITCH_PROD ? "start" : "dev", "-p", String(PORT)], {
+      cwd: path.join(__dirname, ".."),
+      shell: true,
+      stdio: "ignore",
+    });
+    console.log("… Server startet auf", PORT, "…");
+  } else console.log("… gegen", BASE);
   if (!(await waitForServer())) throw new Error("Server nicht erreichbar");
 
   const { chromium } = resolvePlaywright();
