@@ -7,6 +7,10 @@ import { TutorialHeader } from "@/components/builder/tutorial-header";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 import { isBusiness } from "@/lib/plan";
 
+// Server-Actions laufen im Zeitbudget dieser Seite: „Texte mit KI verbessern“ braucht bei
+// 40 Schritten mehrere parallele KI-Calls (je ≤ 20 s).
+export const maxDuration = 60;
+
 export default async function EditorPage({
   params,
 }: {

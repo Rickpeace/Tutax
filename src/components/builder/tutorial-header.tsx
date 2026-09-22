@@ -16,6 +16,7 @@ import {
   Pencil,
   Send,
   ShieldQuestion,
+  Sparkles,
   Undo2,
   Users,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
 import { useDriftCheck } from "@/components/builder/drift-check-button";
+import { IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -554,6 +556,22 @@ export function TutorialHeader({
                 <MenuText
                   label={drift.pending ? "Prüft …" : "Aktualität prüfen"}
                   hint={noSteps ? "Erst Schritte anlegen" : "Prüft per KI, ob die Anleitung noch zur Website passt"}
+                />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => window.dispatchEvent(new Event(IMPROVE_TEXTS_EVENT))}
+                disabled={noSteps}
+                className="items-start"
+                data-testid="menu-improve-texts"
+              >
+                <Sparkles className="mt-0.5 size-4" />
+                <MenuText
+                  label="Texte mit KI verbessern"
+                  hint={
+                    noSteps
+                      ? "Erst Schritte anlegen"
+                      : "Formuliert Titel und Texte natürlicher – Sie sehen vorher jeden Vorschlag"
+                  }
                 />
               </DropdownMenuItem>
               {shareable && (

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Zap } from "lucide-react";
+import { Plus, Sparkles, Zap } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Flow } from "@/components/builder/flow";
 import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
+import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
@@ -764,6 +765,34 @@ export function Builder({
     [confirm],
   );
 
+  // „Texte mit KI verbessern“ (09/2026): Knopf über dem Ablauf ODER „…“-Menü im Kopf (Ereignis).
+  // Ungespeicherte Panel-Eingaben erst verwerfen lassen; danach das Panel neu aufbauen (textRev),
+  // damit es die übernommenen Texte zeigt.
+  const [improveOpen, setImproveOpen] = useState(false);
+  const [textRev, setTextRev] = useState(0);
+  const openImprove = useCallback(async () => {
+    if (!steps.length) return;
+    if (dirtyRef.current && !(await confirmDiscard())) return;
+    dirtyRef.current = false;
+    setImproveOpen(true);
+  }, [steps.length, confirmDiscard]);
+  useEffect(() => {
+    const on = () => void openImprove();
+    window.addEventListener(IMPROVE_TEXTS_EVENT, on);
+    return () => window.removeEventListener(IMPROVE_TEXTS_EVENT, on);
+  }, [openImprove]);
+  const applyTexts = useCallback((patches: { stepId: string; title: string; body?: unknown }[]) => {
+    const byId = new Map(patches.map((p) => [p.stepId, p]));
+    setSteps((prev) =>
+      prev.map((s) => {
+        const p = byId.get(s.id);
+        if (!p) return s;
+        return "body" in p ? { ...s, title: p.title, body: p.body } : { ...s, title: p.title };
+      }),
+    );
+    setTextRev((r) => r + 1);
+  }, []);
+
   const closeEditor = useCallback(async () => {
     if (dirtyRef.current && !(await confirmDiscard())) return;
     dirtyRef.current = false;
@@ -773,7 +802,7 @@ export function Builder({
   const renderPanel = (withClose = false) =>
     selectedStep ? (
       <StepPanel
-        key={selectedStep.id}
+        key={`${selectedStep.id}:${textRev}`}
         step={selectedStep}
         tutorialId={tutorialId}
         allSteps={steps}
@@ -872,9 +901,29 @@ export function Builder({
         }}
       />
 
-      <p className="mb-2 text-sm text-muted-foreground">
-        {steps.length} Schritt{steps.length === 1 ? "" : "e"}
-      </p>
+      <ImproveTextsDialog
+        tutorialId={tutorialId}
+        open={improveOpen}
+        onOpenChange={setImproveOpen}
+        steps={steps}
+        onApplied={applyTexts}
+      />
+
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <span>
+          {steps.length} Schritt{steps.length === 1 ? "" : "e"}
+        </span>
+        {steps.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void openImprove()}
+            className="inline-flex items-center gap-1 rounded-md text-xs font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+            data-testid="improve-texts"
+          >
+            <Sparkles className="size-3.5" /> Texte mit KI verbessern
+          </button>
+        )}
+      </div>
 
       <div className={wide ? "flex items-start gap-6" : ""}>
         <div className={wide ? "min-w-0 flex-1" : ""}>

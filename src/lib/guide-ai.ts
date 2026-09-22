@@ -87,6 +87,94 @@ export function quoteHint(label: string, visible?: string | null): string | unde
   return q && q !== l && l.includes(q.replace(/…$/, "")) && !q.endsWith("…") ? q : undefined;
 }
 
+/**
+ * Tiptap-Body → Klartext + ob er „einfach“ ist (höchstens EIN Absatz aus reinem Text, ohne
+ * Fett/Links/Listen). Nur einfache Texte darf die KI ersetzen — sonst ginge Formatierung verloren.
+ */
+export function bodyInfo(body: unknown): { text: string; simple: boolean } {
+  if (!body || typeof body !== "object") return { text: "", simple: true };
+  let simple = true;
+  let paragraphs = 0;
+  const parts: string[] = [];
+  const walk = (n: unknown, depth: number) => {
+    if (!n || typeof n !== "object") return;
+    const node = n as { type?: string; text?: string; marks?: unknown[]; content?: unknown[] };
+    if (node.type === "text") {
+      if (Array.isArray(node.marks) && node.marks.length) simple = false;
+      parts.push(node.text ?? "");
+      return;
+    }
+    if (node.type === "hardBreak") {
+      parts.push(" ");
+      return;
+    }
+    if (node.type === "paragraph") {
+      const before = parts.join("").trim();
+      (node.content ?? []).forEach((c) => walk(c, depth + 1));
+      if (parts.join("").trim() !== before) paragraphs += 1;
+      parts.push(" ");
+      return;
+    }
+    if (node.type !== "doc" || depth > 0) simple = false;
+    (node.content ?? []).forEach((c) => walk(c, depth + 1));
+    parts.push(" ");
+  };
+  walk(body, 0);
+  if (paragraphs > 1) simple = false;
+  return { text: oneLine(parts.join("")), simple };
+}
+
+const INPUT_ROLES = new Set(["textbox", "searchbox"]);
+const INPUT_WORDS = /eingeben|eintragen|ausfüllen|suchen|tippen/i;
+
+/**
+ * Gespeicherter Schritt (Editor „Texte mit KI verbessern“) → Feinschliff-Eingabe; null = nichts
+ * zu verbessern. Einen gespeicherten Eingabewert gibt es nicht — bei Eingabe-Schritten gelten
+ * zitierte Angaben, die nicht zur Beschriftung gehören, als Wert und werden maskiert (die KI
+ * sieht sie nicht und muss sie unverändert behalten).
+ */
+export function refineStepFromSaved(s: {
+  title: string | null;
+  body: unknown;
+  selector: { css?: string; text?: string; role?: string } | null;
+  interaction: StepInteraction | null;
+  file_meta?: { filename?: string } | null;
+}): RefineStep | null {
+  const title = oneLine(s.title ?? "");
+  const { text, simple } = bodyInfo(s.body);
+  const label = oneLine(s.selector?.text ?? "");
+  if (!title && !text) return null;
+  const role = s.selector?.role ?? "";
+  const isInput =
+    INPUT_ROLES.has(role) || !!s.interaction?.enter || (role === "combobox" && INPUT_WORDS.test(`${title} ${text}`));
+  const password = isInput && isPasswordField(label, s.selector?.css);
+  const values: string[] = [];
+  if (isInput && !password) {
+    const pageQuotes = new Set(
+      [...`${title} ${text}`.matchAll(/Seite „([^„“]*)“/g)].map((m) => m[1].trim()),
+    );
+    for (const q of [...quotesOf(title), ...quotesOf(text)]) {
+      if (q && !q.endsWith("…") && q.length <= 80 && !label.includes(q) && !pageQuotes.has(q) && !values.includes(q)) {
+        values.push(q);
+      }
+    }
+  }
+  return {
+    title,
+    bodyText: text,
+    label,
+    action: isInput ? "type" : "click",
+    interaction: s.interaction ?? null,
+    values,
+    password,
+    fieldKind: role === "searchbox" || /such|search/i.test(label) ? "Suchfeld" : "Textfeld",
+    page: null,
+    bodyLocked: !simple,
+    extraSources: s.file_meta?.filename ? [s.file_meta.filename] : [],
+    quote: quoteHint(label),
+  };
+}
+
 /** Kontext einer Aufnahme: Anleitungstitel (ohne Datums-Standardtitel) + Domains der Schritte. */
 export function refineContextFromGuide(title: string | null, steps: GuideStepInput[]): RefineContext {
   const domains = [...new Set(steps.map((s) => normalizeDomain(s.url || "")).filter((d): d is string => !!d))];

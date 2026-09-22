@@ -28,6 +28,10 @@ import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
+import { canEdit } from "@/lib/roles";
+import { aiConfigured } from "@/lib/ai";
+import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
+import { refineStepFromSaved, suggestStepTexts, type RefineStep } from "@/lib/guide-ai";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -512,4 +516,172 @@ export async function setTutorialCategory(
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
   await invalidateTutorialTags(tutorialId);
+}
+
+// ── „Texte mit KI verbessern“ (09/2026) ───────────────────────────────────────────────────
+// Liefert nur VORSCHLÄGE (nichts wird gespeichert); „Übernehmen“ und „Rückgängig“ laufen über
+// applyStepTexts. Dieselbe Prompt-/Prüf-Logik wie der Feinschliff nach der Aufnahme (guide-ai.ts).
+
+export type StepTextSuggestion = {
+  stepId: string;
+  oldTitle: string;
+  oldBody: string; // Klartext (Anzeige)
+  newTitle: string;
+  newBody: string | null; // null = Text bleibt (formatiert oder unverändert)
+};
+
+export type SuggestTextsResult =
+  | { ok: true; items: StepTextSuggestion[]; total: number; capped: boolean }
+  | { ok: false; error: string };
+
+// Kostenbremse pro Person: höchstens so viele KI-Läufe je angefangener Stunde.
+const TEXT_RUNS_PER_HOUR = 30;
+
+/**
+ * Stunden-Zähler im app_metadata des Nutzers (nur per Service-Rolle schreibbar — der Nutzer kann
+ * ihn nicht selbst zurücksetzen; überlebt Serverless-Instanzen; keine Migration nötig).
+ * Kompromiss: pro Person statt pro Konto, Lesen+Schreiben nicht atomar (zwei gleichzeitige
+ * Klicks können beide durchgehen). Fällt der Zähler aus, läuft die Aktion trotzdem (die
+ * 40-Schritte-Kappe begrenzt die Kosten je Lauf).
+ */
+async function takeTextRun(userId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error || !data?.user) return true;
+    const meta = (data.user.app_metadata ?? {}) as Record<string, unknown>;
+    const hour = Math.floor(Date.now() / 3_600_000);
+    const cur = meta.ai_text_runs as { h?: number; n?: number } | undefined;
+    const n = cur?.h === hour ? Number(cur.n) || 0 : 0;
+    if (n >= TEXT_RUNS_PER_HOUR) return false;
+    await admin.auth.admin.updateUserById(userId, {
+      app_metadata: { ...meta, ai_text_runs: { h: hour, n: n + 1 } },
+    });
+    return true;
+  } catch (e) {
+    console.error("[texte-ki] Zähler:", e instanceof Error ? e.message : e);
+    return true;
+  }
+}
+
+/** Vorschläge für bessere Schritt-Titel/-Texte (Ablauf-Reihenfolge, max. 40 Schritte). */
+export async function suggestStepTextImprovements(tutorialId: string): Promise<SuggestTextsResult> {
+  const ctx = await requireTutorialAccess(tutorialId);
+  if (!canEdit(ctx.role)) return { ok: false, error: "Nur Inhaber und Bearbeiter können Texte verbessern." };
+  if (!aiConfigured()) return { ok: false, error: "Die KI ist gerade nicht verfügbar." };
+
+  const supabase = await createClient();
+  const [{ data: steps }, { data: tut }] = await Promise.all([
+    supabase.from("steps").select("*").eq("tutorial_id", tutorialId).returns<(Step & { file_meta?: { filename?: string } | null })[]>(),
+    supabase.from("tutorials").select("title, root_step_id, site_domains").eq("id", tutorialId).maybeSingle(),
+  ]);
+  const all = steps ?? [];
+  if (!all.length) return { ok: false, error: "Die Anleitung hat noch keine Schritte." };
+  const { data: branches } = await supabase
+    .from("step_branches")
+    .select("*")
+    .in("step_id", all.map((s) => s.id))
+    .returns<StepBranch[]>();
+  const ordered = flowOrder(all, branches ?? [], (tut?.root_step_id as string | null) ?? null);
+  const capped = ordered.length > MAX_GUIDE_STEPS;
+  const chosen = ordered.slice(0, MAX_GUIDE_STEPS);
+
+  const inputs: { step: Step; input: RefineStep }[] = [];
+  for (const s of chosen) {
+    const input = refineStepFromSaved(s);
+    if (input) inputs.push({ step: s, input });
+  }
+  if (!inputs.length) return { ok: true, items: [], total: 0, capped };
+
+  if (!(await takeTextRun(ctx.userId))) {
+    return { ok: false, error: "Sie haben die KI in der letzten Stunde oft genutzt. Bitte versuchen Sie es später erneut." };
+  }
+
+  const { results, failed, calls } = await suggestStepTexts(
+    {
+      guideTitle: (tut?.title as string | null) ?? null,
+      domains: Array.isArray(tut?.site_domains) ? (tut.site_domains as string[]) : [],
+    },
+    inputs.map((x) => x.input),
+  );
+  if (failed === calls) {
+    return { ok: false, error: "Die KI hat gerade nicht geantwortet. Es wurde nichts geändert – bitte später erneut versuchen." };
+  }
+  const items: StepTextSuggestion[] = [];
+  inputs.forEach(({ step, input }, i) => {
+    const r = results[i];
+    if (!r) return;
+    items.push({
+      stepId: step.id,
+      oldTitle: input.title,
+      oldBody: input.bodyText,
+      newTitle: r.title,
+      newBody: r.body,
+    });
+  });
+  return { ok: true, items, total: inputs.length, capped };
+}
+
+/**
+ * Titel/Texte mehrerer Schritte auf einmal speichern („Übernehmen“ und „Rückgängig“). body:
+ * String = ein Absatz (wird zu Tiptap), Objekt = Tiptap-Dokument (Rückgängig stellt das Original
+ * samt Formatierung wieder her), fehlt = Text bleibt. Nebenwirkungen wie updateStep: Cache,
+ * Übersetzungen (Delta), Vorlesen, KI-Assistent-Index.
+ */
+export async function applyStepTexts(
+  tutorialId: string,
+  patches: { stepId: string; title: string; body?: unknown }[],
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const ctx = await requireTutorialAccess(tutorialId);
+  if (!canEdit(ctx.role)) return { ok: false, error: "Nur Inhaber und Bearbeiter können Texte ändern." };
+  if (!Array.isArray(patches) || patches.length === 0) return { ok: true, count: 0 };
+  if (patches.length > MAX_GUIDE_STEPS) return { ok: false, error: "Zu viele Schritte auf einmal." };
+
+  const clean: { id: string; patch: { title: string; body?: unknown } }[] = [];
+  for (const p of patches) {
+    if (!p || typeof p.stepId !== "string" || typeof p.title !== "string") {
+      return { ok: false, error: "Ungültige Änderung." };
+    }
+    const patch: { title: string; body?: unknown } = { title: p.title.replace(/\s+/g, " ").trim().slice(0, 300) };
+    if (typeof p.body === "string") patch.body = mkBody(p.body.slice(0, 2000));
+    else if (p.body === null) patch.body = null;
+    else if (p.body && typeof p.body === "object") {
+      if ((p.body as { type?: unknown }).type !== "doc" || JSON.stringify(p.body).length > 100_000) {
+        return { ok: false, error: "Ungültiger Text." };
+      }
+      patch.body = p.body;
+    }
+    clean.push({ id: p.stepId, patch });
+  }
+
+  // Alle Schritte MÜSSEN zu dieser Anleitung gehören (sonst nichts ändern).
+  const supabase = await createClient();
+  const ids = [...new Set(clean.map((c) => c.id))];
+  const { data: own } = await supabase.from("steps").select("id").eq("tutorial_id", tutorialId).in("id", ids);
+  if ((own ?? []).length !== ids.length) return { ok: false, error: "Schritt nicht gefunden." };
+
+  const done: string[] = [];
+  for (const c of clean) {
+    const { error } = await supabase.from("steps").update(c.patch).eq("id", c.id).eq("tutorial_id", tutorialId);
+    if (error) {
+      console.error("[texte-ki] Speichern:", error.message);
+      break;
+    }
+    done.push(c.id);
+  }
+  if (done.length) {
+    await invalidateTutorialTags(tutorialId);
+    await markTranslationsStale(tutorialId);
+    after(async () => {
+      for (const id of done) {
+        await translateStepDelta(id);
+        await ensureStepAudio(id);
+      }
+    });
+    after(() => reindexTutorialIfLive(tutorialId));
+  }
+  if (done.length < clean.length) {
+    return { ok: false, error: `Nur ${done.length} von ${clean.length} Schritten gespeichert. Bitte erneut versuchen.` };
+  }
+  return { ok: true, count: done.length };
 }
