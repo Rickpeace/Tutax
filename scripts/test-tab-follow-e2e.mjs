@@ -209,7 +209,7 @@ try {
     // --disable-popup-blocking: window.open aus einem SKRIPTIERTEN Klick (content.js el.click())
     // hat keine „transient user activation" → würde sonst geblockt. Der neue Tab (target=_blank)
     // funktioniert ohnehin; das Flag stellt nur den echten Popup-Fenster-Fall her.
-    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--disable-popup-blocking"],
+    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--window-position=-32000,-32000", "--window-size=1280,900", "--disable-popup-blocking"],
   });
 
   let sw = ext.serviceWorkers()[0];
@@ -222,6 +222,9 @@ try {
   await sitePage.goto(SITE + "/start", { waitUntil: "load" });
   const panelPage = await ext.newPage();
   await panelPage.goto(`chrome-extension://${extId}/panel.html`, { waitUntil: "load" });
+  // Panel-Init ist asynchron und zeigt am Ende ihren Start-Bildschirm (blendet #autoRun aus) —
+  // erst danach einen Lauf starten (sonst verwirft das Panel Schritt-Ergebnisse, s. Welle 52b).
+  await panelPage.waitForFunction(() => typeof currentSection === "string" && currentSection !== "", null, { timeout: 15000 });
 
   // Sanity: die SHIPPED-Tab-Folge-Maschine ist im Panel + die pure pickTabForStep erreichbar.
   const sane = await panelPage.evaluate(() => ({

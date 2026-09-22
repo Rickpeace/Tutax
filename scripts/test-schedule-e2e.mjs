@@ -199,7 +199,7 @@ try {
   mkdirSync(userDataDir, { recursive: true });
   ext = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
+    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--window-position=-32000,-32000", "--window-size=1280,900"],
   });
 
   let sw = ext.serviceWorkers()[0];
