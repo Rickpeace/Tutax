@@ -121,8 +121,8 @@ automatisiert getestet.
 4. Den Ordner `extension/` aus diesem Repo auswählen.
 5. Das Steply-Symbol erscheint in der Symbolleiste (ggf. anpinnen).
 
-Die mitgelieferten Icons (`icons/icon16.png`, `48`, `128`) sind einfarbige
-Platzhalter. Neu erzeugen: `node extension/make-icons.mjs` (ohne Abhängigkeiten).
+Die Icons (`icons/icon16.png`, `48`, `128`) zeigen das Steply-Logo (weißes „S“ im
+Korallen-Kreis). Neu erzeugen (zusammen mit dem Favicon der App): `node scripts/make-brand-icons.mjs`.
 
 ---
 
@@ -239,7 +239,6 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 | `panel.html/.js`  | **Die Seitenleiste**: Verbinden, Modus-Wahl, Aufnahme (Video/Sofort), Upload/Download — alle Zustände in einem Dokument |
 | `content.js`      | Läuft passiv auf jeder Seite; erfasst Klicks nur bei Aufnahme |
 | `styles.css`      | Styling der Seitenleiste                                      |
-| `make-icons.mjs`  | Erzeugt die Platzhalter-Icons (ohne Abhängigkeiten)          |
 | `icons/`          | `icon16/48/128.png`                                          |
 
 ### Architektur v2.0 (Side Panel / Tango)
