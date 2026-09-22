@@ -374,21 +374,47 @@ try {
   await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
   s = await st();
   ok(s.phase === "stopped" && s.rec === undefined, "Stopp: Phase „stopped“, rec entfernt");
+  // ---- 4b) Abschluss-Bild (Welle 55, Lücke L2 „Variante A") ----
+  // Nach „Fertig" fotografiert das Panel EINMAL den Endzustand des aufgenommenen Tabs und
+  // hängt ihn als letzten Schritt an — sonst ist das Ergebnis des letzten Klicks in keiner
+  // Anleitung zu sehen.
+  ok(await waitSteps(5, 8000), "Fertig: Abschluss-Bild wird als letzter Schritt angehängt (5)");
+  {
+    const r = await page.evaluate(() => {
+      const last = guideSteps[guideSteps.length - 1];
+      return {
+        variant: last.interaction && last.interaction.variant,
+        selector: last.selector,
+        rect: last.rect,
+        hasImage: !!last.blob && last.width > 0 && last.height > 0,
+        results: guideSteps.filter((x) => x.interaction && x.interaction.variant === "result").length,
+        label: (document.querySelector("#guideList .guide-item:last-child .lbl") || {}).textContent || "",
+      };
+    });
+    ok(r.variant === "result", "Abschluss-Bild: interaction.variant = „result“");
+    ok(r.selector === null, "Abschluss-Bild: OHNE Selektor → nicht automatisierbar, keine Live-Markierung");
+    ok(r.rect && r.rect.w === 0 && r.rect.h === 0, "Abschluss-Bild: keine Markierung im Bild");
+    ok(r.hasImage, "Abschluss-Bild: trägt einen echten Screenshot");
+    ok(r.results === 1, "Abschluss-Bild: genau EINES");
+    ok(/Ergebnis/.test(r.label), "Abschluss-Bild: in der Prüfen-Liste als „Ergebnis“ (" + r.label.slice(0, 40) + ")");
+  }
   await sendStep(TAB1, "Ignoriert (Gestoppt)");
   await sleep(900);
-  ok((await st()).steps === 4, "Gestoppt: Schritt-Nachricht wird ignoriert");
+  ok((await st()).steps === 5, "Gestoppt: Schritt-Nachricht wird ignoriert");
 
   // ---- 5) Gestoppt: Pruefen ----
   ok(await vis("guideCreate"), "Gestoppt: „Anleitung erstellen“ sichtbar");
   ok(!(await page.isDisabled("#guideCreate")), "Gestoppt: „Anleitung erstellen“ aktiv");
   ok(await vis("guideContinue") && (await vis("guideDiscard")), "Gestoppt: Weiter aufnehmen + Verwerfen");
-  ok((await page.$$("#guideList .guide-item")).length === 4, "Gestoppt: Liste mit 4 Schritten sichtbar");
+  ok((await page.$$("#guideList .guide-item")).length === 5, "Gestoppt: Liste mit 5 Schritten sichtbar");
   ok(
-    /4\s*Schritte aufgenommen/.test(await page.textContent("#guideCountLine")) && (await vis("guideCountLine")),
-    "Gestoppt: Prüfen-Kopf „4 Schritte aufgenommen“"
+    /5\s*Schritte aufgenommen/.test(await page.textContent("#guideCountLine")) && (await vis("guideCountLine")),
+    "Gestoppt: Prüfen-Kopf „5 Schritte aufgenommen“"
   );
   ok(await vis("guideTitle"), "Gestoppt: Titel-Feld sichtbar (Prüfen)");
   ok(!(await vis("guidePause")) && !(await vis("guideStop")), "Gestoppt: keine Aufnahme-Steuerleiste");
+  await page.click("#guideList .guide-item:last-child .rm");
+  ok((await st()).steps === 4, "Gestoppt: Abschluss-Bild per ✕ entfernbar (4)");
   await page.click("#guideList .guide-item:last-child .rm");
   ok((await st()).steps === 3, "Gestoppt: Schritt per ✕ entfernbar (3)");
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "4-gestoppt.png"), fullPage: true });
@@ -398,6 +424,15 @@ try {
   ok(s.phase === "recording" && s.rec && s.steps === 3, "Weiter aufnehmen → recording, Liste bleibt (3)");
   await click("guideStop");
   await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  // Keine Dopplung: „Weiter aufnehmen" wirft ein altes Abschluss-Bild weg, am Ende gibt es
+  // wieder genau EINES.
+  ok(await waitSteps(4, 8000), "Weiter aufnehmen → Fertig: wieder genau ein Abschluss-Bild (4)");
+  ok(
+    (await page.evaluate(() =>
+      guideSteps.filter((x) => x.interaction && x.interaction.variant === "result").length,
+    )) === 1,
+    "Abschluss-Bild: nach Stopp → Weiter → Stopp immer noch genau EINES"
+  );
   const dBefore2 = dialogs;
   await click("guideDiscard");
   await page.waitForFunction(() => !document.getElementById("start").hidden, null, { timeout: 3000 });
@@ -409,6 +444,9 @@ try {
   await click("recStart");
   await click("guideStop");
   await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  // Abschluss-Bild (Welle 55): bei 0 Schritten entsteht KEINES.
+  await sleep(1600);
+  ok((await st()).steps === 0, "0 Schritte: kein Abschluss-Bild");
   ok(await page.isDisabled("#guideCreate"), "0 Schritte: „Anleitung erstellen“ deaktiviert");
   ok(/Noch keine Schritte/.test(await page.textContent("#guideNote")), "0 Schritte: Hinweis sichtbar");
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "5-gestoppt-leer.png"), fullPage: true });

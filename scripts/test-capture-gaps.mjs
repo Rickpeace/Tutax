@@ -53,6 +53,11 @@ const FIX = (name) => readFileSync(path.join(__dirname, "fixtures", name), "utf8
 
 // chrome-Stub. Schickt jede Nachricht per exposeBinding nach Node (ueberlebt Seitenwechsel)
 // und haengt den Seitenzustand im Meldemoment an (= Screenshot-Moment im Panel).
+//
+// storage.local ist bewusst ECHT nachgebaut (Welle 55): es lebt in NODE und ueberlebt damit
+// Seitenwechsel — genau wie chrome.storage.local im Browser. Nur so laesst sich der
+// Seitenwechsel-Schritt (L1) pruefen: content.js braucht dafuer rec.startedAt (war die Seite
+// schon vor dem Aufnahmestart offen?) und guideLastStepAt (folgt der Wechsel auf einen Klick?).
 const STUB = `
   window.chrome = {
     runtime: {
@@ -71,7 +76,19 @@ const STUB = `
       onMessage: { addListener: function () {} },
     },
     storage: {
-      local: { get: function (key, cb) { cb({ rec: { startedAt: Date.now(), mode: "guide", nonce: "testnonce123" } }); } },
+      local: {
+        get: function (keys, cb) {
+          Promise.resolve(window.__steplyStoreGet ? window.__steplyStoreGet() : {})
+            .then(function (all) { cb(all || {}); })
+            .catch(function () { cb({}); });
+        },
+        set: function (obj) {
+          try { if (window.__steplyStoreSet) window.__steplyStoreSet(JSON.parse(JSON.stringify(obj))); }
+          catch (e) { /* egal */ }
+          return Promise.resolve();
+        },
+        remove: function () { return Promise.resolve(); },
+      },
       onChanged: { addListener: function () {} },
     },
     tabs: { sendMessage: function () {} },
@@ -110,6 +127,26 @@ try {
   await ctx.exposeBinding("__steplySink", (_src, msg) => {
     sink.push(msg);
   });
+
+  // Der „chrome.storage.local"-Inhalt lebt hier in Node (ueberlebt Seitenwechsel).
+  // rec.startedAt liegt standardmaessig in der ZUKUNFT-Naehe (= „die Seite war schon offen,
+  // als die Aufnahme startete") — dann entsteht beim Laden KEIN Seitenwechsel-Schritt, und
+  // alle Bestandsmuster verhalten sich unveraendert. navMode(true) datiert den Start
+  // zurueck und simuliert damit „die Aufnahme lief schon, als diese Seite geladen wurde".
+  const store = {}; // alles ausser rec (z. B. guideLastStepAt)
+  let navStart = 0; // 0 = aus: rec.startedAt ist IMMER „gerade eben"
+  const navMode = (on) => {
+    navStart = on ? Date.now() - 60000 : 0;
+    delete store.guideLastStepAt;
+  };
+  await ctx.exposeBinding("__steplyStoreGet", () =>
+    Object.assign({}, store, {
+      rec: { startedAt: navStart || Date.now(), mode: "guide", nonce: "testnonce123" },
+    }),
+  );
+  await ctx.exposeBinding("__steplyStoreSet", (_src, obj) => {
+    Object.assign(store, obj || {});
+  });
   await ctx.addInitScript({ content: STUB });
 
   const PAGES = {
@@ -145,7 +182,9 @@ try {
     const t = p || page;
     await t.addScriptTag({ content: RESOLVE_JS });
     await t.addScriptTag({ content: CONTENT_JS });
-    await sleep(120);
+    // Der Aufnahmezustand kommt jetzt asynchron ueber die storage-Bruecke nach Node — ein
+    // Tick mehr, damit content.js „recording" gesetzt hat, bevor der Test klickt.
+    await sleep(220);
   }
   async function open(p) {
     await page.goto("http://steply.test" + p, { waitUntil: "load" });
@@ -501,35 +540,60 @@ try {
   await testCase({
     id: "3.5-pfeiltasten-listbox",
     muster: "Pfeiltasten in einer Listbox (Auswahl wechseln)",
-    supported: false,
-    note: "Pfeiltasten sind in content.js ausdruecklich ausgeschlossen (NO_STEP_KEYS).",
+    supported: true,
+    note: "Welle 55 (L4): mehrere Pfeiltastendruecke ergeben EINEN Schritt auf den zuletzt gewaehlten Eintrag.",
     run: async () => {
       await page.focus("#lb");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
-      await sleep(250);
+      await sleep(600);
     },
-    verify: async (r) => (r.live.length ? { verdict: "erfasst" } : { verdict: "nicht" }),
+    verify: async (r) =>
+      one(r, async (s) => ({
+        verdict: s.action === "click" && s.label ? "erfasst" : "teilweise",
+        detail: `label=${JSON.stringify(s.label)} css=${JSON.stringify((s.selector || {}).css)} (ein Schritt fuer beide Pfeiltasten)`,
+      })),
+  });
+
+  await testCase({
+    id: "3.5b-pfeiltasten-ohne-menue",
+    muster: "Pfeiltasten ausserhalb von Menue/Liste (Gegenprobe: kein Schritt)",
+    supported: true,
+    note: "Schutz vor Schritt-Flut: nur Menues/Listen zaehlen, blosses Blaettern nicht.",
+    run: async () => {
+      await page.evaluate(() => document.activeElement && document.activeElement.blur());
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await sleep(600);
+    },
+    verify: async (r) =>
+      r.live.length === 0
+        ? { verdict: "erfasst", detail: "kein Schritt (korrekt)" }
+        : { verdict: "teilweise", detail: `${r.live.length} ueberfluessige(r) Schritt(e)` },
   });
 
   await testCase({
     id: "3.6-pfeiltasten-menue",
     muster: "Menue per Pfeiltaste oeffnen, Eintrag per Enter waehlen",
-    supported: false,
-    note: "Die Auswahl per Enter wird erfasst, das OEFFNEN per Pfeiltaste nicht - in der Anleitung fehlt damit ein Schritt.",
+    supported: true,
+    note: "Welle 55 (L4): erst das OEFFNEN (Schritt auf den Menue-Knopf), dann die Auswahl per Enter.",
     run: async () => {
       await page.focus("#mtrig");
       await page.keyboard.press("ArrowDown");
       await sleep(150);
       await page.keyboard.press("Enter");
-      await sleep(250);
+      await sleep(400);
     },
     verify: async (r) => {
       if (!r.live.length) return { verdict: "nicht" };
       if (r.live.length === 1) {
         return { verdict: "teilweise", detail: `nur „${r.live[0].label}“ - der Schritt zum Oeffnen des Menues fehlt` };
       }
-      return { verdict: "erfasst", detail: r.live.map((s) => s.label).join(" -> ") };
+      const opener = (r.live[0].selector || {}).css === "#mtrig";
+      return {
+        verdict: opener ? "erfasst" : "teilweise",
+        detail: r.live.map((s) => s.label).join(" -> "),
+      };
     },
   });
 
@@ -790,32 +854,110 @@ try {
       })),
   });
 
+  // Ab hier laeuft die Aufnahme SCHON, waehrend die Seiten geladen werden (navMode) — nur so
+  // koennen Seitenwechsel-Schritte entstehen (sonst gilt „die Seite war vorher schon offen").
+  navMode(true);
+
   await testCase({
     id: "6.2-zurueck-knopf",
     muster: "Zurueck-Knopf des Browsers",
-    supported: false,
-    note: "Browser-Bedienleiste: die Seite sieht den Klick nie. popstate waere erkennbar, wird aber nicht ausgewertet.",
+    supported: true,
+    note: "Welle 55 (L1): die Seite sieht den Klick nie — erkannt wird die ANKUNFT (navigation type back_forward bzw. pageshow aus dem bfcache).",
     run: async () => {
+      await open("/scroll-nav.html");
+      await page.goto("http://steply.test/zweite.html", { waitUntil: "load" });
+      await arm();
+      // Abstand > 1,5 s: sonst gilt der Wechsel als FOLGE des vorigen Schritts (gewollt).
+      await sleep(1800);
       reset();
       await page.goBack({ waitUntil: "load" }).catch(() => {});
-      await sleep(400);
       await arm();
+      await sleep(900);
     },
-    verify: async (r) => (r.live.length ? { verdict: "erfasst" } : { verdict: "nicht" }),
+    verify: async (r) => {
+      const nav = r.live.filter((s) => s.interaction && s.interaction.variant === "nav");
+      if (!nav.length) return { verdict: "nicht" };
+      const s = nav[0];
+      const ok = s.interaction.nav === "back" && !s.selector;
+      return {
+        verdict: ok ? "erfasst" : "teilweise",
+        detail: `nav=${s.interaction.nav} ohne Selektor=${!s.selector} Seite beim Screenshot=${JSON.stringify(s.__url)}`,
+      };
+    },
   });
 
   await testCase({
     id: "6.3-neu-laden",
     muster: "Seite neu laden (F5)",
-    supported: false,
+    supported: true,
+    note: "Welle 55 (L1): Schritt „Seite neu laden“, Screenshot zeigt die NEU geladene Seite.",
     run: async () => {
+      await open("/scroll-nav.html");
+      await sleep(1800);
       reset();
       await page.reload({ waitUntil: "load" }).catch(() => {});
-      await sleep(400);
       await arm();
+      await sleep(900);
     },
-    verify: async (r) => (r.live.length ? { verdict: "erfasst" } : { verdict: "nicht" }),
+    verify: async (r) => {
+      const nav = r.live.filter((s) => s.interaction && s.interaction.variant === "nav");
+      if (!nav.length) return { verdict: "nicht" };
+      const s = nav[0];
+      return {
+        verdict: s.interaction.nav === "reload" && !s.selector ? "erfasst" : "teilweise",
+        detail: `nav=${s.interaction.nav} ohne Selektor=${!s.selector}`,
+      };
+    },
   });
+
+  await testCase({
+    id: "6.3b-adressleiste",
+    muster: "Neue Seite ohne Klick ansteuern (Adressleiste/Weiterleitung)",
+    supported: true,
+    note: "Welle 55 (L1): Schritt „Weiter zu ‚Zweite Seite‘“ — sonst klafft in der Anleitung ein Sprung.",
+    run: async () => {
+      await sleep(1800);
+      reset();
+      await page.goto("http://steply.test/zweite.html", { waitUntil: "load" });
+      await arm();
+      await sleep(900);
+    },
+    verify: async (r) => {
+      const nav = r.live.filter((s) => s.interaction && s.interaction.variant === "nav");
+      if (!nav.length) return { verdict: "nicht" };
+      const s = nav[0];
+      return {
+        verdict: s.interaction.nav === "goto" && !s.selector ? "erfasst" : "teilweise",
+        detail: `nav=${s.interaction.nav} title=${JSON.stringify(s.title)}`,
+      };
+    },
+  });
+
+  await testCase({
+    id: "6.3c-klick-dann-wechsel",
+    muster: "Klick auf einen Link: KEIN zweiter Schritt fuer den Seitenwechsel",
+    supported: true,
+    note: "Gegenprobe zu L1: folgt der Wechsel binnen 1,5 s auf einen erfassten Schritt, ist er dessen Folge.",
+    run: async () => {
+      await open("/scroll-nav.html");
+      await sleep(1800);
+      reset();
+      await clickAt("#timernav");
+      await page.waitForURL("**/zweite.html", { timeout: 4000 }).catch(() => {});
+      await arm();
+      await sleep(900);
+    },
+    verify: async (r) => {
+      const nav = r.live.filter((s) => s.interaction && s.interaction.variant === "nav");
+      const click = r.live.filter((s) => (s.selector || {}).css === "#timernav");
+      if (!click.length) return { verdict: "nicht", detail: "der Klick selbst fehlt" };
+      return nav.length
+        ? { verdict: "teilweise", detail: `ueberfluessiger Seitenwechsel-Schritt (${nav.length})` }
+        : { verdict: "erfasst", detail: "nur der Klick — kein Doppel-Schritt" };
+    },
+  });
+
+  navMode(false);
 
   await testCase({
     id: "6.4-weiterleitung-ohne-klick",
@@ -908,27 +1050,27 @@ try {
   await testCase({
     id: "8.2-shadow-geschlossen",
     muster: "Knopf in einem GESCHLOSSENEN Shadow DOM",
-    supported: false,
-    note: "Technische Browser-Grenze: geschlossene Shadow-Roots sind fuer JEDES Script unsichtbar, das Ereignis zeigt nur den Host.",
+    supported: true,
+    note: "Browser-Grenze bleibt: der Knopf ist unsichtbar. Welle 55 (L6) erfasst darum einen Schritt MIT Klickpunkt-Markierung und OHNE Selektor -> nicht automatisierbar.",
     run: async () => {
       const c = await center("#sclosed");
       await clickXY(c.x, c.y);
     },
-    verify: async (r) => {
-      if (!r.live.length) return { verdict: "nicht", detail: "kein Schritt" };
-      const s = r.live[0];
-      const isHost = /x-closed/i.test((s.selector || {}).css || "") || (s.selector || {}).css === "#sclosed";
-      return {
-        verdict: isHost ? "teilweise" : "erfasst",
-        detail: `Schritt zeigt nur den Baustein, nicht den Knopf: css=${JSON.stringify((s.selector || {}).css)} label=${JSON.stringify(s.label)}`,
-      };
-    },
+    verify: async (r) =>
+      one(r, async (s) => {
+        const spot = s.interaction && s.interaction.variant === "spot";
+        const rc = s.rect || {};
+        return {
+          verdict: spot && !s.selector ? "erfasst" : "teilweise",
+          detail: `variant=${s.interaction && s.interaction.variant} ohne Selektor=${!s.selector} Markierung=${(rc.w * rc.h).toFixed(5)} (Klickpunkt)`,
+        };
+      }),
   });
 
   await testCase({
     id: "8.3-canvas",
     muster: "Klick auf eine Canvas-Oberflaeche (Google-Docs-Muster)",
-    supported: false,
+    supported: true,
     note: "In Canvas-Oberflaechen gibt es kein DOM-Element pro Knopf - ein Selektor kann dort nie mehr als 'die Zeichenflaeche' sein.",
     run: async () => {
       const r = await page.evaluate(() => {
@@ -937,14 +1079,29 @@ try {
       });
       await clickXY(r.x, r.y);
     },
-    verify: async (r) => {
-      if (!r.live.length) return { verdict: "nicht", detail: "Klick auf Canvas erzeugt keinen Schritt (Dead-Click-Filter)" };
-      const s = r.live[0];
-      return {
-        verdict: "teilweise",
-        detail: `Schritt vorhanden, aber ohne Aussage: label=${JSON.stringify(s.label)} css=${JSON.stringify((s.selector || {}).css)}`,
-      };
+    verify: async (r) =>
+      one(r, async (s) => {
+        const spot = s.interaction && s.interaction.variant === "spot";
+        return {
+          verdict: spot && !s.selector ? "erfasst" : "teilweise",
+          detail: `variant=${s.interaction && s.interaction.variant} ohne Selektor=${!s.selector} rect=${JSON.stringify(s.rect)} (Markierung am Klickpunkt)`,
+        };
+      }),
+  });
+
+  await testCase({
+    id: "8.3b-leerflaeche",
+    muster: "Klick auf eine echte Leerflaeche (Gegenprobe: kein Schritt)",
+    supported: true,
+    note: "Der Dead-Click-Filter muss bleiben — sonst entstuende aus jedem Fehlklick ein Schritt.",
+    run: async () => {
+      await page.mouse.click(1080, 8);
+      await sleep(250);
     },
+    verify: async (r) =>
+      r.live.length === 0
+        ? { verdict: "erfasst", detail: "kein Schritt (korrekt)" }
+        : { verdict: "teilweise", detail: `${r.live.length} ueberfluessige(r) Schritt(e)` },
   });
 
   await testCase({
@@ -993,8 +1150,8 @@ try {
   await testCase({
     id: "9.2-doppelklick-tabelle",
     muster: "Doppelklick zum Bearbeiten in einer GEWOEHNLICHEN Tabellenzelle",
-    supported: false,
-    note: "Die Zelle ist nicht bedienbar (kein Knopf, kein tabindex, kein Zeiger-Cursor) -> der Dead-Click-Filter verwirft schon den ersten Klick. Vgl. 9.2b.",
+    supported: true,
+    note: "Welle 55 (L7): Doppelklicks IN Tabellenzellen (td/gridcell/cell) werden nachgereicht — bewusst nur dort, damit ein Doppelklick auf Fliesstext (Wort markieren) keinen Schritt erzeugt.",
     run: async () => {
       const c = await center("#cell");
       await page.mouse.dblclick(c.x, c.y);
@@ -1127,37 +1284,92 @@ try {
     },
   });
 
+  // page.mouse.click kennt KEINE modifiers-Option (die gibt es nur an locator.click) — die
+  // Taste muss darum echt gedrueckt gehalten werden, sonst prueft der Test gar nichts.
+  const clickWithKeys = async (sel, keys) => {
+    for (const k of keys) await page.keyboard.down(k);
+    try {
+      await clickAt(sel);
+    } finally {
+      for (const k of keys.slice().reverse()) await page.keyboard.up(k);
+    }
+  };
+
   await testCase({
     id: "11.1-strg-klick",
     muster: "Mehrfachauswahl per Strg+Klick",
-    supported: false,
+    supported: true,
+    note: "Welle 55 (L3): ohne die Strg-Taste im Schritt verliert der Leser seine bisherige Auswahl, und der Automations-Lauf waehlt falsch.",
     run: async () => {
       await clickAt("#m1");
       reset();
-      await clickAt("#m3", { modifiers: ["Control"] });
+      await clickWithKeys("#m3", ["Control"]);
       await sleep(250);
     },
     verify: async (r) =>
-      one(r, async (s) => ({
-        verdict: s.interaction && (s.interaction.modifiers || s.interaction.ctrl) ? "erfasst" : "teilweise",
-        detail: `Schritt sieht aus wie ein normaler Klick - die Strg-Taste fehlt (interaction=${JSON.stringify(s.interaction || null)}); Auswahl beim Screenshot=${s.__probe && s.__probe.sel}`,
-      })),
+      one(r, async (s) => {
+        const mods = (s.interaction && s.interaction.modifiers) || [];
+        return {
+          verdict: mods.length === 1 && mods[0] === "ctrl" ? "erfasst" : "teilweise",
+          detail: `interaction=${JSON.stringify(s.interaction || null)}; Auswahl beim Screenshot=${s.__probe && s.__probe.sel}`,
+        };
+      }),
   });
 
   await testCase({
     id: "11.2-shift-klick",
     muster: "Bereichsauswahl per Shift+Klick",
-    supported: false,
+    supported: true,
     run: async () => {
       await clickAt("#m1");
       reset();
-      await clickAt("#m4", { modifiers: ["Shift"] });
+      await clickWithKeys("#m4", ["Shift"]);
+      await sleep(250);
+    },
+    verify: async (r) =>
+      one(r, async (s) => {
+        const mods = (s.interaction && s.interaction.modifiers) || [];
+        return {
+          verdict: mods.length === 1 && mods[0] === "shift" ? "erfasst" : "teilweise",
+          detail: `interaction=${JSON.stringify(s.interaction || null)}`,
+        };
+      }),
+  });
+
+  await testCase({
+    id: "11.3-strg-umschalt-klick",
+    muster: "Strg+Umschalt+Klick (beide Zusatztasten)",
+    supported: true,
+    run: async () => {
+      await clickAt("#m1");
+      reset();
+      await clickWithKeys("#m4", ["Control", "Shift"]);
+      await sleep(250);
+    },
+    verify: async (r) =>
+      one(r, async (s) => {
+        const mods = (s.interaction && s.interaction.modifiers) || [];
+        return {
+          verdict: mods.join("+") === "ctrl+shift" ? "erfasst" : "teilweise",
+          detail: `modifiers=${JSON.stringify(mods)} (feste Reihenfolge ctrl,meta,alt,shift)`,
+        };
+      }),
+  });
+
+  await testCase({
+    id: "11.4-klick-ohne-zusatztaste",
+    muster: "Gewoehnlicher Klick traegt KEINE Zusatztasten",
+    supported: true,
+    note: "Gegenprobe zu L3: sonst stuende in jeder Anleitung eine erfundene Taste.",
+    run: async () => {
+      reset();
+      await clickAt("#m2");
       await sleep(250);
     },
     verify: async (r) =>
       one(r, async (s) => ({
-        verdict: s.interaction && (s.interaction.modifiers || s.interaction.shift) ? "erfasst" : "teilweise",
-        detail: `Shift fehlt im Schritt (interaction=${JSON.stringify(s.interaction || null)})`,
+        verdict: !(s.interaction && s.interaction.modifiers) ? "erfasst" : "teilweise",
+        detail: `interaction=${JSON.stringify(s.interaction || null)}`,
       })),
   });
 
