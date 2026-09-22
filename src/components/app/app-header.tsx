@@ -528,6 +528,7 @@ export function TabBar({
   return (
     <nav
       aria-label="Hauptnavigation"
+      data-mobile-tabbar
       className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t-2 border-line bg-card px-0.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
     >
       {left.map((item) => (

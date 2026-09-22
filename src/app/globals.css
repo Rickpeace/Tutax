@@ -294,3 +294,18 @@
   background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-size: 22px 22px;
 }
+
+/* Toasts (sonner): unten statt oben mittig — oben lagen sie über der App-Navigation.
+   Ab lg unten rechts mit 24px Abstand; darunter (mobile Tab-Leiste sichtbar, lg:hidden)
+   mit Abstand ÜBER der Tab-Leiste. Ohne Tab-Leiste (Hilfe-Seite, Login) normaler Abstand.
+   Werte liest der Toaster über offset/mobileOffset (src/components/ui/sonner.tsx). */
+:root {
+  --toast-offset-bottom: 24px;
+  --toast-offset-bottom-mobile: 16px;
+}
+@media (max-width: 1023.98px) {
+  :root:has([data-mobile-tabbar]) {
+    --toast-offset-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    --toast-offset-bottom-mobile: calc(5.25rem + env(safe-area-inset-bottom));
+  }
+}

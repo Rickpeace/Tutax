@@ -11,6 +11,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // App-weit unten (rechts auf Desktop, mobil volle Breite über der Tab-Leiste) —
+      // oben mittig verdeckten Toasts die Navigation. Abstände: globals.css (--toast-offset-*).
+      position="bottom-right"
+      offset={{ bottom: "var(--toast-offset-bottom)", right: "24px" }}
+      mobileOffset={{ bottom: "var(--toast-offset-bottom-mobile)", left: "16px", right: "16px" }}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />

@@ -35,7 +35,7 @@ export default function RootLayout({
     <html lang="de" className={`${nunito.variable} h-full`}>
       <body className="min-h-full flex flex-col">
         <TooltipProvider delay={200}>{children}</TooltipProvider>
-        <Toaster position="top-center" richColors />
+        <Toaster richColors />
       </body>
     </html>
   );
