@@ -141,6 +141,7 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - `node --env-file=.env.local scripts/test-internal-rls.mjs` (interne Tutorials anon-dicht)
   - `node --env-file=.env.local scripts/test-internal-trace.mjs` (intern: keine public Bilder/Embeddings)
   - `node --env-file=.env.local scripts/test-kb-import-live.mjs` (Wissens-Import + SSRF + PDF)
+  - `node --env-file=.env.local scripts/test-chat-topic-e2e.mjs` (Themen-Abgrenzung nach Branche, „Offene Fragen" nur Fach-Lücken)
   - `node --env-file=.env.local scripts/test-kb-sync-e2e.mjs` (Chatbot-Index folgt Bearbeiten/Zurückziehen/Löschen; keine leere Weiterleitungs-Zusage)
   - `node --env-file=.env.local scripts/test-translate-live.mjs` (Übersetzungen inkl. Delta + stale)
   - `node --env-file=.env.local scripts/test-tts-live.mjs`     (Vorlesen: Hash-Cache, public MP3)
@@ -220,7 +221,9 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
 - [x] **Chatbot-Index-Sync (22.09.2026)**: Bearbeiten veröffentlichter Anleitungen zieht den Index im Hintergrund nach
       (`reindexTutorialIfLive`); Migration **0040**: Trigger räumen den Index bei Löschen/Zurückziehen/intern in der DB,
       `replace_kb_source` ersetzt atomar (keine Duplikate, schreibt nie Entwürfe). Bot verspricht nur noch mit
-      hinterlegtem Kontakt eine Weiterleitung.
+      hinterlegtem Kontakt eine Weiterleitung. **Themen-Abgrenzung**: der Bot leitet das Tätigkeitsfeld aus den Titeln
+      der eigenen Anleitungen/Kategorien/Artikel ab (`loadTopicOverview` in `/api/chat`) → Fremdes = off_topic, nur echte
+      Fach-Lücken landen unter „Offene Fragen" (Test: `scripts/test-chat-topic-e2e.mjs`).
 - [x] **Drift-Agent**: `/api/tutorials/[id]/check` (gpt-4o-mini bewertet Veralterung →
       `change_alerts` + `freshness`), `DriftCheckButton` im Editor, Alert-Center `/app/alerts`,
       Glocke mit Zähler im Header.
