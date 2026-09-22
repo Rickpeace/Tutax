@@ -86,6 +86,9 @@ type Key =
   | "stepNoun"
   | "enlargeImage"
   | "imagePreview"
+  | "zoomIn"
+  | "zoomOut"
+  | "zoomReset"
   | "close"
   | "screenshotComing"
   | "printNow"
@@ -165,6 +168,9 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     stepNoun: "Schritt",
     enlargeImage: "Bild vergrößern",
     imagePreview: "Bildvorschau",
+    zoomIn: "Größer",
+    zoomOut: "Kleiner",
+    zoomReset: "Ganzes Bild",
     close: "Schließen",
     screenshotComing: "Screenshot folgt",
     printNow: "Drucken",
@@ -244,6 +250,9 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     stepNoun: "Step",
     enlargeImage: "Enlarge image",
     imagePreview: "Image preview",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    zoomReset: "Fit image",
     close: "Close",
     screenshotComing: "Screenshot coming",
     printNow: "Print",
@@ -323,6 +332,9 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     stepNoun: "Krok",
     enlargeImage: "Powiększ obraz",
     imagePreview: "Podgląd obrazu",
+    zoomIn: "Powiększ",
+    zoomOut: "Pomniejsz",
+    zoomReset: "Całe zdjęcie",
     close: "Zamknij",
     screenshotComing: "Zrzut ekranu wkrótce",
     printNow: "Drukuj",
@@ -402,6 +414,9 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     stepNoun: "Adım",
     enlargeImage: "Resmi büyüt",
     imagePreview: "Resim önizleme",
+    zoomIn: "Yakınlaştır",
+    zoomOut: "Uzaklaştır",
+    zoomReset: "Tüm resim",
     close: "Kapat",
     screenshotComing: "Ekran görüntüsü yakında",
     printNow: "Yazdır",

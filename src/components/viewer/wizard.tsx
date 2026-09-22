@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2, Volume2, VolumeX, Pause, PlayCircle, PauseCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Check, Image as ImageIcon, X, ThumbsUp, ThumbsDown, Loader2, Volume2, VolumeX, Pause, PlayCircle, PauseCircle, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import type { Step, StepBranch } from "@/lib/types";
 import { ViewerImage } from "@/components/viewer/viewer-image";
 import { RichTextView } from "@/components/viewer/rich-text-view";
 import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
 import { dateDe } from "@/lib/format";
 import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
+
+/** Schlüssel, unter dem der Wizard seinen Stand im Browser-Verlaufseintrag ablegt. */
+const WIZ_STATE = "steplyWizard";
+type WizSnapshot = { cur: string | null; history: string[]; depth: number };
 
 export function Wizard({
   rootId,
@@ -68,6 +72,8 @@ export function Wizard({
     highlights: NonNullable<Step["highlights"]>;
     image_width: number | null;
     image_height: number | null;
+    /** Alt-Text = Schritt-Titel (wie am Bild im Schritt selbst). */
+    alt: string;
   } | null>(null);
   const [feedback, setFeedback] = useState<"sent" | null>(null);
   // Schritt-IDs, für die schon „komme nicht weiter" gemeldet wurde (1×/Schritt).
@@ -109,30 +115,110 @@ export function Wizard({
     }
   };
 
+  // ---- Browser-Verlauf (Welle 52) ----------------------------------------
+  // Jeder Schrittwechsel legt einen Verlaufseintrag an, der den kompletten Stand
+  // (aktueller Schritt + Weg dorthin) trägt. So geht der Zurück-Knopf des Browsers
+  // EINEN Schritt zurück statt die Anleitung zu verlassen; Vorwärts funktioniert
+  // genauso, und erst am ersten Schritt verlässt Zurück die Seite.
+  // WICHTIG: Der bestehende Zustand (Next.js-Router-Interna) wird mitkopiert —
+  // ohne ihn lädt der Router bei popstate die Seite komplett neu.
+  const depthRef = useRef(0);
+  // Aktueller Stand für Rückrufe (Timer/„Ton zu Ende“), die sonst veraltete Werte sähen.
+  const stateRef = useRef<{ cur: string | null; history: string[] }>({ cur: rootId, history: [] });
+
+  const writeHistory = useCallback(
+    (nextCur: string | null, nextHistory: string[], replace: boolean) => {
+      if (typeof window === "undefined") return;
+      const depth = replace ? depthRef.current : depthRef.current + 1;
+      depthRef.current = depth;
+      const snap: WizSnapshot = { cur: nextCur, history: nextHistory, depth };
+      try {
+        const next = { ...(window.history.state ?? {}), [WIZ_STATE]: snap };
+        if (replace) window.history.replaceState(next, "");
+        else window.history.pushState(next, "");
+      } catch {
+        /* Verlaufs-Komfort darf nie brechen */
+      }
+    },
+    [],
+  );
+
+  /** Einzige Stelle, die den Schritt wechselt — hält React-Zustand und Verlauf synchron. */
+  const navigate = useCallback(
+    (nextCur: string | null, nextHistory: string[]) => {
+      // Gleicher Schritt (Doppelklick, Neustart auf dem Startschritt): kein neuer
+      // Eintrag, sonst wächst der Verlauf endlos.
+      const sameStep = nextCur === stateRef.current.cur;
+      stateRef.current = { cur: nextCur, history: nextHistory };
+      setCur(nextCur);
+      setHistory(nextHistory);
+      writeHistory(nextCur, nextHistory, sameStep);
+    },
+    [writeHistory],
+  );
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const snap = (e.state as Record<string, unknown> | null)?.[WIZ_STATE] as
+        | WizSnapshot
+        | undefined;
+      if (!snap || typeof snap !== "object") return;
+      const nc = typeof snap.cur === "string" && stepById.has(snap.cur) ? snap.cur : null;
+      const nh = Array.isArray(snap.history)
+        ? snap.history.filter((h) => typeof h === "string" && stepById.has(h))
+        : [];
+      depthRef.current = typeof snap.depth === "number" ? snap.depth : 0;
+      stateRef.current = { cur: nc, history: nh };
+      setCur(nc);
+      setHistory(nh);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [stepById]);
+
   // Position übersteht Reload/Zurück (REVIEW A1): pro Tutorial in sessionStorage.
   // Nur wiederherstellen, wenn alle gespeicherten Schritt-IDs noch existieren
-  // (Tutorial könnte inzwischen geändert worden sein).
+  // (Tutorial könnte inzwischen geändert worden sein). Der Verlaufseintrag dieses
+  // Browser-Eintrags hat Vorrang — er ist genauer als der tab-weite Speicher.
   const storKey =
     accountSlug && tutorialSlug ? `steply-wiz-${accountSlug}-${tutorialSlug}` : null;
   useEffect(() => {
-    if (!storKey) return;
+    let initCur: string | null = rootId;
+    let initHistory: string[] = [];
+    const valid = (c: unknown, h: unknown): h is string[] =>
+      (c === null || (typeof c === "string" && stepById.has(c))) &&
+      Array.isArray(h) &&
+      h.every((x) => typeof x === "string" && stepById.has(x));
     try {
-      const raw = sessionStorage.getItem(storKey);
-      if (!raw) return;
-      const s = JSON.parse(raw) as { cur?: string | null; history?: string[] };
-      if (!Array.isArray(s.history)) return;
-      const validCur = s.cur === null || (typeof s.cur === "string" && stepById.has(s.cur));
-      const validHist = s.history.every((h) => typeof h === "string" && stepById.has(h));
-      if (validCur && validHist && (s.cur !== rootId || s.history.length > 0)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Positions-Wiederherstellung aus sessionStorage nach Mount (hydration-sicher), kein Cascade
-        setCur(s.cur ?? null);
-        setHistory(s.history);
+      const snap = (window.history.state as Record<string, unknown> | null)?.[WIZ_STATE] as
+        | WizSnapshot
+        | undefined;
+      if (snap && typeof snap === "object" && valid(snap.cur, snap.history)) {
+        initCur = snap.cur;
+        initHistory = snap.history;
+        depthRef.current = typeof snap.depth === "number" ? snap.depth : 0;
+      } else if (storKey) {
+        const raw = sessionStorage.getItem(storKey);
+        const s = raw ? (JSON.parse(raw) as { cur?: string | null; history?: string[] }) : null;
+        if (s && valid(s.cur ?? null, s.history)) {
+          initCur = s.cur ?? null;
+          initHistory = s.history;
+        }
       }
     } catch {
       /* Tracking-Komfort darf nie brechen */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storKey]);
+    stateRef.current = { cur: initCur, history: initHistory };
+    if (initCur !== rootId || initHistory.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Positions-Wiederherstellung nach Mount (hydration-sicher), kein Cascade
+      setCur(initCur);
+      setHistory(initHistory);
+    }
+    // Startposition in den BESTEHENDEN Verlaufseintrag schreiben (kein neuer Eintrag):
+    // so verlässt Zurück am ersten Schritt die Seite und ein Neuladen hält die Position.
+    writeHistory(initCur, initHistory, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim ersten Rendern
+  }, []);
   useEffect(() => {
     if (!storKey) return;
     try {
@@ -273,41 +359,38 @@ export function Wizard({
   const jumpTo = (idx: number) => {
     if (!linearPath) return;
     gestureRef.current = true;
-    setCur(linearPath[idx] ?? null);
-    setHistory(linearPath.slice(0, idx));
+    navigate(linearPath[idx] ?? null, linearPath.slice(0, idx));
   };
 
   const go = (target: string | null) => {
     gestureRef.current = true; // Navigation = Geste vorhanden (erlaubt Auto-Play)
-    setHistory((h) => (cur != null ? [...h, cur] : h));
-    setCur(target);
+    const { cur: c, history: h } = stateRef.current;
+    navigate(target, c != null ? [...h, c] : h);
   };
   const back = () => {
     gestureRef.current = true;
-    setHistory((h) => {
-      if (!h.length) return h;
-      const n = [...h];
-      setCur(n.pop() ?? rootId);
-      return n;
-    });
+    // Es gibt einen eigenen Verlaufseintrag -> den Browser zurückgehen lassen, damit
+    // Knopf und Browser-Zurück denselben Weg nehmen (kein doppelter Eintrag).
+    if (depthRef.current > 0) {
+      window.history.back();
+      return;
+    }
+    const h = stateRef.current.history;
+    if (!h.length) return;
+    navigate(h[h.length - 1], h.slice(0, -1));
   };
-  const restart = () => {
-    setCur(rootId);
-    setHistory([]);
-  };
+  const restart = () => navigate(rootId, []);
 
   const step = cur != null ? stepById.get(cur) : null;
 
   // Auto-Modus: zum nächsten Schritt entlang des Standard-Ausgangs (branches[0]).
   // Nur für NICHT-Entscheidungsschritte gedacht (Entscheidungen warten auf Klick).
   const goNext = useCallback(() => {
-    setCur((c) => {
-      if (c == null) return c;
-      const target = branchesByStep.get(c)?.[0]?.target_step_id ?? null;
-      setHistory((h) => [...h, c]);
-      return target;
-    });
-  }, [branchesByStep]);
+    const { cur: c, history: h } = stateRef.current;
+    if (c == null) return;
+    const target = branchesByStep.get(c)?.[0]?.target_step_id ?? null;
+    navigate(target, [...h, c]);
+  }, [branchesByStep, navigate]);
 
   // Nach Schrittwechsel Fokus auf den Schritt-Titel (A11y: Screenreader/Tastatur).
   useEffect(() => {
@@ -379,15 +462,12 @@ export function Wizard({
   // Timer/Audio beim Unmount aufräumen.
   useEffect(() => () => clearAutoTimer(), [clearAutoTimer]);
 
-  // Lightbox per Escape schließen.
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightbox(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  // Großansicht: Knopf merken, der sie geöffnet hat — dorthin geht der Fokus zurück.
+  const zoomTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeLightbox = useCallback(() => {
+    setLightbox(null);
+    zoomTriggerRef.current?.focus();
+  }, []);
 
   return (
     <div
@@ -543,12 +623,14 @@ export function Wizard({
           {imageUrls[step.id] ? (
             <button
               type="button"
+              ref={zoomTriggerRef}
               onClick={() =>
                 setLightbox({
                   url: imageUrls[step.id],
                   highlights: step.highlights ?? [],
                   image_width: step.image_width,
                   image_height: step.image_height,
+                  alt: step.title ?? "",
                 })
               }
               aria-label={L.enlargeImage}
@@ -788,45 +870,226 @@ export function Wizard({
         </div>
       )}
 
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-3"
-          onClick={() => setLightbox(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label={L.imagePreview}
-        >
-          {/* Gleiche Darstellung wie im Schritt — inkl. Markierungen (nicht nur das
-              rohe Bild). Breite so, dass Bild samt Seitenverhältnis in 92vh/95vw passt. */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width:
-                lightbox.image_width && lightbox.image_height
-                  ? `min(95vw, calc(92vh * ${lightbox.image_width / lightbox.image_height}))`
-                  : "min(95vw, 1100px)",
-            }}
-          >
-            <ViewerImage
-              url={lightbox.url}
-              highlights={lightbox.highlights}
-              width={lightbox.image_width}
-              height={lightbox.image_height}
-              alt=""
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setLightbox(null)}
-            aria-label={L.close}
-            className="fixed right-4 top-4 flex size-10 items-center justify-center rounded-full bg-white/90 text-ink shadow-lg transition-transform hover:scale-105"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-      )}
+      {lightbox && <Lightbox data={lightbox} labels={L} onClose={closeLightbox} />}
       </div>
     </div>
+  );
+}
+
+type LightboxData = {
+  url: string;
+  highlights: NonNullable<Step["highlights"]>;
+  image_width: number | null;
+  image_height: number | null;
+  alt: string;
+};
+
+/**
+ * Großansicht eines Schritt-Bildes.
+ *
+ * Nutzt das GANZE Fenster (die alte Fassung ließ 5 % Rand und passte das Bild in die
+ * Fensterhöhe — auf dem Handy war das Bild danach kaum größer als im Schritt) und erlaubt
+ * Vergrößern/Verschieben: Knöpfe, Doppeltippen und Ziehen. Auf schmalen Fenstern startet
+ * sie bereits vergrößert (das Bild füllt die Höhe), weil genau dort das Vergrößern zählt.
+ *
+ * Barrierefreiheit: Fokus wandert beim Öffnen in den Dialog, Tab bleibt darin gefangen,
+ * Escape schließt; zurück geht der Fokus auf das auslösende Bild (siehe closeLightbox).
+ */
+function Lightbox({
+  data,
+  labels,
+  onClose,
+}: {
+  data: LightboxData;
+  labels: HubLabels;
+  onClose: () => void;
+}) {
+  const TOOLBAR = 56;
+  const MAX_ZOOM = 6;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [vp, setVp] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ id: number; x: number; y: number; px: number; py: number } | null>(null);
+  const movedRef = useRef(false);
+  const startedRef = useRef(false);
+
+  const aspect =
+    data.image_width && data.image_height ? data.image_width / data.image_height : 16 / 10;
+
+  useEffect(() => {
+    const update = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const availW = Math.max(1, vp.w);
+  const availH = Math.max(1, vp.h - TOOLBAR);
+  const fitW = Math.min(availW, availH * aspect);
+  const fitH = fitW / aspect;
+  // Startvergrößerung: so weit, dass das Bild die Fensterhöhe füllt (höchstens 2,5×).
+  // Auf breiten Fenstern ist das 1× — dort füllt „passend“ das Fenster schon aus.
+  const startZoom = Math.min(2.5, Math.max(1, availH / Math.max(1, fitH)));
+
+  useEffect(() => {
+    if (startedRef.current || vp.w === 0) return;
+    startedRef.current = true;
+    // Startvergrößerung steht erst fest, wenn die Fenstergröße gemessen ist.
+    setZoom(startZoom);
+  }, [startZoom, vp.w]);
+
+  const maxX = Math.max(0, (fitW * zoom - availW) / 2);
+  const maxY = Math.max(0, (fitH * zoom - availH) / 2);
+  const clampPan = (p: { x: number; y: number }) => ({
+    x: Math.min(maxX, Math.max(-maxX, p.x)),
+    y: Math.min(maxY, Math.max(-maxY, p.y)),
+  });
+  const shown = clampPan(pan);
+
+  const setZoomAt = (next: number) => {
+    const z = Math.min(MAX_ZOOM, Math.max(1, next));
+    setZoom(z);
+    if (z <= 1.001) setPan({ x: 0, y: 0 });
+  };
+
+  // Fokusfalle + Escape + Seite hinter dem Overlay ruhigstellen.
+  useEffect(() => {
+    closeRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = rootRef.current;
+      if (!root) return;
+      const items = [...root.querySelectorAll<HTMLElement>("button:not([disabled])")];
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const inside = !!active && root.contains(active);
+      if (e.shiftKey && (!inside || active === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={labels.imagePreview}
+      className="fixed inset-0 z-[100] flex flex-col bg-black/90"
+    >
+      <div
+        className="flex shrink-0 items-center justify-end gap-2 px-2"
+        style={{ height: TOOLBAR }}
+      >
+        <ToolButton onClick={() => setZoomAt(zoom / 1.6)} label={labels.zoomOut} disabled={zoom <= 1.001}>
+          <ZoomOut className="size-5" />
+        </ToolButton>
+        <ToolButton onClick={() => setZoomAt(1)} label={labels.zoomReset} disabled={zoom <= 1.001}>
+          <Maximize2 className="size-5" />
+        </ToolButton>
+        <ToolButton onClick={() => setZoomAt(zoom * 1.6)} label={labels.zoomIn} disabled={zoom >= MAX_ZOOM - 0.001}>
+          <ZoomIn className="size-5" />
+        </ToolButton>
+        <ToolButton onClick={onClose} label={labels.close} ref={closeRef}>
+          <X className="size-5" />
+        </ToolButton>
+      </div>
+
+      <div
+        className="relative min-h-0 flex-1 touch-none select-none overflow-hidden"
+        style={{ cursor: zoom > 1.001 ? "grab" : "zoom-in" }}
+        onPointerDown={(e) => {
+          movedRef.current = false;
+          if (zoom <= 1.001) return;
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          dragRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, px: shown.x, py: shown.y };
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (!d || d.id !== e.pointerId) return;
+          const dx = e.clientX - d.x;
+          const dy = e.clientY - d.y;
+          if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
+          setPan(clampPan({ x: d.px + dx, y: d.py + dy }));
+        }}
+        onPointerUp={() => {
+          dragRef.current = null;
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+        }}
+        onDoubleClick={() => setZoomAt(zoom > 1.001 ? 1 : 3)}
+        onClick={(e) => {
+          // Klick auf die freie Fläche schließt — ein Ziehen aber nicht.
+          if (movedRef.current) return;
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ transform: `translate(${shown.x}px, ${shown.y}px) scale(${zoom})` }}
+        >
+          {/* Gleiche Darstellung wie im Schritt — inkl. Markierungen und Verpixelung. */}
+          <div style={{ width: fitW || undefined }}>
+            <ViewerImage
+              url={data.url}
+              highlights={data.highlights}
+              width={data.image_width}
+              height={data.image_height}
+              alt={data.alt}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolButton({
+  children,
+  label,
+  onClick,
+  disabled,
+  ref,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  ref?: React.Ref<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="flex size-10 items-center justify-center rounded-full bg-white/90 text-ink shadow-lg transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+    >
+      {children}
+    </button>
   );
 }
 
