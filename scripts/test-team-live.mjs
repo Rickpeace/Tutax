@@ -321,6 +321,19 @@ try {
   ok(!!tOwner && !!tEditor && tOwner !== tEditor, "Erweiterung: Inhaber UND Bearbeiter haben je eine eigene Verbindung");
   ok((await recorderMe(tOwner)) === 200 && (await recorderMe(tEditor)) === 200,
     "Erweiterung: beide Verbindungen gültig – Bearbeiter hat den Inhaber NICHT rausgeworfen");
+  // Migration 0041: zweiter Browser derselben Person -> eigene Verbindung, die erste bleibt.
+  // (Vor 0041 gibt es genau eine Verbindung je Person -> Teil überspringen.)
+  const multiConn = !(await admin.from("recorder_tokens").select("id").limit(1)).error;
+  let edToks = [];
+  if (multiConn) {
+    await makeCode(np);
+    edToks = (await admin.from("recorder_tokens").select("token").eq("account_id", ownerAid).eq("user_id", neuUid)).data ?? [];
+    const edStatus = await Promise.all(edToks.map((t) => recorderMe(t.token)));
+    ok(edToks.length === 2 && edStatus.every((st) => st === 200),
+      `Erweiterung: zweiter Browser des Bearbeiters – beide Verbindungen gültig (${edStatus.join(",")})`);
+  } else {
+    console.log("… Migration 0041 fehlt -> Mehrfach-Verbindungen hier übersprungen");
+  }
 
   // ================= 6c) Mitarbeiter =================
   await invite(op, E.mit, "member");
@@ -454,13 +467,19 @@ try {
   const neuRole = (await memberships(neuUid)).find((m) => m.account_id === ownerAid)?.role;
   ok(neuRole === "member", "Rolle ändern: Bearbeiter -> Mitarbeiter gespeichert");
   ok((await recorderMe(tEditor)) === 401, "Rolle ändern: Erweiterung des neuen Mitarbeiters ist getrennt");
+  if (multiConn) {
+    const edAfter = await Promise.all(edToks.map((t) => recorderMe(t.token)));
+    ok(edAfter.length === 2 && edAfter.every((st) => st === 401), "Rolle ändern: ALLE Verbindungen (beide Browser) getrennt");
+  }
   ok((await recorderMe(tOwner)) === 200, "Rolle ändern: Erweiterung des Inhabers läuft weiter");
   await op.goto(`${BASE}/app/settings/team`, { waitUntil: "domcontentloaded" });
   await op.getByLabel(`Rolle von ${E.neu}`).selectOption("editor");
   await op.getByText(`${E.neu} ist jetzt Bearbeiter`).waitFor({ timeout: 30_000 });
   ok((await memberships(neuUid)).find((m) => m.account_id === ownerAid)?.role === "editor", "Rolle ändern: zurück zu Bearbeiter");
   await makeCode(np); // wieder Bearbeiter -> neue Verbindung für den Entfernen-Test
-  const tEditor2 = (await admin.from("recorder_tokens").select("token").eq("account_id", ownerAid).eq("user_id", neuUid).maybeSingle()).data?.token;
+  // Seit 0041 kann eine Person mehrere Verbindungen haben -> die neueste nehmen (nach dem
+  // Herabstufen wurden alle gelöscht, hier gibt es also genau die eben erzeugte).
+  const tEditor2 = (await admin.from("recorder_tokens").select("token").eq("account_id", ownerAid).eq("user_id", neuUid).order("created_at", { ascending: false }).limit(1)).data?.[0]?.token;
 
   // ================= 6d2) Einladungen laufen nach 14 Tagen ab =================
   await invite(op, mail("alt"), "editor");
@@ -535,6 +554,8 @@ try {
   ok(!afterRemove.startsWith("/app"), `Entfernt: kein Zugriff mehr auf die App (landet auf ${afterRemove})`);
   ok((await np.getByText("aus dem Team entfernt").count()) > 0, "Entfernt: Anmeldeseite erklärt, warum");
   ok(!!tEditor2 && (await recorderMe(tEditor2)) === 401, "Entfernt: Erweiterung der Person hat keinen Zugang mehr");
+  const { count: leftToks } = await admin.from("recorder_tokens").select("token", { count: "exact", head: true }).eq("account_id", ownerAid).eq("user_id", neuUid);
+  ok(leftToks === 0, `Entfernt: keine Verbindung der Person mehr in der DB (${leftToks})`);
   // alter/zurückgezogener Link -> Hinweis auf der Anmeldeseite
   await rp.goto(`${BASE}/invite/${invFremd.token}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
   await rp.waitForURL((u) => u.pathname === "/login", { timeout: 30_000 }).catch(() => {});

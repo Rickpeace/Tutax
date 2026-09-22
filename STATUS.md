@@ -29,6 +29,7 @@ Letztes Update: 2026-09-22 (Editor-Überarbeitung + KI-Texte + Eingaben, s. §7i
 > - **Geparkt:** „Aktualität prüfen“-Umbau (Text vs. Screenshot) auf Branch
 >   `welle-53-drift-text-vs-screenshot` — Richard: „erstmal weglassen“.
 > - **Parallel (andere Sitzung):** Team-Rollen Inhaber/Bearbeiter/Mitarbeiter, Migrationen 0037–0040.
+> - **Mehrere Erweiterungs-Verbindungen je Person (22.09.2026):** Migration **0041** (`recorder_multi_connection`) liegt bereit, **noch NICHT angewendet**. Code läuft mit und ohne 0041 (ohne: altes Verhalten, eine Verbindung je Person). Reihenfolge: Code deployen → 0041 anwenden → `test-recorder-connections-live.mjs` + `test-team-live.mjs` (TEAM_PROD=1) laufen lassen.
 
 ## 7h. Live-Führung + Seiten-Erkennung (06.07.2026, Wellen 31a–d) — LIVE, Extension v2.5.1
 > Tango-Prinzip: Die Extension führt Tutorials DIREKT auf der echten Website — Panel
@@ -173,7 +174,8 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - `node --env-file=.env.local scripts/test-team-live.mjs`   (Team E2E: Einladen/Annehmen alle Wege, Rollen, Mitarbeiter-Sperren inkl. DB-Direktzugriff, Erweiterung pro Person, Team-Grenze, Entfernen; Server :3032, `TEAM_PROD=1` = gegen Build)
   - `node --env-file=.env.local scripts/test-org-switch.mjs`  (Organisation wechseln inkl. gleicher Namen + Fehlerfall; :3031, `ORGSWITCH_PROD=1`)
   - `node --env-file=.env.local scripts/test-plan-guards-live.mjs` (DB-Sperren per REST: Tarif, Sprachen/Intern/KI-Design nur Business, Einladungen nur via Server — 0037/0038)
-  - Tests, die eine Erweiterungs-Verbindung brauchen, setzen sie über `scripts/_recorder-token.mjs` (pro Person, seit 0037)
+  - Tests, die eine Erweiterungs-Verbindung brauchen, setzen sie über `scripts/_recorder-token.mjs` (pro Person, seit 0037; fügt seit 0041 eine Verbindung hinzu)
+  - `node --env-file=.env.local scripts/test-recorder-connections-live.mjs` (mehrere Browser je Person, 0041: Chrome+Edge beide gültig, Trennen, Neu verbinden, 10er-Grenze, Team-Entfernen; ohne 0041 automatisch Rückwärts-Kompatibilitäts-Modus; Server :3041) · `node scripts/test-recorder-label.mjs` (Browser-Name aus User-Agent)
   - `npx tsx scripts/test-tree.ts`                             (Tree-Derivation)
   - `node --env-file=.env.local scripts/seed-datev.mjs`        (DATEV-Tutorials seeden, idempotent)
   - Seeds/Pipelines: `seed-steply-help.mjs` (/h/steply-Doku), `shoot-steply-help.mjs <pw-dir>`

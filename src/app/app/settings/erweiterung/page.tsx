@@ -1,20 +1,16 @@
 import Link from "next/link";
 import { requireAccount } from "@/lib/account";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { listRecorderConnections } from "@/lib/recorder";
 import { appBaseUrl } from "@/lib/url";
 import { RecorderConnect } from "@/components/app/recorder-connect";
 import { SettingsHeader } from "@/components/app/settings-ui";
 
 export default async function ErweiterungPage() {
   const { account, userId } = await requireAccount();
-  // Verbindung ist PRO PERSON (Migration 0037) — nur die eigene zählt. Admin-Client, weil
-  // recorder_tokens bewusst keine RLS-Policies hat (Tokens sieht nur der Server).
-  const { data: tokenRow } = await createAdminClient()
-    .from("recorder_tokens")
-    .select("token")
-    .eq("account_id", account.id)
-    .eq("user_id", userId)
-    .maybeSingle();
+  // Verbindungen sind PRO PERSON (Migration 0037), seit 0041 eine je Browser/Gerät — nur die
+  // eigenen zählen. Server-Helfer mit Admin-Client, weil recorder_tokens bewusst keine
+  // RLS-Policies hat. An den Client gehen nur Kennung/Name/Zeiten — der Token selbst NIE.
+  const connections = await listRecorderConnections(account.id, userId);
 
   return (
     <div className="grid gap-[18px]">
@@ -31,8 +27,7 @@ export default async function ErweiterungPage() {
           </>
         }
       />
-      {/* Nur „gibt es einen Token" geht an den Client — der Token selbst nie. */}
-      <RecorderConnect initialHasToken={Boolean(tokenRow?.token)} appUrl={appBaseUrl()} />
+      <RecorderConnect connections={connections} appUrl={appBaseUrl()} />
     </div>
   );
 }

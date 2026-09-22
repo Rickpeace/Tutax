@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -12,10 +13,35 @@ import {
   Download,
   ChevronDown,
   Puzzle,
+  Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/app/copy-field";
-import { rotateRecorderToken } from "@/app/app/settings/einbetten/actions";
+import {
+  disconnectRecorderConnection,
+  rotateRecorderToken,
+} from "@/app/app/settings/einbetten/actions";
+import type { RecorderConnection } from "@/lib/recorder";
+import { dateLongDe, relativeDe } from "@/lib/format";
+
+// Welche Verbindung gehört zu DIESEM Browser? Die Seite kann den Token der Erweiterung nicht
+// sehen — wir merken uns nach erfolgreichem Verbinden die (nicht geheime) Kennung lokal.
+const THIS_BROWSER_KEY = "steply.recorderConnectionId";
+function readThisBrowserId(): string | null {
+  try {
+    return localStorage.getItem(THIS_BROWSER_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeThisBrowserId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(THIS_BROWSER_KEY, id);
+    else localStorage.removeItem(THIS_BROWSER_KEY);
+  } catch {
+    /* privater Modus o. ä. — dann eben ohne „dieser Browser" */
+  }
+}
 
 // Steply-Erweiterung verbinden (Welle 25 Ein-Klick-Pairing; Welle 50c neue Optik:
 // Status-Karte + genau EIN nächster Schritt + „Code manuell eingeben" eingeklappt).
@@ -31,13 +57,15 @@ import { rotateRecorderToken } from "@/app/app/settings/einbetten/actions";
 //
 // Extension-Erkennung: content.js setzt frueh das DOM-Attribut data-steply-recorder=version
 // (isolated world -> nur das DOM ist geteilt, window-Variablen NICHT). Wir lesen es nach Mount.
-// Ob die Erweiterung in DIESEM Browser schon einen gueltigen Token hat, kann die Seite nicht
-// sehen — nur, ob das Konto einen aktiven Token hat (initialHasToken).
+// Ob die Erweiterung in DIESEM Browser einen gueltigen Token hat, kann die Seite nicht direkt
+// sehen. Seit Migration 0041 hat jede Person mehrere Verbindungen (eine je Browser); nach dem
+// Verbinden merken wir uns die Kennung lokal (THIS_BROWSER_KEY) und erkennen so „dieser Browser".
 export function RecorderConnect({
-  initialHasToken,
+  connections,
   appUrl,
 }: {
-  initialHasToken: boolean;
+  /** Verbindungen der Person in diesem Konto (ohne Token). */
+  connections: RecorderConnection[];
   /** Echte App-Basis-URL — nur noch fuer den manuellen Fallback relevant. */
   appUrl: string;
 }) {
@@ -54,7 +82,11 @@ export function RecorderConnect({
   const [showManual, setShowManual] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [hasToken, setHasToken] = useState(initialHasToken);
+  const [thisBrowserId, setThisBrowserId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const router = useRouter();
+  const hasToken = connections.length > 0;
+  const thisBrowserConnected = !!thisBrowserId && connections.some((c) => c.id === thisBrowserId);
 
   // DOM-Marker nach Mount lesen (+ kurze Nachkontrollen, falls die Extension gerade erst
   // installiert wurde oder das Content-Script minimal spaeter dran ist).
@@ -73,6 +105,7 @@ export function RecorderConnect({
     // setState ASYNCHRON planen (kein synchrones setState im Effekt-Body): erste Pruefung
     // + zwei Nachkontrollen, falls die Extension gerade erst installiert wurde.
     const t0 = setTimeout(() => {
+      if (!cancelled) setThisBrowserId(readThisBrowserId());
       if (!read()) setInstalled(false);
     }, 0);
     const t1 = setTimeout(read, 500);
@@ -93,7 +126,9 @@ export function RecorderConnect({
 
     // 1) Frischen Verbindungs-Token erzeugen. Den bestehenden lesen wir bewusst NIE ins DOM
     //    (Sicherheit); deshalb rotieren wir hier und uebergeben den frischen Token direkt.
+    //    Jede Verbindung ist eine eigene Zeile (eine je Browser) — andere Browser bleiben verbunden.
     let freshToken: string;
+    let freshId: string | null;
     try {
       const res = await rotateRecorderToken();
       if (!res.ok) {
@@ -102,7 +137,7 @@ export function RecorderConnect({
         return;
       }
       freshToken = res.token;
-      setHasToken(true);
+      freshId = res.id;
     } catch {
       setPairError("Der Verbindungs-Code konnte nicht erzeugt werden.");
       setPairing(false);
@@ -145,24 +180,60 @@ export function RecorderConnect({
     });
 
     if (result.ok) {
+      // Die Erweiterung dieses Browsers nutzt jetzt den neuen Token -> seine bisherige
+      // Verbindung ist verwaist und wird aufgeräumt (andere Browser bleiben unberührt).
+      const previous = readThisBrowserId();
+      if (freshId) {
+        writeThisBrowserId(freshId);
+        setThisBrowserId(freshId);
+        if (previous && previous !== freshId) {
+          await disconnectRecorderConnection(previous).catch(() => null);
+        }
+      }
       setPairedAccount(result.account || "");
       toast.success(
         "Steply-Erweiterung verbunden" + (result.account ? " mit " + result.account : "") + ".",
       );
     } else {
+      // Nicht verbunden -> die eben angelegte Verbindung wieder entfernen (keine Leichen).
+      if (freshId) await disconnectRecorderConnection(freshId).catch(() => null);
       setPairError(result.error || "Verbindung fehlgeschlagen.");
     }
+    router.refresh();
     setPairing(false);
-  }, [pairing]);
+  }, [pairing, router]);
+
+  async function disconnect(c: RecorderConnection) {
+    if (!c.id || removing) return;
+    setRemoving(c.id);
+    try {
+      const res = await disconnectRecorderConnection(c.id);
+      if (res.ok) {
+        if (c.id === thisBrowserId) {
+          writeThisBrowserId(null);
+          setThisBrowserId(null);
+          setPairedAccount(null);
+        }
+        toast.success(`Verbindung „${c.label || "Browser"}“ getrennt.`);
+      } else {
+        toast.error(res.error);
+      }
+      router.refresh();
+    } catch {
+      toast.error("Die Verbindung konnte nicht getrennt werden.");
+    } finally {
+      setRemoving(null);
+    }
+  }
 
   async function generateManual() {
     if (busy) return;
     setBusy(true);
     try {
-      const res = await rotateRecorderToken();
+      const res = await rotateRecorderToken({ manual: true });
       if (res.ok) {
         setToken(res.token);
-        setHasToken(true);
+        router.refresh();
         toast.success("Verbindungs-Code erstellt. Jetzt in die Erweiterung einfügen.");
       } else {
         toast.error(res.error);
@@ -209,14 +280,26 @@ export function RecorderConnect({
         Jetzt verbinden
       </Button>
     );
-  } else {
+  } else if (thisBrowserConnected) {
     tone = "ok";
-    title = "Installiert";
-    sub = `${v} · Ihr Konto hat eine aktive Verbindung. Klappt das Hochladen in diesem Browser nicht, verbinden Sie neu – andere Browser müssen danach ebenfalls neu verbunden werden.`;
+    title = "Installiert – verbunden";
+    sub = `${v} · Dieser Browser ist mit Ihrem Konto verbunden. Klappt das Hochladen nicht, verbinden Sie ihn neu – andere Browser bleiben verbunden.`;
     action = (
       <Button variant="outline" onClick={pair} disabled={pairing}>
         {pairing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
         Neu verbinden
+      </Button>
+    );
+  } else {
+    // Es gibt Verbindungen, aber ob DIESER Browser dazugehört, wissen wir nicht sicher (z. B.
+    // vor dem Update verbunden). Verbinden schadet nie: andere Browser bleiben verbunden.
+    tone = "ok";
+    title = "Installiert";
+    sub = `${v} · Ist dieser Browser unten nicht dabei oder klappt das Hochladen hier nicht, verbinden Sie ihn – andere Browser bleiben verbunden.`;
+    action = (
+      <Button variant="outline" onClick={pair} disabled={pairing}>
+        {pairing ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
+        Diesen Browser verbinden
       </Button>
     );
   }
@@ -258,6 +341,58 @@ export function RecorderConnect({
         )}
       </section>
 
+      {/* --- Verbundene Browser (eine Verbindung je Browser/Gerät, Migration 0041) --- */}
+      {connections.length > 0 && (
+        <section
+          data-testid="recorder-connections"
+          className="grid gap-2 rounded-card border-2 border-line bg-card px-[18px] py-4"
+        >
+          <b className="font-black text-ink">Ihre verbundenen Browser</b>
+          <ul className="grid gap-2">
+            {connections.map((c, i) => (
+              <li
+                key={c.id ?? `legacy-${i}`}
+                data-testid="recorder-connection"
+                data-connection-id={c.id ?? ""}
+                className="flex flex-wrap items-center gap-3 rounded-xl bg-line-2/60 px-3 py-2"
+              >
+                <div className="min-w-0 flex-1 basis-52">
+                  <span className="block font-extrabold text-ink">
+                    {c.label || "Browser"}
+                    {c.id && c.id === thisBrowserId && (
+                      <span className="ml-2 rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal-text">
+                        dieser Browser
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[12.5px] text-muted-foreground" suppressHydrationWarning>
+                    {c.createdAt ? `verbunden am ${dateLongDe(c.createdAt)}` : "verbunden"}
+                    {" · "}
+                    {c.lastUsedAt ? `zuletzt genutzt ${relativeDe(c.lastUsedAt)}` : "noch nicht genutzt"}
+                  </span>
+                </div>
+                {c.id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => disconnect(c)}
+                    disabled={removing !== null}
+                    aria-label={`${c.label || "Browser"} trennen`}
+                  >
+                    {removing === c.id ? <Loader2 className="size-4 animate-spin" /> : <Unplug className="size-4" />}
+                    Trennen
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Jeder Browser hat eine eigene Verbindung. „Trennen“ macht nur diese eine ungültig –
+            die Erweiterung dort muss dann neu verbunden werden.
+          </p>
+        </section>
+      )}
+
       {/* --- Manueller Fallback (eingeklappt) --- */}
       <div className="text-[13px] text-ink-2">
         <button
@@ -293,7 +428,7 @@ export function RecorderConnect({
                 <div>
                   <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                    Code erneuern
+                    Neuen Code erzeugen
                   </Button>
                 </div>
               </>
@@ -306,15 +441,13 @@ export function RecorderConnect({
                 <div>
                   <Button variant="outline" size="sm" onClick={generateManual} disabled={busy}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-                    {hasToken ? "Neuen Code erzeugen" : "Code erzeugen"}
+                    Code erzeugen
                   </Button>
                 </div>
-                {hasToken && (
-                  <p className="text-xs text-muted-foreground">
-                    Es ist bereits ein Code aktiv. Ein neuer Code macht den alten sofort ungültig –
-                    verbundene Erweiterungen brauchen dann den neuen.
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Jeder Code ist eine eigene Verbindung – bereits verbundene Browser bleiben
+                  verbunden.
+                </p>
               </>
             )}
           </div>

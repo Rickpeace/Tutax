@@ -1,5 +1,5 @@
 import "server-only";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Gemeinsame Bausteine der Steply-Recorder-Direkt-Upload-Routen (/api/recorder/*).
@@ -7,8 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // AUTH-MODELL: Die Browser-Extension ruft diese Routen CROSS-ORIGIN auf (sie läuft
 // auf der Kunden-Website, nicht auf unserer Domain). Cookie-Auth ist damit unmöglich
 // und auch unerwünscht. Stattdessen ein pro-Konto widerrufbarer, hochentropischer
-// UUID-Token (recorder_tokens, pro Person + Organisation seit Migration 0037), den der
-// Nutzer in den Einstellungen erzeugt. Der Token wird via Admin-Client (RLS-Bypass) geprüft.
+// UUID-Token (recorder_tokens, pro Person + Organisation seit Migration 0037; seit 0041
+// mehrere je Person — einer pro Browser/Gerät), den der Nutzer in den Einstellungen erzeugt. Der Token wird via Admin-Client (RLS-Bypass) geprüft.
 //
 // CORS: Weil kein Cookie/keine Session mitgeschickt wird, ist `Access-Control-Allow-
 // Origin: *` unkritisch — es gibt keine ambient authority, die ein fremder Origin
@@ -85,5 +85,77 @@ export async function accountForRecorderToken(token: unknown): Promise<RecorderA
     admin.from("accounts").select("id, name, slug").eq("id", tok.account_id).maybeSingle(),
   ]);
   if (!data || !member || (member.role !== "owner" && member.role !== "editor")) return null;
+  touchRecorderToken(t);
   return { id: data.id as string, name: data.name as string, slug: data.slug as string };
+}
+
+// „Zuletzt genutzt" (Migration 0041) gedrosselt pflegen: höchstens alle 10 Minuten je Token
+// — pro Server-Instanz im Speicher UND in der DB (Bedingung auf last_used_at), damit viele
+// Instanzen nicht bei jedem Upload-Aufruf schreiben. Fire-and-forget: Fehler (z. B. Spalte
+// fehlt, solange 0041 nicht angewendet ist) werden bewusst ignoriert — die Prüfung des
+// Tokens hängt nie davon ab.
+const TOUCH_EVERY_MS = 10 * 60_000;
+const lastTouch = new Map<string, number>();
+
+function touchRecorderToken(token: string) {
+  const now = Date.now();
+  if (now - (lastTouch.get(token) ?? 0) < TOUCH_EVERY_MS) return;
+  lastTouch.set(token, now);
+  if (lastTouch.size > 5000) lastTouch.clear(); // Speicher begrenzen (nur eine Drossel)
+  const cutoff = new Date(now - TOUCH_EVERY_MS).toISOString();
+  const write = async () => {
+    try {
+      await createAdminClient()
+        .from("recorder_tokens")
+        .update({ last_used_at: new Date(now).toISOString() })
+        .eq("token", token)
+        .or(`last_used_at.is.null,last_used_at.lt.${cutoff}`);
+    } catch {
+      /* egal — nur Anzeige */
+    }
+  };
+  try {
+    after(write); // nach der Antwort, ohne sie zu verzögern
+  } catch {
+    void write(); // außerhalb eines Requests (after nicht verfügbar)
+  }
+}
+
+export type RecorderConnection = {
+  /** Öffentliche Kennung (null, solange Migration 0041 fehlt). Der Token selbst NIE. */
+  id: string | null;
+  label: string | null;
+  createdAt: string | null;
+  lastUsedAt: string | null;
+};
+
+/** Verbundene Browser einer Person in einem Konto (neueste zuerst). Nur Server. */
+export async function listRecorderConnections(accountId: string, userId: string): Promise<RecorderConnection[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("recorder_tokens")
+    .select("id, label, created_at, last_used_at")
+    .eq("account_id", accountId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (!error) {
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      label: (r.label as string | null) ?? null,
+      createdAt: (r.created_at as string | null) ?? null,
+      lastUsedAt: (r.last_used_at as string | null) ?? null,
+    }));
+  }
+  // Vor Migration 0041 (Spalten fehlen): höchstens eine Verbindung, ohne Trennen-Kennung.
+  const legacy = await admin
+    .from("recorder_tokens")
+    .select("created_at")
+    .eq("account_id", accountId)
+    .eq("user_id", userId);
+  return (legacy.data ?? []).map((r) => ({
+    id: null,
+    label: null,
+    createdAt: (r.created_at as string | null) ?? null,
+    lastUsedAt: null,
+  }));
 }

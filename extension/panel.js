@@ -2348,7 +2348,7 @@ function guideUploadErrorText(msg) {
     return "Steply ist gerade nicht erreichbar. Prüfen Sie die Internetverbindung und versuchen Sie es erneut. Ihre Schritte bleiben erhalten.";
   }
   if (/\b401\b|Token/i.test(m)) {
-    return "Die Verbindung zu Steply ist nicht mehr gültig. Öffnen Sie in Steply „Einstellungen → Steply-Erweiterung“ und verbinden Sie neu – danach hier „Erneut versuchen“. Ihre Schritte bleiben erhalten.";
+    return "Die Verbindung zu Steply ist nicht mehr gültig (z. B. weil sie in den Einstellungen getrennt wurde). Öffnen Sie in Steply „Einstellungen → Steply-Erweiterung“ und verbinden Sie neu – danach hier „Erneut versuchen“. Ihre Schritte bleiben erhalten.";
   }
   return "Beim Hochladen ist etwas schiefgelaufen. Ihre Schritte bleiben erhalten – versuchen Sie es gleich noch einmal.";
 }
@@ -3221,7 +3221,7 @@ function renderGuidesList() {
   if (siteTutorials === null) {
     if (siteTutorialsError === "auth") {
       showGuidesEmpty(
-        "Die Verbindung zu Steply ist nicht mehr gültig. Verbinden Sie die Steply-Erweiterung in Steply unter „Einstellungen → Steply-Erweiterung“ neu.",
+        "Die Verbindung zu Steply ist nicht mehr gültig (z. B. weil sie in den Einstellungen getrennt wurde). Verbinden Sie die Steply-Erweiterung in Steply unter „Einstellungen → Steply-Erweiterung“ neu.",
         null
       );
       return;
