@@ -2626,7 +2626,10 @@
     try {
       const patch = {};
       patch[NAV_STORE_KEY] = navStoredStepAt;
-      chrome.storage.local.set(patch);
+      // Promise abfangen: ist der Erweiterungs-Kontext weg (Reload der Erweiterung), wuerde
+      // sonst auf JEDER Seite eine unbehandelte Ablehnung in der Konsole landen.
+      const p = chrome.storage.local.set(patch);
+      if (p && typeof p.catch === "function") p.catch(() => {});
     } catch (err) {
       /* storage nicht verfuegbar -> nur die In-Speicher-Zeit zaehlt */
     }
