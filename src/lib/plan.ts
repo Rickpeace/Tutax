@@ -5,7 +5,8 @@
 //
 // Stufen: free < pro < business.
 //  - free: 1 Hilfe-Seite, bis FREE_TUTORIAL_LIMIT Tutorials, voller Builder.
-//  - pro: unbegrenzt + Chatbot/Wissen + manuelles Branding + Insights.
+//  - pro: unbegrenzt + Chatbot/Wissen + manuelles Branding + Insights + Team bis 5
+//         + Schulungen mit Nachweis (öffentliche Anleitungen zusätzlich „Team“).
 //  - business: + KI-CI, Mehrsprachigkeit, Vorlesen (TTS), interne Schulungen.
 
 export const FREE_TUTORIAL_LIMIT = 5;
@@ -25,6 +26,10 @@ export function isBusiness(account: { plan?: string | null }): boolean {
 /** Einheitliche Fehlermeldung für Business-Features. */
 export const BUSINESS_REQUIRED =
   "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
+
+/** Einheitliche Fehlermeldung für Pro-Features (z. B. Schulungen mit Schulungsnachweis). */
+export const PRO_REQUIRED =
+  "Dieses Feature ist ab dem Pro-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
 
 /**
  * Wie viele Personen (alle Rollen, inkl. offener Einladungen) das Team haben darf.

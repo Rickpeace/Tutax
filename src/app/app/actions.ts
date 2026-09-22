@@ -27,7 +27,7 @@ import {
 } from "@/lib/category-name";
 import { ensureTutorialAudio, removeTutorialAudio } from "@/lib/tts";
 import { isExtraLang } from "@/lib/i18n-hub";
-import { FREE_TUTORIAL_LIMIT, isPro, isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
+import { FREE_TUTORIAL_LIMIT, isPro, isBusiness, BUSINESS_REQUIRED, PRO_REQUIRED } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -644,16 +644,25 @@ export async function setTutorialAudience(
   await requireTutorialAccess(tutorialId);
   const { account } = await requireAccount();
   const targetVisibility: Tutorial["visibility"] = audience.publicOn ? "public" : "internal";
-  // Business-Gate: intern (inkl. Schulungsnachweis) ist Business. Öffentlich geht immer.
+  // Business-Gate: intern („nur Team“) ist Business. Öffentlich geht immer.
   if (targetVisibility === "internal" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
   const supabase = await createClient();
 
   const { data: tutorial, error } = await supabase
     .from("tutorials")
-    .select("id, title, slug, account_id, status, visibility")
+    .select("id, title, slug, account_id, status, visibility, in_lernen")
     .eq("id", tutorialId)
-    .single<VisibilityTutorial>();
+    .single<VisibilityTutorial & { in_lernen: boolean | null }>();
   if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden");
+
+  // Pro-Gate (Tarifseite, lib/pricing.ts: „Schulungen mit Schulungsnachweis“ ab Pro):
+  // öffentliche Anleitung zusätzlich unter Schulungen nur mit Pro/Business EINSCHALTEN.
+  // Was schon Schulung ist (in_lernen oder intern, z. B. nach einem Downgrade), bleibt
+  // erlaubt — bestehende Daten werden nie angefasst, Abwählen geht immer.
+  const alreadyTraining = !!tutorial.in_lernen || tutorial.visibility === "internal";
+  if (audience.publicOn && audience.lernenOn && !alreadyTraining && !isPro(account)) {
+    throw new Error(PRO_REQUIRED);
+  }
 
   // Zuerst die Sichtbarkeit über die geteilte Logik umschalten (falls nötig).
   await applyVisibilityChange(supabase, account, tutorial, targetVisibility);

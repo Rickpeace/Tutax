@@ -5,7 +5,7 @@ import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { Builder } from "@/components/builder/builder";
 import { TutorialHeader } from "@/components/builder/tutorial-header";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
-import { isBusiness } from "@/lib/plan";
+import { isBusiness, isPro } from "@/lib/plan";
 
 // Server-Actions laufen im Zeitbudget dieser Seite: „Texte mit KI verbessern“ braucht bei
 // 40 Schritten mehrere parallele KI-Calls (je ≤ 20 s).
@@ -87,6 +87,7 @@ export default async function EditorPage({
         visibility={tutorial.visibility}
         inLernen={tutorial.in_lernen}
         isBusiness={isBusiness(account)}
+        isPro={isPro(account)}
         categories={categories ?? []}
         categoryId={tutorial.category_id}
         siteDomains={tutorial.site_domains ?? []}

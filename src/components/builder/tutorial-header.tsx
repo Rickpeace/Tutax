@@ -73,6 +73,7 @@ export function TutorialHeader({
   visibility: initialVisibility,
   inLernen: initialInLernen,
   isBusiness,
+  isPro,
   categories,
   categoryId,
   siteDomains,
@@ -89,6 +90,8 @@ export function TutorialHeader({
   visibility: TutorialVisibility;
   inLernen: boolean;
   isBusiness: boolean;
+  /** Pro oder höher: „Team“ zusätzlich zur Hilfe-Seite (Schulungen mit Nachweis). */
+  isPro: boolean;
   categories: { id: string; name: string }[];
   categoryId: string | null;
   siteDomains: string[];
@@ -263,8 +266,9 @@ export function TutorialHeader({
     if (publicOn) applyAudience(false, false); // beides → nur Team
     else applyAudience(true, true); // nur Team → beides
   };
-  // Team ist Business. Wer (nach einem Downgrade) Team schon hat, darf es behalten/abwählen.
-  const teamLocked = !isBusiness && !teamOn;
+  // „Team“ zusätzlich zur Hilfe-Seite (Schulungsnachweis) ist Pro (Tarifseite). Wer (nach einem
+  // Downgrade) Team schon hat, darf es behalten/abwählen.
+  const teamLocked = !isPro && !teamOn;
   // Hilfe-Seite abwählen hieße „nur Team“ (internal) — ebenfalls Business (Server-Gate).
   const helpLocked = !isBusiness && publicOn && teamOn;
   const toggleTeam = () => {
@@ -421,7 +425,7 @@ export function TutorialHeader({
             label="Team"
             hint={
               teamLocked
-                ? "„Team“ (Schulungen mit Nachweis) ist im Business-Tarif enthalten."
+                ? "„Team“ (Schulungen mit Nachweis) ist ab dem Pro-Tarif enthalten."
                 : teamOn && !publicOn
                   ? "Mindestens eine Zielgruppe bleibt aktiv – schalten Sie zuerst „Hilfe-Seite (für alle)“ ein."
                   : teamOn
