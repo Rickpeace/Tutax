@@ -2,7 +2,19 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, ExternalLink, Eye, Globe, Languages, Link2, Loader2, Lock, Pencil } from "lucide-react";
+import {
+  ChevronLeft,
+  ExternalLink,
+  Eye,
+  Globe,
+  Languages,
+  Link2,
+  Loader2,
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  ShieldQuestion,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +28,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { StatusSwitch } from "@/components/app/status-switch";
 import { CategoryPicker } from "@/components/builder/category-picker";
 import { SiteDomainsPicker } from "@/components/builder/site-domains-picker";
-import { DriftCheckButton } from "@/components/builder/drift-check-button";
+import { useDriftCheck } from "@/components/builder/drift-check-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   setTutorialTitle,
   setTutorialDescription,
@@ -232,6 +251,9 @@ export function TutorialHeader({
   // Nur Team ist Business. Wer (nach einem Downgrade) schon Nur Team hat, darf zurück.
   const teamLocked = !isBusiness && publicOn;
   const noSteps = !hasSteps;
+  const drift = useDriftCheck(tutorialId);
+  // „Übersetzung veraltet“ als kleiner Punkt am „…“-Knopf (vorher am Übersetzen-Knopf).
+  const showStaleDot = languages.length > 0 && stale && !noSteps && !trBusy;
 
   return (
     <div className="mb-6">
@@ -416,80 +438,9 @@ export function TutorialHeader({
         {/* „Gilt für Website" (Welle 31c): Basis-Domains, für die die Anleitung gilt. */}
         <SiteDomainsPicker tutorialId={tutorialId} initialDomains={siteDomains} />
 
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          {languages.length > 0 && noSteps && (
-            <EmptyLock locked>
-              <Button variant="outline" size="sm" disabled>
-                <Languages className="size-4" /> Übersetzen
-              </Button>
-            </EmptyLock>
-          )}
-          {languages.length > 0 && !noSteps && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={translate}
-                    disabled={trBusy}
-                    className="relative"
-                  />
-                }
-              >
-                {trBusy ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
-                Übersetzen
-                {stale && !trBusy && (
-                  <span
-                    aria-hidden
-                    className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-card"
-                  />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                {stale
-                  ? "Übersetzungen sind veraltet oder unvollständig – jetzt aktualisieren."
-                  : `Wird automatisch übersetzt in: ${languages.map((l) => LANG_NAME[l]).join(", ")}. Klicken, um jetzt zu aktualisieren.`}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {shareable && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={copyLink}
-                    data-testid="copy-link"
-                  />
-                }
-              >
-                <Link2 className="size-4" /> Link kopieren
-              </TooltipTrigger>
-              <TooltipContent>{STABLE_LINK_HINT}</TooltipContent>
-            </Tooltip>
-          )}
-          {shareable && (
-            <Button
-              variant="outline"
-              size="sm"
-              nativeButton={false}
-              render={
-                <Link
-                  href={`/h/${accountSlug}/${slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Auf der Hilfe-Seite öffnen"
-                />
-              }
-            >
-              <ExternalLink className="size-4" /> Öffnen
-            </Button>
-          )}
-          <EmptyLock locked={noSteps}>
-            <DriftCheckButton tutorialId={tutorialId} disabled={noSteps} />
-          </EmptyLock>
+        {/* Rechts nur „Vorschau“ + „…“ (Welle 53): seltene Aktionen im Menü, damit die
+            Steuerzeile bei 1440 px nie umbricht und mobil weniger Knöpfe vor dem Ablauf stehen. */}
+        <div className="flex items-center gap-2 sm:ml-auto">
           <Button
             variant="outline"
             size="sm"
@@ -498,6 +449,85 @@ export function TutorialHeader({
           >
             <Eye className="size-4" /> Vorschau
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="relative"
+                  aria-label={
+                    showStaleDot ? "Weitere Aktionen (Übersetzung veraltet)" : "Weitere Aktionen"
+                  }
+                  title="Weitere Aktionen"
+                  data-testid="editor-more"
+                />
+              }
+            >
+              {trBusy || drift.pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <MoreHorizontal className="size-4" />
+              )}
+              {showStaleDot && (
+                <span
+                  aria-hidden
+                  data-testid="translation-stale-dot"
+                  className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber ring-2 ring-card"
+                />
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {languages.length > 0 && (
+                <DropdownMenuItem onClick={translate} disabled={noSteps || trBusy} className="items-start">
+                  {trBusy ? <Loader2 className="mt-0.5 size-4 animate-spin" /> : <Languages className="mt-0.5 size-4" />}
+                  <MenuText
+                    label={trBusy ? "Übersetzt …" : "Übersetzen"}
+                    hint={
+                      noSteps
+                        ? "Erst Schritte anlegen"
+                        : stale
+                          ? "Übersetzungen sind veraltet oder unvollständig – jetzt aktualisieren."
+                          : `Wird automatisch übersetzt in: ${languages.map((l) => LANG_NAME[l]).join(", ")}. Klicken, um jetzt zu aktualisieren.`
+                    }
+                    dot={stale && !noSteps && !trBusy}
+                  />
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={drift.run} disabled={noSteps || drift.pending} className="items-start">
+                {drift.pending ? (
+                  <Loader2 className="mt-0.5 size-4 animate-spin" />
+                ) : (
+                  <ShieldQuestion className="mt-0.5 size-4" />
+                )}
+                <MenuText
+                  label={drift.pending ? "Prüft …" : "Aktualität prüfen"}
+                  hint={noSteps ? "Erst Schritte anlegen" : "Prüft per KI, ob die Anleitung noch zur Website passt"}
+                />
+              </DropdownMenuItem>
+              {shareable && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={copyLink} data-testid="copy-link" className="items-start">
+                    <Link2 className="mt-0.5 size-4" />
+                    <MenuText label="Link zur Hilfe-Seite kopieren" hint={STABLE_LINK_HINT} />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    render={
+                      <a
+                        href={`/h/${accountSlug}/${slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="open-help-page"
+                      />
+                    }
+                  >
+                    <ExternalLink className="size-4" /> Auf der Hilfe-Seite öffnen
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -560,6 +590,19 @@ function EmptyLock({ locked, children }: { locked: boolean; children: React.Reac
       </TooltipTrigger>
       <TooltipContent>Erst Schritte anlegen</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Zweizeiliger Menüeintrag: Aktion + kurze Erklärung (ersetzt die Tooltips der Knöpfe). */
+function MenuText({ label, hint, dot }: { label: string; hint: string; dot?: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="flex items-center gap-1.5 font-bold">
+        {label}
+        {dot && <span aria-label="veraltet" className="size-2 rounded-full bg-amber" />}
+      </span>
+      <span className="text-xs font-normal text-muted-foreground">{hint}</span>
+    </span>
   );
 }
 

@@ -377,7 +377,11 @@ try {
   // ── 4. Veröffentlichen + „Link kopieren“ ─────────────────────────────────────────
   await openEditor(null);
   const controls = page.getByTestId("editor-controls");
-  ok((await controls.getByTestId("copy-link").count()) === 0, "Entwurf: kein „Link kopieren“");
+  // Welle 53: „Link zur Hilfe-Seite kopieren“ + „Auf der Hilfe-Seite öffnen“ im „…“-Menü des Kopfs.
+  const more = controls.getByTestId("editor-more");
+  await more.click();
+  ok((await page.getByTestId("copy-link").count()) === 0, "Entwurf: kein „Link kopieren“");
+  await page.keyboard.press("Escape");
   await controls.getByRole("switch").first().click();
   const pub = await waitFor(async () => {
     const { data } = await admin.from("tutorials").select("status, slug").eq("id", tutorialId).single();
@@ -385,18 +389,16 @@ try {
   }, 40);
   ok(!!pub, `Veröffentlicht (Slug „${pub?.slug}“)`);
   const expectedUrl = `${BASE}/h/${accSlug}/${pub.slug}`;
-  await controls.getByTestId("copy-link").waitFor({ timeout: 20_000 });
-  await controls.getByTestId("copy-link").click();
+  await page.waitForTimeout(800);
+  await more.click();
+  await page.getByTestId("copy-link").waitFor({ timeout: 20_000 });
+  ok(await page.getByText("Der Link bleibt gleich, auch wenn Sie die Anleitung umbenennen.").first().isVisible(), "Hinweis „Der Link bleibt gleich …“ am Menüeintrag");
+  const openLink = page.locator(`a[href="/h/${accSlug}/${pub.slug}"]`);
+  ok((await openLink.count()) === 1, "„Auf der Hilfe-Seite öffnen“ verlinkt die Hilfe-Seite");
+  await page.getByTestId("copy-link").click();
   await page.getByText("Link kopiert").first().waitFor({ timeout: 10_000 });
   const clip1 = await page.evaluate(() => navigator.clipboard.readText());
   ok(clip1 === expectedUrl, `Editor-Kopf „Link kopieren“: ${clip1}`);
-  const openLink = controls.locator(`a[href="/h/${accSlug}/${pub.slug}"]`);
-  ok((await openLink.count()) === 1, "„Öffnen“ daneben verlinkt die Hilfe-Seite");
-  await page.mouse.move(5, 900);
-  await page.waitForTimeout(300);
-  await controls.getByTestId("copy-link").hover();
-  await page.getByText("Der Link bleibt gleich, auch wenn Sie die Anleitung umbenennen.").first().waitFor({ timeout: 5_000 });
-  ok(true, "Hinweis „Der Link bleibt gleich …“ am Knopf");
   await page.screenshot({ path: path.join(SHOT_DIR, "06-link-kopieren-kopf.png"), clip: { x: 0, y: 0, width: 1400, height: 380 } });
 
   // Umbenennen -> Slug bleibt.

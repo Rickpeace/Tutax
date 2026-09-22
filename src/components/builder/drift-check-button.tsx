@@ -6,14 +6,8 @@ import { toast } from "sonner";
 import { ShieldQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function DriftCheckButton({
-  tutorialId,
-  disabled = false,
-}: {
-  tutorialId: string;
-  /** z. B. solange die Anleitung noch keine Schritte hat (Hinweis kommt vom Aufrufer). */
-  disabled?: boolean;
-}) {
+/** „Aktualität prüfen“ als Hook — der Editor-Kopf nutzt es im „…“-Menü (Welle 53). */
+export function useDriftCheck(tutorialId: string) {
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -49,6 +43,18 @@ export function DriftCheckButton({
     });
   }
 
+  return { pending, run };
+}
+
+export function DriftCheckButton({
+  tutorialId,
+  disabled = false,
+}: {
+  tutorialId: string;
+  /** z. B. solange die Anleitung noch keine Schritte hat (Hinweis kommt vom Aufrufer). */
+  disabled?: boolean;
+}) {
+  const { pending, run } = useDriftCheck(tutorialId);
   return (
     <Button
       variant="outline"
