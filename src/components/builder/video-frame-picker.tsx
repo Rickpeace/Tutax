@@ -121,7 +121,7 @@ export function VideoFramePicker({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="overflow-hidden rounded-lg border border-border bg-black">
+          <div className="overflow-hidden rounded-lg border-2 border-line bg-black">
             <video
               ref={videoRef}
               src={videoUrl}

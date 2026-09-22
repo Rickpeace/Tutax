@@ -108,15 +108,15 @@ function StepCard({
     <button
       type="button"
       onClick={() => onSelect?.(node.step.id)}
-      className={`flex w-full items-center gap-3 rounded-xl border bg-card p-[11px] text-left shadow-[0_1px_2px_rgba(51,41,31,0.03)] outline-none transition-all hover:-translate-y-px focus-visible:ring-3 focus-visible:ring-ring/50 ${
+      className={`flex w-full items-center gap-3 rounded-xl border-2 bg-card p-[10px] text-left shadow-[0_1px_2px_rgba(51,41,31,0.03)] outline-none transition-all hover:-translate-y-px focus-visible:ring-3 focus-visible:ring-ring/50 ${
         selected
           ? "border-primary shadow-[0_6px_20px_color-mix(in_srgb,var(--primary)_12%,transparent)]"
-          : "border-border hover:border-primary/40"
+          : "border-line hover:border-primary/40"
       }`}
     >
       <StepThumb imagePath={node.step.image_path} bust={bust} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-ink">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-ink">
           {hasTitle ? (
             <span className="min-w-0 truncate">{node.step.title}</span>
           ) : bodyLabel ? (
@@ -129,7 +129,7 @@ function StepCard({
           {isQ && <Tag tone="accent">Frage</Tag>}
         </div>
         {hasTitle && bodyText && (
-          <div className="truncate text-[11.5px] text-muted-foreground">{bodyText}</div>
+          <div className="truncate text-xs text-muted-foreground">{bodyText}</div>
         )}
       </div>
       <ChevronRight className="size-4 text-line" />
@@ -281,7 +281,7 @@ function Branch({
         className="flex w-full items-center gap-2 rounded-lg py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <span
-          className="rounded-full px-2.5 py-[3px] text-[11.5px] font-extrabold text-white"
+          className="rounded-full px-2.5 py-[3px] text-xs font-extrabold text-white"
           style={{ background: color }}
         >
           {branch.label}

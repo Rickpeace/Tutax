@@ -290,11 +290,13 @@ export function ImageField({
             // ein Vorfahr-Stacking-Kontext ließ die Navbar ÜBER dem Overlay erscheinen.
             createPortal(
               <div
-                className="fixed inset-0 z-[100] flex flex-col bg-black/60 p-3 sm:p-6"
+                className="fixed inset-0 z-[100] flex flex-col justify-center bg-black/60 p-3 sm:p-6"
                 onClick={() => setBig(false)}
               >
+                {/* Mobil nur so hoch wie der Inhalt (sonst große weiße Fläche unter dem Bild),
+                    ab sm füllt die Fläche den Bildschirm. */}
                 <div
-                  className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden rounded-xl bg-popover p-4 shadow-2xl ring-1 ring-foreground/10"
+                  className="mx-auto flex max-h-full min-h-0 w-full max-w-[1600px] flex-col overflow-hidden rounded-xl bg-popover p-4 shadow-2xl ring-1 ring-foreground/10 sm:flex-1"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -326,10 +328,10 @@ export function ImageField({
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
           onPaste={onPaste}
-          className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
+          className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed py-8 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
             dragActive
               ? "border-primary bg-muted text-primary"
-              : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-muted"
+              : "border-line bg-card text-muted-foreground hover:border-primary/40 hover:bg-muted"
           }`}
         >
           {busy ? (

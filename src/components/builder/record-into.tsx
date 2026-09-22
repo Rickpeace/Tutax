@@ -130,7 +130,7 @@ export function RecordIntoDialog({
                 <Zap className="size-5" />
               </span>
               <span className="font-bold text-ink">Seitenleiste öffnen &amp; aufnehmen</span>
-              <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-bold text-ink">
+              <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-line-2 px-2 py-0.5 text-xs font-bold text-ink">
                 <CheckCircle2 className="size-3 text-primary" /> Installiert
                 {version ? " (v" + version + ")" : ""}
               </span>

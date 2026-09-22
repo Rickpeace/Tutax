@@ -233,7 +233,7 @@ export function CropDialog({
               )}
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="mt-4 flex items-center justify-between gap-2 sm:gap-3">
               <Button variant="outline" onClick={onCancel} disabled={busy} className="bg-white">
                 <X className="size-4" /> Abbrechen
               </Button>
@@ -243,7 +243,7 @@ export function CropDialog({
                   setAspect(null);
                   setBox({ x: 0, y: 0, w: 1, h: 1 });
                 }}
-                className="rounded-md text-sm font-medium text-white/80 outline-none hover:text-white focus-visible:ring-3 focus-visible:ring-white/60"
+                className="shrink-0 whitespace-nowrap rounded-md text-sm font-medium text-white/80 outline-none hover:text-white focus-visible:ring-3 focus-visible:ring-white/60"
               >
                 Ganzes Bild
               </button>

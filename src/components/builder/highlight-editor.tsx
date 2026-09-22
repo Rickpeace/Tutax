@@ -381,7 +381,7 @@ export function HighlightEditor({
     <div className="space-y-2">
       {/* Werkzeugleiste */}
       <div
-        className={`flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-1.5 ${
+        className={`flex flex-wrap items-center gap-2 rounded-lg border-2 border-line bg-card p-[5px] ${
           stickyToolbar ? "sticky top-0 z-20 shadow-sm" : ""
         }`}
       >
@@ -512,7 +512,7 @@ export function HighlightEditor({
       <div
         ref={wrapRef}
         data-testid="highlight-canvas"
-        className="relative overflow-hidden rounded-lg border border-border select-none"
+        className="relative overflow-hidden rounded-lg ring-2 ring-line select-none"
         style={{ touchAction: "none", cursor: tool === "select" ? "default" : "crosshair" }}
         onPointerDown={onCanvasDown}
         onPointerMove={onCanvasMove}

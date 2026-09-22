@@ -8,6 +8,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   normalizeDomain,
   mergeDomains,
@@ -133,7 +135,7 @@ export function SiteDomainsPicker({
         )}
 
         <div className="flex items-center gap-1.5">
-          <input
+          <Input
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
@@ -149,17 +151,12 @@ export function SiteDomainsPicker({
             aria-label="Website hinzufügen"
             spellCheck={false}
             autoComplete="off"
-            className="min-w-0 flex-1 rounded-md border border-line bg-card px-2 py-1 text-sm text-ink outline-none focus:border-primary"
+            aria-invalid={error ? true : undefined}
+            className="min-w-0 flex-1"
           />
-          <button
-            type="button"
-            onClick={addDomain}
-            disabled={busy}
-            aria-label="Website hinzufügen"
-            className="flex shrink-0 items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-primary-pressed disabled:opacity-50"
-          >
-            <Plus className="size-3.5" /> Hinzufügen
-          </button>
+          <Button type="button" size="sm" onClick={addDomain} disabled={busy}>
+            <Plus /> Hinzufügen
+          </Button>
         </div>
 
         {error && <p className="text-xs text-destructive">{error}</p>}
