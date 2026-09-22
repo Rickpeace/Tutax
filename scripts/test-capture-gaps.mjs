@@ -73,7 +73,11 @@ const STUB = `
         } catch (e) { /* egal */ }
         return Promise.resolve(undefined);
       },
-      onMessage: { addListener: function () {} },
+      onMessage: {
+        addListener: function (f) {
+          (window.__steplyMsgListeners = window.__steplyMsgListeners || []).push(f);
+        },
+      },
     },
     storage: {
       local: {
@@ -89,7 +93,11 @@ const STUB = `
         },
         remove: function () { return Promise.resolve(); },
       },
-      onChanged: { addListener: function () {} },
+      onChanged: {
+        addListener: function (f) {
+          (window.__steplyStorageListeners = window.__steplyStorageListeners || []).push(f);
+        },
+      },
     },
     tabs: { sendMessage: function () {} },
   };
@@ -211,6 +219,19 @@ window.__probe=function(){return {url:location.pathname,hash:location.hash};};<\
   const reset = () => {
     sink.length = 0;
   };
+
+  // Aufnahme im LAUFENDEN Dokument stoppen bzw. wieder starten (wie das Panel: es entfernt
+  // bzw. setzt `rec` in chrome.storage.local, content.js haengt an storage.onChanged).
+  const setRecording = (on) =>
+    page.evaluate((rec) => {
+      (window.__steplyStorageListeners || []).forEach((f) => f({ rec: { newValue: rec } }, "local"));
+    }, on ? { startedAt: Date.now() - 60000, mode: "guide", nonce: "testnonce123" } : undefined);
+
+  // Eine Nachricht an content.js zustellen (wie chrome.runtime.sendMessage aus dem Panel).
+  const toContent = (msg) =>
+    page.evaluate((m) => {
+      (window.__steplyMsgListeners || []).forEach((f) => f(m, {}, function () {}));
+    }, msg);
   const allSteps = () =>
     sink
       .filter((m) => m.type === "steply-guide-step" && m.step)
@@ -634,6 +655,28 @@ window.__probe=function(){return {url:location.pathname,hash:location.hash};};<\
         detail: r.live.map((s) => s.label).join(" -> "),
       };
     },
+  });
+
+  await testCase({
+    id: "3.5d-pfeiltaste-dann-sofort-fertig",
+    muster: "Pfeiltaste waehlen und SOFORT auf Fertig druecken",
+    supported: true,
+    note: "Pruefbericht: der entprellte Pfeiltasten-Schritt (bis 700 ms) ging beim Stopp verloren.",
+    run: async () => {
+      await page.evaluate(() => document.getElementById("lb").setAttribute("aria-activedescendant", "o1"));
+      await page.focus("#lb");
+      reset();
+      await page.keyboard.press("ArrowDown");
+      await sleep(60); // viel frueher als das Entprell-Fenster: der Schritt ist noch offen
+      await setRecording(false); // „Fertig" in der Seitenleiste
+      await sleep(400);
+      await setRecording(true); // fuer die folgenden Muster wieder scharf stellen
+      await sleep(200);
+    },
+    verify: async (r) =>
+      r.live.length === 1
+        ? { verdict: "erfasst", detail: `Schritt beim Stopp noch gemeldet: ${JSON.stringify(r.live[0].label)}` }
+        : { verdict: r.live.length ? "teilweise" : "nicht", detail: `${r.live.length} Schritte statt 1` },
   });
 
   await testCase({
@@ -1212,6 +1255,46 @@ window.__probe=function(){return {url:location.pathname,hash:location.hash};};<\
   });
 
   await testCase({
+    id: "8.3c-deko-canvas",
+    muster: "Dekorative, bildschirmfuellende Canvas (Partikel-Hintergrund)",
+    supported: true,
+    note: "Pruefbericht: sonst waere auf solchen Seiten JEDER Fehlklick ein Schritt. Gewertet wird eine Zeichenflaeche nur, wenn sie deutlich kleiner als das Fenster ist ODER sich per aria-label/role/tabindex als Bedienflaeche ausweist.",
+    run: async () => {
+      const c = await center("#cvdeko");
+      await clickXY(c.x, c.y);
+      await sleep(250);
+    },
+    verify: async (r) =>
+      r.live.length === 0
+        ? { verdict: "erfasst", detail: "kein Schritt (korrekt)" }
+        : { verdict: "teilweise", detail: `${r.live.length} ueberfluessige(r) Schritt(e)` },
+  });
+
+  await testCase({
+    id: "8.3d-canvas-deckel",
+    muster: "Zeichen-Editor: viele Klicks auf dieselbe Flaeche",
+    supported: true,
+    note: "Pruefbericht: jeder Strich waere ein Schritt — nach Sekunden waere die 40er-Grenze voll. Deckel: hoechstens 5 Schritte je Flaeche/Dokument.",
+    run: async () => {
+      await open("/widgets.html"); // frisches Dokument -> Zaehler zurueck auf 0
+      const b = await page.evaluate(() => {
+        const r = document.getElementById("cv").getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width, h: r.height };
+      });
+      reset();
+      for (let i = 0; i < 12; i++) {
+        await page.mouse.click(b.x + 20 + i * 18, b.y + 20 + (i % 3) * 18);
+        await sleep(120);
+      }
+      await sleep(300);
+    },
+    verify: async (r) =>
+      r.live.length > 0 && r.live.length <= 5
+        ? { verdict: "erfasst", detail: `${r.live.length} Schritte aus 12 Klicks (Deckel greift)` }
+        : { verdict: "teilweise", detail: `${r.live.length} Schritte aus 12 Klicks` },
+  });
+
+  await testCase({
     id: "8.4-svg-knopf",
     muster: "SVG-Element als Knopf (role=button)",
     supported: true,
@@ -1478,6 +1561,44 @@ window.__probe=function(){return {url:location.pathname,hash:location.hash};};<\
         verdict: !(s.interaction && s.interaction.modifiers) ? "erfasst" : "teilweise",
         detail: `interaction=${JSON.stringify(s.interaction || null)}`,
       })),
+  });
+
+  await testCase({
+    id: "11.5-wiedergabe-strg-klick",
+    muster: "WIEDERGABE: Automations-Schritt mit Strg+Klick ausfuehren",
+    supported: true,
+    note: "Gegenstueck zur Aufnahme: el.click() kann keine Zusatztaste tragen — die Wiedergabe schickt darum die vollstaendige Maus-Sequenz. Geprueft wird die WIRKUNG auf der Seite (Mehrfachauswahl bleibt erhalten).",
+    run: async () => {
+      await clickAt("#m1"); // Ausgangsauswahl: nur Beleg 1
+      reset();
+      await toContent({
+        type: "steply-exec-step",
+        token: "tok-mod",
+        step: {
+          index: 0,
+          total: 1,
+          action: "click",
+          selector: { css: "#m3" },
+          interaction: { modifiers: ["ctrl"] },
+        },
+      });
+      await page.waitForFunction(
+        () => document.querySelectorAll("#multi li.sel").length >= 2,
+        null,
+        { timeout: 6000 },
+      ).catch(() => {});
+      await sleep(200);
+    },
+    verify: async (r) => {
+      const sel = await page.evaluate(() =>
+        Array.prototype.map.call(document.querySelectorAll("#multi li.sel"), (l) => l.id).join(","),
+      );
+      const res = r.msgs.filter((m) => m.type === "steply-exec-result" && m.token === "tok-mod");
+      const ok = res.length && res[0].ok === true;
+      return sel === "m1,m3" && ok
+        ? { verdict: "erfasst", detail: `Auswahl nach der Wiedergabe: ${sel} (Ergebnis ok=${ok})` }
+        : { verdict: "teilweise", detail: `Auswahl=${sel || "(keine)"} Ergebnis=${JSON.stringify(res[0] || null)}` };
+    },
   });
 
   await testCase({

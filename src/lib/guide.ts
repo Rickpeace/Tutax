@@ -43,6 +43,8 @@ const SHADOW_DEPTH_MAX = 5;
 // "result" (Abschluss-Bild) kommen dazu. Alle drei tragen NIE einen Selektor.
 const INTERACTION_VARIANTS = ["right", "double", "drag", "key", "nav", "spot", "result"] as const;
 const INTERACTION_MODIFIERS = ["ctrl", "meta", "alt", "shift"] as const;
+// Varianten, die per Definition KEIN Ziel auf der Seite haben (s. validateGuideSteps).
+export const NO_TARGET_VARIANTS = ["nav", "spot", "result"] as const;
 const INTERACTION_NAV_KINDS = ["back", "reload", "goto"] as const;
 
 // Ein normalisiertes sensibles Rechteck (Auto-Schwärzung, Welle 28) – wie rect, 0..1.
@@ -235,7 +237,11 @@ export function validateInteraction(raw: unknown, action: GuideAction): StepInte
   }
   // Zusatztasten beim Klick (Welle 55, L3): nur bekannte Namen, ohne Dubletten, feste
   // Reihenfolge (ctrl→meta→alt→shift), damit Texte und Wiedergabe deterministisch sind.
-  if (action === "click" && Array.isArray(r.modifiers)) {
+  // NUR bei Varianten, zu denen eine gedrückte Taste überhaupt passt: einfacher Klick,
+  // Doppelklick, markierte Stelle. Bei Tastenkürzel/Ziehen/Seitenwechsel/Abschluss-Bild wäre
+  // sie sinnlos (und stünde als erfundene Taste in der Anleitung).
+  const modsAllowed = !out.variant || out.variant === "double" || out.variant === "spot";
+  if (action === "click" && modsAllowed && Array.isArray(r.modifiers)) {
     const seen = new Set<string>();
     for (const m of r.modifiers.slice(0, 8)) {
       const k = typeof m === "string" ? m.trim().toLowerCase() : "";
@@ -488,6 +494,13 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
     const jump = validateStepJump(s.jump);
     // interaction (Welle 48): optional, tolerant validiert. Fehlt/kaputt -> weg.
     const interaction = validateInteraction(s.interaction, action);
+    // Welle 55 — INVARIANTE: Schritte ohne Ziel (Seitenwechsel, markierte Stelle,
+    // Abschluss-Bild) tragen NIE einen Selektor. Genau daran erkennen Automationen und
+    // Live-Führung, dass hier nichts angesteuert werden kann. Ein Client könnte sonst
+    // { selector, interaction:{variant:"result"} } schicken und so ein Ergebnis-Bild als
+    // ausführbaren Klick in eine Automation schmuggeln — darum hier serverseitig erzwungen.
+    const noTarget = interaction ? NO_TARGET_VARIANTS.includes(interaction.variant as never) : false;
+    const effectiveSelector = noTarget ? undefined : selector;
     // typed_value (Welle 54): optional, nur Eingabe-Schritte; sensible Beschriftung → weg.
     const typedValue = validateTypedValue(s.typed_value, action, label);
 
@@ -500,7 +513,7 @@ export function validateGuideSteps(raw: unknown, accountId: string): GuideStepIn
       title,
       w: Math.round(s.w),
       h: Math.round(s.h),
-      ...(selector ? { selector } : {}),
+      ...(effectiveSelector ? { selector: effectiveSelector } : {}),
       ...(sensitive.length ? { sensitive } : {}),
       ...(fileMeta ? { file_meta: fileMeta } : {}),
       ...(condition ? { condition } : {}),
@@ -559,7 +572,22 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   }
   if (step.action === "click" && it?.variant === "result") return "Ergebnis";
   if (step.action === "click" && it?.variant === "spot") {
+    // Eine gedrückte Zusatztaste gehört auch hier in den Titel — sonst führt die Anleitung
+    // in die Irre (ohne Strg geht die bisherige Auswahl verloren).
+    const spotKeys = modifierKeysDe(it);
     const where = step.label ? labelHead(step.label) : "";
+    if (spotKeys) {
+      const lead = spotKeys.includes("+")
+        ? `Mit gedrückten ${spotKeys}-Tasten`
+        : `Mit gedrückter ${spotKeys}-Taste`;
+      if (where) {
+        return wrapOne(
+          [(l) => `${lead} in „${l}“ auf die markierte Stelle klicken`, () => `${lead} auf die markierte Stelle klicken`],
+          where,
+        );
+      }
+      return `${lead} auf die markierte Stelle klicken`.slice(0, TITLE_MAX);
+    }
     if (where) return wrapOne([(l) => `In „${l}“ auf die markierte Stelle klicken`], where);
     return "Auf die markierte Stelle klicken";
   }

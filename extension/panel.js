@@ -4146,9 +4146,24 @@ function guideRenderImage(step) {
 // („result"). Erkannt an der Interaktion, nicht am fehlenden Selektor: ein Schritt aus einer
 // ALTEN Aufnahme ohne Selektor bleibt ein echter Fehlschlag (und damit sichtbar).
 const GUIDE_NO_TARGET_VARIANTS = { nav: 1, spot: 1, result: 1 };
-function guideStepHasNoTarget(step) {
+// Der Hinweis unter dem großen Screenshot für genau diese Schritte: er sagt zuerst, WAS zu tun
+// ist (Handlung), und erst dann, warum nichts markiert wird. null = kein solcher Schritt.
+function guideNoTargetText(step) {
   const it = guideInteraction(step);
-  return !!it && GUIDE_NO_TARGET_VARIANTS[it.variant] === 1;
+  if (!it || GUIDE_NO_TARGET_VARIANTS[it.variant] !== 1) return null;
+  if (it.variant === "result") {
+    return "Geschafft – dieses Bild zeigt nur das Ergebnis. Hier ist nichts mehr zu tun.";
+  }
+  if (it.variant === "spot") {
+    return "Klicken Sie auf die im Bild markierte Stelle – dort gibt es kein Element, das Steply hervorheben könnte.";
+  }
+  if (it.nav === "back") {
+    return "Gehen Sie mit dem Zurück-Knopf Ihres Browsers zur vorigen Seite – auf der Seite selbst gibt es dafür nichts zum Anklicken.";
+  }
+  if (it.nav === "reload") {
+    return "Laden Sie die Seite neu (Taste F5) – auf der Seite selbst gibt es dafür nichts zum Anklicken.";
+  }
+  return "Die Seite wechselt von selbst – warten Sie kurz und folgen Sie dem Screenshot.";
 }
 
 function guideSetFallback(on, hintText) {
@@ -4238,11 +4253,16 @@ function guideRenderStep() {
         step: { selector: sel, title: step.title, index: idx, total: total, interaction: guideInteraction(step) },
       });
     } else {
-      // Ohne Selektor gleich Fallback (großer Screenshot + Hinweis).
+      // Ohne Selektor gleich Fallback (großer Screenshot + Hinweis). Welle 55: Schritte, die
+      // ABSICHTLICH kein Ziel haben (Seitenwechsel, markierte Stelle, Abschluss-Bild), bekommen
+      // hier ihren eigenen Text — sie laufen nie über den Status-Listener, weil gar kein
+      // „steply-guide-show" rausgeht. Echte Alt-Schritte ohne Selektor behalten die bisherige
+      // Meldung.
       sendGuideToTab({ type: "steply-guide-hide" });
       guideSetFallback(
         true,
-        "Für diesen Schritt gibt es keine Markierung auf der Seite – orientieren Sie sich am Screenshot.",
+        guideNoTargetText(step) ||
+          "Für diesen Schritt gibt es keine Markierung auf der Seite – orientieren Sie sich am Screenshot.",
       );
     }
   }
@@ -4667,12 +4687,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     // ABSICHTLICH nicht ansteuerbar — „nicht zu finden“ wäre dort schlicht falsch und würde
     // dem Menschen einen Fehler vorgaukeln. Sie bekommen einen eigenen, ruhigen Hinweis und
     // zählen auch nicht als Selektor-Fehlschlag in der Telemetrie.
-    const intentional = guideStepHasNoTarget(step);
+    const noTarget = guideNoTargetText(step);
+    const intentional = !!noTarget;
     guideSetFallback(
       true,
-      intentional
-        ? "Für diesen Schritt gibt es nichts zum Anklicken – folgen Sie dem Screenshot."
-        : "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",
+      noTarget || "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",
     );
     if (!intentional) {
       if (reason) els.runFallbackHint.title = "Grund: " + reason;

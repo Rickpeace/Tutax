@@ -1751,8 +1751,14 @@
   // die Aufnahme wirkte auf Google-Docs-artigen Oberflaechen kaputt. Jetzt: Schritt mit
   // Klickpunkt-Markierung, ohne Selektor, klar als „nicht automatisierbar" erkennbar.
   // ENG begrenzt, damit daraus keine Flut von Fehlklick-Schritten wird.
-  const SPOT_REPEAT_MS = 600; // zweiter Druck auf dieselbe Stelle -> nur EIN Schritt
-  const SPOT_REPEAT_PX = 12;
+  const SPOT_REPEAT_MS = 900; // zweiter Druck auf dieselbe Stelle -> nur EIN Schritt
+  const SPOT_REPEAT_PX = 16;
+  // DECKEL gegen die Schritt-Flut: In einem Zeichen-Editor waere JEDER Strich ein Schritt —
+  // die 40er-Grenze der Aufnahme waere nach ein paar Sekunden voll und das Screenshot-
+  // Kontingent erschoepft. Fuer eine Anleitung reichen ein paar Klicks auf die Flaeche; alles
+  // darueber ist Zeichnen, nicht Bedienen. Gilt je Dokument (in einem Editor = je Aufnahme).
+  const SPOT_MAX_PER_PAGE = 5;
+  let spotCount = 0;
   let lastSpotStep = null; // { el, x, y, at }
 
   // Web-Baustein mit GESCHLOSSENEM Shadow-Root? Erkennung bewusst eng: eigenes Element
@@ -1770,11 +1776,30 @@
     }
   }
 
+  // Zaehlt eine Zeichenflaeche als bedienbar? Eine BILDSCHIRMFUELLENDE <canvas> ist fast immer
+  // Deko (Partikel-Hintergrund, Verlauf) — dort waere jeder Fehlklick ein Schritt. Sie zaehlt
+  // darum nur, wenn sie sich als Bedienflaeche zu erkennen gibt (aria-label/role/tabindex) oder
+  // deutlich kleiner als das Fenster ist (Google-Docs-Seite, Diagramm, Signaturfeld).
+  const SPOT_CANVAS_MAX_AREA = 0.85; // Anteil der Fensterflaeche
+  function canvasCounts(el) {
+    try {
+      if (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby")) return true;
+      if (el.getAttribute("role") || el.getAttribute("tabindex") != null) return true;
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth || document.documentElement.clientWidth || 1;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 1;
+      if (!r.width || !r.height) return false;
+      return (r.width * r.height) / (vw * vh) < SPOT_CANVAS_MAX_AREA;
+    } catch (err) {
+      return false;
+    }
+  }
+
   // Flaeche, fuer die ein „spot"-Schritt entsteht, oder null.
   function spotSurfaceFor(target) {
     if (!target || target.nodeType !== 1) return null;
     const canvas = closestDeep(target, "canvas");
-    if (canvas) return canvas;
+    if (canvas) return canvasCounts(canvas) ? canvas : null;
     if (isClosedShadowHost(target)) return target;
     return null;
   }
@@ -1782,6 +1807,7 @@
   function emitSpotClick(target, event) {
     const surface = spotSurfaceFor(target);
     if (!surface) return;
+    if (spotCount >= SPOT_MAX_PER_PAGE) return; // Deckel: ab hier ist es Zeichnen, kein Bedienen
     const x = event.clientX || 0;
     const y = event.clientY || 0;
     // Doppelklick / Zittern auf derselben Stelle erzeugt nur EINEN Schritt.
@@ -1808,6 +1834,7 @@
       interaction,
     });
     lastSpotStep = { el: surface, x, y, at: Date.now() };
+    spotCount++;
   }
 
   // Name einer Zeichen-/Baustein-Flaeche: aria-label/title/alt, sonst "" (nie der Tag-Name).
@@ -2414,6 +2441,13 @@
     } catch (err) {
       return null;
     }
+  }
+
+  // Eine offene Pfeiltasten-Serie verwerfen (Aufnahme aus) — nur den Timer abraeumen.
+  function abortArrowStep() {
+    const p = arrowPending;
+    arrowPending = null;
+    if (p && p.timer) clearTimeout(p.timer);
   }
 
   // Einen offenen Pfeiltasten-Schritt JETZT melden (vor einem Klick / einer anderen Taste),
@@ -5452,7 +5486,14 @@
     } else {
       // Pause/Stopp (Welle 48): eine noch nicht abgeschlossene Eingabe (Feld nicht verlassen)
       // JETZT melden — das Panel nimmt nach dem Entfernen von rec noch kurz Schritte an.
-      if (recording && mode === "guide") flushPendingInput();
+      // Welle 55: dasselbe gilt fuer einen noch offenen Pfeiltasten-Schritt (entprellt, bis zu
+      // 700 ms). Ohne das ginge „Menuepunkt per Pfeiltaste waehlen, sofort Fertig" verloren.
+      // MUSS laufen, SOLANGE `recording` noch true ist (flushArrowStep prueft das selbst).
+      if (recording && mode === "guide") {
+        flushArrowStep();
+        flushPendingInput();
+      }
+      abortArrowStep(); // Timer abraeumen, falls nichts zu melden war
       recording = false;
       navSetActive(false);
     }

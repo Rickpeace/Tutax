@@ -194,11 +194,43 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Datei", action: "c
   // (g) Automation: Schritte ohne Selektor sind nicht automatisierbar (nur Kürzel sind Ausnahme).
   ok(actionForInteraction({ variant: "nav", nav: "back" }) === "click", "Umwandlung: nav bleibt formal ein Klick (fliegt ohne Selektor raus)");
 
+  // (g2) INVARIANTE: ein Schritt ohne Ziel darf NIE einen Selektor behalten. Sonst koennte ein
+  //      Client ein Abschluss-Bild als ausfuehrbaren Klick in eine Automation schmuggeln.
+  for (const v of ["nav", "spot", "result"]) {
+    const smuggled = step({
+      selector: { css: "#geheim", text: "Loeschen" },
+      interaction: v === "nav" ? { variant: "nav", nav: "goto" } : { variant: v },
+    });
+    ok(smuggled.selector === undefined, `Selektor bei variant "${v}" serverseitig verworfen`);
+  }
+  ok(step({ selector: { css: "#ok" }, interaction: { variant: "double" } }).selector?.css === "#ok",
+    "Selektor bei echten Klick-Varianten bleibt erhalten");
+
+  // (g3) Zusatztasten nur bei Varianten, zu denen sie passen (sonst stuende eine erfundene
+  //      Taste in der Anleitung).
+  ok(validateInteraction({ variant: "key", key: "Ctrl+S", modifiers: ["shift"] }, "click")?.modifiers === undefined,
+    "modifiers bei Tastenkuerzel verworfen");
+  ok(validateInteraction({ variant: "nav", nav: "back", modifiers: ["ctrl"] }, "click")?.modifiers === undefined,
+    "modifiers bei Seitenwechsel verworfen");
+  ok(validateInteraction({ variant: "double", modifiers: ["ctrl"] }, "click")?.modifiers?.[0] === "ctrl",
+    "modifiers bei Doppelklick erlaubt");
+  ok(validateInteraction({ variant: "spot", modifiers: ["ctrl"] }, "click")?.modifiers?.[0] === "ctrl",
+    "modifiers bei markierter Stelle erlaubt");
+
+  // (g4) markierte Stelle MIT Zusatztaste: die Taste gehoert in den Titel.
+  const spotMod = step({ label: "", interaction: { variant: "spot", modifiers: ["ctrl"] } });
+  const smT = templateTitle(spotMod, 0);
+  ok(/Strg/.test(smT) && /markierte Stelle/.test(smT) && smT.length <= 60, `Titel spot+Strg: ${smT}`);
+
   // (h) Wiedergabe-Seite: exec-plan reicht die neuen Felder durch.
-  const pi = parseInteraction({ modifiers: ["shift", "ctrl", "unsinn"], variant: "nav", nav: "goto" }, "click");
-  ok(JSON.stringify(pi?.modifiers) === JSON.stringify(["ctrl", "shift"]) && pi?.nav === "goto",
-    `exec-plan parseInteraction: ${JSON.stringify(pi)}`);
+  const pi = parseInteraction({ modifiers: ["shift", "ctrl", "unsinn"] }, "click");
+  ok(JSON.stringify(pi?.modifiers) === JSON.stringify(["ctrl", "shift"]),
+    `exec-plan parseInteraction modifiers: ${JSON.stringify(pi)}`);
+  ok(parseInteraction({ variant: "nav", nav: "goto" }, "click")?.nav === "goto", "exec-plan: nav durchgereicht");
   ok(parseInteraction({ variant: "nav", nav: "quer" }, "click") === null, "exec-plan: unbekannte nav-Art verworfen");
+  // H1 auch auf der Wiedergabe-Seite: Zusatztaste ohne passende Variante faellt weg.
+  ok(parseInteraction({ variant: "nav", nav: "goto", modifiers: ["ctrl"] }, "click")?.modifiers === undefined,
+    "exec-plan: modifiers bei Seitenwechsel verworfen");
 }
 
 console.log(failed ? "\n✗ Fehlgeschlagen." : "\n✓ Erweiterte Interaktion: Validierung + Texte + Chips verifiziert.");

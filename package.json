@@ -7,7 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "fresh": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev"
+    "fresh": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
+    "test:capture": "node scripts/test-capture-gaps.mjs --strict",
+    "test:capture-report": "node scripts/test-capture-gaps.mjs",
+    "test:panel": "node scripts/test-guide-flow-panel.mjs",
+    "test:interaction": "node scripts/test-guide-interaction.mjs",
+    "test:exec-plan": "node scripts/test-exec-plan.mjs",
+    "test:resolve": "node scripts/test-guide-resolve.mjs",
+    "test:glossary": "node scripts/test-ui-glossary.mjs",
+    "build:extension": "node scripts/build-extension-zip.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

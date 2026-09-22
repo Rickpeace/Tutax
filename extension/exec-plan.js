@@ -121,7 +121,11 @@
     var isInput = action === "fill" || action === "type";
     var isClick = action == null || action === "click";
     if (raw.enter === true && isInput) out.enter = true;
-    if (isClick && Array.isArray(raw.modifiers)) {
+    // Zusatztasten nur bei Varianten, zu denen sie passen (spiegelt guide.ts validateInteraction):
+    // einfacher Klick, Doppelklick, markierte Stelle. Sonst waeren sie eine erfundene Taste.
+    var rawVariant = typeof raw.variant === "string" ? raw.variant : "";
+    var modsAllowed = !rawVariant || rawVariant === "double" || rawVariant === "spot";
+    if (isClick && modsAllowed && Array.isArray(raw.modifiers)) {
       // Zusatztasten beim Klick (Welle 55, L3): bekannte Namen, ohne Dubletten, feste Reihenfolge.
       var seen = {};
       for (var mi = 0; mi < raw.modifiers.length && mi < 8; mi++) {

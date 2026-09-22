@@ -454,6 +454,54 @@ try {
   await click("guideDiscard");
   ok(dialogs === dBefore3 && (await st()).phase === "idle", "Verwerfen ohne Schritte: ohne Rückfrage");
 
+  // ---- 5b) Live-Fuehrung: Hinweis fuer Schritte OHNE Ziel (Welle 55) ----
+  // Pruefbericht: der Zweig „kein Selektor" setzte IMMER den alten Text; Seitenwechsel,
+  // markierte Stelle und Abschluss-Bild kommen nie beim Status-Listener an, weil gar kein
+  // „steply-guide-show" rausgeht. Hier wird der ECHTE Render-Pfad gefahren.
+  {
+    const hintFor = (interaction, selector) =>
+      page.evaluate(
+        ({ interaction, selector }) => {
+          guide.stepById = new Map();
+          guide.branchesByStep = new Map();
+          guide.history = [];
+          guide.skipNote = null;
+          guide.curId = "s1";
+          guide.steps = [];
+          guide.stepById.set("s1", {
+            id: "s1",
+            title: "Schritt",
+            body: null,
+            imageUrl: null,
+            highlights: [],
+            selector: selector || null,
+            interaction: interaction || null,
+            is_decision: false,
+          });
+          guideRenderStep();
+          const el = document.getElementById("runFallbackHint");
+          return { text: el.textContent, hidden: el.hidden };
+        },
+        { interaction, selector },
+      );
+
+    const reload = await hintFor({ variant: "nav", nav: "reload" }, null);
+    ok(/neu/i.test(reload.text) && !reload.hidden, "Führung: Seitenwechsel „neu laden“ nennt die Handlung (" + reload.text.slice(0, 48) + "…)");
+    const back = await hintFor({ variant: "nav", nav: "back" }, null);
+    ok(/Zurück-Knopf/.test(back.text), "Führung: Zurück-Knopf wird benannt");
+    const spot = await hintFor({ variant: "spot" }, null);
+    ok(/markierte Stelle/.test(spot.text), "Führung: markierte Stelle wird benannt");
+    const result = await hintFor({ variant: "result" }, null);
+    ok(/Ergebnis/.test(result.text), "Führung: Abschluss-Bild wird benannt");
+    const legacy = await hintFor(null, null);
+    ok(
+      /keine Markierung auf der Seite/.test(legacy.text),
+      "Führung: echter Alt-Schritt ohne Selektor behält die bisherige Meldung",
+    );
+    const normal = await hintFor(null, { css: "#x" });
+    ok(normal.hidden, "Führung: Schritt MIT Selektor zeigt keinen Fallback-Hinweis");
+  }
+
   // ---- 6) Popups ----
   await click("recStart");
   await sendStep(TAB_FOREIGN, "Private Mail (fremdes Fenster)");
