@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Flow } from "@/components/builder/flow";
 import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
@@ -749,11 +750,25 @@ export function Builder({
     else handleAddStep(); // am Ende: neuen Schritt anlegen + auswählen
   }, [selIndex, ordered, handleAddStep]);
 
-  const closeEditor = useCallback(() => {
-    if (dirtyRef.current && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  // Ungespeicherte Titel-/Text-Änderungen: Steply-Dialog statt Browser-confirm().
+  const [confirm, confirmDialog] = useConfirm();
+  const confirmDiscard = useCallback(
+    () =>
+      confirm({
+        title: "Änderungen verwerfen?",
+        description: "Titel oder Erklärtext dieses Schritts sind noch nicht gespeichert.",
+        confirmLabel: "Verwerfen",
+        cancelLabel: "Weiter bearbeiten",
+        destructive: true,
+      }),
+    [confirm],
+  );
+
+  const closeEditor = useCallback(async () => {
+    if (dirtyRef.current && !(await confirmDiscard())) return;
     dirtyRef.current = false;
     setSelectedId(null);
-  }, []);
+  }, [confirmDiscard]);
 
   const renderPanel = (withClose = false) =>
     selectedStep ? (
@@ -795,13 +810,13 @@ export function Builder({
     ) : null;
 
   const flowArea = tree ? (
-    <div className="rounded-2xl border border-border bg-card/40 p-4 sm:p-5">
+    <div className="rounded-2xl border-2 border-line bg-card/40 p-4 sm:p-5">
       <Flow
         tree={tree}
         imgBust={imgBust}
         selectedId={selectedId}
-        onSelect={(id) => {
-          if (dirtyRef.current && id !== selectedId && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+        onSelect={async (id) => {
+          if (dirtyRef.current && id !== selectedId && !(await confirmDiscard())) return;
           dirtyRef.current = false;
           setSelectedId(id);
         }}
@@ -844,6 +859,9 @@ export function Builder({
 
   return (
     <>
+      {/* Verwerfen-Abfrage: bei der Schublade (schmal) IN ihr gerendert — dort ist sie ein
+          verschachtelter Dialog, ein Klick darin gilt dann nicht als „daneben“. */}
+      {wide && confirmDialog}
       {/* Aufnahme-Ziel-Dialog (Welle 27): immer gemountet, damit die Extension-Erkennung
           fertig ist, bevor ein Einfügepunkt geöffnet wird. open = recordTarget != null. */}
       <RecordIntoDialog
@@ -869,7 +887,7 @@ export function Builder({
           // 440/520 px — zwischen 1024 und 1440 px weder Überlauf noch gequetschter Ablauf.
           <aside
             data-testid="step-editor-panel"
-            className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[clamp(360px,44%,600px)] shrink-0 flex-col self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+            className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[clamp(360px,44%,600px)] shrink-0 flex-col self-start overflow-hidden rounded-2xl border-2 border-line bg-card shadow-sm"
           >
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
               {renderPanel(true)}
@@ -880,18 +898,22 @@ export function Builder({
 
       {!wide && (
         <Sheet open={!!selectedStep} onOpenChange={(o) => { if (!o) closeEditor(); }}>
+          {/* EINE Kopfzeile: die Navigationszeile des Panels (mit ✕ links wie im angedockten
+              Panel) ist der Kopf; der Titel bleibt für Screenreader erhalten. */}
           <SheetContent
             side={mobile ? "bottom" : "right"}
+            showCloseButton={false}
             className={
               mobile
-                ? "max-h-[85vh] w-full overflow-y-auto"
-                : "w-full overflow-y-auto sm:max-w-2xl"
+                ? "max-h-[85vh] w-full gap-0 overflow-y-auto"
+                : "w-full gap-0 overflow-y-auto sm:max-w-2xl"
             }
           >
-            <SheetHeader>
+            <SheetHeader className="sr-only">
               <SheetTitle>Schritt bearbeiten</SheetTitle>
             </SheetHeader>
-            <div className="px-4 pb-8">{renderPanel()}</div>
+            <div className="px-4 pb-8">{renderPanel(true)}</div>
+            {confirmDialog}
           </SheetContent>
         </Sheet>
       )}

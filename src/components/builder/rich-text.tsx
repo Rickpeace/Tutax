@@ -2,7 +2,18 @@
 
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { useState } from "react";
 import { Bold, Italic, List, ListOrdered, Link2, Link2Off } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /** Nur echte http/https-Links zulassen (javascript:/data: etc. verwerfen). */
 function safeHttpUrl(raw: string): string | null {
@@ -62,6 +73,11 @@ export function RichText({
     onUpdate: ({ editor }) => onChange(editor.getJSON()),
   });
 
+  // Link-Dialog (statt Browser-prompt): URL-Feld, Prüfung auf http/https bleibt.
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkInput, setLinkInput] = useState("");
+  const [linkError, setLinkError] = useState("");
+
   if (!editor) return null;
 
   const linkActive = editor.isActive("link");
@@ -71,24 +87,29 @@ export function RichText({
       editor.chain().focus().unsetLink().run();
       return;
     }
-    const prev = (editor.getAttributes("link").href as string) || "";
-    const input = window.prompt("Link-Adresse (URL):", prev);
-    if (input === null) return; // Abbrechen
-    if (!input.trim()) {
+    setLinkInput((editor.getAttributes("link").href as string) || "");
+    setLinkError("");
+    setLinkOpen(true);
+  }
+  function applyLink() {
+    if (!editor) return;
+    if (!linkInput.trim()) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      setLinkOpen(false);
       return;
     }
-    const url = safeHttpUrl(input);
+    const url = safeHttpUrl(linkInput);
     if (!url) {
-      window.alert("Bitte eine gültige http(s)-Adresse angeben.");
+      setLinkError("Bitte eine gültige http(s)-Adresse angeben.");
       return;
     }
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    setLinkOpen(false);
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-0.5 border-b border-line-2 px-1 py-1">
+    <div className="overflow-hidden rounded-lg border-2 border-line bg-card">
+      <div className="flex items-center gap-0.5 border-b-2 border-line-2 px-1 py-1">
         <ToolBtn editor={editor} label="Fett" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="size-4" />
         </ToolBtn>
@@ -106,6 +127,49 @@ export function RichText({
         </ToolBtn>
       </div>
       <EditorContent editor={editor} />
+
+      <Dialog open={linkOpen} onOpenChange={(o) => { if (!o) setLinkOpen(false); }}>
+        <DialogContent className="sm:max-w-md" data-testid="link-dialog">
+          <DialogHeader>
+            <DialogTitle>Link einfügen</DialogTitle>
+            <DialogDescription>
+              Markierter Text wird zum Link. Ohne „https://“ ergänzt Steply das automatisch.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyLink();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="rt-link-url">Link-Adresse</Label>
+              <Input
+                id="rt-link-url"
+                autoFocus
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="z. B. https://beispiel.de/hilfe"
+                value={linkInput}
+                aria-invalid={linkError ? true : undefined}
+                onChange={(e) => {
+                  setLinkInput(e.target.value);
+                  if (linkError) setLinkError("");
+                }}
+              />
+              {linkError && <p className="text-xs text-destructive">{linkError}</p>}
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="ghost" onClick={() => setLinkOpen(false)}>
+                Abbrechen
+              </Button>
+              <Button type="submit">Link setzen</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -347,7 +347,14 @@ try {
   ok(u3.path === `${accountId}/${tutorialId}/${s3}.webp`, "Ungeteilt: Standard-Pfad bleibt");
 
   // Einen der beiden Schritte löschen -> Storage-Objekt bleibt.
+  // Steply-Bestätigungsdialog (kein Browser-confirm mehr): Folge wird genannt, dann bestätigen.
   await panel().getByRole("button", { name: /Schritt löschen/ }).click();
+  const delDlg = page.getByTestId("confirm-dialog");
+  await delDlg.waitFor({ timeout: 10_000 });
+  ok((await delDlg.innerText()).includes("werden gelöscht"), "Löschen fragt im Steply-Dialog und nennt die Folge");
+  await delDlg.getByRole("button", { name: "Schritt löschen" }).click();
+  await page.locator("[data-sonner-toast]", { hasText: "Schritt gelöscht" }).waitFor({ timeout: 10_000 });
+  ok(true, "Toast „Schritt gelöscht“");
   const gone = await waitFor(async () => !(await stepRow(newStep.id)));
   ok(gone, "Neuer Schritt gelöscht (DB)");
   const dl = await admin.storage.from("tutorial-images").download(s1Path);

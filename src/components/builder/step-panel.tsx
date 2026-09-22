@@ -6,6 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +21,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { RichText } from "@/components/builder/rich-text";
 import { StatusSwitch } from "@/components/app/status-switch";
 import { ImageField } from "@/components/builder/image-field";
@@ -98,6 +107,7 @@ export function StepPanel({
   const [dirty, setDirty] = useState(false);
   const [rtKey, setRtKey] = useState(0);
   const [pendingNav, setPendingNav] = useState<null | { run: () => void; label: string }>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   // Eltern (Builder) über ungespeicherte Änderungen informieren (Schließen-Abfrage).
   useEffect(() => {
@@ -133,20 +143,70 @@ export function StepPanel({
 
   // Frage-Toggle: beim Ausschalten mit mehreren Antworten warnen (alle außer der ersten
   // werden entfernt -> Folge-Schritte anderer Antworten sind dann nicht mehr verbunden).
-  function toggleDecision() {
+  async function toggleDecision() {
     const turningOff = step.is_decision;
     if (turningOff && branches.length > 1) {
-      const ok = confirm(
-        "Alle Antworten außer der ersten werden entfernt – Folge-Schritte anderer Antworten sind dann nicht mehr verbunden. Fortfahren?",
-      );
+      const ok = await confirm({
+        title: "Frage ausschalten?",
+        description:
+          "Alle Antworten außer der ersten werden entfernt. Folge-Schritte der anderen Antworten bleiben erhalten, sind danach aber nicht mehr mit dem Ablauf verbunden.",
+        confirmLabel: "Ausschalten",
+        destructive: true,
+      });
       if (!ok) return;
     }
     onSetDecision(step.id, !step.is_decision);
   }
 
+  // Schritt löschen: Folge klar benennen. Verhalten = Builder.handleDeleteStep/deleteStep:
+  // linearer Schritt -> Vorgänger zeigen auf den nächsten Schritt; Frage -> Antworten gehen
+  // mit, Vorgänger zeigen aufs Ende, Ast-Schritte bleiben unverbunden stehen.
+  async function askDeleteStep() {
+    let consequence: string;
+    if (step.is_decision && branches.length > 0) {
+      const names = branches
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((b) => `„${b.label?.trim() || "Antwort"}“`)
+        .join(", ");
+      const hasBranchSteps = branches.some((b) => b.target_step_id);
+      consequence =
+        `Die Antworten ${names} werden mit gelöscht.` +
+        (hasBranchSteps
+          ? " Die Schritte in den Ästen bleiben erhalten, sind danach aber nicht mehr mit dem Ablauf verbunden."
+          : "");
+    } else if (!step.is_decision && branches.some((b) => b.target_step_id)) {
+      consequence = "Der Ablauf geht danach direkt mit dem nächsten Schritt weiter.";
+    } else {
+      consequence = "Die Anleitung endet danach beim vorigen Schritt.";
+    }
+    const ok = await confirm({
+      title: `„${stepLabel(step)}“ löschen?`,
+      description: `Titel, Erklärtext, Screenshot und Markierungen dieses Schritts werden gelöscht. ${consequence}`,
+      confirmLabel: "Schritt löschen",
+      destructive: true,
+    });
+    if (!ok) return;
+    onDeleteStep(step.id);
+    toast.success("Schritt gelöscht");
+  }
+
+  async function askDeleteBranch(branch: StepBranch) {
+    const target = branch.target_step_id ? allSteps.find((s) => s.id === branch.target_step_id) : null;
+    const ok = await confirm({
+      title: `Antwort „${branch.label?.trim() || "Antwort"}“ löschen?`,
+      description: target
+        ? `Der Schritt „${stepLabel(target)}“ dahinter bleibt erhalten, ist aber nicht mehr mit dieser Antwort verbunden.`
+        : undefined,
+      confirmLabel: "Antwort löschen",
+      destructive: true,
+    });
+    if (ok) onDeleteBranch(branch.id);
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
+      <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b-2 border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
         <div className="flex items-center gap-1">
           {onClose && (
             <Button variant="ghost" size="icon-sm" onClick={onClose} title="Editor schließen" aria-label="Editor schließen">
@@ -252,8 +312,8 @@ export function StepPanel({
       {/* Frage/Verzweigung: derselbe Schalter wie überall (StatusSwitch), die Karte bleibt
           neutral — nur ein dezenter Rand zeigt den aktiven Zustand. */}
       <div
-        className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
-          step.is_decision ? "border-primary/30 bg-card" : "border-border bg-card"
+        className={`flex items-center gap-3 rounded-lg border-2 p-3 transition-colors ${
+          step.is_decision ? "border-primary/30 bg-card" : "border-line bg-card"
         }`}
       >
         <GitBranch
@@ -294,7 +354,7 @@ export function StepPanel({
                 branch={b}
                 targetOptions={targetOptions}
                 onUpdate={onUpdateBranch}
-                onDelete={onDeleteBranch}
+                onDelete={() => askDeleteBranch(b)}
                 stepLabel={stepLabel}
                 onGo={() =>
                   guardedNav(
@@ -313,17 +373,17 @@ export function StepPanel({
       {/* Nur für Automationen (Bedingung, Sprung) — der Mensch ignoriert es, darum eingeklappt. */}
       {!step.is_decision && <AdvancedSection step={step} onSetCondition={onSetCondition} />}
 
-      <div className="border-t border-line-2 pt-4">
+      <div className="border-t-2 border-line-2 pt-4">
         <Button
           variant="destructive"
           size="sm"
-          onClick={() => {
-            if (confirm("Diesen Schritt mit allen Inhalten wirklich löschen?")) onDeleteStep(step.id);
-          }}
+          onClick={askDeleteStep}
         >
           <Trash2 className="size-4" /> Schritt löschen
         </Button>
       </div>
+
+      {confirmDialog}
 
       <Dialog open={pendingNav !== null} onOpenChange={(o) => { if (!o) setPendingNav(null); }}>
         <DialogContent showCloseButton={false} className="sm:max-w-lg">
@@ -378,7 +438,7 @@ function AdvancedSection({
     !!step.condition && !(step.condition.kind === "url" && !step.condition.pattern.trim());
   const active = [condActive ? "Bedingung" : null, step.jump ? "Sprung" : null].filter(Boolean);
   return (
-    <div className="rounded-lg border border-border bg-card" data-testid="step-advanced">
+    <div className="rounded-lg border-2 border-line bg-card" data-testid="step-advanced">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -388,7 +448,7 @@ function AdvancedSection({
         <Zap className="size-4 shrink-0 text-muted-foreground" />
         <span className="flex-1 text-sm font-semibold text-ink">Erweitert (für Automationen)</span>
         {active.length > 0 && (
-          <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal-text">
+          <span className="rounded-full bg-teal-soft px-2 py-0.5 text-xs font-extrabold text-teal-text">
             {active.join(" + ")} aktiv
           </span>
         )}
@@ -397,7 +457,7 @@ function AdvancedSection({
         />
       </button>
       {open && (
-        <div className="space-y-3 border-t border-line-2 px-3 pb-3 pt-3">
+        <div className="space-y-3 border-t-2 border-line-2 px-3 pb-3 pt-3">
           <ConditionField step={step} onSetCondition={onSetCondition} />
           {step.jump && (
             <p className="text-xs text-muted-foreground">
@@ -497,11 +557,11 @@ function ConditionField({
   return (
     <div>
       <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
+        <Switch
           checked={enabled}
-          onChange={toggleEnabled}
-          className="mt-0.5 size-4 accent-primary"
+          onCheckedChange={toggleEnabled}
+          aria-label="Bedingung"
+          className="mt-0.5"
         />
         <div className="flex-1">
           <div className="text-sm font-semibold text-ink">Bedingung</div>
@@ -513,8 +573,8 @@ function ConditionField({
       </label>
 
       {enabled && (
-        <div className="mt-3 space-y-2 pl-7">
-          <div className="flex flex-wrap items-center gap-3 text-[13px]">
+        <div className="mt-3 space-y-2 pl-[50px]">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <label className={`flex items-center gap-1.5 ${hasSelector ? "" : "opacity-40"}`}>
               <input
                 type="radio"
@@ -550,16 +610,15 @@ function ConditionField({
               onBlur={(e) => commitPattern(e.target.value)}
               aria-label="URL enthält"
               placeholder="z. B. /login  oder  beispiel.de/app"
-              className="h-8 text-[13px]"
+              className="h-8"
             />
           )}
 
-          <label className="flex items-center gap-1.5 text-[13px]">
-            <input
-              type="checkbox"
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Switch
               checked={negate}
-              onChange={(e) => setNegate(e.target.checked)}
-              className="size-3.5 accent-primary"
+              onCheckedChange={(c) => setNegate(c)}
+              aria-label="Umkehren (nur wenn NICHT zutrifft)"
             />
             <span className="font-semibold text-ink">Umkehren (nur wenn NICHT zutrifft)</span>
           </label>
@@ -568,6 +627,9 @@ function ConditionField({
     </div>
   );
 }
+
+/** Auswahl-Wert für „Ende“ (kein Ziel-Schritt) — Base-UI-Select braucht einen echten Wert. */
+const END = "__end__";
 
 function BranchRow({
   branch,
@@ -583,16 +645,20 @@ function BranchRow({
     id: string,
     patch: { label?: string; target_step_id?: string | null },
   ) => void;
-  onDelete: (id: string) => void;
+  onDelete: () => void;
   onGo: () => void;
   stepLabel: (s: Step) => string;
 }) {
   const labelText = branch.label?.trim() || "Antwort";
   const currentTarget = targetOptions.find((s) => s.id === branch.target_step_id);
+  const targetItems = [
+    { value: END, label: "→ Ende" },
+    ...targetOptions.map((s) => ({ value: s.id, label: `→ ${stepLabel(s)}` })),
+  ];
   return (
     // @container: Ist die Zeile schmal (Handy, schmales Panel), rutscht die Ziel-Auswahl in eine
     // eigene volle Zeile — sonst wäre der Schritt-Name bis zur Unlesbarkeit abgeschnitten.
-    <div className="@container rounded-lg border border-border bg-card p-2">
+    <div className="@container rounded-lg border-2 border-line bg-card p-2">
     <div className="flex flex-wrap items-center gap-2">
       <span
         aria-hidden
@@ -601,7 +667,7 @@ function BranchRow({
       />
       {/* key = aktueller Wert: bleibt beim Tippen stabil (Commit erst onBlur), remountet
           aber bei EXTERNER Änderung (z. B. „Ja"/„Nein" beim Verzweigen) mit neuem Wert. */}
-      <input
+      <Input
         key={`l:${branch.label ?? ""}`}
         defaultValue={branch.label ?? ""}
         placeholder="Antwort"
@@ -610,25 +676,30 @@ function BranchRow({
           if (e.target.value !== (branch.label ?? ""))
             onUpdate(branch.id, { label: e.target.value });
         }}
-        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring @md:w-20 @md:flex-none"
+        className="min-w-0 flex-1 @md:w-24 @md:flex-none"
       />
-      <select
-        key={`t:${branch.target_step_id ?? ""}`}
-        defaultValue={branch.target_step_id ?? ""}
-        onChange={(e) =>
-          onUpdate(branch.id, { target_step_id: e.target.value || null })
+      <Select
+        value={branch.target_step_id ?? END}
+        items={targetItems}
+        onValueChange={(v) =>
+          onUpdate(branch.id, { target_step_id: !v || v === END ? null : String(v) })
         }
-        aria-label={`Weiter bei Antwort „${labelText}“`}
-        title={currentTarget ? stepLabel(currentTarget) : "Ende"}
-        className="order-last w-full min-w-0 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring @md:order-none @md:w-auto @md:flex-1"
       >
-        <option value="">→ Ende</option>
-        {targetOptions.map((s) => (
-          <option key={s.id} value={s.id}>
-            → {stepLabel(s)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          aria-label={`Weiter bei Antwort „${labelText}“`}
+          title={currentTarget ? stepLabel(currentTarget) : "Ende"}
+          className="order-last w-full min-w-0 @md:order-none @md:w-auto @md:flex-1"
+        >
+          <SelectValue className="min-w-0 truncate" />
+        </SelectTrigger>
+        <SelectContent>
+          {targetItems.map((it) => (
+            <SelectItem key={it.value} value={it.value}>
+              {it.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <button
         type="button"
         onClick={onGo}
@@ -640,9 +711,7 @@ function BranchRow({
       </button>
       <button
         type="button"
-        onClick={() => {
-          if (confirm("Diese Antwort-Option löschen?")) onDelete(branch.id);
-        }}
+        onClick={onDelete}
         className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-no-soft hover:text-no focus-visible:ring-3 focus-visible:ring-ring/50"
         aria-label="Antwort löschen"
       >
