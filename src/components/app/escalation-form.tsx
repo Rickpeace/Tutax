@@ -491,8 +491,9 @@ function ChatPreview({ settings, accountName }: { settings: EscalationSettings; 
         ? `Passt die Frage zu „${ex.label.replace("Frage zu ", "")}“, wählt der Assistent ${chosen.name}. Fehlende Kontaktwege kommen vom allgemeinen Kontakt.`
         : "Passt keine Person eindeutig, erscheint der allgemeine Kontakt.";
 
+  // lg:top-[82px] = unter der 60px-Kopfleiste (sticky, z-30) + Abstand, wie die Einstellungs-Seitenleiste.
   return (
-    <aside className="space-y-3 lg:sticky lg:top-4" aria-label="Vorschau" data-testid="contact-preview">
+    <aside className="space-y-3 lg:sticky lg:top-[82px]" aria-label="Vorschau" data-testid="contact-preview">
       <div className="text-xs font-extrabold tracking-wider text-faint uppercase">So sieht es Ihr Kunde</div>
       <div className="flex flex-wrap gap-1.5">
         {examples.map((e) => (

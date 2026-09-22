@@ -23,8 +23,8 @@ export function CategoryJump({ sections }: { sections: JumpSection[] }) {
   return (
     <nav
       aria-label="Kategorien"
-      // sticky unter dem 56px-Header; z unter dem Header (z-20), über dem Inhalt.
-      className="sticky top-14 z-10 -mx-5 mb-4 border-b border-line-2 bg-background/90 backdrop-blur md:hidden"
+      // sticky unter dem 60px-Header (app-header.tsx); z unter dem Header (z-30), über dem Inhalt.
+      className="sticky top-[60px] z-10 -mx-5 mb-4 border-b border-line-2 bg-background/90 backdrop-blur md:hidden"
     >
       <div className="flex gap-2 overflow-x-auto px-5 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {sections.map((s) => (
