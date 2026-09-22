@@ -228,7 +228,7 @@ try {
   mkdirSync(userDataDir, { recursive: true });
   ext = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
+    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--window-position=-32000,-32000", "--window-size=1280,900"],
   });
 
   // Extension-ID über den Service-Worker.
@@ -243,6 +243,9 @@ try {
   await sitePage.goto(SITE + "/", { waitUntil: "load" });
   const panelPage = await ext.newPage();
   await panelPage.goto(`chrome-extension://${extId}/panel.html`, { waitUntil: "load" });
+  // Panel-Init ist asynchron und zeigt am Ende ihren Start-Bildschirm (blendet #autoRun aus) —
+  // erst danach einen Lauf starten (sonst verwirft das Panel Schritt-Ergebnisse, s. Welle 52b).
+  await panelPage.waitForFunction(() => typeof currentSection === "string" && currentSection !== "", null, { timeout: 15000 });
 
   // Sanity: die SHIPPED-Ausführ-Maschine ist im Panel erreichbar (globaler Namensraum).
   const sane = await panelPage.evaluate(() => ({

@@ -68,7 +68,7 @@ function html(res, body) {
 }
 const server = createServer((req, res) => {
   const u = new URL(req.url, "http://x");
-  reqLog.push({ method: req.method, path: u.pathname, search: u.search });
+  reqLog.push({ method: req.method, path: u.pathname, search: u.search, t: Date.now() });
   if (u.pathname === "/app" && req.method === "GET") {
     const tag = u.searchParams.get("tag") || "A";
     const bare = u.searchParams.get("bare") === "1";
@@ -225,7 +225,7 @@ try {
   mkdirSync(userDataDir, { recursive: true });
   ext = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--disable-popup-blocking"],
+    args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`, "--window-position=-32000,-32000", "--window-size=1280,900", "--disable-popup-blocking"],
   });
 
   let sw = ext.serviceWorkers()[0];
@@ -237,8 +237,96 @@ try {
   const sitePage = ext.pages()[0] || (await ext.newPage());
   await sitePage.goto(SITE + "/app?tag=A", { waitUntil: "load" });
   const panelPage = await ext.newPage();
+  const DIAG = process.env.STEPLY_DIAG === "1";
+  if (DIAG) {
+    // Früh (vor panel.js) mitschreiben, wann die Panel-Init ihren Start-Bildschirm zeigt.
+    await panelPage.addInitScript(() => {
+      window.__diagEarly = [];
+      let last = null;
+      const t = setInterval(() => {
+        let sec;
+        try { sec = currentSection; } catch (e) { return; }
+        if (sec !== last) { last = sec; window.__diagEarly.push({ t: Date.now(), ev: "section", sec }); }
+      }, 2);
+      setTimeout(() => clearInterval(t), 60000);
+    });
+  }
+  // WELLE 52b — Ursache des wackligen Tests (1 von 3 Läufen unter Last: „A … phase=miss, index=0,
+  // reason=timeout"): Das Panel startet seine Init ASYNCHRON (panel.js, IIFE am Dateiende:
+  // windows.getCurrent → reconcile → loadConfig → Caches → showHome). Das „load"-Ereignis kommt
+  // VOR deren Ende. Startete der Test den Lauf in dieser Lücke, zeigte die Init danach ihren
+  // Start-Bildschirm (show("connect")) und blendete #autoRun wieder aus — der Ergebnis-Handler
+  // verwirft steply-exec-result bei verborgenem #autoRun (gewollt: kein Lauf-Bildschirm = kein
+  // Lauf) → Klick erfolgt, Ergebnis verworfen, 20-s-Timeout. Im Produkt unmöglich: den Start-Knopf
+  // gibt es erst NACH der Init. Unter Last (parallele Browser) dauern die chrome.*-Aufrufe länger →
+  // die Lücke wird groß genug. DETERMINISTISCH nachgestellt: die Init wird hier absichtlich um
+  // STEPLY_DELAY_INIT ms (Standard 800) verzögert; der Test wartet danach auf den ECHTEN Zustand
+  // „Init fertig" (currentSection gesetzt) statt auf „load".
+  const INIT_DELAY = Number(process.env.STEPLY_DELAY_INIT || 800);
+  if (INIT_DELAY > 0) {
+    await panelPage.addInitScript((ms) => {
+      const orig = chrome.windows.getCurrent.bind(chrome.windows);
+      chrome.windows.getCurrent = (...a) => new Promise((r) => setTimeout(r, ms)).then(() => orig(...a));
+    }, INIT_DELAY);
+  }
   await panelPage.goto(`chrome-extension://${extId}/panel.html`, { waitUntil: "load" });
+  await panelPage.waitForFunction(() => typeof currentSection === "string" && currentSection !== "", null, { timeout: 15000 });
 
+  if (DIAG) {
+    await panelPage.evaluate(() => {
+      window.__diag = window.__diagEarly || [];
+      const L = (o) => window.__diag.push(Object.assign({ t: Date.now(), ph: exec.phase, i: exec.index }, o));
+      const origSend = chrome.tabs.sendMessage.bind(chrome.tabs);
+      chrome.tabs.sendMessage = (tabId, msg, ...rest) => {
+        L({ ev: "send", tabId, type: msg && msg.type, token: msg && msg.token, css: msg && msg.step && msg.step.selector && msg.step.selector.css });
+        const p = origSend(tabId, msg, ...rest);
+        if (p && p.then) p.then(() => L({ ev: "send-ok", type: msg && msg.type, token: msg && msg.token }), (e) => L({ ev: "send-err", type: msg && msg.type, token: msg && msg.token, err: String(e && e.message || e) }));
+        return p;
+      };
+      chrome.runtime.onMessage.addListener((msg, sender) => {
+        if (msg && msg.type === "steply-exec-result") L({ ev: "result", autoRunHidden: els.autoRun.hidden, section: currentSection, token: msg.token, ok: msg.ok, reason: msg.reason, tab: sender && sender.tab && sender.tab.id, frame: sender && sender.frameId, docId: sender && sender.documentId });
+      });
+      chrome.tabs.onUpdated.addListener((tabId, ci) => { if (ci.status) L({ ev: "tab-upd", tabId, status: ci.status }); });
+      const origShow = window.show;
+      window.show = function (sec) { L({ ev: "show", sec }); return origShow.apply(this, arguments); };
+      let last = "";
+      setInterval(() => { const k = exec.phase + "/" + exec.index; if (k !== last) { last = k; L({ ev: "phase" }); } }, 20);
+    });
+  }
+  const dumpDiag = async (label, fromIdx) => {
+    if (!DIAG) return;
+    const d = await panelPage.evaluate(() => window.__diag.splice(0));
+    const srv = reqLog.slice(fromIdx).map((r) => ({ t: r.t, ev: "srv", path: r.path + r.search }));
+    const all = d.concat(srv).sort((a, b) => a.t - b.t);
+    const t0 = all.length ? all[0].t : 0;
+    console.log("  ── DIAG " + label + " ──");
+    for (const e of all) { const { t, ...rest } = e; console.log("   +" + String(t - t0).padStart(6) + "ms " + JSON.stringify(rest)); }
+  };
+  // Diagnose (nur mit STEPLY_DIAG=1): Zeitleiste Panel-Nachrichten + Seiten-DOM + Server-Log.
+  const diagMark = async (label) => {
+    if (!DIAG) return;
+    await panelPage.evaluate((l) => { if (l !== "A") window.__diag.splice(0); window.__diag.push({ t: Date.now(), ev: l + "-start" }); }, label);
+    await sitePage.evaluate(() => {
+      window.__sd = [];
+      const L = (ev) => window.__sd.push({ t: Date.now(), ev });
+      new MutationObserver((ms) => {
+        for (const m of ms) {
+          for (const n of m.addedNodes) if (n.id) L("add#" + n.id);
+          for (const n of m.removedNodes) if (n.id) L("rm#" + n.id);
+          if (m.type === "attributes") L("attr " + m.target.id + "." + m.attributeName + "=" + m.target.getAttribute(m.attributeName));
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+      document.addEventListener("click", (e) => L("click#" + (e.target && e.target.id) + " trusted=" + e.isTrusted), true);
+      document.addEventListener("visibilitychange", () => L("vis=" + document.visibilityState));
+      L("vis=" + document.visibilityState);
+    }).catch(() => {});
+  };
+  const diagDump = async (label, st, fromIdx) => {
+    if (!DIAG || (st && st.phase === "done" && process.env.STEPLY_DIAG_ALL !== "1")) return;
+    const sd = await sitePage.evaluate(() => window.__sd || []).catch(() => []);
+    for (const e of sd) reqLog.push({ t: e.t, path: "[page] " + e.ev, search: "" });
+    await dumpDiag(label, fromIdx);
+  };
   const sane = await panelPage.evaluate(() => ({
     exec: typeof exec !== "undefined",
     run: typeof execExecuteCurrent === "function",
@@ -257,9 +345,11 @@ try {
   // ════════ BEWEIS A: EINFACHER In-Page-Klick (ein Tab) ════════
   await sitePage.goto(SITE + "/app?tag=A", { waitUntil: "load" });
   const aFrom = reqLog.length;
+  await diagMark("A");
   await startRunInPanel(panelPage, inpageAuto(SITE), "auto", siteTabId);
   const stA = await waitFor(panelPage, (s) => s.phase === "done" || s.phase === "miss" || s.phase === "aborted", 40000);
   const aClicks = clicks(aFrom);
+  await diagDump("A", stA, aFrom);
   ok(aClicks.some((c) => c.indexOf("/avatar-click") === 0), "A: Avatar-Klick ausgeführt (Dropdown geöffnet)");
   ok(stA && stA.phase === "done",
     `A: Lauf schaltet nach dem In-Page-Klick weiter und läuft durch (phase=${stA && stA.phase}, index=${stA && stA.index}, reason=${stA && stA.reason})`);
@@ -268,9 +358,11 @@ try {
   // ════════ BEWEIS B (REGRESSION): zweite gleich-URL-Kopie darf die Bindung NICHT stehlen ════════
   await sitePage.goto(SITE + "/app?tag=A", { waitUntil: "load" });
   const bFrom = reqLog.length;
+  await diagMark("B");
   await startRunInPanel(panelPage, dupTabThenInpageAuto(SITE), "auto", siteTabId);
   const stB = await waitFor(panelPage, (s) => s.phase === "done" || s.phase === "miss" || s.phase === "aborted", 45000);
   const bClicks = clicks(bFrom);
+  await diagDump("B", stB, bFrom);
   // Der In-Page-Klick MUSS auf dem gebundenen (sichtbaren) Tab A laufen — nicht auf der zweiten Kopie.
   ok(bClicks.some((c) => c === "/avatar-click?tag=A"),
     `B: In-Page-Klick lief auf dem GEBUNDENEN Tab (tag=A) — nicht auf der zweiten Kopie (clicks=${JSON.stringify(bClicks)})`);
@@ -281,9 +373,11 @@ try {
   // ════════ BEWEIS C: echte Tab-Folge (Welle 43) bleibt intakt ════════
   await sitePage.goto(SITE + "/app?tag=A", { waitUntil: "load" });
   const cFrom = reqLog.length;
+  await diagMark("C");
   await startRunInPanel(panelPage, popupThenInpageAuto(SITE), "auto", siteTabId);
   const stC = await waitFor(panelPage, (s) => s.phase === "done" || s.phase === "miss" || s.phase === "aborted", 70000);
   const cClicks = clicks(cFrom);
+  await diagDump("C", stC, cFrom);
   ok(cClicks.some((c) => c === "/oauth-click"), "C: Popup-Konto gewählt");
   ok(cClicks.some((c) => c === "/avatar2-click"),
     "C: Lauf ist der echten Tab-Folge auf /app2 gefolgt und hat DORT den In-Page-Klick ausgeführt");
