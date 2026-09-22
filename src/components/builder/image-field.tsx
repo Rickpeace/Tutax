@@ -29,6 +29,7 @@ export function ImageField({
   hasSourceVideo = false,
   onSetImage,
   onSetHighlights,
+  onRemoveImage,
   onDuplicateImage,
 }: {
   tutorialId: string;
@@ -47,6 +48,8 @@ export function ImageField({
     },
   ) => void;
   onSetHighlights: (stepId: string, highlights: Highlight[]) => void;
+  /** Bild samt Markierungen entfernen (mit „Rückgängig“). Fehlt es, nur das Bild leeren. */
+  onRemoveImage?: (stepId: string) => void;
   /** Welle 51a: „Bild in neuen Schritt übernehmen“ (ein Screenshot für mehrere Schritte). */
   onDuplicateImage?: () => void;
 }) {
@@ -196,10 +199,13 @@ export function ImageField({
       />
       {imagePath && url ? (
         <div
-          className={`relative space-y-2 rounded-lg transition-shadow ${
+          className={`relative space-y-2 rounded-lg outline-none transition-shadow focus-visible:ring-3 focus-visible:ring-ring/50 ${
             dragActive ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
           }`}
+          // Fokussierbar, damit Strg+V (Bild einfügen) auch per Tastatur hier landet.
           tabIndex={0}
+          role="group"
+          aria-label="Screenshot – zum Ersetzen ein Bild hier ablegen oder einfügen (Strg+V)"
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragEnter={onDragEnter}
@@ -266,11 +272,13 @@ export function ImageField({
               size="sm"
               disabled={busy}
               onClick={() =>
-                onSetImage(stepId, {
-                  image_path: null,
-                  image_width: null,
-                  image_height: null,
-                })
+                onRemoveImage
+                  ? onRemoveImage(stepId)
+                  : onSetImage(stepId, {
+                      image_path: null,
+                      image_width: null,
+                      image_height: null,
+                    })
               }
             >
               <Trash2 className="size-4" /> Entfernen
@@ -318,7 +326,7 @@ export function ImageField({
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
           onPaste={onPaste}
-          className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-sm transition-colors ${
+          className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
             dragActive
               ? "border-primary bg-muted text-primary"
               : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-muted"
@@ -333,7 +341,13 @@ export function ImageField({
             ? "Wird hochgeladen …"
             : dragActive
             ? "Bild hier ablegen"
-            : "Screenshot hochladen / Foto aufnehmen"}
+            : (
+                <span>
+                  Screenshot hochladen
+                  {/* „Foto aufnehmen“ gibt es nur auf Handy/Tablet (Kamera über die Dateiauswahl). */}
+                  <span className="hidden pointer-coarse:inline"> / Foto aufnehmen</span>
+                </span>
+              )}
           {!busy && !dragActive && (
             <span className="text-xs text-muted-foreground/80">
               Klicken, ablegen oder einfügen (Strg+V)

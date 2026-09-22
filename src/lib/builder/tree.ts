@@ -162,6 +162,30 @@ export function buildRenderTree(
 }
 
 /** Schritt mit Eingangsgrad 0 (kein Branch zeigt auf ihn) = Wurzelkandidat. */
+/** Schritt-IDs in tatsächlicher FLUSS-Reihenfolge (Tree-DFS). */
+export function flattenFlow(node: RenderNode): string[] {
+  if (node.type === "merge") return [];
+  const ids: string[] = [node.step.id];
+  for (const b of node.branches ?? []) ids.push(...flattenFlow(b.child));
+  if (node.after) ids.push(...flattenFlow(node.after));
+  if (node.next) ids.push(...flattenFlow(node.next));
+  return ids;
+}
+
+/**
+ * Schritte in Ablauf-Reihenfolge (wie Vor/Zurück im Editor): erst der Fluss, danach nicht
+ * erreichbare Schritte nach Position. Grundlage für „Schritt N“ bei Schritten ohne Titel.
+ */
+export function flowOrder(steps: Step[], branches: StepBranch[], rootStepId: string | null): Step[] {
+  const tree = buildRenderTree(steps, branches, rootStepId);
+  const flowIds = tree ? flattenFlow(tree) : [];
+  const seen = new Set(flowIds);
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  const inFlow = flowIds.map((id) => byId.get(id)).filter((s): s is Step => !!s);
+  const rest = steps.filter((s) => !seen.has(s.id)).sort((a, b) => a.position - b.position);
+  return [...inFlow, ...rest];
+}
+
 function inferRoot(steps: Step[], branches: StepBranch[]): string | null {
   const targeted = new Set(
     branches.map((b) => b.target_step_id).filter(Boolean) as string[],

@@ -20,7 +20,8 @@ import { ensureStepAudio, removeStepAudio } from "@/lib/tts";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
-import type { Highlight } from "@/lib/types";
+import type { Highlight, Step, StepBranch } from "@/lib/types";
+import { flowOrder } from "@/lib/builder/tree";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -417,29 +418,33 @@ export async function getTutorialVideoUrl(tutorialId: string): Promise<string | 
 }
 
 /**
- * Auto-Schwärzung (Welle 28): Wie viele Schritte tragen noch UNGEPRÜFTE automatische
+ * Auto-Schwärzung (Welle 28): Welche Schritte tragen noch UNGEPRÜFTE automatische
  * Schwärzungen (Highlight vom Typ „blur“ mit `suggested:true`)? Dient dem UI-Gate vor
  * dem Veröffentlichen im Builder-Header — rein informativ, blockiert NICHT. RLS-sicher:
- * liefert nur Schritte aus eigenen Tutorials.
+ * liefert nur Schritte aus eigenen Tutorials. Rückgabe: Anzeigenamen in Ablauf-Reihenfolge
+ * (Titel, sonst „Schritt N“ mit N = Nummer im Ablauf — wie im Editor).
  */
-export async function countUnreviewedBlurSteps(tutorialId: string): Promise<number> {
+export async function listUnreviewedBlurSteps(tutorialId: string): Promise<string[]> {
   const supabase = await createClient();
-  const { data: steps } = await supabase
-    .from("steps")
-    .select("highlights")
-    .eq("tutorial_id", tutorialId);
-  let n = 0;
-  for (const s of steps ?? []) {
+  const [{ data: steps }, { data: tut }] = await Promise.all([
+    supabase.from("steps").select("*").eq("tutorial_id", tutorialId).returns<Step[]>(),
+    supabase.from("tutorials").select("root_step_id").eq("id", tutorialId).maybeSingle(),
+  ]);
+  const all = steps ?? [];
+  const ids = all.map((s) => s.id);
+  const { data: branches } = ids.length
+    ? await supabase.from("step_branches").select("*").in("step_id", ids).returns<StepBranch[]>()
+    : { data: [] as StepBranch[] };
+  const ordered = flowOrder(all, branches ?? [], (tut?.root_step_id as string | null) ?? null);
+  const out: string[] = [];
+  ordered.forEach((s, i) => {
     const hs = Array.isArray(s.highlights) ? s.highlights : [];
-    if (
-      hs.some(
-        (h) => h && typeof h === "object" && (h as { suggested?: unknown }).suggested === true,
-      )
-    ) {
-      n++;
-    }
-  }
-  return n;
+    const unreviewed = hs.some(
+      (h) => h && typeof h === "object" && (h as { suggested?: unknown }).suggested === true,
+    );
+    if (unreviewed) out.push(s.title?.trim() || `Schritt ${i + 1}`);
+  });
+  return out;
 }
 
 /**

@@ -14,19 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Flow } from "@/components/builder/flow";
 import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
-import { buildRenderTree } from "@/lib/builder/tree";
-import type { RenderNode } from "@/lib/builder/tree";
+import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
-/** Schritt-IDs in tatsächlicher FLUSS-Reihenfolge (Tree-DFS) – für Vor/Zurück im Editor. */
-function flattenFlow(node: RenderNode): string[] {
-  if (node.type === "merge") return [];
-  const ids: string[] = [node.step.id];
-  for (const b of node.branches ?? []) ids.push(...flattenFlow(b.child));
-  if (node.after) ids.push(...flattenFlow(node.after));
-  if (node.next) ids.push(...flattenFlow(node.next));
-  return ids;
-}
 import {
   addStep,
   updateStep,
@@ -74,7 +64,9 @@ function mkStep(id: string, tutorialId: string, position: number): Step {
     id,
     tutorial_id: tutorialId,
     chapter_id: null,
-    title: "Neuer Schritt",
+    // Leer statt „Neuer Schritt“: der Titel ist optional; Ablauf, Hilfe-Seite und Player zeigen
+    // ohne Titel „Schritt N“ (N = Nummer im Ablauf).
+    title: "",
     body: null,
     image_path: null,
     image_width: null,
@@ -136,20 +128,66 @@ export function Builder({
     setRootId(initialRoot);
   }, [initialSteps, initialBranches, initialRoot]);
 
+  // Fehlgeschlagene Schreibvorgänge, die „Erneut versuchen“ nachholt (in Reihenfolge).
+  const failed = useRef<(() => Promise<unknown>)[]>([]);
+  const persistRef = useRef<
+    (fn: () => Promise<unknown>, opts?: { retry?: boolean }) => Promise<unknown>
+  >(() => Promise.resolve());
+
+  // Speichern fehlgeschlagen: ruhig und ehrlich melden. Die Eingabe bleibt stehen; wer nicht
+  // erneut versucht, bekommt nach dem Schließen der Meldung wieder den Server-Stand.
+  const reportSaveError = useCallback(
+    (fn: () => Promise<unknown>, canRetry: boolean) => {
+      if (canRetry) failed.current.push(fn);
+      let retried = false;
+      const resync = () => {
+        if (retried) return;
+        failed.current = [];
+        router.refresh();
+      };
+      toast.error("Nicht gespeichert – Ihre Eingabe ist noch da. Bitte erneut versuchen.", {
+        id: "builder-save-error", // mehrere Fehler kurz hintereinander = EINE Meldung
+        duration: 12_000,
+        action:
+          failed.current.length > 0
+            ? {
+                label: "Erneut versuchen",
+                onClick: () => {
+                  retried = true;
+                  const queue = failed.current;
+                  failed.current = [];
+                  persistRef
+                    .current(async () => {
+                      for (const f of queue) await f();
+                    })
+                    .then(
+                      () => toast.success("Gespeichert"),
+                      () => {},
+                    );
+                },
+              }
+            : undefined,
+        onAutoClose: resync,
+        onDismiss: resync,
+      });
+    },
+    [router],
+  );
+
   const persist = useCallback(
-    (fn: () => Promise<unknown>) => {
+    (fn: () => Promise<unknown>, opts?: { retry?: boolean }) => {
       pending.current += 1;
       const p = Promise.resolve().then(fn);
-      p.catch(() => {
-        toast.error("Speichern fehlgeschlagen – lade neu …");
-        router.refresh();
-      }).finally(() => {
+      p.catch(() => reportSaveError(fn, opts?.retry !== false)).finally(() => {
         pending.current -= 1;
       });
       return p; // Promise für Aufrufer, die auf den Erfolg warten wollen (saveStep)
     },
-    [router],
+    [reportSaveError],
   );
+  useEffect(() => {
+    persistRef.current = persist;
+  }, [persist]);
 
   // Explizites Speichern (Titel/Text) – kein Auto-Save mehr bei jedem Tastendruck.
   const dirtyRef = useRef(false);
@@ -157,7 +195,9 @@ export function Builder({
     async (id: string, patch: { title: string; body: unknown }) => {
       setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
       // await -> wirft bei Fehler, damit der Aufrufer KEINEN Erfolg meldet (Toast/Nav).
-      await persist(() => updateStep(id, patch));
+      // Kein „Erneut versuchen“ in der Meldung: der Speichern-Knopf im Panel bleibt stehen
+      // und IST der erneute Versuch (sonst bliebe das Panel trotz Erfolg „ungespeichert“).
+      await persist(() => updateStep(id, patch), { retry: false });
     },
     [persist],
   );
@@ -199,9 +239,11 @@ export function Builder({
         ]);
       }
     }
-    persist(() => addStep(tutorialId, { id, title: newStep.title ?? "Neuer Schritt", position }, setRoot, wire));
+    const added = persist(() => addStep(tutorialId, { id, title: "", position }, setRoot, wire));
+    // Erster Schritt: Kopf neu laden (Übersetzen/Aktualität/Veröffentlichen waren gesperrt).
+    if (setRoot) added.then(() => router.refresh(), () => {});
     setSelectedId(id);
-  }, [steps, branches, tutorialId, persist]);
+  }, [steps, branches, tutorialId, persist, router]);
 
   // §7.4: Schritt gezielt in einen Ast einfügen (B → N → altes Ziel).
   // `seed` (Welle 51a): Bild eines Schritts + übernommene Verpixelung für den neuen Schritt.
@@ -227,7 +269,7 @@ export function Builder({
         }),
     );
     persist(async () => {
-      await addStep(tutorialId, { id, title: "Neuer Schritt", position }, false, null, seed?.server);
+      await addStep(tutorialId, { id, title: "", position }, false, null, seed?.server);
       await updateBranch(branchId, { target_step_id: id });
       await addBranch({
         id: weiterId,
@@ -269,7 +311,7 @@ export function Builder({
     persist(() =>
       addStep(
         tutorialId,
-        { id, title: "Neuer Schritt", position },
+        { id, title: "", position },
         false,
         { branchId: weiterId, fromStepId: stepId },
         seed?.server,
@@ -389,9 +431,11 @@ export function Builder({
       setSteps((prev) => prev.filter((s) => s.id !== stepId));
       if (wasRoot) setRootId(nextTarget);
       setSelectedId(null);
-      persist(() => deleteStep(tutorialId, stepId, nextTarget, wasRoot));
+      const removed = persist(() => deleteStep(tutorialId, stepId, nextTarget, wasRoot));
+      // Letzter Schritt weg: Kopf neu laden (sperrt Übersetzen/Aktualität/Veröffentlichen).
+      if (steps.length === 1) removed.then(() => router.refresh(), () => {});
     },
-    [steps, branches, rootId, tutorialId, persist],
+    [steps, branches, rootId, tutorialId, persist, router],
   );
 
   // ── Schritt-Umordnen (Hoch/Runter) ──────────────────────────────────────────
@@ -582,6 +626,45 @@ export function Builder({
     [persist, steps, previousOf],
   );
 
+  // Bild entfernen: Markierungen (inkl. vorgeschlagener Verpixelungen) gehören zum Bild und
+  // gehen mit — sonst zählte die Veröffentlichen-Sperre Schritte, die man gar nicht mehr prüfen
+  // kann. „Rückgängig“ stellt Bild + Markierungen wieder her.
+  const removeStepImage = useCallback(
+    (stepId: string) => {
+      const cur = steps.find((s) => s.id === stepId);
+      if (!cur?.image_path) return;
+      const snapshot = {
+        image_path: cur.image_path,
+        image_width: cur.image_width,
+        image_height: cur.image_height,
+        highlights: cur.highlights ?? [],
+      };
+      const cleared = {
+        image_path: null,
+        image_width: null,
+        image_height: null,
+        highlights: [] as Highlight[],
+      };
+      setSteps((p) => p.map((s) => (s.id === stepId ? { ...s, ...cleared } : s)));
+      const removal = persist(() => updateStep(stepId, cleared));
+      toast("Bild entfernt", {
+        action: {
+          label: "Rückgängig",
+          onClick: () => {
+            setSteps((p) => p.map((s) => (s.id === stepId ? { ...s, ...snapshot } : s)));
+            setImgBust((m) => ({ ...m, [stepId]: (m[stepId] ?? 0) + 1 }));
+            // Erst nach dem Entfernen schreiben (sonst könnte es das Wiederherstellen überholen).
+            persist(async () => {
+              await removal.catch(() => {});
+              await updateStep(stepId, snapshot);
+            });
+          },
+        },
+      });
+    },
+    [steps, persist],
+  );
+
   const setStepHighlights = useCallback(
     (stepId: string, highlights: Highlight[]) => {
       setSteps((prev) =>
@@ -625,6 +708,12 @@ export function Builder({
   useEffect(() => {
     orderedRef.current = ordered;
   }, [ordered]);
+  // Anzeigename: Titel, sonst „Schritt N“ mit N = Nummer im Ablauf (nicht die Anlege-Position).
+  const flowNumber = useMemo(() => new Map(ordered.map((s, i) => [s.id, i + 1])), [ordered]);
+  const stepLabel = useCallback(
+    (s: Step) => s.title?.trim() || `Schritt ${flowNumber.get(s.id) ?? s.position}`,
+    [flowNumber],
+  );
 
   // ── „Ab hier mit Extension aufnehmen" (Welle 27) ─────────────────────────────
   // Einen Einfügepunkt in ein Aufnahme-Ziel übersetzen (Anker + menschlich lesbare
@@ -689,6 +778,7 @@ export function Builder({
         }}
         hasSourceVideo={hasSourceVideo}
         onSetImage={setStepImage}
+        onRemoveImage={removeStepImage}
         onSetHighlights={setStepHighlights}
         onSetDecision={handleSetDecision}
         onSetCondition={handleSetCondition}
@@ -700,6 +790,7 @@ export function Builder({
         onInsertIntoBranch={insertIntoBranch}
         onDuplicateImage={duplicateImageToNewStep}
         onClose={withClose ? closeEditor : undefined}
+        stepLabel={stepLabel}
       />
     ) : null;
 
@@ -714,6 +805,7 @@ export function Builder({
           dirtyRef.current = false;
           setSelectedId(id);
         }}
+        flowNumber={flowNumber}
         onInsertAfter={insertAfter}
         onInsertIntoBranch={insertIntoBranch}
         onRecordAfter={recordAfter}
