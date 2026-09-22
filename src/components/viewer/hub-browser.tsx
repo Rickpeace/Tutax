@@ -44,11 +44,14 @@ export function HubBrowser({
 
   const groups = useMemo(() => {
     const term = q.trim().toLowerCase();
+    // Kategoriename wird mitgesucht: er steht als Überschrift sichtbar auf der Seite,
+    // wer ihn eintippt, erwartet die Anleitungen darunter (nicht „nichts gefunden“).
     const filtered = term
       ? items.filter(
           (t) =>
             t.title.toLowerCase().includes(term) ||
-            (t.description ?? "").toLowerCase().includes(term),
+            (t.description ?? "").toLowerCase().includes(term) ||
+            t.category.toLowerCase().includes(term),
         )
       : items;
     const m = new Map<string, HubTutorial[]>();

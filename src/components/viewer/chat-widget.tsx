@@ -269,7 +269,14 @@ export function ChatWidget({
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
             {msgs.map((m, i) => (
-              <Bubble key={i} m={m} accountSlug={accountSlug} typingLabel={L.chatTyping} />
+              <Bubble
+                key={i}
+                m={m}
+                accountSlug={accountSlug}
+                typingLabel={L.chatTyping}
+                embedded={embedded}
+                langQuery={lang === "de" ? "" : `?lang=${lang}`}
+              />
             ))}
           </div>
 
@@ -318,10 +325,16 @@ function Bubble({
   m,
   accountSlug,
   typingLabel,
+  embedded = false,
+  langQuery = "",
 }: {
   m: Msg;
   accountSlug: string;
   typingLabel: string;
+  /** Im Script-Bubble-iFrame: Quellen im Hauptfenster öffnen, nicht im 400×640-Rahmen. */
+  embedded?: boolean;
+  /** „?lang=xx“ oder "" — die gewählte Sprache soll beim Wechsel zur Anleitung bleiben. */
+  langQuery?: string;
 }) {
   const bot = m.role === "bot";
   return (
@@ -348,7 +361,12 @@ function Bubble({
             {m.sources.map((s) => (
               <Link
                 key={s.slug}
-                href={`/h/${accountSlug}/${s.slug}`}
+                href={`/h/${accountSlug}/${s.slug}${langQuery}`}
+                // Eingebettet (iFrame der Chat-Blase): ins Hauptfenster laden. Sonst würde
+                // die komplette Hilfe-Seite in das kleine Chat-Fenster geladen — ohne Weg
+                // zurück. Auf der normalen Hilfe-Seite bleibt es eine In-App-Navigation.
+                target={embedded ? "_top" : undefined}
+                rel={embedded ? "noopener" : undefined}
                 className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-semibold text-ink hover:border-[var(--brand-accent)]"
               >
                 <Layers className="size-3.5" style={{ color: "var(--brand-accent-strong, var(--brand-accent))" }} />
