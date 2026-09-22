@@ -166,12 +166,37 @@ async function pairVia(page, buttonName) {
   return page.evaluate(() => localStorage.getItem("__fakeExtToken"));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Gibt den neu erzeugten Code zurück. Gewartet wird auf den NEUEN Wert im Code-Feld: die
+// Server-Aktion antwortet erst nach Anlegen + Aufräumen (10er-Grenze). Ein Warten auf den
+// Toast reicht nicht — der vom vorigen Aufruf ist oft noch sichtbar (Test-Race).
 async function manualCode(page) {
   const btn = page.getByRole("button", { name: /Code erzeugen/ });
   if (!(await btn.first().isVisible().catch(() => false))) await page.getByText("Code manuell eingeben").click();
+  const field = page.locator("input[readonly]").first();
+  const before = (await field.count()) ? await field.inputValue() : "";
   await page.getByRole("button", { name: /Code erzeugen/ }).first().click();
-  await page.getByText("Verbindungs-Code erstellt").last().waitFor({ timeout: 30_000 });
-  await sleep(300);
+  const handle = await page.waitForFunction(
+    (prev) => {
+      const v = document.querySelector("input[readonly]")?.value ?? "";
+      return /^[0-9a-f-]{36}$/i.test(v) && v !== prev ? v : null;
+    },
+    before,
+    { timeout: 30_000 },
+  );
+  const token = await handle.jsonValue();
+  if (!UUID_RE.test(token)) throw new Error("Kein neuer Code im Feld");
+  return token;
+}
+
+// Status-Karte: auf den erwarteten Titel WARTEN (die Erkennung der Erweiterung + „dieser
+// Browser" kommen per setTimeout nach dem Laden; ein sofortiges count() war ein Test-Race).
+async function statusIs(page, title) {
+  return page
+    .getByTestId("extension-status")
+    .locator("b", { hasText: new RegExp("^" + title + "$") })
+    .waitFor({ timeout: 15_000 })
+    .then(() => true, () => false);
 }
 
 const users = new Set();
@@ -212,7 +237,7 @@ try {
   // ---------- Chrome verbinden ----------
   await openSettings(chrome);
   if (process.env.DEBUG_CONN) console.log("  Status:", await chrome.getByTestId("extension-status").innerText(), await chrome.evaluate(() => document.documentElement.getAttribute("data-steply-recorder")));
-  ok((await chrome.getByText("Installiert – noch nicht verbunden").count()) === 1, "Chrome: „Installiert – noch nicht verbunden“");
+  ok(await statusIs(chrome, "Installiert – noch nicht verbunden"), "Chrome: „Installiert – noch nicht verbunden“");
   const tChrome = await pairVia(chrome, "Jetzt verbinden");
   ok((await me(tChrome)) === 200, "Chrome: verbunden, Token gültig");
 
@@ -242,12 +267,13 @@ try {
 
     // ---------- Liste + „dieser Browser" + Token nie im HTML ----------
     await openSettings(chrome);
-    ok((await chrome.getByText("Installiert – verbunden").count()) === 1, "Chrome: Status „Installiert – verbunden“ (dieser Browser)");
+    ok(await statusIs(chrome, "Installiert – verbunden"), "Chrome: Status „Installiert – verbunden“ (dieser Browser)");
     ok((await chrome.getByTestId("recorder-connection").count()) === 2, "Liste „Ihre verbundenen Browser“ zeigt 2 Einträge");
     const thisRow = chrome.locator(`[data-connection-id="${rowChrome.id}"]`);
     ok((await thisRow.getByText("dieser Browser").count()) === 1, "Chrome-Eintrag als „dieser Browser“ markiert");
-    ok((await chrome.getByText(/verbunden am/).count()) === 2 && (await chrome.getByText("noch nicht genutzt").count()) >= 1,
-      "Liste zeigt „verbunden am …“ und „noch nicht genutzt“");
+    const listText = await chrome.getByTestId("recorder-connections").innerText();
+    ok((listText.match(/verbunden am \d/g) ?? []).length === 2 && (listText.match(/zuletzt genutzt/g) ?? []).length === 2,
+      "Liste zeigt „verbunden am …“ und „zuletzt genutzt …“ (beide Tokens wurden schon benutzt)");
     const html = await chrome.content();
     ok(!html.includes(tChrome) && !html.includes(tEdge), "Kein Token im Seiten-HTML (nur Kennungen)");
 
@@ -282,18 +308,16 @@ try {
 
     // ---------- Begrenzung: max. 10, die am längsten ungenutzte fliegt ----------
     const codes = [];
-    for (let i = 0; i < 9; i++) {
-      await manualCode(edge);
-      codes.push((await rowsOf(accId, ownerId, "id, token, created_at")).at(-1).token);
-    }
+    for (let i = 0; i < 9; i++) codes.push(await manualCode(edge));
     ok((await rowsOf(accId, ownerId, "id")).length === 10, "10 Verbindungen möglich");
     // Edge gerade benutzt -> darf nicht fliegen; der älteste ungenutzte Code schon.
     await admin.from("recorder_tokens").update({ last_used_at: new Date().toISOString() }).eq("token", tEdge);
-    await manualCode(edge);
+    const code11 = await manualCode(edge);
     rows = await rowsOf(accId, ownerId, "token, label");
     ok(rows.length === 10, `11. Verbindung: weiterhin 10 (${rows.length})`);
     ok(!rows.some((r) => r.token === codes[0]) && (await me(codes[0])) === 401, "11. Verbindung: die am längsten ungenutzte ist entfernt");
-    ok((await me(tEdge)) === 200 && (await me(codes[1])) === 200, "11. Verbindung: kürzlich genutzte + neuere bleiben gültig");
+    ok((await me(tEdge)) === 200 && (await me(codes[1])) === 200 && (await me(code11)) === 200,
+      "11. Verbindung: kürzlich genutzte, neuere und die neue bleiben gültig");
     ok(rows.some((r) => r.label === "Edge · macOS (Code)"), "Manueller Code ist als „(Code)“ benannt");
 
     // ---------- Team-Entfernen löscht ALLE Verbindungen der Person ----------
