@@ -2,8 +2,8 @@
 // Deckt ab:
 //  (a) Schritt OHNE Titel: updateStep(title='') ok, Datenpfad liefert leeren Titel
 //      (Tree-Fallback-Logik inline nachgestellt -> kein Crash).
-//  (b) deleteCategory-Invarianten: leere EIGENE Kategorie löschbar; NICHT-leere wird
-//      verweigert; GLOBALE (account_id=null) wird verweigert.
+//  (b) deleteCategory-Invarianten: leere EIGENE Kategorie löschbar; NICHT-leere ebenfalls
+//      (Anleitungen → „Sonstiges“, Welle 54); GLOBALE (account_id=null) wird verweigert.
 //  (c) setTutorialAudience-Mapping (Nebenwirkungen der geteilten Sichtbarkeits-Logik):
 //      public+lernen ⇒ visibility public + in_lernen true (erscheint in der Lernen-Query);
 //      Haken1 aus ⇒ internal (public-Bilder weg, wie test-internal-trace);
@@ -145,13 +145,19 @@ try {
   ok(!goneEmpty, "b1) leere Kategorie ist weg");
   catEmpty = null;
 
-  // Invariante 2: NICHT-leere Kategorie -> count>0 -> Aktion verweigert (serverseitig).
+  // Invariante 2 (Welle 54): NICHT-leere Kategorie ist löschbar — die Anleitungen bleiben
+  // erhalten und landen unter „Sonstiges“ (Fremdschlüssel on delete set null).
   const { count: fullCount } = await admin
     .from("tutorials")
     .select("id", { count: "exact", head: true })
     .eq("account_id", accountId)
     .eq("category_id", catFull);
-  ok((fullCount ?? 0) > 0, "b2) volle Kategorie: >0 Tutorials -> deleteCategory würde verweigern");
+  ok((fullCount ?? 0) > 0, "b2) volle Kategorie: >0 Anleitungen");
+  const { error: delFullErr } = await admin.from("categories").delete().eq("id", catFull).eq("account_id", accountId);
+  ok(!delFullErr, `b2) Löschen der vollen Kategorie ok ${delFullErr ? "(" + delFullErr.message + ")" : ""}`);
+  const { data: survivor } = await admin.from("tutorials").select("id, category_id").eq("id", tutId).maybeSingle();
+  ok(!!survivor && survivor.category_id === null, "b2) Anleitung bleibt erhalten, category_id=null („Sonstiges“)");
+  catFull = null;
 
   // Invariante 3: globale Kategorie (account_id=null) -> gehört NICHT dem Konto -> verweigert.
   if (globalCatId) {

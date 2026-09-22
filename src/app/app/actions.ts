@@ -67,15 +67,18 @@ export async function createTutorial(formData: FormData) {
 }
 
 /**
- * Leere EIGENE Kategorie löschen (Welle 20, Dashboard-Papierkorb).
+ * EIGENE Kategorie löschen (Welle 20; Welle 54: auch mit Anleitungen darin).
  * Sicherheit serverseitig:
+ *  - requireAccount(): nur Rollen, die bearbeiten dürfen (Inhaber/Bearbeiter; Mitarbeiter
+ *    werden abgewiesen) — Rechteprüfung über canEdit.
  *  - Kategorie muss dem aktiven Konto gehören (globale/Standard-Kategorien mit
  *    account_id = null werden NIE gelöscht — RLS + expliziter Check).
- *  - Kategorie muss WIRKLICH leer sein (0 Tutorials) — sonst Fehler (Toast beim Client).
- * Danach Dashboard revalidieren + Hub-Cache invalidieren (Kategorie verschwindet
- * auch aus der öffentlichen Hilfe-Seite, falls sie dort noch auftauchte).
+ * Die Anleitungen darin bleiben erhalten: der Fremdschlüssel steht auf „on delete set null“
+ * → sie landen unter „Sonstiges“. Danach Anleitungen-Übersicht revalidieren, Hub- und
+ * Anleitungs-Caches invalidieren und (Kategorie steckt in den KI-Ausschnitten) veröffentlichte
+ * Anleitungen neu indizieren. Rückgabe: wie viele Anleitungen nach „Sonstiges“ gewandert sind.
  */
-export async function deleteCategory(categoryId: string) {
+export async function deleteCategory(categoryId: string): Promise<{ moved: number }> {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
@@ -90,25 +93,34 @@ export async function deleteCategory(categoryId: string) {
     throw new Error("Kategorie kann nicht gelöscht werden.");
   }
 
-  // Serverseitig nachprüfen, dass die Kategorie wirklich leer ist.
-  const { count } = await supabase
+  // Betroffene Anleitungen VOR dem Löschen merken (danach ist category_id schon null).
+  const { data: affected, error: ae } = await supabase
     .from("tutorials")
-    .select("id", { count: "exact", head: true })
+    .select("id")
     .eq("account_id", account.id)
     .eq("category_id", categoryId);
-  if ((count ?? 0) > 0) {
-    throw new Error("Kategorie ist nicht leer.");
-  }
+  if (ae) throw new Error(ae.message);
+  const affectedIds = (affected ?? []).map((t) => t.id as string);
 
-  const { error } = await supabase
+  // .select(): ein von RLS still verweigertes Löschen (0 Zeilen) nicht als Erfolg melden.
+  const { data: gone, error } = await supabase
     .from("categories")
     .delete()
     .eq("id", categoryId)
-    .eq("account_id", account.id);
+    .eq("account_id", account.id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!gone?.length) throw new Error("Kategorie kann nicht gelöscht werden.");
 
   invalidateHubTag(account.slug);
+  for (const id of affectedIds) await invalidateTutorialTags(id);
+  if (affectedIds.length) {
+    after(async () => {
+      for (const id of affectedIds) await reindexTutorialIfLive(id);
+    });
+  }
   revalidatePath("/app");
+  return { moved: affectedIds.length };
 }
 
 export async function renameTutorial(id: string, title: string) {

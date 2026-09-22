@@ -3,6 +3,8 @@
 // Prueft: Karten zeigen Titel/Website/Kategorie, NUR „Nur Team" ist markiert (kein „Kunde"-Etikett),
 // EIN Status-Schalter; Umschalten auf Liste gruppiert nach Kategorie + merkt sich die Wahl
 // (Reload); Schalter veroeffentlicht wirklich (DB); mobil keine horizontale Scrollleiste.
+// Welle 54: Kategorie löschen über „…“ (Dialog nennt die Folge, Anleitungen → „Sonstiges“,
+// auch mobil neben dem Titel).
 // Screenshots → SHOT_DIR (Standard: scripts/.shots-library, gitignored ueber .shots*).
 //
 // Nutzung:  node --env-file=.env.local scripts/test-library-views.mjs
@@ -39,7 +41,7 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
   auth: { persistSession: false },
 });
 
-const PORT = 3024;
+const PORT = Number(process.env.TEST_PORT) || 3024;
 const BASE = `http://localhost:${PORT}`;
 const PW = "Test12345!";
 const stamp = String(process.hrtime.bigint()).slice(-8);
@@ -168,6 +170,52 @@ try {
   await page.waitForTimeout(600);
   ok(await main.getByText("Website", { exact: true }).isVisible(), "Liste bleibt nach Neuladen gewählt");
 
+  // ---- Kategorie löschen (Welle 54): „…“ neben der Kategorie, Bestätigung nennt die Folge ----
+  const aside = page.locator("aside").first();
+  const lohnRow = aside.getByTestId("category-row").filter({ hasText: "Lohn & Gehalt" });
+  ok((await aside.getByTestId("category-row").count()) === 2, "Nur eigene Kategorien haben ein „…“-Menü (nicht „Sonstiges“)");
+  await lohnRow.hover();
+  await lohnRow.getByTestId("category-menu").click();
+  await page.getByTestId("category-delete").click();
+  const dlg = page.getByTestId("confirm-dialog");
+  await dlg.waitFor({ timeout: 10_000 });
+  const dlgText = await dlg.innerText();
+  ok(dlgText.includes("Kategorie „Lohn & Gehalt“ löschen?"), "Dialog-Titel nennt die Kategorie");
+  ok(
+    dlgText.includes("2 Anleitungen wandern nach „Sonstiges“. Die Anleitungen selbst bleiben erhalten."),
+    `Dialog nennt die Folge (${dlgText.replace(/\s+/g, " ").slice(0, 160)})`,
+  );
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOT_DIR, "kategorie-loeschen-dialog.png"), fullPage: false });
+  await dlg.getByRole("button", { name: "Abbrechen" }).click();
+  await page.waitForTimeout(500);
+  ok((await admin.from("categories").select("id").eq("id", catId("Lohn & Gehalt")).maybeSingle()).data !== null, "Abbrechen: Kategorie bleibt");
+  await lohnRow.hover();
+  await lohnRow.getByTestId("category-menu").click();
+  await page.getByTestId("category-delete").click();
+  await dlg.waitFor({ timeout: 10_000 });
+  await dlg.getByRole("button", { name: "Kategorie löschen" }).click();
+  let catGone = false;
+  for (let i = 0; i < 20 && !catGone; i++) {
+    await page.waitForTimeout(600);
+    catGone = (await admin.from("categories").select("id").eq("id", catId("Lohn & Gehalt")).maybeSingle()).data === null;
+  }
+  ok(catGone, "Löschen: Kategorie ist weg (DB)");
+  const { data: moved } = await admin
+    .from("tutorials")
+    .select("id, category_id")
+    .in("title", ["Lohnabrechnung abrufen", "Neue Mitarbeitende einarbeiten"])
+    .eq("account_id", accountId);
+  ok(moved?.length === 2 && moved.every((t) => t.category_id === null), "Anleitungen bleiben erhalten und stehen unter „Sonstiges“ (category_id=null)");
+  await page.getByText(/Kategorie gelöscht – 2 Anleitungen jetzt unter „Sonstiges“/).waitFor({ timeout: 10_000 }).then(
+    () => ok(true, "Toast nennt die verschobenen Anleitungen"),
+    () => ok(false, "Toast nennt die verschobenen Anleitungen"),
+  );
+  await aside.getByText("Lohn & Gehalt").waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
+  ok((await aside.getByText("Lohn & Gehalt").count()) === 0, "Seitenleiste: Kategorie verschwunden");
+  ok(await main.getByText("Lohnabrechnung abrufen").first().isVisible(), "Anleitung weiter sichtbar");
+  await page.screenshot({ path: path.join(SHOT_DIR, "kategorie-geloescht.png"), fullPage: false });
+
   // ---- Mobil ----
   const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const mp = await mob.newPage();
@@ -188,6 +236,22 @@ try {
   const overflow2 = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   ok(overflow2 <= 1, `Mobil Liste: keine horizontale Scrollleiste (${overflow2}px)`);
   await mp.screenshot({ path: path.join(SHOT_DIR, "4-mobil-liste.png"), fullPage: true });
+
+  // Mobil: Kategorie wählen → „…“ neben dem Titel → Lösch-Dialog (nur ansehen, abbrechen).
+  await mp.locator("main").last().getByRole("button", { name: "Belege & Dokumente" }).first().click();
+  await mp.waitForTimeout(400);
+  const mMenu = mp.locator("main").last().locator("h1").getByTestId("category-menu");
+  ok(await mMenu.isVisible(), "Mobil: „…“ neben dem Kategorie-Titel");
+  await mMenu.click();
+  await mp.getByTestId("category-delete").click();
+  const mDlg = mp.getByTestId("confirm-dialog");
+  await mDlg.waitFor({ timeout: 10_000 });
+  ok((await mDlg.innerText()).includes("1 Anleitung wandert nach „Sonstiges“."), "Mobil-Dialog: Einzahl „1 Anleitung wandert …“");
+  await mp.waitForTimeout(300);
+  await mp.screenshot({ path: path.join(SHOT_DIR, "kategorie-loeschen-dialog-mobil.png"), fullPage: false });
+  await mDlg.getByRole("button", { name: "Abbrechen" }).click();
+  const overflow3 = await mp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  ok(overflow3 <= 1, `Mobil mit Kategorie-Menü: keine horizontale Scrollleiste (${overflow3}px)`);
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));
 } finally {

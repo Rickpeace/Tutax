@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { requireAccount } from "@/lib/account";
+import { canEdit } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Tutorial } from "@/lib/types";
@@ -19,7 +20,7 @@ import { Loader2 } from "lucide-react";
  * der letzten 7 Tage erscheinen als Hinweiskarte darüber (Welle 51).
  */
 export default async function DashboardPage() {
-  const { account } = await requireAccount();
+  const { account, role } = await requireAccount();
   const supabase = await createClient();
 
   const [{ data: tutorials }, { data: categories }, { data: atRows }, { data: tpls }, { data: globalCats }, { data: activeJobs }, { data: failedRows }] =
@@ -153,6 +154,7 @@ export default async function DashboardPage() {
       categories={browserCats}
       accountId={account.id}
       accountSlug={account.slug}
+      canManageCategories={canEdit(role)}
       topSlot={
         jobs.length > 0 || failedJobs.length > 0 ? (
           <>

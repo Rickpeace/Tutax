@@ -10,6 +10,7 @@ import {
 import { NewTutorialButton } from "@/components/app/new-tutorial-button";
 import { PageHeader } from "@/components/app/page-header";
 import { BulkCleanupProvider, CleanupControls } from "@/components/app/bulk-cleanup";
+import { CategoryMenu } from "@/components/app/category-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +59,7 @@ export function LibraryBrowser({
   categories,
   accountId,
   accountSlug,
+  canManageCategories = false,
   topSlot,
   children,
 }: {
@@ -65,6 +67,8 @@ export function LibraryBrowser({
   categories: LibraryCategory[];
   accountId: string;
   accountSlug: string;
+  /** Eigene Kategorien löschen dürfen (Rollen mit Bearbeiten-Recht; Server prüft erneut). */
+  canManageCategories?: boolean;
   topSlot?: React.ReactNode;
   children?: React.ReactNode;
 }) {
@@ -115,6 +119,12 @@ export function LibraryBrowser({
   const catCount = (id: string) =>
     inScope.filter((t) => (t.categoryId ?? "__none") === id).length;
   const hasUncategorized = tutorials.some((t) => !t.categoryId);
+  // Für den Lösch-Dialog: ALLE Anleitungen der Kategorie (unabhängig von Bereich/Status).
+  const totalInCat = (id: string) => tutorials.filter((t) => t.categoryId === id).length;
+  const activeOwnCat =
+    canManageCategories && categoryId !== "alle" && categoryId !== "__none"
+      ? catById.get(categoryId)
+      : undefined;
 
   const activeName =
     categoryId === "alle"
@@ -184,16 +194,37 @@ export function LibraryBrowser({
               active={categoryId === "alle"}
               onClick={() => setCategoryId("alle")}
             />
-            {sidebarCats.map((c) => (
-              <CategoryRow
-                key={c.id}
-                name={c.name}
-                count={catCount(c.id)}
-                active={categoryId === c.id}
-                onClick={() => setCategoryId(c.id)}
-                color={c.id === "__none" ? CATEGORY_NEUTRAL : categoryColor(c.name)}
-              />
-            ))}
+            {sidebarCats.map((c) => {
+              const row = (
+                <CategoryRow
+                  key={c.id}
+                  name={c.name}
+                  count={catCount(c.id)}
+                  active={categoryId === c.id}
+                  onClick={() => setCategoryId(c.id)}
+                  color={c.id === "__none" ? CATEGORY_NEUTRAL : categoryColor(c.name)}
+                />
+              );
+              // Eigene Kategorie: „…“-Menü (Kategorie löschen) — erscheint bei Hover/Fokus.
+              if (c.id === "__none" || !canManageCategories) return row;
+              return (
+                <div key={c.id} className="group/cat relative flex items-center" data-testid="category-row">
+                  <div className="min-w-0 flex-1 [&>button]:w-full [&>button]:pr-9">{row}</div>
+                  <CategoryMenu
+                    categoryId={c.id}
+                    categoryName={c.name}
+                    tutorialCount={totalInCat(c.id)}
+                    onDeleted={() => {
+                      if (categoryId === c.id) setCategoryId("alle");
+                    }}
+                    className={cn(
+                      "absolute right-1 opacity-0 group-hover/cat:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 data-[popup-open]:opacity-100",
+                      categoryId === c.id && "opacity-100",
+                    )}
+                  />
+                </div>
+              );
+            })}
           </SidebarGroup>
         </aside>
 
@@ -231,7 +262,23 @@ export function LibraryBrowser({
           {/* Filterzeile */}
           <PageHeader
             className="mb-4 items-center"
-            title={activeName}
+            title={
+              activeOwnCat ? (
+                <span className="inline-flex max-w-full items-center gap-1">
+                  <span className="min-w-0 break-words">{activeName}</span>
+                  {/* Mobil gibt es keine Seitenleiste: „…“ (Kategorie löschen) neben dem Titel. */}
+                  <CategoryMenu
+                    categoryId={activeOwnCat.id}
+                    categoryName={activeOwnCat.name}
+                    tutorialCount={totalInCat(activeOwnCat.id)}
+                    onDeleted={() => setCategoryId("alle")}
+                    className="lg:hidden"
+                  />
+                </span>
+              ) : (
+                activeName
+              )
+            }
             meta={`${visible.length} Anleitung${visible.length === 1 ? "" : "en"}`}
             actions={
             <div className="flex items-center gap-2 text-xs font-extrabold">
