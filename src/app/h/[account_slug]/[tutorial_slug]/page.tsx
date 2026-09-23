@@ -207,8 +207,9 @@ export default async function ViewerPage({
   // Vorlesen (Welle 14): öffentliche MP3-URL je Schritt (v1 nur DE-Originaltext;
   // audio_path liegt auf der Original-Zeile und übersteht das Übersetzungs-Merge).
   // Vorlesen ist Business: nach einem Herabstufen kein ▶ mehr (die Dateien bleiben liegen).
+  // Die Aufnahmen sind deutsch — auf EN/PL/TR-Seiten kein ▶ (sonst „Read aloud“ mit deutscher Stimme).
   const audioUrls: Record<string, string> = {};
-  if (isBusiness(account)) {
+  if (isBusiness(account) && lang === "de") {
     for (const s of steps) if (s.audio_path) audioUrls[s.id] = publicAudioUrl(s.audio_path);
   }
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";

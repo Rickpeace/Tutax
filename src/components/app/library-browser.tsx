@@ -59,6 +59,7 @@ export function LibraryBrowser({
   categories,
   accountId,
   videoAllowed = true,
+  videoExportAllowed = true,
   accountSlug,
   canManageCategories = false,
   topSlot,
@@ -69,6 +70,8 @@ export function LibraryBrowser({
   accountId: string;
   /** Anleitung aus Video erlaubt (Tarif) — für die Erstell-Weiche. */
   videoAllowed?: boolean;
+  /** „Als Video exportieren“ (Business) im Karten-Menü anbieten? */
+  videoExportAllowed?: boolean;
   accountSlug: string;
   /** Eigene Kategorien löschen dürfen (Rollen mit Bearbeiten-Recht; Server prüft erneut). */
   canManageCategories?: boolean;
@@ -341,6 +344,7 @@ export function LibraryBrowser({
                       key={t.id}
                       tutorial={t}
                       accountSlug={accountSlug}
+                      exportAllowed={videoExportAllowed}
                       categoryName={categoryNameOf(t)}
                       layout="row"
                     />
@@ -374,6 +378,7 @@ export function LibraryBrowser({
                 key={t.id}
                 tutorial={t}
                 accountSlug={accountSlug}
+                exportAllowed={videoExportAllowed}
                 categoryName={categoryNameOf(t)}
               />
             ))}

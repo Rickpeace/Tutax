@@ -12,7 +12,7 @@ import { FailedVideoNotices } from "@/components/app/failed-video-notices";
 import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
 import { relativeDe } from "@/lib/format";
 import { Loader2 } from "lucide-react";
-import { isPro, videoAllowed } from "@/lib/plan";
+import { isBusiness, isPro, videoAllowed } from "@/lib/plan";
 import { countTutorialSteps } from "@/lib/tutorial-step-counts";
 
 /**
@@ -150,6 +150,7 @@ export default async function DashboardPage() {
       categories={browserCats}
       accountId={account.id}
       videoAllowed={videoAllowed(account)}
+      videoExportAllowed={isBusiness(account)}
       accountSlug={account.slug}
       canManageCategories={canEdit(role)}
       topSlot={

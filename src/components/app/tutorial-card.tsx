@@ -95,11 +95,14 @@ export function TutorialCard({
   accountSlug,
   categoryName,
   layout = "card",
+  exportAllowed = true,
 }: {
   tutorial: LibraryTutorial;
   accountSlug: string;
   categoryName: string | null;
   layout?: TutorialLayout;
+  /** „Als Video exportieren“ ist Business — sonst kein Menüpunkt (statt Fehler nach dem Klick). */
+  exportAllowed?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -245,7 +248,7 @@ export function TutorialCard({
       accountSlug={accountSlug}
       live={live}
       internal={internal}
-      onExport={() => setExportOpen(true)}
+      onExport={exportAllowed ? () => setExportOpen(true) : undefined}
       onRename={() => setRenameOpen(true)}
       onDuplicate={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
       onAutomation={convertToAutomation}
@@ -493,7 +496,7 @@ function TutorialMenu({
   accountSlug: string;
   live: boolean;
   internal: boolean;
-  onExport: () => void;
+  onExport?: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onAutomation: () => void;
@@ -560,7 +563,7 @@ function TutorialMenu({
             <Link2 className="size-4" /> Link kopieren
           </DropdownMenuItem>
         )}
-        {publicLive && (
+        {publicLive && onExport && (
           <DropdownMenuItem
             onClick={(e) => {
               e.preventDefault();
