@@ -281,8 +281,27 @@ async function addStepUI(page, title, first) {
   await t.waitFor({ timeout: 30_000 });
   await page.waitForTimeout(600);
   await t.fill(title);
-  await page.getByTestId("step-save-state").getByRole("button", { name: /Speichern/ }).click();
-  await page.getByTestId("step-save-state").getByText("Gespeichert").waitFor({ timeout: 30_000 });
+  try {
+    await page.getByTestId("step-save-state").getByRole("button", { name: /Speichern/ }).click({ timeout: 30_000 });
+  } catch (e) {
+    // Diagnose: was liegt über dem Knopf?
+    if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/teamp-save-blocked.png` }).catch(() => {});
+    const open = await page.evaluate(() =>
+      [...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"],[data-open]')]
+        .map((el) => `${el.tagName}[role=${el.getAttribute("role")}] ${(el.textContent || "").slice(0, 60)}`),
+    ).catch(() => []);
+    console.log("  ℹ Offen beim Speichern:", JSON.stringify(open));
+    throw e;
+  }
+  try {
+    await page.getByTestId("step-save-state").getByText("Gespeichert").waitFor({ timeout: 30_000 });
+  } catch (e) {
+    const state = await page.getByTestId("step-save-state").innerText().catch(() => "?");
+    const toasts = await page.locator("[data-sonner-toast]").allInnerTexts().catch(() => []);
+    console.log(`  ℹ Speichern: Status „${state.replace(/\s+/g, " ")}“, Meldungen ${JSON.stringify(toasts)}`);
+    if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/teamp-save-state.png` }).catch(() => {});
+    throw e;
+  }
 }
 
 let server, browser;

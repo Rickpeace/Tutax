@@ -75,6 +75,32 @@ Test belegt (Nachweise: Kern-Durchlauf 10 Phasen, 30 DB-/Logik-Tests, Server-E2E
   `app.steply.de` erst nach Besitz-Nachweis in die Erweiterungs-Liste
 - [ ] ⚪ Chat-Reset + Admin-Komponenten noch mit Browser-`confirm()`; Chat-Bot-Schnellbremse nur pro Instanz
 
+## Bugsuche Runde 2 — 23.09.2026 abends (4 Prüfer, echte Durchläufe)
+
+Team × Tarife (91 Prüfungen), Business Ende-zu-Ende (127), Regressionen der Audit-Änderungen,
+bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
+- [x] Team: ungültiger Einladungslink leitete angemeldete Nutzer kommentarlos in die App · herabgestufter
+  Inhaber sah englischen Fehler bei Einladen/Zurückziehen · neuer Nutzer konnte ohne Organisation enden
+- [x] Business: Vorlesen wurde nach Textänderung nie erneuert (mehrdeutige DB-Abfrage) · geänderte
+  Antwort-Labels nie übersetzt · MP3s nach Löschen/Zurücksetzen öffentlich · Herabstufen schaltete
+  Sprachen/Vorlesen/KI-Design nicht ab (liefen weiter kostenpflichtig) · Sprache abwählen nach Herabstufen
+  scheiterte · „Übersetzen“ ohne Business-Prüfung · „Aussehen“ zeigte falschen Modus
+- [x] Regressionen: Vorlagen fehlten im Chatbot nach Upgrade · „Erneut versuchen“ verschob doppelt ·
+  Schriftnamen als Tracking-Schlupfloch · veröffentlichte Anleitung nach Sofort-Anleitung-Einfügen 1 h alt
+- [x] Bereiche: „Einrichtung erneut“ schickte das ganze Team in den Assistenten · „Als Automation nutzen“
+  ohne Grund · Hinweis übernehmen ohne Cache/Übersetzung/Audio · Schrittzahlen ab 1000 Schritten falsch ·
+  „Organisation verlassen“ im alten Tab traf falsche Org · Vorlage löschen machte versteckte Kopien
+  öffentlich · QR auf Zweit-Domain · abgelaufener Link ohne Erklärung · E-Mail-Wechsel englisch u. a.
+- [x] Video-Export nur Business im Menü; Vorlesen nur auf deutschen Seiten (Aufnahmen sind deutsch)
+
+**Offen — Entscheidung Richard:**
+- [ ] Alte Hilfe-Seiten-Adresse nach Umbenennen: sofort 404 und von Fremden belegbar (QR/iFrame/Chat-Script
+  zeigten dann fremde Seite) → Adressen reservieren + weiterleiten (Migration)
+- [ ] Vorlage löschen: sichtbare Kunden-Kopien bleiben als eigene Anleitungen (zählen dann aufs Gratis-Limit)
+- [ ] Leere Vorlage lässt sich veröffentlichen · Nur-Einladungs-Nutzer ohne eigene Org nach Entfernen ·
+  Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
+- [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
+
 ## Abgleich 23.09.2026
 
 Alle 110 bis dahin offenen Checkboxen (Top 5, A–I, Lückenliste) gegen den Code geprüft

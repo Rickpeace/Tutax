@@ -96,7 +96,8 @@ async function mkUser(email, name) {
   const uid = created.data.user.id;
   const { data: members } = await admin.from("account_members").select("account_id").eq("user_id", uid);
   const aid = members[0].account_id;
-  await admin.from("accounts").update({ name, onboarded: true }).eq("id", aid);
+  // Wissensdatenbank (veralteter-Tab-Prüfung) ist Pro (23.09.2026) -> Test-Konten hochstufen.
+  await admin.from("accounts").update({ name, onboarded: true, plan: "pro" }).eq("id", aid);
   return { uid, aid };
 }
 

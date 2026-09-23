@@ -304,8 +304,11 @@ try {
   // ── 2. Vorlesen ───────────────────────────────────────────────────────────
   section("2. Vorlesen (TTS)");
   const a1 = translated.audio.find((s) => s.id === main.stepIds[0]);
-  const playBtn = pub.getByRole("button", { name: "Read step aloud" });
-  ok((await playBtn.count()) > 0, "Wizard zeigt ▶-Knopf „Read step aloud“");
+  // Die Aufnahmen sind deutsch: auf der EN-Seite KEIN ▶ (sonst „Read aloud“ mit deutscher Stimme).
+  ok((await pub.getByRole("button", { name: "Read step aloud" }).count()) === 0, "EN-Seite: kein ▶ (Aufnahmen sind deutsch)");
+  await visit(pub, `${BASE}/h/${B.slug}/${tSlug}`, "Anleitung (deutsch)");
+  const playBtn = pub.getByRole("button", { name: "Schritt vorlesen" });
+  ok((await playBtn.count()) > 0, "DE-Seite: Wizard zeigt ▶-Knopf „Schritt vorlesen“");
   const audioSrc = await pub.locator("audio").first().getAttribute("src").catch(() => null);
   ok(audioSrc === publicUrl(a1.audio_path), `<audio src> zeigt auf die MP3 von Schritt 1`);
   const mp3 = await fetch(publicUrl(a1.audio_path));
@@ -556,9 +559,17 @@ try {
 
   // ── 7. Video-Export ──────────────────────────────────────────────────────
   section("7. Video-Export");
-  await cardAction(pp, "Pro Anleitung", /Als Video exportieren/);
-  await pp.getByRole("dialog").getByRole("button", { name: /^Klassisch/ }).click();
-  ok(!!(await toastText(pp, /Business-Tarif/, 15_000)), "Pro: Export abgelehnt mit Business-Hinweis");
+  // Pro: Menüpunkt gibt es gar nicht (Export ist Business) — statt Fehler nach dem Klick.
+  await pp.goto(`${BASE}/app`, { waitUntil: "networkidle", timeout: 120_000 });
+  const proCard = pp
+    .locator("div, li, article")
+    .filter({ hasText: "Pro Anleitung" })
+    .filter({ has: pp.getByRole("button", { name: "Aktionen" }) })
+    .last();
+  await proCard.getByRole("button", { name: "Aktionen" }).click();
+  await pp.getByRole("menuitem").first().waitFor({ timeout: 10_000 }).catch(() => {});
+  ok((await pp.getByRole("menuitem", { name: /Als Video exportieren/ }).count()) === 0, "Pro: kein Menüpunkt „Als Video exportieren“ (Business)");
+  await pp.keyboard.press("Escape");
   await cardAction(bp, "Beleg hochladen", /Als Video exportieren/);
   await bp.getByRole("dialog").getByRole("button", { name: /^Klassisch/ }).click();
   const job = await waitFor(async () => {
