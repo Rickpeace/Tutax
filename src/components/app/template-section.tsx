@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { PencilLine, Eye, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { HelpToggle } from "@/components/app/help-toggle";
 import { PageHeader } from "@/components/app/page-header";
 import { categoryColor } from "@/lib/category-colors";
@@ -33,6 +34,7 @@ export type TemplateItem = {
  */
 export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const [pending, start] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
   // Optimistischer Schalter-Zustand; synct mit Server-Daten nach Fork/Reset.
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(items.map((i) => [i.templateId, i.enabled])),
@@ -122,9 +124,15 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
                 variant="ghost"
                 size="sm"
                 disabled={pending}
-                onClick={() => {
-                  if (confirm("Eigene Anpassungen verwerfen und auf den Standard zurücksetzen?"))
-                    run(() => resetTemplate(it.templateId), "Auf Standard zurückgesetzt");
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Auf den Standard zurücksetzen?",
+                    description:
+                      "Ihre eigenen Anpassungen an dieser Anleitung werden verworfen. Danach sehen Ihre Kunden wieder die zentral gepflegte Standard-Version.",
+                    confirmLabel: "Zurücksetzen",
+                    destructive: true,
+                  });
+                  if (ok) run(() => resetTemplate(it.templateId), "Auf Standard zurückgesetzt");
                 }}
               >
                 <Undo2 className="size-4" /> Zurücksetzen
@@ -180,6 +188,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
           </div>
         ))}
       </div>
+      {confirmDialog}
     </section>
   );
 }

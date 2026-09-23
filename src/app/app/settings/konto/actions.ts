@@ -1,15 +1,43 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 
+/**
+ * Passwort ändern — nur mit dem AKTUELLEN Passwort. Sonst könnte jeder, der kurz an ein
+ * entsperrtes Gerät kommt, das Passwort neu setzen und das Konto übernehmen.
+ * Geprüft wird per Wegwerf-Anmeldung (eigener Client ohne Cookies), deren Sitzung
+ * sofort wieder verworfen wird; die laufende Sitzung bleibt unberührt.
+ */
 export async function changePassword(
+  currentPassword: string,
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!currentPassword) return { ok: false, error: "Bitte geben Sie Ihr aktuelles Passwort ein." };
   if (password.length < 8) return { ok: false, error: "Mindestens 8 Zeichen." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return { ok: false, error: "Sitzung abgelaufen – bitte neu anmelden." };
+
+  const probe = createPlainClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { error: checkError } = await probe.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+  if (checkError) {
+    return { ok: false, error: "Das aktuelle Passwort stimmt nicht." };
+  }
+  await probe.auth.signOut({ scope: "local" }).catch(() => {});
+
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { ok: false, error: uebersetzeAuthFehler(error.message) };
   return { ok: true };

@@ -112,6 +112,21 @@ export async function updatePassword(
   } = await supabase.auth.getUser();
   if (!user)
     return { error: "Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an." };
+  // Nur mit frischem E-Mail-Nachweis: Die Sitzung muss in den letzten 30 Minuten über einen
+  // E-Mail-Link entstanden sein (Supabase-amr „otp“ — Zurücksetzen- und Magic-Link, geprüft
+  // 23.09.2026). Eine normale Passwort-Sitzung („password“) darf hier NICHT ohne altes
+  // Passwort ein neues setzen — sonst Konto-Übernahme am entsperrten Gerät. Passwort
+  // ändern mit altem Passwort: Einstellungen → Profil.
+  const { data: claims } = await supabase.auth.getClaims();
+  const amr = (claims?.claims?.amr ?? []) as { method?: string; timestamp?: number }[];
+  const freshLink = amr.some(
+    (a) => a.method === "otp" && typeof a.timestamp === "number" && Date.now() / 1000 - a.timestamp < 30 * 60,
+  );
+  if (!freshLink)
+    return {
+      error:
+        "Aus Sicherheitsgründen geht das nur direkt über den Link aus der E-Mail. Bitte fordern Sie unter „Passwort vergessen“ einen neuen Link an.",
+    };
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: uebersetzeAuthFehler(error.message) };
   redirect("/app");

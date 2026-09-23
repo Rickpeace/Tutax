@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { leaveTeam } from "@/app/app/settings/team/actions";
 
 /**
@@ -13,9 +14,16 @@ import { leaveTeam } from "@/app/app/settings/team/actions";
  */
 export function LeaveTeam({ orgName, blockedReason }: { orgName: string; blockedReason?: string }) {
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   async function leave() {
-    if (!confirm(`„${orgName}“ wirklich verlassen? Sie verlieren sofort den Zugriff auf diese Organisation.`)) return;
+    const ok = await confirm({
+      title: `„${orgName}“ verlassen?`,
+      description: "Sie verlieren sofort den Zugriff auf diese Organisation. Wieder hinein kommen Sie nur mit einer neuen Einladung.",
+      confirmLabel: "Organisation verlassen",
+      destructive: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await leaveTeam();
@@ -39,6 +47,7 @@ export function LeaveTeam({ orgName, blockedReason }: { orgName: string; blocked
           <LogOut className="size-4" /> {orgName} verlassen
         </Button>
       </div>
+      {confirmDialog}
     </div>
   );
 }

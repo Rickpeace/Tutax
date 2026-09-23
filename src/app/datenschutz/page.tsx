@@ -19,15 +19,15 @@ const sections = [
   },
   {
     h: "4. Hosting & Auftragsverarbeiter",
-    p: "Datenbank, Authentifizierung und Datei-Speicher: Supabase (EU-Region). Hosting der Anwendung: Vercel (EU-Region). Mit diesen Subprozessoren bestehen Auftragsverarbeitungsverträge (AVV) nach Art. 28 DSGVO.",
+    p: "Datenbank, Authentifizierung und Datei-Speicher: Supabase (Rechenzentrum in der EU, Irland). Hosting und Auslieferung der Anwendung: Vercel Inc. (USA). Verarbeitung von Bildschirm-Videos zu Anleitungen: Server bei Hetzner Online GmbH (Deutschland). Versand von E-Mails (Einladungen, Benachrichtigungen): Resend (USA). Mit diesen Dienstleistern bestehen bzw. werden Auftragsverarbeitungsverträge (AVV) nach Art. 28 DSGVO geschlossen.",
   },
   {
     h: "5. KI-Funktionen & Übermittlung in Drittländer",
-    p: "Für KI-gestützte Funktionen (Hilfe-Chat auf den veröffentlichten Seiten sowie die KI-Erstellung von Anleitungen) nutzen wir OpenAI als Auftragsverarbeiter. Dabei werden die jeweiligen Eingaben und Inhalte an OpenAI, L.L.C. (USA) übermittelt und dort verarbeitet. Diese Übermittlung in ein Drittland stützt sich auf die EU-Standardvertragsklauseln sowie das EU-US Data Privacy Framework. Über die API übermittelte Inhalte werden nach Zusicherung von OpenAI nicht zum Training der Modelle verwendet. Bitte geben Sie im Hilfe-Chat keine personenbezogenen oder vertraulichen Daten ein.",
+    p: "Für KI-gestützte Funktionen (Hilfe-Chat auf den veröffentlichten Seiten, KI-Erstellung und -Überarbeitung von Anleitungen, Übersetzung, Transkription von Videos) nutzen wir OpenAI als Auftragsverarbeiter. Für das Vorlesen von Anleitungen nutzen wir ElevenLabs. Für die Übernahme Ihres Designs (CI) wird ein Bildschirmfoto der von Ihnen angegebenen Website über thum.io erstellt. Dabei werden die jeweiligen Eingaben und Inhalte an diese Anbieter in den USA übermittelt und dort verarbeitet. Diese Übermittlung in ein Drittland stützt sich auf die EU-Standardvertragsklauseln bzw. das EU-US Data Privacy Framework. Über die API übermittelte Inhalte werden nach Zusicherung von OpenAI nicht zum Training der Modelle verwendet. Bitte geben Sie im Hilfe-Chat keine personenbezogenen oder vertraulichen Daten ein.",
   },
   {
-    h: "6. Cookies & Analyse",
-    p: "Der öffentliche Viewer setzt keine Tracking-Cookies. Für die Anmeldung werden technisch notwendige Sitzungs-Cookies verwendet. Analyse erfolgt – sofern aktiv – ohne Personenbezug.",
+    h: "6. Cookies, Schriften & Analyse",
+    p: "Der öffentliche Viewer setzt keine Tracking-Cookies. Für die Anmeldung werden technisch notwendige Sitzungs-Cookies verwendet. Hat eine Organisation für ihre Hilfe-Seite eine eigene Schrift gewählt, wird diese von Google Fonts (Google Ireland Ltd.) geladen; dabei wird Ihre IP-Adresse an Google übermittelt. Analyse erfolgt – sofern aktiv – ohne Personenbezug.",
   },
   {
     h: "7. Speicherdauer",
