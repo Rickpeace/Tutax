@@ -21,6 +21,7 @@ export function HubBrowser({
   langQuery = "",
   labels,
   colorful = false,
+  chatAvailable = true,
 }: {
   accountSlug: string;
   items: HubTutorial[];
@@ -36,6 +37,8 @@ export function HubBrowser({
    * Kunden-CI (ai/extreme) bleibt alles monochrom in der Akzentfarbe.
    */
   colorful?: boolean;
+  /** Gibt es den Hilfe-Assistenten (ab Pro)? Sonst kein „Fragen Sie den Assistenten“. */
+  chatAvailable?: boolean;
 }) {
   const L = labels ?? labelsFor(lang);
   // Query-Suffix für Karten-Links (?lang=… bzw. leer).
@@ -200,9 +203,11 @@ export function HubBrowser({
               </div>
             )}
 
-            <p className="mt-5 max-w-xs text-xs text-muted-foreground">
-              {L.notRight}
-            </p>
+            {chatAvailable && (
+              <p className="mt-5 max-w-xs text-xs text-muted-foreground">
+                {L.notRight}
+              </p>
+            )}
           </div>
         )
       ) : (

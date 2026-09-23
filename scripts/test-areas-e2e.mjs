@@ -1070,12 +1070,14 @@ async function phaseH() {
     // Profil: E-Mail-Wechsel auf vorhandene / eigene Adresse
     await go(page, "/app/settings/profil");
     await page.locator("#new-email").fill(other.email);
+    await page.locator("#email-current-password").fill(PW); // seit Audit 23.09. Pflicht
     await page.getByRole("button", { name: "E-Mail ändern" }).click();
     msg = await toastMatching(page, /.+/, 15_000);
     info(`E-Mail auf vergebene Adresse: ${msg}`);
     check(msg && !/Fast geschafft/.test(msg) && !/[a-z]+ [a-z]+ (has|already|with)/i.test(msg), "Vergebene E-Mail: deutsche Ablehnung", "E-Mail-Wechsel auf vergebene Adresse zeigt englischen Text oder falschen Erfolg", String(msg));
     await page.locator("[data-sonner-toast]").first().waitFor({ state: "detached", timeout: 15_000 }).catch(() => {});
     await page.locator("#new-email").fill(u.email);
+    await page.locator("#email-current-password").fill(PW); // seit Audit 23.09. Pflicht
     await page.getByRole("button", { name: "E-Mail ändern" }).click();
     msg = await toastMatching(page, /.+/, 15_000);
     info(`E-Mail auf eigene Adresse: ${msg}`);

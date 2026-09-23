@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateLongDe } from "@/lib/format";
 import type { Tutorial } from "@/lib/types";
 import { PageHeader } from "@/components/app/page-header";
+import { isPro } from "@/lib/plan";
 
 /**
  * Schulungen (/app/lernen — Route bleibt): interne Anleitungen fürs Team mit
@@ -70,10 +71,10 @@ export default async function LernenPage() {
           </span>
           <h2 className="mt-4 text-base font-extrabold text-ink">Noch keine Schulungen</h2>
           <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-muted-foreground">
-            Schulungen sind Anleitungen nur für Ihr Team – sie erscheinen nie auf der
-            Hilfe-Seite. Nehmen Sie im Editor einer Anleitung das Häkchen „Auf der
-            Hilfe-Seite“ heraus oder setzen Sie „In Schulungen“ und geben Sie sie frei.
-            Danach steht sie hier, und Ihr Team kann sie als absolviert markieren.
+            Schulungen sind Anleitungen für Ihr Team. Wählen Sie im Editor einer Anleitung
+            oben bei der Zielgruppe „Team“ (zusätzlich oder statt „Hilfe-Seite (für alle)“) und
+            veröffentlichen Sie sie. Danach steht sie hier, und Ihr Team kann sie als absolviert
+            markieren.{!isPro(account) && " Schulungen mit Nachweis sind ab dem Pro-Tarif enthalten."}
           </p>
           <Link
             href="/app"

@@ -4,6 +4,7 @@ import {
   bearerToken,
   RECORDER_ME_CORS,
 } from "@/lib/recorder";
+import { videoAllowed } from "@/lib/plan";
 
 // Steply-Recorder, Ein-Klick-Pairing (Welle 25): GET /api/recorder/me.
 //
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
     );
   }
   return NextResponse.json(
-    { account: account.name, slug: account.slug },
+    // videoAllowed: „Video mit Ton“ (KI) ist ab Pro — die Erweiterung sagt das VOR der Aufnahme
+    // statt erst nach dem Hochladen (Audit 23.09.: Sackgasse im Gratis-Tarif).
+    { account: account.name, slug: account.slug, videoAllowed: videoAllowed(account) },
     { status: 200, headers: RECORDER_ME_CORS },
   );
 }

@@ -139,13 +139,8 @@ function flatOrder(steps: Step[], branches: StepBranch[], rootId: string | null)
     walk(node.next);
   };
   walk(tree);
-  // Unerreichbare Schritte (kein eingehender Branch) hinten anhängen, nach Position.
-  for (const s of [...steps].sort((a, b) => a.position - b.position)) {
-    if (!seen.has(s.id)) {
-      seen.add(s.id);
-      ordered.push(s);
-    }
-  }
+  // Unerreichbare Schritte (ohne Verbindung) NICHT drucken: der Player zeigt sie nie — gedruckt
+  // standen sie als scheinbarer Schluss-Schritt da (Audit 23.09.).
   return ordered;
 }
 
@@ -301,6 +296,19 @@ export default async function PrintPage({
                 <div className="mt-2 text-[15px] leading-relaxed text-ink-2">
                   <RichTextView doc={step.body} />
                 </div>
+
+                {/* Linearer Schritt, dessen Folgeschritt NICHT die nächste Nummer ist (Ende eines Asts,
+                    Zusammenführung) oder der hier endet: ausdrücklich sagen, wie es weitergeht —
+                    sonst las man nach dem Ja-Ast im Nein-Ast weiter (Audit 23.09.). */}
+                {!step.is_decision && (() => {
+                  const nextId = bs[0]?.target_step_id ?? null;
+                  const nextNo = nextId ? numberById.get(nextId) : null;
+                  const isLast = i === ordered.length - 1;
+                  if (nextNo && nextNo !== i + 2)
+                    return <p className="mt-2 text-sm font-semibold">→ {t(lang, "continueWithStep", { n: nextNo })}</p>;
+                  if (!nextNo && !isLast) return <p className="mt-2 text-sm font-semibold">→ {labels.end}</p>;
+                  return null;
+                })()}
 
                 {/* Verzweigungen als „Wenn X → weiter mit Schritt N"-Zeilen (übersetzt). */}
                 {step.is_decision && bs.length > 0 && (

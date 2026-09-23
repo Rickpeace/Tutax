@@ -62,6 +62,8 @@ export default function AssistentLayout({
 /** Braucht den Konto-Slug (uncached) → streamt in die statische Shell. */
 async function ChatTestLink() {
   const { account } = await requireAccount();
+  // Den Chat gibt es auf der Hilfe-Seite erst ab Pro — sonst öffnete der Knopf eine Seite ohne Chat.
+  if (!isPro(account)) return null;
   return (
     <Button
       variant="outline"

@@ -18,7 +18,7 @@ import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/s
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { unwrap, errorText } from "@/lib/action-error";
 
-type Member = { userId: string; role: string; email: string; isYou: boolean };
+type Member = { userId: string; role: string; email: string; name?: string | null; isYou: boolean };
 type Invitation = { id: string; email: string; role: string; token: string; expired: boolean; expiresAt: string };
 
 const roleLabel = (role: string) => ROLE_LABEL[asRole(role)];
@@ -180,14 +180,17 @@ export function TeamManager({
         icon={Users}
         description={isOwner ? undefined : "Mitglieder einladen oder entfernen können nur Inhaber."}
       >
-        <ul className="-mx-[18px] -mb-4 divide-y-2 divide-line-2 border-t-2 border-line-2">
+        <ul className="-mx-[18px] -mb-4 min-w-0 divide-y-2 divide-line-2 border-t-2 border-line-2">
           {members.map((m) => (
             <li key={m.userId} className="flex items-center gap-3 px-[18px] py-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-black text-coral-text">
-                {(m.email[0] ?? "?").toUpperCase()}
+                {((m.name || m.email)[0] ?? "?").toUpperCase()}
               </div>
-              <div className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
-                {m.email} {m.isYou && <span className="font-semibold text-muted-foreground">(Sie)</span>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-ink">
+                  {m.name || m.email} {m.isYou && <span className="font-semibold text-muted-foreground">(Sie)</span>}
+                </div>
+                {m.name && <div className="truncate text-xs font-semibold text-muted-foreground">{m.email}</div>}
               </div>
               {isOwner && !(m.role === "owner" && ownerCount <= 1) ? (
                 <select

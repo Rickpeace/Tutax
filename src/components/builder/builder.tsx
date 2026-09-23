@@ -757,6 +757,30 @@ export function Builder({
     [confirm],
   );
 
+  // Links innerhalb der App (Zurück, Kopfleiste, Reiter) bei ungespeicherten Eingaben abfangen:
+  // `beforeunload` greift nur beim Schließen/Neuladen, Next-Links wechselten sonst ohne Rückfrage
+  // und Titel/Text waren weg (Audit 23.09.). Capture-Phase auf document = vor Nexts Link-Handler.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!dirtyRef.current || e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // neuer Tab: nichts geht verloren
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download")) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void confirmDiscard().then((ok) => {
+        if (!ok) return;
+        dirtyRef.current = false;
+        router.push(url.pathname + url.search + url.hash);
+      });
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [confirmDiscard, router]);
+
   // „Texte mit KI verbessern“ (09/2026): Knopf über dem Ablauf ODER „…“-Menü im Kopf (Ereignis).
   // Ungespeicherte Panel-Eingaben erst verwerfen lassen; danach das Panel neu aufbauen (textRev),
   // damit es die übernommenen Texte zeigt.

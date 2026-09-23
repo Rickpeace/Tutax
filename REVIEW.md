@@ -102,6 +102,59 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Voller Bug-Audit 23.09.2026 abends (6 Prüfer parallel, alles gegen live)
+
+Bereiche: Editor/Veröffentlichen · Erweiterung/Video/Automationen · KI + Tarif-Gates ·
+Konto/Team/Admin · Sicherheit/Mandanten · Alltag/Optik (8 Rollen × Desktop/Handy, ~430 Aufrufe).
+Ergebnis KI-Gates: **kein Weg für Gratis-Konten zu kostenpflichtiger KI** (alle Routen/Actions live probiert).
+
+**Behoben (live, Regression `test-rest-guards`, `test-audit-0923`, angepasste RLS-Tests):**
+- [x] 🔴 `video_jobs` per REST fälschbar → fremde Entwürfe gelöscht, fremde Videos lesbar,
+  Business-Export ohne Business (Migration 0043 + `getTutorialVideoUrl` + Worker-Checks)
+- [x] 🟠 Eigene Anleitung als globale Vorlage ausgebbar; gefälschte Vorlagen-Kopie löschte
+  fremde Vorlese-Dateien (0043 + `.is("account_id", null)` + resetTemplate prüft zuerst)
+- [x] 🟠 Veröffentlichte Schritte aller Konten anonym per REST lesbar (page_url mit Session-
+  Parametern, Selektoren), dazu Designs/Kategorien (Migration 0044: nur noch Vorlagen)
+- [x] 🟠 E-Mail ändern ohne Passwort → Konto-Übernahme am offenen Gerät (jetzt Passwort-Pflicht)
+- [x] 🟠 Unter Last flogen Angemeldete auf /login (Proxy-Timeout = „abgemeldet“) → fail-open
+- [x] 🟡 Gratis-Grenze per REST umgehbar (0043-Trigger; Vorlagen-Kopie mit Server-Rechten)
+- [x] 🟡 Anmelde-Link legte für jede Adresse Konto + Organisation an (`shouldCreateUser:false`)
+- [x] 🟡 embed.js: unsichtbares iFrame schluckte Klicks auf Kunden-Websites
+- [x] 🟡 Duplizieren machte „Nur Team“ öffentlich · Frage ohne Antworten = Sackgasse ·
+  Startschritt gelöscht → Hilfe-Seite „Fertig“ · Druckansicht führte in falschen Ast ·
+  ungespeicherte Schritt-Texte bei App-Links ohne Rückfrage weg
+- [x] 🟡 Screencast-Export zeigte verpixelte Stellen (jetzt gesperrt bei Verpixelung)
+- [x] 🟡 KI-Kostenbremsen: Aktualität (auch REST-Reset), Vorschlag übernehmen, Entwurf aus
+  Frage, Übersetzen
+- [x] Erweiterung 2.19.3: verschobene Zeitplan-Läufe gingen verloren · Runner meldet Abbruch
+  beim Schließen · Verbindungs-Code wird vor dem Speichern geprüft · „Video mit Ton“ sagt
+  vorab „ab Pro“ (`/api/recorder/me` liefert `videoAllowed`)
+- [x] Kleinkram: Automations-Lauf nachträglich überschreibbar · „NEXT_REDIRECT“-Toast ·
+  Vorschau-Design ≠ live · Titel ohne Längengrenze · Team-Liste Handy zu breit · tote
+  Menü-Anker Startseite · Vorlagen-Spalten verrutscht · „Wissenslücken“-Zahl · „Chat testen“
+  und Chat-Hinweise im Gratis-Tarif · Mitarbeiter sahen nach Login kurz die Inhaber-Oberfläche ·
+  /login ignorierte ?next= · 404 ohne eigenen Titel
+
+**Offen (bewusst später / Entscheidung nötig):**
+- [ ] **Richard:** Video-Worker `deploy.sh` (Worker-Absicherung wirkt erst dann; DB-Schutz greift schon) ·
+  Erweiterung 2.19.3 neu laden · in Supabase „Secure email change“ prüfen
+- [ ] **Produkt:** „Ab hier aufnehmen“ fügt in veröffentlichte Anleitungen nie ein (legt neuen Entwurf an)
+  → einfügen erlauben oder Knopf bei veröffentlichten ausblenden?
+- [ ] Nach Verpixeln/Bild-Ersetzen liefert das CDN ~60 s das alte Bild (Inhalts-Hash in Dateinamen)
+- [ ] SSRF per DNS-Rebinding in `safeFetch` (IP festhalten) · Anmelde-Aktionen ohne eigenes
+  IP-/E-Mail-Limit · öffentliche Feedback-Aktionen ohne Limit · Buckets ohne MIME-/Größengrenze
+- [ ] Rohe Fehlertexte in upload-url/branding/theme · kein CSP `script-src` · `X-Powered-By` ·
+  `/logout` per GET · Recorder-Tokens im Klartext · Team-Grenze per parallelen Einladungen
+- [ ] `assertActiveAccount` fehlt bei rotateRecorderToken/setTemplateEnabled/forkTemplate/resetTemplate
+- [ ] Wissens-Import-Budget umgehbar; `takeHourlyAiRun` nicht atomar
+- [ ] Bibliothek: Seitenleisten-Zähler ignorieren Status-Filter · Lernen-Leerzustand nennt alte
+  Begriffe · Team-Liste ohne Namen · Tailwind-Amber statt Design-Farben, Kategorie-Farbkollision ·
+  Gratis am Limit: „Neue Anleitung“ ohne Hinweis
+- [ ] Server-Aktionen live teils langsam (Umbenennen 11–22 s beim ersten Mal, einmal 500 beim
+  Duplizieren) — Vercel-Logs ansehen
+- [ ] Veraltete Tests: test-app-shell, test-settings (Pro-Sperren), test-mobile-newtut („Neu“ statt
+  „Aufnehmen“, räumt Org nicht auf), test-kern-durchlauf (Wartezeiten zu knapp für live)
+
 ## Team-Einladungen + E-Mails — 23.09.2026 (echte Mails über Resend, live)
 
 - [x] Einladen per Mail live geprüft (`scripts/test-team-invite-mail.mjs`, 29 Prüfungen):

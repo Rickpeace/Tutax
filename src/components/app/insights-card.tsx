@@ -96,7 +96,9 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
         <Stat
           label="Wissenslücken"
           value={unansweredCount.toLocaleString("de-DE")}
-          hint="offene Fragen"
+          // Zählt Chat-Anfragen ohne Antwort (dieselbe Frage kann mehrfach kommen) — die
+          // Liste „Offene Fragen“ fasst gleiche Fragen zusammen (Audit 23.09.: 2 vs. 1).
+          hint="unbeantwortete Chat-Anfragen"
           icon={<MessageCircleQuestion className="size-3.5" />}
         />
       </div>

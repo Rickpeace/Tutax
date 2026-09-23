@@ -80,7 +80,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const renderRow = (it: TemplateItem) => (
     <div
       key={it.templateId}
-      className="flex flex-col gap-1.5 border-t-2 border-line-2 px-4 py-2.5 transition-colors hover:bg-[#fffcf7] md:grid md:grid-cols-[minmax(0,1fr)_110px_190px_auto] md:items-center md:gap-4"
+      className="flex flex-col gap-1.5 border-t-2 border-line-2 px-4 py-2.5 transition-colors hover:bg-[#fffcf7] md:grid md:grid-cols-[minmax(0,1fr)_110px_190px_170px] md:items-center md:gap-4"
       data-testid="template-row"
     >
       {/* Mobil: Titel ganze Breite (umbrechend), darunter Schalter + Aktionen. */}
@@ -167,7 +167,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         }
       />
       <div className="overflow-hidden rounded-card border-2 border-line bg-card">
-        <div className="hidden grid-cols-[minmax(0,1fr)_110px_190px_auto] gap-4 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
+        <div className="hidden grid-cols-[minmax(0,1fr)_110px_190px_170px] gap-4 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
           <span>Anleitung</span>
           <span>Art</span>
           <span>Hilfe-Seite</span>

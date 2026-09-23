@@ -96,7 +96,7 @@ export function BrandPreview({
             borderRadius: pill ? "999px" : radius,
           }}
         >
-          Frage stellen
+          Weiter
         </div>
       </div>
     </div>

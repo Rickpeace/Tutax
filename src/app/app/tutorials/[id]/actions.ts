@@ -30,7 +30,7 @@ import { validateStepCondition } from "@/lib/guide";
 import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/lib/category-name";
 import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
-import { flowOrder } from "@/lib/builder/tree";
+import { flowOrder, resolveRoot } from "@/lib/builder/tree";
 import { planMove } from "@/lib/builder/rewire";
 import { canEdit } from "@/lib/roles";
 import { isAccountStoragePath } from "@/lib/storage-path";
@@ -377,6 +377,17 @@ export async function deleteStep(
 
   const { error } = await supabase.from("steps").delete().eq("id", stepId);
   if (error) throw new Error(error.message);
+  // Start gelöscht und kein Folgeschritt: sonst stünde root_step_id auf null, obwohl noch
+  // Schritte da sind (Hilfe-Seite zeigte sofort „Fertig“) — Ersatz-Start wie im Editor wählen.
+  if (wasRoot && !nextTarget) {
+    const { data: rest } = await supabase.from("steps").select("*").eq("tutorial_id", tutorialId);
+    if (rest?.length) {
+      const ids = rest.map((s) => s.id as string);
+      const { data: restBranches } = await supabase.from("step_branches").select("*").in("step_id", ids);
+      const newRoot = resolveRoot(rest as Step[], (restBranches ?? []) as StepBranch[], null);
+      if (newRoot) await supabase.from("tutorials").update({ root_step_id: newRoot }).eq("id", tutorialId);
+    }
+  }
   // Öffentliche Bildkopie des gelöschten Schritts entfernen, sofern kein anderer veröffentlichter
   // Schritt sie noch nutzt (Sicherheitsprüfung Welle 51, H2/M1).
   if (victim?.image_path) {

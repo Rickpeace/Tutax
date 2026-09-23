@@ -127,8 +127,12 @@ async function postStart(automationId) {
   }
 }
 
-async function postFinish(runId, status, currentStep, detail) {
+// Laufender Server-Lauf (für die Abbruch-Meldung beim Schließen des Runner-Tabs).
+let activeRunId = null;
+
+async function postFinish(runId, status, currentStep, detail, keepalive) {
   if (!cfg.token || !runId) return;
+  if (runId === activeRunId) activeRunId = null; // nur EINMAL abschließen
   const body = { token: cfg.token, runId: runId, event: "finish", status: status };
   if (typeof currentStep === "number") body.currentStep = currentStep;
   if (detail && typeof SteplyExecPlan !== "undefined") {
@@ -140,11 +144,19 @@ async function postFinish(runId, status, currentStep, detail) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      keepalive: !!keepalive,
     });
   } catch (err) {
     /* still */
   }
 }
+
+// Wird der (unsichtbare) Runner-Tab geschlossen, bevor der Lauf fertig ist, den Abbruch melden —
+// sonst stand der Lauf bis zu 1 h auf „Läuft“ (wie in panel.js seit v2.19.2; keepalive überlebt
+// den Abbau des Dokuments). Die Lauf-Sperre läuft ohnehin nach 10 min ab.
+window.addEventListener("pagehide", () => {
+  if (activeRunId) void postFinish(activeRunId, "aborted", undefined, "runner-geschlossen", true);
+});
 
 // ── Tab-Helfer ───────────────────────────────────────────────────────────────
 async function tabUrlById(tabId) {
@@ -770,6 +782,7 @@ async function runAutomation(automationId) {
 
   // Lauf registrieren + Lebensader.
   const runId = await postStart(automationId);
+  activeRunId = runId;
   execPortOpen(targetTabId);
   execPingStart();
   setStatus("Ablauf läuft …");

@@ -1,4 +1,5 @@
 import { requireAccount } from "@/lib/account";
+import { userDisplayName } from "@/lib/user-name";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TeamManager } from "@/components/app/team-manager";
@@ -29,10 +30,13 @@ export default async function TeamPage() {
   const rows = memberRows ?? [];
   const userRes = await Promise.all(rows.map((m) => admin.auth.admin.getUserById(m.user_id)));
   const emailById = new Map(rows.map((m, i) => [m.user_id, userRes[i].data?.user?.email ?? ""]));
+  // Gepflegter Name (Mein Profil) — wie im Schulungsnachweis; sonst nur die E-Mail.
+  const nameById = new Map(rows.map((m, i) => [m.user_id, userDisplayName(userRes[i].data?.user?.user_metadata)]));
   const members = (memberRows ?? []).map((m) => ({
     userId: m.user_id,
     role: m.role,
     email: emailById.get(m.user_id) ?? "—",
+    name: nameById.get(m.user_id) ?? null,
     isYou: m.user_id === user?.id,
   }));
   const myRole = members.find((m) => m.isYou)?.role ?? "editor";

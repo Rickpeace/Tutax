@@ -298,6 +298,7 @@ export default async function HubPage({
           langQuery={langQ}
           labels={labels}
           colorful={mode === "manual"}
+          chatAvailable={isPro(account)}
         />
       </div>
 

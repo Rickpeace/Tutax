@@ -173,7 +173,7 @@ export default function LandingPage() {
       </section>
 
       {/* Sofort-Anleitung per Extension (der Tango-Moment) */}
-      <section className="px-4 py-10 sm:px-10 sm:py-[52px]">
+      <section id="features" className="px-4 py-10 sm:px-10 sm:py-[52px]">
         <div className="mx-auto grid max-w-[1000px] items-center gap-8 lg:grid-cols-[1fr_1.1fr] lg:gap-12">
           <div>
             <h2 className="text-[21px] font-black leading-tight sm:text-[32px]">
@@ -433,7 +433,7 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ — kompakt, native <details> (kein JS) */}
-      <section className="px-4 pb-10 sm:px-10 sm:pb-[52px]">
+      <section id="faq" className="px-4 pb-10 sm:px-10 sm:pb-[52px]">
         <h2 className="text-center text-[20px] font-black leading-tight sm:text-[32px]">
           Häufige Fragen
         </h2>

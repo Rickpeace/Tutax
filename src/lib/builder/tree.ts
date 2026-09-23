@@ -114,6 +114,18 @@ export function findJoinPoint(
   return graphOf(steps, branches).joinPoint(decisionId);
 }
 
+/**
+ * Startschritt: explizit gesetzt (und noch vorhanden), sonst der Schritt ohne eingehende
+ * Verbindung, sonst der erste nach Position. EINE Regel für Editor, Druck UND Player — sonst
+ * zeigte die Hilfe-Seite nach dem Löschen des Startschritts sofort „Fertig“, obwohl Editor und
+ * Druck noch Schritte zeigten (Audit 23.09.).
+ */
+export function resolveRoot(steps: Step[], branches: StepBranch[], rootStepId: string | null): string | null {
+  if (!steps.length) return null;
+  if (rootStepId && steps.some((s) => s.id === rootStepId)) return rootStepId;
+  return inferRoot(steps, branches) ?? [...steps].sort((a, b) => a.position - b.position)[0].id;
+}
+
 export function buildRenderTree(
   steps: Step[],
   branches: StepBranch[],
@@ -123,12 +135,7 @@ export function buildRenderTree(
 
   const { stepById, branchesByStep, joinPoint } = graphOf(steps, branches);
 
-  // Wurzel: explizit gesetzt, sonst der Schritt mit Eingangsgrad 0,
-  // sonst der erste nach position.
-  const root =
-    (rootStepId && stepById.has(rootStepId) && rootStepId) ||
-    inferRoot(steps, branches) ||
-    [...steps].sort((a, b) => a.position - b.position)[0].id;
+  const root = resolveRoot(steps, branches, rootStepId)!;
 
   const title = (id: string) => stepById.get(id)?.title?.trim() || "Schritt";
 

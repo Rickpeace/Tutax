@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 export default function NotFound() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-16 text-center">
+      {/* React hebt <title> in den Kopf — sonst trug die 404 den Titel der Startseite. */}
+      <title>Seite nicht gefunden · Steply</title>
       <Link href="/" aria-label="Zur Startseite">
         <Wordmark size="lg" />
       </Link>
@@ -18,14 +20,14 @@ export default function NotFound() {
         Sind Sie über einen Hilfe-Link hierher gekommen? Prüfen Sie den Link oder
         fragen Sie die Organisation, von der Sie ihn erhalten haben.
       </p>
-      <Button
-        size="lg"
-        nativeButton={false}
-        className="mt-8"
-        render={<Link href="/" />}
-      >
-        Zur Startseite
-      </Button>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Button size="lg" nativeButton={false} render={<Link href="/app" />}>
+          Zu Ihren Anleitungen
+        </Button>
+        <Button size="lg" variant="outline" nativeButton={false} render={<Link href="/" />}>
+          Zur Startseite
+        </Button>
+      </div>
     </main>
   );
 }

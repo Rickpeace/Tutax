@@ -866,9 +866,17 @@ async function syncSchedules() {
   const now = Date.now();
   const tz = new Date().getTimezoneOffset();
   const wanted = new Set();
+  // Verschobene Läufe (belegt → +5 min) NICHT überschreiben: sonst setzte der nächste Abgleich
+  // den Wecker auf die nächste reguläre Fälligkeit (z. B. nächste Woche) und der Lauf fiel aus.
+  const postponed = (await steplyReadRunState()).postponed || {};
   for (const a of list) {
     if (!a || !a.id || !a.schedule || a.schedule.enabled === false) continue;
-    const when = self.SteplyExecPlan.nextFireTime(a.schedule, now, tz);
+    let when = self.SteplyExecPlan.nextFireTime(a.schedule, now, tz);
+    const p = postponed[a.id];
+    if (p && typeof p.until === "number" && p.until > now - STEPLY_LOCK_TTL) {
+      const retryAt = Math.max(p.until, now + 1000);
+      when = when == null ? retryAt : Math.min(when, retryAt);
+    }
     if (when == null) continue;
     const name = STEPLY_RUN_PREFIX + a.id;
     wanted.add(name);
@@ -919,8 +927,17 @@ async function handleScheduledRun(automationId, scheduledTime) {
   const lockFresh =
     state.lock && typeof state.lock.at === "number" && Date.now() - state.lock.at < STEPLY_LOCK_TTL;
   if (steplyActiveRunPorts > 0 || lockFresh) {
+    const until = Date.now() + STEPLY_POSTPONE_MS;
     try {
-      chrome.alarms.create(STEPLY_RUN_PREFIX + automationId, { when: Date.now() + STEPLY_POSTPONE_MS });
+      chrome.alarms.create(STEPLY_RUN_PREFIX + automationId, { when: until });
+    } catch (err) {
+      /* egal */
+    }
+    // Merken, damit syncSchedules den Verschiebe-Wecker nicht überschreibt.
+    state.postponed = state.postponed || {};
+    state.postponed[automationId] = { until };
+    try {
+      await chrome.storage.local.set({ steplyRunState: state });
     } catch (err) {
       /* egal */
     }
@@ -928,6 +945,7 @@ async function handleScheduledRun(automationId, scheduledTime) {
   }
 
   // Fälligkeit als behandelt markieren + Sperre setzen (der Runner gibt sie am Ende frei).
+  if (state.postponed) delete state.postponed[automationId];
   state.lastDue[automationId] = due;
   state.lock = { id: automationId, at: Date.now(), due };
   try {

@@ -61,6 +61,8 @@ export type RecorderAccount = {
   slug: string;
   /** Person hinter dem Token (für personenbezogene Kostenbremsen, z. B. KI-Feinschliff). */
   userId: string;
+  /** Tarif (free/pro/business) — z. B. damit die Erweiterung Video-Aufnahmen vorab als „ab Pro“ zeigt. */
+  plan: string | null;
 };
 
 /**
@@ -88,7 +90,7 @@ export async function accountForRecorderToken(token: unknown): Promise<RecorderA
       .eq("account_id", tok.account_id)
       .eq("user_id", tok.user_id)
       .maybeSingle(),
-    admin.from("accounts").select("id, name, slug").eq("id", tok.account_id).maybeSingle(),
+    admin.from("accounts").select("id, name, slug, plan").eq("id", tok.account_id).maybeSingle(),
   ]);
   if (!data || !member || (member.role !== "owner" && member.role !== "editor")) return null;
   touchRecorderToken(t);
@@ -97,6 +99,7 @@ export async function accountForRecorderToken(token: unknown): Promise<RecorderA
     name: data.name as string,
     slug: data.slug as string,
     userId: tok.user_id as string,
+    plan: (data.plan as string | null) ?? null,
   };
 }
 

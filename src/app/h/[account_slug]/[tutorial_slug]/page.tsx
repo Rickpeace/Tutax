@@ -330,6 +330,7 @@ export default async function ViewerPage({
           accountSlug={account.slug}
           tutorialSlug={tutorial_slug}
           labels={labels}
+          chatAvailable={isPro(account)}
         />
 
         <div className="mt-4 text-center">

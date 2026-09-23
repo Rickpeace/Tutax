@@ -8,6 +8,7 @@ import { welcomeEmail } from "@/lib/email/templates";
 import { createClient } from "@/lib/supabase/server";
 import { appBaseUrl, safeNext } from "@/lib/url";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
+import { MEMBER_HOME, asRole } from "@/lib/roles";
 
 export type AuthState = { error?: string; message?: string };
 
@@ -25,11 +26,20 @@ export async function signInWithPassword(
   if (!email || !password) return { error: "Bitte E-Mail und Passwort eingeben." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: uebersetzeAuthFehler(error.message) };
 
   revalidatePath("/", "layout");
-  redirect(safeNext(next, "/app"));
+  let target = safeNext(next, "/app");
+  // Mitarbeiter direkt zu den Schulungen: über /app sahen sie sonst ~3 s die Inhaber-Oberfläche
+  // (Reiter, ⌘K mit Einstellungen), bis die Umleitung griff (Audit 23.09.).
+  if (target === "/app" && data.user) {
+    const { data: rows } = await supabase.from("account_members").select("account_id, role").eq("user_id", data.user.id);
+    const activeId = (data.user.user_metadata as { active_account_id?: string } | null)?.active_account_id;
+    const active = (rows ?? []).find((r) => r.account_id === activeId) ?? rows?.[0];
+    if (active && asRole(active.role) === "member") target = MEMBER_HOME;
+  }
+  redirect(target);
 }
 
 /** Registrierung mit E-Mail + Passwort (Account-Anlage via DB-Trigger) */

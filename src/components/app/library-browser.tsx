@@ -122,8 +122,13 @@ export function LibraryBrowser({
     }),
     [tutorials],
   );
+  // Zähler folgen auch dem Status-Filter — sonst stand links „Steuern 1“ und rechts „0 Anleitungen“.
   const catCount = (id: string) =>
-    inScope.filter((t) => (t.categoryId ?? "__none") === id).length;
+    inScope.filter(
+      (t) =>
+        (t.categoryId ?? "__none") === id &&
+        (status === "alle" || (status === "live") === (t.status === "published")),
+    ).length;
   const hasUncategorized = tutorials.some((t) => !t.categoryId);
   // Für den Lösch-Dialog: ALLE Anleitungen der Kategorie (unabhängig von Bereich/Status).
   const totalInCat = (id: string) => tutorials.filter((t) => t.categoryId === id).length;
@@ -316,6 +321,22 @@ export function LibraryBrowser({
             </div>
             }
           />
+
+          {visible.length === 0 && tutorials.length > 0 && (
+            <div className="rounded-card border-2 border-dashed border-line bg-card px-4 py-8 text-center text-sm font-semibold text-muted-foreground">
+              Keine Anleitung passt zu diesem Filter.{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setStatus("alle");
+                  setCategoryId("alle");
+                }}
+                className="font-extrabold text-primary hover:underline"
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          )}
 
           {view === "row" && (
             /* Liste: nach Kategorie gruppiert, Spalten zum Überfliegen */

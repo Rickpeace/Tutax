@@ -249,7 +249,7 @@ export function BrandingForm({
             className="mt-3 inline-flex rounded-[12px] px-3 py-1.5 text-xs font-extrabold text-white"
             style={{ background: colors.primary }}
           >
-            Frage stellen
+            Weiter
           </div>
         </div>
       </SettingsCard>

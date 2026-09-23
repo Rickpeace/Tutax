@@ -417,6 +417,9 @@ function tokenFp(token) {
 
 // Kontoname des aktuellen Tokens holen (GET /api/recorder/me). FAIL-SILENT; kurzer Timeout.
 // Dedupe: parallele Aufrufe teilen sich EINE Anfrage (vorher kam /me beim Öffnen doppelt).
+// Darf das verbundene Konto „Video mit Ton“ (ab Pro)? null = unbekannt.
+let accountVideoAllowed = null;
+
 function fetchAccountName() {
   if (!cfg.token) {
     accountName = "";
@@ -439,6 +442,8 @@ function fetchAccountName() {
       const body = await res.json().catch(() => ({}));
       if (body && body.account && token === cfg.token) {
         accountName = String(body.account).slice(0, 80);
+        // Ältere Server ohne Feld: unbekannt (null) → wie bisher erst beim Hochladen prüfen.
+        accountVideoAllowed = typeof body.videoAllowed === "boolean" ? body.videoAllowed : null;
         try {
           chrome.storage.local.set({ steplyAccountCache: { fp: tokenFp(token), name: accountName } });
         } catch (err) {
@@ -773,12 +778,37 @@ async function saveCfg() {
     els.cfgStatus.className = "status status-error";
     return;
   }
+  // Code VOR dem Speichern prüfen (wie das Ein-Klick-Verbinden): ein Tippfehler oder ein in
+  // Steply getrennter Code fiel sonst erst nach einer ganzen Aufnahme beim Hochladen auf.
+  let verified = null; // true = gültig, false = abgelehnt, null = nicht prüfbar (Netz)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch((appUrl || DEFAULT_APP_URL) + "/api/recorder/me", {
+      headers: { Authorization: "Bearer " + token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) verified = true;
+    else if (res.status === 401 || res.status === 403) verified = false;
+  } catch (err) {
+    verified = null;
+  }
+  if (verified === false) {
+    els.cfgStatus.textContent =
+      "Dieser Verbindungs-Code gilt nicht (mehr). Bitte kopieren Sie ihn in Steply unter „Einstellungen → Steply-Erweiterung“ neu.";
+    els.cfgStatus.className = "status status-error";
+    return;
+  }
   try {
     await chrome.storage.local.set({ steplyToken: token, steplyAppUrl: appUrl });
     cfg.token = token;
     cfg.appUrl = appUrl;
     hasToken = true;
-    els.cfgStatus.textContent = "Gespeichert – die Steply-Erweiterung ist verbunden.";
+    els.cfgStatus.textContent =
+      verified === true
+        ? "Gespeichert – die Steply-Erweiterung ist verbunden."
+        : "Gespeichert. Die Verbindung konnte gerade nicht geprüft werden (Internet?) – sie wird beim nächsten Hochladen genutzt.";
     els.cfgStatus.className = "status status-ok";
     setTimeout(() => {
       if (currentSection === "connect") showStart();
@@ -954,6 +984,14 @@ function goVideoSetup() {
   els.interruptedHint.hidden = true;
   show("videoSetup");
   setStatus("");
+  if (accountVideoAllowed === false) {
+    // Gratis: nicht erst aufnehmen lassen und dann am Tarif scheitern.
+    setStatus(
+      "„Video mit Ton“ ist ab Pro enthalten – die KI baut daraus die Schritte. Im kostenlosen Tarif nutzen Sie die Sofort-Anleitung (Reiter „Aufnehmen“).",
+      "error",
+    );
+    return;
+  }
   micPreflight();
 }
 

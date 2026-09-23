@@ -9,12 +9,13 @@ import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
 import { dateDe } from "@/lib/format";
 import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
 import { backAction, nextSnapshot, type WizMove, type WizSnapshot } from "@/lib/wizard-history";
+import { resolveRoot } from "@/lib/builder/tree";
 
 /** Schlüssel, unter dem der Wizard seinen Stand im Browser-Verlaufseintrag ablegt. */
 const WIZ_STATE = "steplyWizard";
 
 export function Wizard({
-  rootId,
+  rootId: rootIdProp,
   steps,
   branches,
   imageUrls,
@@ -27,6 +28,7 @@ export function Wizard({
   onComplete,
   onUncomplete,
   labels,
+  chatAvailable = true,
 }: {
   rootId: string | null;
   steps: Step[];
@@ -44,9 +46,13 @@ export function Wizard({
   onUncomplete?: () => Promise<void>;
   /** UI-Strings; Default = deutsche Strings (damit /app/lernen & Vorschau unverändert bleiben). */
   labels?: HubLabels;
+  /** Gibt es den Hilfe-Assistenten auf dieser Seite (ab Pro)? Sonst kein Verweis darauf. */
+  chatAvailable?: boolean;
 }) {
   const L = labels ?? labelsFor("de");
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
+  // Gleiche Startschritt-Regel wie Editor/Druck (fehlt der gespeicherte Start, nicht sofort „Fertig“).
+  const rootId = useMemo(() => resolveRoot(steps, branches, rootIdProp), [steps, branches, rootIdProp]);
   const branchesByStep = useMemo(() => {
     const m = new Map<string, StepBranch[]>();
     for (const b of branches) {
@@ -724,7 +730,7 @@ export function Wizard({
           </div>
 
           <div className="mt-5">
-            {step.is_decision ? (
+            {step.is_decision && (branchesByStep.get(step.id) ?? []).length > 0 ? (
               <div className="flex flex-col gap-2">
                 {(branchesByStep.get(step.id) ?? []).map((b) => (
                   <button
@@ -771,7 +777,7 @@ export function Wizard({
               <div className="mt-3 text-center" data-tx="stuck">
                 {stuckSent.has(step.id) ? (
                   <p className="text-xs text-muted-foreground" role="status">
-                    {L.stuckThanks}
+                    {chatAvailable ? L.stuckThanks : L.stuckThanks.split(/(?<=[.!?])\s/)[0]}
                   </p>
                 ) : (
                   <button
