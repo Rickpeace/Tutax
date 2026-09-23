@@ -31,6 +31,9 @@ const paths = [];
 async function mkUser(email) {
   const { data } = await admin.auth.admin.createUser({ email, password: "Test12345!", email_confirm: true });
   const accountId = (await admin.from("account_members").select("account_id").eq("user_id", data.user.id)).data[0].account_id;
+  // Anleitungen aus Video sind Pro (23.09.2026) — Gratis wird schon beim Handshake abgelehnt
+  // (geprüft in scripts/test-pro-gates.mjs). Hier geht es um den Upload-Weg selbst.
+  await admin.from("accounts").update({ plan: "pro" }).eq("id", accountId);
   return { userId: data.user.id, accountId };
 }
 

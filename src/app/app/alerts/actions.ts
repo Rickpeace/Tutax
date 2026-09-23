@@ -8,6 +8,7 @@ import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { reindexTutorialIfLive } from "@/lib/kb";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -30,7 +31,9 @@ type Issue = { step?: string; problem?: string; suggestion?: string; applied?: b
  */
 export const applyDriftSuggestions = withUserErrors(async function applyDriftSuggestions(alertId: string, indices: number[]) {
   // Nur Inhaber/Bearbeiter (KI-Kosten + Schreiben); Mitarbeiter weist requireAccount ab.
-  await requireAccount();
+  const { account } = await requireAccount();
+  // KI-Aufruf (kostet) → erst ab Pro.
+  if (!isPro(account)) throw new UserError(PRO_REQUIRED);
   if (!aiConfigured()) throw new UserError("KI ist nicht aktiviert.");
   const supabase = await createClient();
 

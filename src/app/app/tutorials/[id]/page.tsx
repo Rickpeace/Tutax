@@ -105,6 +105,7 @@ export default async function EditorPage({
         rootStepId={tutorial.root_step_id}
         hasSourceVideo={!!videoJob}
         published={tutorial.status === "published"}
+        aiAllowed={isPro(account)}
       />
     </main>
   );

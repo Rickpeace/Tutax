@@ -8,8 +8,7 @@ import {
 } from "@/lib/recorder";
 import {
   PLAN_LIMIT_CODE,
-  TUTORIAL_QUOTA_MESSAGE,
-  tutorialQuotaReachedFor,
+  videoQuotaErrorFor,
 } from "@/lib/tutorial-quota";
 
 // Steply-Recorder-Direkt-Upload, Schritt 1: Handshake.
@@ -33,9 +32,9 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   // Free-Limit VOR dem Video-Upload (sonst lädt die Erweiterung das ganze Video hoch, und erst
   // complete lehnt ab). complete + Worker prüfen zusätzlich.
-  if (await tutorialQuotaReachedFor(admin, account.id)) {
-    return recorderJson({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, 403);
-  }
+  // Kostenlos zusätzlich: höchstens FREE_VIDEO_LIMIT Anleitungen aus Video.
+  const quotaErr = await videoQuotaErrorFor(admin, account.id);
+  if (quotaErr) return recorderJson({ error: quotaErr, code: PLAN_LIMIT_CODE }, 403);
 
   const path = `${account.id}/${crypto.randomUUID()}.webm`;
   const { data, error } = await admin.storage

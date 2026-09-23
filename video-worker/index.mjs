@@ -210,11 +210,15 @@ async function rewireLinear(tutId, rows) {
 // Pro/Business unbegrenzt. Die App prüft schon beim Einreihen; hier maßgeblich, weil Aufträge
 // auch direkt aus dem Browser entstehen und mehrere gleichzeitig eingereiht sein können.
 const FREE_TUTORIAL_LIMIT = 5;
+// Kostenlos: höchstens so viele Anleitungen aus Video (src/lib/plan.ts FREE_VIDEO_LIMIT).
+const FREE_VIDEO_LIMIT = 0;
+const VIDEO_QUOTA_MESSAGE =
+  "Anleitungen aus Video erstellt die KI – das ist ab Pro enthalten („Einstellungen → Tarif“). Im kostenlosen Tarif bauen Sie Anleitungen von Hand oder mit der Sofort-Anleitung.";
 const TUTORIAL_QUOTA_MESSAGE =
   "Der kostenlose Tarif erlaubt keine weiteren Anleitungen. Einen größeren Tarif wählen Sie in Steply unter „Einstellungen → Tarif“.";
 // Kann die Prüfung selbst nicht lesen (DB-Aussetzer), läuft der Auftrag weiter — eine Aufnahme
 // geht nicht wegen eines Zähl-Fehlers verloren (die App hat beim Einreihen schon geprüft).
-async function assertTutorialQuota(accountId) {
+async function assertTutorialQuota(accountId, jobId) {
   const { data: acc, error: aErr } = await sb.from("accounts").select("plan").eq("id", accountId).maybeSingle();
   if (aErr) { console.error("  Tarif-Prüfung übersprungen:", aErr.message); return; }
   if (acc?.plan === "pro" || acc?.plan === "business") return;
@@ -224,6 +228,10 @@ async function assertTutorialQuota(accountId) {
   ]);
   if (tErr || fErr) { console.error("  Tarif-Prüfung übersprungen:", (tErr || fErr).message); return; }
   if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) throw new Error(TUTORIAL_QUOTA_MESSAGE);
+  // Video-Grenze: fertige Video-Aufträge dieses Kontos (ohne den laufenden) zählen.
+  const { count: videos, error: vErr } = await sb.from("video_jobs").select("id", { count: "exact", head: true }).eq("account_id", accountId).eq("status", "done").neq("id", jobId);
+  if (vErr) { console.error("  Video-Grenze übersprungen:", vErr.message); return; }
+  if ((videos ?? 0) >= FREE_VIDEO_LIMIT) throw new Error(VIDEO_QUOTA_MESSAGE);
 }
 
 async function buildTutorial(job, videoPath, dir) {
@@ -418,7 +426,7 @@ async function buildTutorial(job, videoPath, dir) {
   //    wächst Schritt für Schritt (statt Big-Bang am Ende).
   // Free-Limit direkt vor dem Anlegen erneut prüfen (während der KI-Analyse kann eine andere
   // Anleitung entstanden sein). Wirft mit deutscher Meldung → Job „failed“ mit diesem Grund.
-  await assertTutorialQuota(job.account_id);
+  await assertTutorialQuota(job.account_id, job.id);
   const tutId = uuid();
   const rows = [];          // erfolgreich eingefügte Step-Rows (für Cleanup + Wiring)
   const branchIds = [];     // eingefügte Branch-IDs (für Cleanup)
@@ -764,7 +772,7 @@ function resolveBrandLogo(theme) {
 
 async function processJob(job) {
   // Free-Limit schon VOR Download + KI-Kosten (buildTutorial prüft vor dem Anlegen noch einmal).
-  await assertTutorialQuota(job.account_id);
+  await assertTutorialQuota(job.account_id, job.id);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
     const raw = path.join(tmp, "in");

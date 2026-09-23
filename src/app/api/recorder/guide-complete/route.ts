@@ -36,6 +36,7 @@ import {
 } from "@/lib/guide-ai";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
+import { isPro } from "@/lib/plan";
 
 // Sofort-Anleitung (Welle 22), Schritt 2: complete.
 // Nachdem die Extension alle WebPs an die signierten URLs hochgeladen hat, meldet sie
@@ -289,6 +290,9 @@ function scheduleRefine(
 ) {
   after(async () => {
     try {
+      // KI-Feinschliff kostet → nur ab Pro (Gratis behält die regelbasierten Texte).
+      const { data: owner } = await admin.from("tutorials").select("accounts!inner(plan)").eq("id", tutorialId).maybeSingle<{ accounts: { plan: string | null } | null }>();
+      if (!isPro(owner?.accounts ?? {})) return;
       if (!(await takeHourlyAiRun(userId, "guide_refine_runs", GUIDE_REFINE_RUNS_PER_HOUR))) {
         console.warn("[guide-complete] Feinschliff übersprungen: Stunden-Limit erreicht.");
         return;

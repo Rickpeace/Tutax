@@ -46,6 +46,7 @@ export function DesignModeSwitcher({
   extremeLogoUrl,
   sourceUrl,
   business,
+  branded = true,
 }: {
   /** Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
   accountId: string;
@@ -60,6 +61,8 @@ export function DesignModeSwitcher({
   extremeLogoUrl: string | null;
   sourceUrl: string;
   business: boolean;
+  /** Eigenes Logo/CI im Tarif (ab Pro)? Sonst zeigt „Steply-Standard“ die reine Standardgestaltung. */
+  branded?: boolean;
 }) {
   const [pending, start] = useTransition();
   const hasAi = !!aiTokens;
@@ -101,7 +104,9 @@ export function DesignModeSwitcher({
   }[] = [
     {
       key: "manual",
-      description: "Warm und ruhig, mit Ihrem Logo und Ihrer Akzentfarbe.",
+      description: branded
+        ? "Warm und ruhig, mit Ihrem Logo und Ihrer Akzentfarbe."
+        : "Warm und ruhig, in den Steply-Farben. Eigenes Logo und Farben ab Pro.",
       available: true,
       needsBusiness: false,
       preview: <BrandPreview compact tokens={manualTokens} logoUrl={manualLogoUrl} accountName={accountName} />,
@@ -191,6 +196,15 @@ export function DesignModeSwitcher({
         aside={!business ? <BusinessPill /> : undefined}
         description="Geben Sie die Adresse Ihrer Website an. Die KI erstellt daraus ein passendes Design – aktiv wird es erst, wenn Sie es oben auf „Verwenden“ stellen."
       >
+        {/* KI-Design ist Business — Erzeugen ist serverseitig gesperrt, hier gleich erklärt. */}
+        {!business ? (
+          <p className="text-sm font-semibold text-ink-2">
+            Im Business-Tarif erstellt die KI aus Ihrer Website automatisch ein passendes Design.{" "}
+            <a href="/app/settings/tarif" className="font-extrabold text-primary underline underline-offset-2">
+              Tarife ansehen
+            </a>
+          </p>
+        ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid content-start gap-1.5">
             <span className="text-[12.5px] font-extrabold text-ink-2">
@@ -217,6 +231,7 @@ export function DesignModeSwitcher({
             />
           </div>
         </div>
+        )}
       </SettingsCard>
     </div>
   );

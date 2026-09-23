@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runDriftCheck } from "@/lib/drift";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 export const maxDuration = 60;
 
@@ -25,6 +26,13 @@ export async function POST(
   // Prüfen kostet KI-Aufrufe und schreibt Hinweise -> nur Inhaber/Bearbeiter (Migration 0037).
   const { data: canEdit } = await supabase.rpc("can_edit_tutorial", { tid: id });
   if (canEdit !== true) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
+  // Aktualität prüfen nutzt KI (kostet) → erst ab Pro; automatisch jede Woche ist Business.
+  const { data: planRow } = await supabase
+    .from("tutorials")
+    .select("accounts!inner(plan)")
+    .eq("id", id)
+    .maybeSingle<{ accounts: { plan: string | null } | null }>();
+  if (!isPro(planRow?.accounts ?? {})) return NextResponse.json({ error: PRO_REQUIRED }, { status: 403 });
 
   const result = await runDriftCheck(supabase, id);
 

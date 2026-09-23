@@ -10,6 +10,16 @@
 //  - business: + KI-CI, Mehrsprachigkeit, Vorlesen (TTS), interne Schulungen.
 
 export const FREE_TUTORIAL_LIMIT = 5;
+/**
+ * Kostenlos: so viele Anleitungen aus Video. 0 = Video ist Pro (Produktentscheid 23.09.2026:
+ * Gratis nutzt keine KI, die Geld kostet — Video = Spracherkennung + Bildanalyse).
+ */
+export const FREE_VIDEO_LIMIT = 0;
+
+/** Darf das Konto Anleitungen aus Video (KI) erstellen? (Oberfläche; Server: videoQuotaErrorFor) */
+export function videoAllowed(account: { plan?: string | null }): boolean {
+  return isPro(account) || FREE_VIDEO_LIMIT > 0;
+}
 
 export type PlanKey = "free" | "pro" | "business";
 

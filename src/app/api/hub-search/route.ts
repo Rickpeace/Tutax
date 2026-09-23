@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured } from "@/lib/ai";
 import { embed } from "@/lib/openai";
+import { isPro } from "@/lib/plan";
 
 export const maxDuration = 30;
 
@@ -47,10 +48,13 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id")
+    .select("id, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return NextResponse.json({ results: [] });
+  // KI-Suche kostet je Anfrage (Embedding) → erst ab Pro. Gratis: leere KI-Treffer, die
+  // Hilfe-Seite sucht dann nur in Titeln/Beschreibungen (clientseitig, ohne KI).
+  if (!isPro(account)) return NextResponse.json({ results: [] });
 
   try {
     const qVec = await embed(q);

@@ -10,6 +10,7 @@ import { activeAccountId } from "@/lib/account";
 import { revalidateHubByAccountId } from "@/lib/cache-tags";
 import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { THEME_FORBIDDEN, THEME_RATE_LIMITED, THEME_RUN_KEY, THEME_RUNS_PER_HOUR } from "@/lib/theme-ai-limits";
+import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 
 export const maxDuration = 60;
 
@@ -134,6 +135,10 @@ export async function POST(req: NextRequest) {
   // null) — zwei KI-Aufrufe (Vision + Review) je Lauf. Plus Kostenbremse pro Person.
   const accountId = (await activeAccountId())?.accountId;
   if (!accountId) return NextResponse.json({ error: THEME_FORBIDDEN }, { status: 403 });
+  // KI-Design ist Business (Tarifseite) — auch das Erzeugen, nicht nur das Einschalten:
+  // sonst kostete jeder Versuch Screenshot + Vision-Aufruf, ohne dass es genutzt werden darf.
+  const { data: planRow } = await createAdminClient().from("accounts").select("plan").eq("id", accountId).single();
+  if (!isBusiness(planRow ?? {})) return NextResponse.json({ error: BUSINESS_REQUIRED }, { status: 403 });
 
   if (!aiConfigured()) {
     return NextResponse.json({ configured: false, message: "OPENAI_API_KEY fehlt." });

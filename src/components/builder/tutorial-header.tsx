@@ -562,7 +562,7 @@ export function TutorialHeader({
                   />
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={drift.run} disabled={noSteps || drift.pending} className="items-start">
+              <DropdownMenuItem onClick={drift.run} disabled={noSteps || drift.pending || !isPro} className="items-start">
                 {drift.pending ? (
                   <Loader2 className="mt-0.5 size-4 animate-spin" />
                 ) : (
@@ -570,12 +570,18 @@ export function TutorialHeader({
                 )}
                 <MenuText
                   label={drift.pending ? "Prüft …" : "Aktualität prüfen"}
-                  hint={noSteps ? "Erst Schritte anlegen" : "Prüft per KI, ob die Anleitung noch zur Website passt"}
+                  hint={
+                    !isPro
+                      ? "Ab Pro – prüft per KI, ob die Anleitung noch zur Website passt"
+                      : noSteps
+                        ? "Erst Schritte anlegen"
+                        : "Prüft per KI, ob die Anleitung noch zur Website passt"
+                  }
                 />
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => window.dispatchEvent(new Event(IMPROVE_TEXTS_EVENT))}
-                disabled={noSteps}
+                disabled={noSteps || !isPro}
                 className="items-start"
                 data-testid="menu-improve-texts"
               >
@@ -583,9 +589,11 @@ export function TutorialHeader({
                 <MenuText
                   label="Texte mit KI verbessern"
                   hint={
-                    noSteps
-                      ? "Erst Schritte anlegen"
-                      : "Formuliert Titel und Texte natürlicher – Sie sehen vorher jeden Vorschlag"
+                    !isPro
+                      ? "Ab Pro – formuliert Titel und Texte natürlicher"
+                      : noSteps
+                        ? "Erst Schritte anlegen"
+                        : "Formuliert Titel und Texte natürlicher – Sie sehen vorher jeden Vorschlag"
                   }
                 />
               </DropdownMenuItem>

@@ -20,6 +20,7 @@ import { loadOpenGaps } from "@/lib/gaps";
 import { relativeDe } from "@/lib/format";
 import { userDisplayName } from "@/lib/user-name";
 import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
+import { videoAllowed } from "@/lib/plan";
 
 /**
  * App-Shell (Welle 50b): 60px-Kopfleiste für alle /app-Seiten; mobil übernimmt
@@ -122,14 +123,14 @@ async function HelpPageSlot() {
 async function NewActionSlot() {
   const { account, role } = await requireAccount({ allowMember: true });
   if (!canEdit(role)) return null; // Mitarbeiter erstellen nichts
-  return <NewTutorialButton accountId={account.id} openOnEvent={NEW_TUTORIAL_EVENT} />;
+  return <NewTutorialButton accountId={account.id} openOnEvent={NEW_TUTORIAL_EVENT} videoAllowed={videoAllowed(account)} />;
 }
 
 /** „Neu"-Tab (mobil) öffnet dieselbe Erstell-Weiche. */
 async function CreateTabSlot() {
   const { account, role } = await requireAccount({ allowMember: true });
   if (!canEdit(role)) return <div />; // Platz in der 5er-Leiste halten
-  return <NewTutorialButton accountId={account.id} trigger={<CreateTabTrigger />} />;
+  return <NewTutorialButton accountId={account.id} trigger={<CreateTabTrigger />} videoAllowed={videoAllowed(account)} />;
 }
 
 /** „Mehr"-Tab (mobil) — braucht den Konto-Slug für „Hilfe-Seite ansehen“. */

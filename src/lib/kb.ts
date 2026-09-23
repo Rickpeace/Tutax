@@ -4,8 +4,31 @@ import { embedMany } from "@/lib/openai";
 import { embeddingsConfigured } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { forkIsServable } from "@/lib/templates";
+import { isPro } from "@/lib/plan";
 
 /** Tiptap-JSON -> Klartext. */
+/** Ist das Konto Pro/Business? (Embeddings nur dann — sie kosten und dienen Chat + KI-Suche.) */
+async function accountIsPro(admin: SupabaseClient, accountId: string): Promise<boolean> {
+  const { data } = await admin.from("accounts").select("plan").eq("id", accountId).maybeSingle();
+  return isPro(data ?? {});
+}
+
+/**
+ * Nach einem Upgrade auf Pro/Business den Chatbot-/Such-Index des Kontos aufbauen (Gratis-Konten
+ * werden nicht indiziert). Veröffentlichte öffentliche Anleitungen + veröffentlichte Artikel.
+ */
+export async function reindexAccount(accountId: string): Promise<void> {
+  if (!embeddingsConfigured()) return;
+  const admin = createAdminClient();
+  if (!(await accountIsPro(admin, accountId))) return;
+  const [{ data: tuts }, { data: arts }] = await Promise.all([
+    admin.from("tutorials").select("id").eq("account_id", accountId).eq("status", "published").eq("visibility", "public"),
+    admin.from("kb_articles").select("id").eq("account_id", accountId).eq("status", "published"),
+  ]);
+  for (const t of tuts ?? []) await indexTutorial(admin, accountId, t.id as string).catch(() => {});
+  for (const a of arts ?? []) await indexArticle(admin, accountId, a.id as string).catch(() => {});
+}
+
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
   const out: string[] = [];
@@ -29,6 +52,9 @@ export async function indexTutorial(
   tutorialId: string,
 ): Promise<void> {
   if (!embeddingsConfigured()) return;
+  // Embeddings kosten; genutzt werden sie nur von Chat + KI-Suche (beide Pro). Gratis-Konten
+  // werden nicht indiziert — ein Upgrade baut den Index nach (reindexAccount).
+  if (!(await accountIsPro(admin, accountId))) return;
 
   const { data: tut } = await admin
     .from("tutorials")
@@ -204,6 +230,8 @@ export async function indexArticle(
     .maybeSingle();
 
   if (a && a.account_id !== accountId) return; // fremder Artikel: nichts anfassen
+  // Wissensdatenbank ist Pro — Gratis-Konten werden nicht (neu) indiziert (Embeddings kosten).
+  if (a && a.status === "published" && !(await accountIsPro(admin, accountId))) return;
 
   if (!a || a.status !== "published") {
     // Nicht (mehr) veröffentlicht: Index entfernen (Unpublish/Delete).

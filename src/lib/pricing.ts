@@ -25,7 +25,7 @@ export const PLANS: Plan[] = [
       "1 Hilfe-Seite",
       `Bis zu ${FREE_TUTORIAL_LIMIT} Anleitungen`,
       "Voller Editor: Markierungen, Lupe, Verpixeln, Verzweigungen",
-      "3 Anleitungen aus Video zum Antesten",
+      "Sofort-Anleitung mit der Steply-Erweiterung",
       "Link, QR-Codes & Druckansicht",
       "Hinweis „Erstellt mit Steply“ im Fußbereich",
       "Nur für Sie allein (ohne Team)",
@@ -39,7 +39,8 @@ export const PLANS: Plan[] = [
     tagline: "Für den täglichen Einsatz",
     highlight: true,
     features: [
-      "Unbegrenzte Anleitungen & Videos",
+      "Unbegrenzte Anleitungen & Anleitungen aus Video",
+      "KI im Editor: Texte verbessern & Aktualität prüfen",
       "Steply-Erweiterung mit Direkt-Upload",
       "KI-Assistent + Wissensdatenbank (inkl. Import aus Website & Dokumenten)",
       "Chat-Bubble für Ihre Website",

@@ -37,6 +37,7 @@ import { aiConfigured } from "@/lib/ai";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
 import { refineStepFromSaved, suggestStepTexts, type RefineStep } from "@/lib/guide-ai";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -647,6 +648,8 @@ async function takeTextRun(userId: string): Promise<boolean> {
 export async function suggestStepTextImprovements(tutorialId: string): Promise<SuggestTextsResult> {
   const ctx = await requireTutorialAccess(tutorialId);
   if (!canEdit(ctx.role)) return { ok: false, error: "Nur Inhaber und Bearbeiter können Texte verbessern." };
+  // KI-Aufruf (kostet) → erst ab Pro.
+  if (!isPro(ctx.account)) return { ok: false, error: PRO_REQUIRED };
   if (!aiConfigured()) return { ok: false, error: "Die KI ist gerade nicht verfügbar." };
 
   const supabase = await createClient();

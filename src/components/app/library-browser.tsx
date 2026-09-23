@@ -58,6 +58,7 @@ export function LibraryBrowser({
   tutorials,
   categories,
   accountId,
+  videoAllowed = true,
   accountSlug,
   canManageCategories = false,
   topSlot,
@@ -66,6 +67,8 @@ export function LibraryBrowser({
   tutorials: LibraryTutorial[];
   categories: LibraryCategory[];
   accountId: string;
+  /** Anleitung aus Video erlaubt (Tarif) — für die Erstell-Weiche. */
+  videoAllowed?: boolean;
   accountSlug: string;
   /** Eigene Kategorien löschen dürfen (Rollen mit Bearbeiten-Recht; Server prüft erneut). */
   canManageCategories?: boolean;
@@ -346,6 +349,7 @@ export function LibraryBrowser({
               ))}
               <NewTutorialButton
                 accountId={accountId}
+                videoAllowed={videoAllowed}
                 categoryId={newCategoryId}
                 trigger={
                   <button
@@ -376,6 +380,7 @@ export function LibraryBrowser({
             {/* Anlegen-Karte (Design: gestrichelt) */}
             <NewTutorialButton
               accountId={accountId}
+              videoAllowed={videoAllowed}
               categoryId={newCategoryId}
               trigger={
                 <button

@@ -40,8 +40,10 @@ export default async function AussehenPage() {
         accountName={account.name}
         accountSlug={account.slug}
         mode={mode}
-        manualTokens={theme?.tokens ?? null}
-        manualLogoUrl={manualLogoUrl}
+        // Gratis: Vorschau = echte Hilfe-Seite (Steply-Standard, ohne eigenes Logo/Farben).
+        manualTokens={isPro(account) ? (theme?.tokens ?? null) : null}
+        manualLogoUrl={isPro(account) ? manualLogoUrl : null}
+        branded={isPro(account)}
         aiTokens={theme?.ai_tokens ?? null}
         aiLogoUrl={aiLogoUrl}
         extremeTokens={theme?.extreme_tokens ?? null}

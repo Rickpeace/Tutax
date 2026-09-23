@@ -4,8 +4,7 @@ import { activeAccountId, getCurrentUser } from "@/lib/account";
 import { safeFetch } from "@/lib/ssrf";
 import {
   PLAN_LIMIT_CODE,
-  TUTORIAL_QUOTA_MESSAGE,
-  tutorialQuotaReachedFor,
+  videoQuotaErrorFor,
 } from "@/lib/tutorial-quota";
 
 // Import per direktem Video-Link (MP4/WebM). Lädt selbst herunter (SSRF-geschützt),
@@ -60,9 +59,8 @@ export async function POST(req: NextRequest) {
   if (!url) return NextResponse.json({ error: "URL fehlt" }, { status: 400 });
 
   // Free-Limit VOR dem Herunterladen: jeder Import wird zu einer NEUEN Anleitung.
-  if (await tutorialQuotaReachedFor(createAdminClient(), accountId)) {
-    return NextResponse.json({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, { status: 403 });
-  }
+  const quotaErr = await videoQuotaErrorFor(createAdminClient(), accountId);
+  if (quotaErr) return NextResponse.json({ error: quotaErr, code: PLAN_LIMIT_CODE }, { status: 403 });
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   try {
     new URL(url);

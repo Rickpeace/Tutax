@@ -98,6 +98,7 @@ export function Builder({
   rootStepId: initialRoot,
   hasSourceVideo = false,
   published = false,
+  aiAllowed = true,
 }: {
   tutorialId: string;
   steps: Step[];
@@ -107,6 +108,8 @@ export function Builder({
   hasSourceVideo?: boolean;
   /** Ist die Anleitung gerade veröffentlicht? Steuert die Ansage beim Löschen des letzten Schritts. */
   published?: boolean;
+  /** KI-Funktionen im Tarif (ab Pro)? Sonst kein „Texte mit KI verbessern“. */
+  aiAllowed?: boolean;
 }) {
   const router = useRouter();
   const mobile = useMedia("(max-width: 767px)");
@@ -902,7 +905,7 @@ export function Builder({
         <span>
           {steps.length} Schritt{steps.length === 1 ? "" : "e"}
         </span>
-        {steps.length > 0 && (
+        {steps.length > 0 && aiAllowed && (
           <button
             type="button"
             onClick={() => void openImprove()}

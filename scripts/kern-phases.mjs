@@ -529,7 +529,13 @@ export async function run(c) {
       await page.goto(`${BASE}/app/tutorials/${state.tutorialId}`, { waitUntil: "domcontentloaded" });
       await sleep(3000);
       const improve = page.getByTestId("improve-texts");
-      if (!(await improve.count())) bug("aergerlich", "„Texte mit KI verbessern“ fehlt", "Der Einstieg ueber dem Ablauf ist nicht da.");
+      // KI im Editor ist seit 23.09.2026 Pro: im Gratis-Tarif darf der Knopf NICHT da sein.
+      const { data: planNow } = await admin.from("accounts").select("plan").eq("id", state.accountId).single();
+      const proNow = planNow?.plan === "pro" || planNow?.plan === "business";
+      if (!proNow) {
+        if (await improve.count()) bug("aergerlich", "Gratis sieht „Texte mit KI verbessern“", "KI kostet — der Knopf gehört erst ab Pro angezeigt.");
+        else ok("Gratis: kein „Texte mit KI verbessern“ (KI erst ab Pro)");
+      } else if (!(await improve.count())) bug("aergerlich", "„Texte mit KI verbessern“ fehlt", "Der Einstieg ueber dem Ablauf ist nicht da.");
       else {
         await improve.click();
         const dlg = page.getByTestId("improve-texts-dialog");

@@ -9,8 +9,7 @@ import {
 import { MAX_CLICKS, validateClicksOrNull } from "@/lib/clicks";
 import {
   PLAN_LIMIT_CODE,
-  TUTORIAL_QUOTA_MESSAGE,
-  tutorialQuotaReachedFor,
+  videoQuotaErrorFor,
 } from "@/lib/tutorial-quota";
 
 // Steply-Recorder-Direkt-Upload, Schritt 2: complete.
@@ -59,10 +58,11 @@ export async function POST(req: NextRequest) {
 
   // Free-Limit: jede Video-Aufnahme wird zu einer NEUEN Anleitung (der Worker prüft kurz vor dem
   // Anlegen noch einmal, falls zwischendurch weitere entstanden sind).
-  if (await tutorialQuotaReachedFor(admin, account.id)) {
+  const quotaErr = await videoQuotaErrorFor(admin, account.id);
+  if (quotaErr) {
     // Das hochgeladene Video bleibt sonst verwaist liegen (die Erweiterung lädt es lokal herunter).
     await admin.storage.from(VIDEO_BUCKET).remove([path]).catch(() => {});
-    return recorderJson({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, 403);
+    return recorderJson({ error: quotaErr, code: PLAN_LIMIT_CODE }, 403);
   }
 
   const row: Record<string, unknown> = {

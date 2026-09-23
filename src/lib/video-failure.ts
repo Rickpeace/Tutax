@@ -14,6 +14,9 @@ export const FAILED_VIDEO_DAYS = 7;
 export function failedVideoReason(error: string | null | undefined): string {
   const e = (error ?? "").trim();
   if (!e) return "der Grund ist unbekannt";
+  // Video-Grenze (Worker-Meldung „Im kostenlosen Tarif sind 3 Anleitungen aus Video …“).
+  if (/Anleitungen aus Video/i.test(e))
+    return "Anleitungen aus Video sind ab Pro enthalten (Einstellungen → Tarif)";
   // Free-Limit (Worker-Meldung „Der kostenlose Tarif erlaubt keine weiteren Anleitungen …“).
   if (/kostenlose Tarif|Tarif-Grenze/i.test(e))
     return "der kostenlose Tarif erlaubt keine weiteren Anleitungen (größeren Tarif unter Einstellungen → Tarif wählen)";

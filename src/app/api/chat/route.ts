@@ -320,7 +320,14 @@ export async function POST(req: NextRequest) {
             if (t && !seen.has(t.slug)) { seen.add(t.slug); sources.push({ title: t.title, slug: t.slug }); }
           }
         }
-        const escalation = status === "no_answer" ? buildEscalation(expertIdx) : null;
+        // Kontaktbox bei echter Sackgasse — UND immer dann, wenn die Antwort selbst auf den
+        // Kontakt verweist („Unten finden Sie, wie Sie uns erreichen“). Die KI schwankt bei
+        // Grenzfällen zwischen no_answer und off_topic und behält den Verweis dabei manchmal;
+        // ohne Box liefe das Versprechen ins Leere (Audit 23.09.2026).
+        const mentionsContact =
+          /unten finden sie|direkt erreichen|below you.{0,20}(find|see)|reach us directly/i.test(emitted);
+        const escalation =
+          status === "no_answer" || (canEscalate && mentionsContact) ? buildEscalation(expertIdx) : null;
 
         send({ meta: { status, sources: sources.slice(0, 3), escalation, weak: status === "no_answer" } });
 

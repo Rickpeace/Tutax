@@ -140,6 +140,45 @@ try {
     multipart: { file: { name: "a.txt", mimeType: "text/plain", buffer: Buffer.from("Öffnungszeiten: Mo–Fr 8–17 Uhr.") } },
   });
   ok(kbResp.status() === 403, `Gratis-App: Dokument-Import direkt → ${kbResp.status()} (erwartet 403)`);
+
+  // ── KI, die Geld kostet: im Gratis-Tarif nirgends ───────────────────────
+  const { data: freeTut } = await admin.from("tutorials").select("id").eq("account_id", free.accountId).single();
+  const driftResp = await app.request.post(`${BASE}/api/tutorials/${freeTut.id}/check`);
+  ok(driftResp.status() === 403, `Gratis-App: „Aktualität prüfen“ direkt → ${driftResp.status()} (erwartet 403)`);
+  const vidResp = await app.request.post(`${BASE}/api/video-import`, { data: { url: "https://example.com/video.mp4" } });
+  ok(vidResp.status() === 403, `Gratis-App: Video-Import direkt → ${vidResp.status()} (erwartet 403)`);
+
+  await app.goto(`${BASE}/app/tutorials/${freeTut.id}`, { waitUntil: "networkidle", timeout: 90_000 });
+  await app.waitForTimeout(1500);
+  ok((await app.getByTestId("improve-texts").count()) === 0, "Gratis-Editor: kein Knopf „Texte mit KI verbessern“ über dem Ablauf");
+  await app.getByTestId("editor-more").click().catch(() => {});
+  await app.getByTestId("menu-improve-texts").waitFor({ timeout: 10_000 }).catch(() => {});
+  const menuItem = app.getByTestId("menu-improve-texts");
+  if (await menuItem.count()) {
+    const dis = (await menuItem.getAttribute("data-disabled")) !== null || (await menuItem.getAttribute("aria-disabled")) === "true";
+    ok(dis, "Gratis-Editor: Menüpunkt „Texte mit KI verbessern“ gesperrt");
+  } else ok(false, "Gratis-Editor: „…“-Menü nicht gefunden (Menüpunkt nicht prüfbar)");
+  await app.keyboard.press("Escape");
+
+  await app.goto(`${BASE}/app`, { waitUntil: "networkidle", timeout: 90_000 });
+  await app.getByRole("button", { name: /Neue Anleitung/ }).first().click();
+  await app.getByRole("dialog").waitFor({ timeout: 15_000 });
+  const videoCard = app.getByRole("dialog").getByText("Aus Video").first();
+  const videoHref = await videoCard.locator("xpath=ancestor::a[1]").getAttribute("href").catch(() => null);
+  ok(videoHref === "/app/settings/tarif", `Gratis: „Aus Video“ ist als Pro markiert und führt zum Tarif (${videoHref ?? "kein Link"})`);
+  await app.keyboard.press("Escape");
+
+  // Veröffentlichen erzeugt im Gratis-Tarif keinen (kostenpflichtigen) Chatbot-/Such-Index.
+  const pubBtn = app.getByTestId("publish-button");
+  await admin.from("tutorials").update({ status: "draft" }).eq("id", freeTut.id);
+  await admin.from("kb_embeddings").delete().eq("account_id", free.accountId);
+  await app.goto(`${BASE}/app/tutorials/${freeTut.id}`, { waitUntil: "networkidle", timeout: 90_000 });
+  await pubBtn.waitFor({ timeout: 30_000 });
+  await pubBtn.click();
+  await app.getByTestId("published-badge").waitFor({ timeout: 60_000 }).catch(() => {});
+  await app.waitForTimeout(6000); // Index läuft im Hintergrund (after)
+  const { count: emb } = await admin.from("kb_embeddings").select("id", { count: "exact", head: true }).eq("account_id", free.accountId);
+  ok((emb ?? 0) === 0, `Gratis: Veröffentlichen legt keinen KI-Index an (${emb ?? 0} Einträge)`);
   await ctx.close();
 } finally {
   await browser.close();

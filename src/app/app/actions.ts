@@ -36,7 +36,7 @@ import {
   BUSINESS_REQUIRED,
   audienceGateError,
 } from "@/lib/plan";
-import { TUTORIAL_QUOTA_MESSAGE } from "@/lib/tutorial-quota";
+import { TUTORIAL_QUOTA_MESSAGE, videoQuotaErrorFor } from "@/lib/tutorial-quota";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
@@ -73,8 +73,8 @@ async function tutorialQuotaReached(
  */
 export async function videoUploadQuotaError(): Promise<string | null> {
   const { account } = await requireAccount();
-  const supabase = await createClient();
-  return (await tutorialQuotaReached(supabase, account)) ? TUTORIAL_QUOTA_MESSAGE : null;
+  // Gleiche Regel wie Erweiterung/Import: Anleitungs-Grenze + Video-Grenze (kostenlos).
+  return videoQuotaErrorFor(createAdminClient(), account.id);
 }
 
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */

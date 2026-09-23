@@ -60,7 +60,13 @@ Test belegt (Nachweise: Kern-Durchlauf 10 Phasen, 30 DB-/Logik-Tests, Server-E2E
 - [x] 🟠 Tarif-Umfang: Chatbot, Logo/CI, Insights, Wissen liefen für Free (pricing.ts sagt Pro) — ✅ 23.09.2026 serverseitig ab Pro
   (Richards Entscheid): Hilfe-Seite (Logo/CI, Chat, „Erstellt mit Steply“ nur Gratis), /api/chat, Wissen/Import,
   Offene Fragen, Kontakt, Logo-Upload/Farben; Tarif-Wechsel im Admin räumt den Hub-Cache (`scripts/test-pro-gates.mjs`, 21/21).
-  Bewusst NICHT gesperrt: Erweiterung/Sofort-Anleitung + Video-Limit (Standard-Erstellweg)
+  Bewusst NICHT gesperrt: Sofort-Anleitung per Erweiterung (Standard-Erstellweg, ohne KI)
+- [x] 🔴 Gratis nutzt KEINE KI, die Geld kostet (Richards Vorgabe 23.09.2026): zusätzlich gesperrt KI-Suche auf der
+  Hilfe-Seite, Chatbot-Index beim Veröffentlichen (Upgrade baut ihn nach: `reindexAccount`), „Texte mit KI verbessern“,
+  KI-Feinschliff nach Sofort-Anleitung, „Aktualität prüfen“ + Vorschläge, Anleitung aus Video (Gratis 0, auch im Worker),
+  KI-Design-Erzeugung nur Business. UI: „Aus Video“ + Editor-Menü mit „Ab Pro“. `scripts/test-pro-gates.mjs` 27/27.
+- [x] 🟡 Chat versprach „Unten finden Sie, wie Sie uns erreichen“ auch bei off_topic, ohne Kontaktbox → Box kommt mit,
+  sobald die Antwort darauf verweist und ein Kontakt hinterlegt ist
 - [ ] ⚪ KI-Grenzfall: „Grundfreibetrag“ an ein Projekt-Software-Konto wird teils als „unbeantwortet“ statt „fachfremd“ eingestuft
   (`test-chat-topic-e2e`, 23.09.2026 abends stabil so; mittags grün — Code unverändert, Modell-Schwankung)
 - [ ] 🟠 Migrationen (Entwurf im Audit-Bericht): Pfad-Wächter für `steps.image_path/audio_path` +

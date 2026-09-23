@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { createTutorial } from "@/app/app/actions";
 import { VideoUpload } from "@/components/app/video-upload";
 import { useRecorderExtension } from "@/lib/use-recorder-extension";
+import { ProPill } from "@/components/app/settings-ui";
 
 /**
  * „Neues Tutorial" (Welle 20): öffnet zuerst eine Weiche mit zwei Karten —
@@ -41,6 +42,7 @@ export function NewTutorialButton({
   label = "Neue Anleitung",
   trigger,
   openOnEvent,
+  videoAllowed = true,
 }: {
   accountId: string;
   variant?: "default" | "outline";
@@ -51,6 +53,8 @@ export function NewTutorialButton({
   trigger?: React.ReactElement;
   /** Öffnet den Dialog auch, wenn dieses window-Ereignis feuert (⌘K-Aktion). */
   openOnEvent?: string;
+  /** Anleitung aus Video (KI) erlaubt? Im Gratis-Tarif nicht (Tarifseite) — dann Pro-Hinweis. */
+  videoAllowed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // "choice" = Weiche, "manual" = Titel-Abfrage. Video läuft im eigenen Dialog.
@@ -121,22 +125,40 @@ export function NewTutorialButton({
                     Schritte von Hand anlegen — Screenshot, Markierung und Text.
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setVideoOpen(true);
-                  }}
-                  className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40"
-                >
-                  <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
-                    <Clapperboard className="size-5" />
-                  </span>
-                  <span className="font-bold text-ink">Aus Video</span>
-                  <span className="text-xs text-muted-foreground">
-                    Aufgabe einmal vorführen — die KI baut die Schritte daraus.
-                  </span>
-                </button>
+                {videoAllowed ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      setVideoOpen(true);
+                    }}
+                    className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40"
+                  >
+                    <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
+                      <Clapperboard className="size-5" />
+                    </span>
+                    <span className="font-bold text-ink">Aus Video</span>
+                    <span className="text-xs text-muted-foreground">
+                      Aufgabe einmal vorführen — die KI baut die Schritte daraus.
+                    </span>
+                  </button>
+                ) : (
+                  // Gratis: Video-Anleitungen nutzen KI (kostet) → Pro. Hinweis statt Sackgasse.
+                  <a
+                    href="/app/settings/tarif"
+                    className="flex flex-col items-start gap-2 rounded-xl border border-dashed border-border bg-card p-4 text-left opacity-80 transition-all hover:opacity-100"
+                  >
+                    <span className="flex size-10 items-center justify-center rounded-lg bg-line-2 text-muted-foreground">
+                      <Clapperboard className="size-5" />
+                    </span>
+                    <span className="flex items-center gap-1.5 font-bold text-ink">
+                      Aus Video <ProPill />
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Die KI baut Schritte aus einem Video — ab Pro. Tarife ansehen →
+                    </span>
+                  </a>
+                )}
               </div>
             </>
           ) : (

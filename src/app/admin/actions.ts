@@ -9,6 +9,7 @@ import { after } from "next/server";
 import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
 import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
 import { translateTutorial } from "@/lib/translate-jobs";
+import { reindexAccount } from "@/lib/kb";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -172,6 +173,8 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   // Der Tarif steuert, was die Hilfe-Seite zeigt (Logo/CI, Chat, „Erstellt mit Steply“) —
   // deren Cache sofort räumen, sonst gälte der alte Tarif dort bis zu einer Stunde weiter.
   if (acc?.slug) invalidateHubTag(acc.slug as string);
+  // Gratis-Konten haben keinen Chatbot-/Such-Index (Embeddings kosten) — beim Upgrade nachbauen.
+  if (plan !== "free") after(() => reindexAccount(accountId));
   revalidatePath("/admin");
 }
 

@@ -12,7 +12,7 @@ import { FailedVideoNotices } from "@/components/app/failed-video-notices";
 import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
 import { relativeDe } from "@/lib/format";
 import { Loader2 } from "lucide-react";
-import { isPro } from "@/lib/plan";
+import { isPro, videoAllowed } from "@/lib/plan";
 
 /**
  * Bibliothek (Design-Handoff 07/2026, Option 2a/2b): Kategorien-Sidebar +
@@ -157,6 +157,7 @@ export default async function DashboardPage() {
       tutorials={items}
       categories={browserCats}
       accountId={account.id}
+      videoAllowed={videoAllowed(account)}
       accountSlug={account.slug}
       canManageCategories={canEdit(role)}
       topSlot={
