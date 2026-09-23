@@ -1376,6 +1376,10 @@ export async function run(c) {
         info(`Nachgestellter Veroeffentlichen-Aufruf: HTTP ${resp.status()}; status der leeren Anleitung=${leer2.status}`);
         const respText = await resp.text().catch(() => "");
         info(`Antwort des Servers: ${respText.replace(/\s+/g, " ").slice(0, 400)}`);
+        // Next ersetzt im Produktions-Build den Text GEWORFENER Fehler durch einen Digest —
+        // der Grund muss als Rückgabewert (withUserErrors) beim Nutzer ankommen.
+        if (/noch keine Schritte/.test(respText)) ok("Ablehnungs-Grund kommt als deutscher Text beim Nutzer an");
+        else bug("aergerlich", "Ablehnungs-Grund geht im Produktions-Build verloren", `Antwort enthaelt nur: ${respText.slice(0, 200)}`);
         if (leer2.status === "published") {
           bug("blockierend", "Server veroeffentlicht eine leere Anleitung", "Die Veroeffentlichen-Action laesst sich an der Oberflaeche vorbei mit einer Anleitung ohne Schritte aufrufen.");
         } else ok("Server lehnt das Veroeffentlichen einer leeren Anleitung ab (nicht nur die Oberflaeche)");
