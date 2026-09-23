@@ -4,7 +4,7 @@
 // lib/builder/rewire.ts und prüft, was Flow/Player (erster Branch) danach zeigen.
 import assert from "node:assert/strict";
 import { buildRenderTree, flattenFlow } from "../src/lib/builder/tree.ts";
-import { appendAnchor, deleteRewireTarget, swapPair } from "../src/lib/builder/rewire.ts";
+import { appendAnchor, deleteRewireTarget, swapPair, swapPlan } from "../src/lib/builder/rewire.ts";
 import type { Step, StepBranch } from "../src/lib/types.ts";
 
 let pos = 0;
@@ -106,6 +106,36 @@ check("3c: linearer Schritt → Folgeschritt; Selbst-Schleife → Ende", () => {
   const steps = [S("A"), S("B"), S("C")];
   assert.equal(deleteRewireTarget(steps, [B("A", "B"), B("B", "C")], "B"), "C");
   assert.equal(deleteRewireTarget(steps, [B("B", "B")], "B"), null);
+});
+
+// builder.handleMoveStep / moveStep (Server) — beide wenden denselben swapPlan an.
+function move(steps: Step[], branches: StepBranch[], root: string | null, id: string, dir: "up" | "down") {
+  const plan = swapPlan(steps, branches, root, id, dir, `nb${bc++}`);
+  if (!plan) return null;
+  const t = new Map(plan.targets.map((x) => [x.branchId, x.target]));
+  const next = branches.map((b) => (t.has(b.id) ? { ...b, target_step_id: t.get(b.id) ?? null } : b));
+  if (plan.newBranch) next.push({ ...plan.newBranch, label: null, color: null, position: 0, created_at: "" });
+  return { branches: next, root: plan.newRoot ?? root };
+}
+
+check("4: hoch, dann wieder runter → Ablauf wie vorher, Startschritt im selben Plan", () => {
+  const steps = [S("P"), S("Bel")];
+  const up = move(steps, [B("P", "Bel")], "P", "Bel", "up");
+  assert.ok(up, "hoch erlaubt");
+  assert.equal(up.root, "Bel", "neuer Startschritt ist Teil DESSELBEN Plans");
+  assert.deepEqual(flow(steps, up.branches, up.root), ["Bel", "P"]);
+  const down = move(steps, up.branches, up.root, "Bel", "down");
+  assert.ok(down, "runter erlaubt");
+  assert.equal(down.root, "P");
+  assert.deepEqual(flow(steps, down.branches, down.root), ["P", "Bel"]);
+});
+
+check("4b: mittlerer Schritt mit Vorgänger und Nachfolger tauschen", () => {
+  const steps = [S("A"), S("M"), S("N"), S("Z")];
+  const r = move(steps, [B("A", "M"), B("M", "N"), B("N", "Z")], "A", "M", "down");
+  assert.ok(r);
+  assert.deepEqual(flow(steps, r.branches, r.root), ["A", "N", "M", "Z"]);
+  assert.equal(r.root, "A");
 });
 
 console.log(`\n${ok} Prüfungen grün`);

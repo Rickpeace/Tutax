@@ -109,3 +109,44 @@ export function deleteRewireTarget(
   // Selbst-Schleife: der Schritt verschwindet gleich — dann endet der Ablauf hier.
   return target === stepId ? null : target;
 }
+
+/** Ergebnis eines Tauschs: welche Kanten wohin zeigen, ggf. neue Kante B→A, ggf. neuer Start. */
+export type SwapPlan = {
+  targets: { branchId: string; target: string | null }[];
+  newBranch: { id: string; step_id: string; target_step_id: string } | null;
+  newRoot: string | null;
+};
+
+/**
+ * „Schritt nach oben/unten“ als EIN Plan — dieselbe Rechnung im Editor (optimistisch) und auf
+ * dem Server (moveStep). Fluss vorher: Vorgänger → A → B → Nachfolger; nachher: Vorgänger →
+ * B → A → Nachfolger. Ist B ein Blatt, entsteht die Kante B→A neu (`newBranchId`).
+ * null = kein eindeutiger Tausch (siehe swapPair).
+ */
+export function swapPlan(
+  steps: Step[],
+  branches: StepBranch[],
+  rootId: string | null,
+  stepId: string,
+  dir: "up" | "down",
+  newBranchId: string,
+): SwapPlan | null {
+  const pair = swapPair(steps, branches, stepId, dir);
+  if (!pair) return null;
+  const { a, b } = pair;
+  const outA = branches.find((br) => br.step_id === a.id && br.target_step_id === b.id);
+  if (!outA) return null;
+  const outB = branches.filter((br) => br.step_id === b.id).sort(byPosition)[0] ?? null;
+  const succ = outB?.target_step_id ?? null;
+  const aIsRoot = rootId === a.id;
+  const preds = aIsRoot ? [] : branches.filter((br) => br.target_step_id === a.id);
+  return {
+    targets: [
+      ...preds.map((p) => ({ branchId: p.id, target: b.id as string | null })),
+      { branchId: outA.id, target: succ },
+      ...(outB ? [{ branchId: outB.id, target: a.id as string | null }] : []),
+    ],
+    newBranch: outB ? null : { id: newBranchId, step_id: b.id, target_step_id: a.id },
+    newRoot: aIsRoot ? b.id : null,
+  };
+}

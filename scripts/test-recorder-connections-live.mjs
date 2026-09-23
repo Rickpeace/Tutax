@@ -357,8 +357,9 @@ try {
     const edStatus = await Promise.all(edRows.map((r) => me(r.token)));
     ok(edRows.length === 2 && edStatus.every((s) => s === 200), `Bearbeiter: zwei eigene Verbindungen gültig (${edStatus.join(",")})`);
     await edge.goto(`${BASE}/app/settings/team`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    edge.once("dialog", (d) => d.accept());
+    // Seit Commit 807cab2 Steply-Dialog statt Browser-confirm(): dort „Entfernen“ bestätigen.
     await edge.getByRole("button", { name: `${E.ed} entfernen` }).click();
+    await edge.getByRole("button", { name: "Entfernen", exact: true }).click({ timeout: 20_000 });
     await edge.getByText("wurde aus dem Team entfernt").waitFor({ timeout: 30_000 });
     const after = await Promise.all(edRows.map((r) => me(r.token)));
     ok(after.every((s) => s === 401) && (await rowsOf(accId, edId, "token")).length === 0,

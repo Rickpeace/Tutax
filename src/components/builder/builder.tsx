@@ -17,7 +17,8 @@ import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
 import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
-import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair } from "@/lib/builder/rewire";
+import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair, swapPlan } from "@/lib/builder/rewire";
+import { unwrap } from "@/lib/action-error";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 import {
@@ -28,7 +29,7 @@ import {
   updateBranch,
   deleteBranch,
   deleteStep,
-  setRootStep,
+  moveStep,
   setStepCondition,
 } from "@/app/app/tutorials/[id]/actions";
 import { unpublishTutorial } from "@/app/app/actions";
@@ -124,6 +125,19 @@ export function Builder({
   // Zahl der noch nicht bestätigten Schreibvorgänge. Verhindert, dass ein FREMDER
   // Server-Reload (z. B. DriftCheck-Button) laufende optimistische Änderungen zurücksetzt.
   const pending = useRef(0);
+
+  // Tab schließen/neu laden, während noch gespeichert wird: Browser fragt nach (sonst gingen
+  // gerade abgeschickte Änderungen verloren). Ein Listener für die ganze Sitzung — er fragt
+  // nur, wenn im Moment tatsächlich etwas unterwegs ist.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (pending.current <= 0) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
 
   // Nur resynchronisieren, wenn KEIN Write in-flight ist (sonst gingen Branch/Highlight-
   // Optimistik im Fenster bis zum Persist verloren). Nach Abschluss liefert der nächste
@@ -500,16 +514,6 @@ export function Builder({
   // Reines Branch-Rewiring: Positionen werden NICHT umgeschrieben (die Fluss-
   // Reihenfolge kommt aus dem Tree). Getauscht wird nur mit dem LINEAREN Nachbarn,
   // und nur wenn der Tausch eindeutig ist (siehe canMove).
-  const outgoingOf = useCallback(
-    (id: string) => branches.filter((b) => b.step_id === id),
-    [branches],
-  );
-  // Predecessor-Kanten: Branches, deren Ziel dieser Schritt ist.
-  const incomingOf = useCallback(
-    (id: string) => branches.filter((b) => b.target_step_id === id),
-    [branches],
-  );
-
   // Eindeutiges lineares Paar (A→B) für einen Tausch, oder null (Regeln: lib/builder/rewire.ts).
   const swapPair = useCallback(
     (stepId: string, dir: "up" | "down") => findSwapPair(steps, branches, stepId, dir),
@@ -523,78 +527,33 @@ export function Builder({
 
   const handleMoveStep = useCallback(
     (stepId: string, dir: "up" | "down") => {
-      const pair = swapPair(stepId, dir);
-      if (!pair) return;
-      const { a, b } = pair; // Fluss: Vorgänger → A → B → Nachfolger
-      const outA = outgoingOf(a.id).find((br) => br.target_step_id === b.id)!; // A→B
-      const outB = outgoingOf(b.id)[0] ?? null; // B→Nachfolger (oder Blatt)
-      const succ = outB?.target_step_id ?? null;
-      const aIsRoot = rootId === a.id;
-      // Vorgänger-Kanten (nur wenn A nicht Wurzel): Kanten, die auf A zeigen → B.
-      const preds = aIsRoot ? [] : incomingOf(a.id);
-      // Nur relevant, wenn B ein Blatt ist (keine ausgehende Kante) → neue Kante B→A.
+      // Gleiche Rechnung wie der Server (lib/builder/rewire.ts swapPlan): Vorgänger → B → A →
+      // Nachfolger; ist B ein Blatt, entsteht die Kante B→A neu.
       const newBranchId = crypto.randomUUID();
+      const plan = swapPlan(steps, branches, rootId, stepId, dir, newBranchId);
+      if (!plan) return;
 
       // ── Optimistischer State ──
+      const targetOf = new Map(plan.targets.map((t) => [t.branchId, t.target]));
       setBranches((prev) => {
-        let next = prev;
-        // 1) Vorgänger → B statt A.
-        if (preds.length) {
-          const predIds = new Set(preds.map((p) => p.id));
-          next = next.map((br) =>
-            predIds.has(br.id) ? { ...br, target_step_id: b.id } : br,
-          );
-        }
-        // 2) A→B wird A→Nachfolger.
-        next = next.map((br) =>
-          br.id === outA.id ? { ...br, target_step_id: succ } : br,
+        const next = prev.map((br) =>
+          targetOf.has(br.id) ? { ...br, target_step_id: targetOf.get(br.id) ?? null } : br,
         );
-        // 3) B→Nachfolger wird B→A; falls B Blatt war, neue Kante B→A anlegen.
-        if (outB) {
-          next = next.map((br) =>
-            br.id === outB.id ? { ...br, target_step_id: a.id } : br,
-          );
-        } else {
-          next = [
-            ...next,
-            {
-              id: newBranchId,
-              step_id: b.id,
-              label: null,
-              color: null,
-              target_step_id: a.id,
-              position: 0,
-              created_at: "",
-            },
-          ];
-        }
-        return next;
+        if (!plan.newBranch) return next;
+        return [
+          ...next,
+          { ...plan.newBranch, label: null, color: null, position: 0, created_at: "" },
+        ];
       });
-      if (aIsRoot) setRootId(b.id);
+      if (plan.newRoot) setRootId(plan.newRoot);
       // Auswahl bleibt auf demselben Schritt (stepId), Flow spiegelt die neue Reihenfolge.
 
-      // ── Persist (dieselbe Reihenfolge; existierende Actions) ──
-      persist(async () => {
-        if (preds.length) {
-          for (const p of preds) await updateBranch(p.id, { target_step_id: b.id });
-        }
-        await updateBranch(outA.id, { target_step_id: succ });
-        if (outB) {
-          await updateBranch(outB.id, { target_step_id: a.id });
-        } else {
-          await addBranch({
-            id: newBranchId,
-            step_id: b.id,
-            label: null,
-            color: null,
-            target_step_id: a.id,
-            position: 0,
-          });
-        }
-        if (aIsRoot) await setRootStep(tutorialId, b.id);
-      });
+      // ── Persist: EIN Aufruf (moveStep rechnet serverseitig neu und schreibt alles am
+      // Stück) — früher drei Einzel-Aufrufe, von denen beim schnellen Wegklicken der letzte
+      // (Startschritt) verloren gehen konnte → Schritt unerreichbar.
+      persist(async () => unwrap(await moveStep(tutorialId, stepId, dir, newBranchId)));
     },
-    [swapPair, outgoingOf, incomingOf, rootId, tutorialId, persist],
+    [steps, branches, rootId, tutorialId, persist],
   );
 
   // Welle 51a: „voriger Schritt“ = Vorgänger im Ablauf (eingehende Kante), sonst der

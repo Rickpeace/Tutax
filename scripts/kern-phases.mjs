@@ -420,12 +420,24 @@ export async function run(c) {
           else ok("Reihenfolge ueberlebt das Neuladen");
           // zurueckschieben
           await page.getByText("Beleg auswaehlen").first().click();
-          await sleep(1500);
+          // Erst prüfen, wenn das Panel wirklich diesen Schritt zeigt (sonst war der Knopf
+          // manchmal noch der des vorigen Schritts -> Zurückschieben fiel still aus).
+          await page.waitForFunction(
+            () => document.querySelector("#step-title")?.value === "Beleg auswaehlen",
+            null,
+            { timeout: 20_000 },
+          ).catch(() => {});
+          await sleep(800);
           const down = page.getByRole("button", { name: "Schritt nach unten" });
-          if (await down.isEnabled()) {
+          const downOn = await down.isEnabled();
+          if (downOn) {
             await down.click();
             await sleep(2500);
           }
+          const { data: tRow } = await admin.from("tutorials").select("root_step_id").eq("id", state.tutorialId).single();
+          const { data: bRows } = await admin.from("step_branches").select("step_id, target_step_id").in("step_id", steps.map((s) => s.id));
+          const nameOf = (id) => steps.find((s) => s.id === id)?.title ?? (id ? "?" : "Ende");
+          info(`Zurueckschieben: Knopf aktiv=${downOn}; Start=${nameOf(tRow?.root_step_id)}; Kanten: ${(bRows || []).map((r) => nameOf(r.step_id) + "->" + nameOf(r.target_step_id)).join(", ")}`);
         }
       } else bug("aergerlich", "„Schritt nach oben“ bleibt gesperrt", "Beim zweiten Schritt ist der Hoch-Knopf deaktiviert.");
 
@@ -638,7 +650,17 @@ export async function run(c) {
         ok("Mitarbeiter sieht die Schulung");
         await mp.getByText("Beleg hochladen").first().click();
         await mp.waitForURL(/\/app\/lernen\//, { timeout: 40_000 }).catch(() => {});
-        await sleep(2000);
+        // Auf den Player warten (erster Aufruf erzeugt ggf. die verpixelte Bildkopie) und
+        // die Ladezeit festhalten — statt nach fixen 2 s im Ladebildschirm zu suchen.
+        const tLoad = Date.now();
+        await mp
+          .getByRole("button", { name: /^(Fertig|Weiter)|Als absolviert markieren/ })
+          .first()
+          .waitFor({ timeout: 60_000 })
+          .catch(() => {});
+        const loadMs = Date.now() - tLoad;
+        info(`Schulung geladen nach ${(loadMs / 1000).toFixed(1)} s`);
+        if (loadMs > 8000) bug("aergerlich", "Schulung laedt sehr langsam", `Bis der Player erscheint vergehen ${(loadMs / 1000).toFixed(1)} s.`);
         await shot(mp, "32-schulung");
         // Durchklicken bis zum Ende, dann „Als absolviert markieren“.
         for (let i = 0; i < 12; i++) {

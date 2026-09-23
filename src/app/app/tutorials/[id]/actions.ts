@@ -31,6 +31,7 @@ import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/
 import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
+import { swapPlan } from "@/lib/builder/rewire";
 import { canEdit } from "@/lib/roles";
 import { aiConfigured } from "@/lib/ai";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
@@ -389,6 +390,52 @@ export async function deleteStep(
  * Startschritt getauscht wird, wird der Nachbar zur neuen Wurzel). Additiv —
  * persistiert nur, die UI führt optimistisch.
  */
+/**
+ * „Schritt nach oben/unten“ in EINEM Aufruf (Audit 23.09.2026). Vorher schickte der Editor
+ * drei Einzel-Aufrufe (Kante, Kante, Startschritt); klickte man sofort weg, kam der letzte
+ * nicht mehr an und der Ablauf war kaputt (Schritt unerreichbar). Der Server rechnet den
+ * Tausch selbst aus dem aktuellen DB-Stand (gleiche Regel wie der Editor: swapPlan) und
+ * schreibt alles am Stück — ein einmal abgeschickter Aufruf läuft auch zu Ende, wenn der
+ * Nutzer die Seite verlässt.
+ */
+export const moveStep = withUserErrors(async function moveStep(
+  tutorialId: string,
+  stepId: string,
+  dir: "up" | "down",
+  newBranchId: string,
+) {
+  await requireTutorialAccess(tutorialId);
+  const supabase = await createClient();
+  const [{ data: tut }, { data: steps }] = await Promise.all([
+    supabase.from("tutorials").select("root_step_id").eq("id", tutorialId).maybeSingle(),
+    supabase.from("steps").select("*").eq("tutorial_id", tutorialId).returns<Step[]>(),
+  ]);
+  const ids = (steps ?? []).map((s) => s.id);
+  const { data: branches } = ids.length
+    ? await supabase.from("step_branches").select("*").in("step_id", ids).returns<StepBranch[]>()
+    : { data: [] as StepBranch[] };
+  const plan = swapPlan(steps ?? [], branches ?? [], tut?.root_step_id ?? null, stepId, dir, newBranchId);
+  if (!plan) throw new UserError("Dieser Schritt lässt sich hier nicht verschieben. Bitte laden Sie die Seite neu.");
+
+  for (const t of plan.targets) {
+    const { error } = await supabase.from("step_branches").update({ target_step_id: t.target }).eq("id", t.branchId);
+    if (error) throw new Error(error.message);
+  }
+  if (plan.newBranch) {
+    const { error } = await supabase
+      .from("step_branches")
+      .insert({ ...plan.newBranch, label: null, color: null, position: 0 });
+    if (error && !(await isOwnRetryDuplicate(supabase, error, "step_branches", plan.newBranch.id, { column: "step_id", value: plan.newBranch.step_id }))) {
+      throw new Error(error.message);
+    }
+  }
+  if (plan.newRoot) {
+    const { error } = await supabase.from("tutorials").update({ root_step_id: plan.newRoot }).eq("id", tutorialId);
+    if (error) throw new Error(error.message);
+  }
+  await invalidateTutorialTags(tutorialId);
+});
+
 export async function setRootStep(tutorialId: string, stepId: string) {
   const { tutorialId: owner } = await requireStepAccess(stepId);
   if (owner !== tutorialId) throw new Error("Schritt nicht gefunden.");
