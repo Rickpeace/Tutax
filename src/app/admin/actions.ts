@@ -11,6 +11,10 @@ import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
 import { translateTutorial } from "@/lib/translate-jobs";
 import { retireHiddenTemplateForks } from "@/lib/template-forks";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { createClient } from "@/lib/supabase/server";
+import { appBaseUrl } from "@/lib/url";
+import { purgeAccountFiles } from "@/lib/storage-purge";
+import { PROTECTED_SLUGS } from "@/lib/admin-customers";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -181,8 +185,79 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   // was nur OpenAI-Kosten erzeugt).
   const wasPaid = before?.plan === "pro" || before?.plan === "business";
   if (plan !== "free" && !wasPaid) after(() => reindexAccount(accountId));
-  revalidatePath("/admin");
+  revalidatePath("/admin", "layout"); // Vorlagen- UND Kunden-Seiten
 }
+
+/**
+ * Support: einem Teammitglied einen Link zum Passwort-Zurücksetzen per E-Mail schicken
+ * (gleicher Weg wie „Passwort vergessen“ — der Link führt über /auth/confirm nach /reset).
+ */
+export const sendMemberPasswordLink = withUserErrors(async function sendMemberPasswordLink(userId: string): Promise<{ email: string }> {
+  await ensureAdmin();
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user?.email) throw new UserError("Diese Person wurde nicht gefunden.");
+  const supabase = await createClient();
+  const { error: sendErr } = await supabase.auth.resetPasswordForEmail(data.user.email, {
+    redirectTo: `${appBaseUrl()}/auth/confirm?next=/reset`,
+  });
+  if (sendErr) {
+    // Supabase meldet Mail-Server-Fehler als 500 mit leerem Text („{}“) — verständlich übersetzen.
+    const detail = sendErr.message && sendErr.message !== "{}" ? ` (${sendErr.message})` : "";
+    throw new UserError(
+      sendErr.status === 429
+        ? "Zu viele E-Mails in kurzer Zeit – bitte in ein paar Minuten erneut versuchen."
+        : `Der Mail-Server hat die E-Mail an ${data.user.email} nicht angenommen${detail}. Bitte die Adresse prüfen oder den E-Mail-Versand in Supabase (Auth → SMTP) kontrollieren.`,
+    );
+  }
+  return { email: data.user.email };
+});
+
+/**
+ * Kunden (Organisation) endgültig löschen — nur mit dem exakten Namen als Bestätigung.
+ * Reihenfolge: Dateien in allen Speicher-Bereichen → Organisation (alle Anleitungen, Schritte,
+ * Wissen, Automationen, Einladungen … per Kaskade) → Personen, die danach in KEINER Organisation
+ * mehr sind (sonst stünden sie ohne Team da). Admins und die eigenen Organisationen
+ * (steply, demo) bleiben unangetastet.
+ */
+export const deleteCustomer = withUserErrors(async function deleteCustomer(
+  accountId: string,
+  confirmName: string,
+): Promise<{ files: number; users: number }> {
+  await ensureAdmin();
+  const admin = createAdminClient();
+  const { data: acc } = await admin.from("accounts").select("id, name, slug").eq("id", accountId).maybeSingle();
+  if (!acc) throw new UserError("Diese Organisation gibt es nicht mehr.");
+  if (PROTECTED_SLUGS.has(acc.slug as string)) {
+    throw new UserError("Diese Organisation gehört zu Steply selbst und lässt sich hier nicht löschen.");
+  }
+  if (confirmName.trim() !== String(acc.name).trim()) {
+    throw new UserError("Der eingegebene Name stimmt nicht mit dem Namen der Organisation überein.");
+  }
+
+  const { data: members } = await admin.from("account_members").select("user_id").eq("account_id", accountId);
+  const memberIds = (members ?? []).map((m) => m.user_id as string);
+
+  const purged = await purgeAccountFiles(admin, accountId);
+  const { error: delErr } = await admin.from("accounts").delete().eq("id", accountId);
+  if (delErr) throw new Error(delErr.message);
+
+  // Personen ohne weitere Organisation mit löschen (Admins nie).
+  const { data: admins } = await admin.from("admins").select("user_id");
+  const adminIds = new Set((admins ?? []).map((a) => a.user_id as string));
+  let usersDeleted = 0;
+  for (const uid of memberIds) {
+    if (adminIds.has(uid)) continue;
+    const { count } = await admin.from("account_members").select("user_id", { count: "exact", head: true }).eq("user_id", uid);
+    if ((count ?? 0) > 0) continue;
+    const { error } = await admin.auth.admin.deleteUser(uid);
+    if (!error) usersDeleted++;
+  }
+
+  invalidateHubTag(acc.slug as string);
+  revalidatePath("/admin", "layout");
+  return { files: Object.values(purged).reduce((a, b) => a + b, 0), users: usersDeleted };
+});
 
 /** Template einer globalen Kategorie zuordnen (oder lösen mit null). */
 export async function setTemplateCategory(templateId: string, categoryId: string | null) {

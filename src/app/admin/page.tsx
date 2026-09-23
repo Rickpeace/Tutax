@@ -1,19 +1,18 @@
-import { AlertTriangle, FileText, Crown } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, FileText } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 import { NewTemplateButton } from "@/components/admin/new-template-button";
 import { TemplateActions } from "@/components/admin/template-actions";
 import { CategoryManager } from "@/components/admin/category-manager";
 import { TemplateCategorySelect } from "@/components/admin/template-category-select";
-import { Button } from "@/components/ui/button";
-import { setAccountPlan } from "./actions";
 
 export default async function AdminTemplatesPage() {
   // Gate AUCH hier: Layout und Page rendern unter PPR parallel — das Layout-Gate
   // allein ließ den Page-Payload vor dem Redirect an anonyme Besucher raus.
   await requireAdmin();
   const admin = createAdminClient();
-  const [{ data: templates }, { data: categories }, { data: accounts }] = await Promise.all([
+  const [{ data: templates }, { data: categories }] = await Promise.all([
     admin
       .from("tutorials")
       .select("id, title, status, slug, freshness, category_id")
@@ -24,15 +23,10 @@ export default async function AdminTemplatesPage() {
       .select("id, name, position")
       .is("account_id", null)
       .order("position", { ascending: true }),
-    admin
-      .from("accounts")
-      .select("id, name, slug, plan, created_at")
-      .order("created_at", { ascending: true }),
   ]);
 
   const list = templates ?? [];
   const cats = categories ?? [];
-  const accs = accounts ?? [];
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
@@ -46,51 +40,13 @@ export default async function AdminTemplatesPage() {
         <NewTemplateButton />
       </div>
 
-      {/* Kunden-Konten: Tarif manuell schalten (Vollzugriff ohne Zahlungsanbieter). */}
-      <section className="mt-8">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-          Kunden-Konten &amp; Tarif
-        </h2>
-        <div className="mt-3 space-y-2">
-          {accs.map((a) => {
-            const plan = a.plan === "business" ? "business" : a.plan === "pro" ? "pro" : "free";
-            return (
-              <div
-                key={a.id}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
-              >
-                <span
-                  className={
-                    plan !== "free"
-                      ? "flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-bold text-primary"
-                      : "rounded-md bg-line-2 px-2 py-0.5 text-xs font-bold text-muted-foreground"
-                  }
-                >
-                  {plan !== "free" && <Crown className="size-3" />}{" "}
-                  {plan === "business" ? "Business" : plan === "pro" ? "Pro" : "Free"}
-                </span>
-                <span className="font-bold text-ink">{a.name}</span>
-                <span className="text-xs text-muted-foreground">/h/{a.slug}</span>
-                {/* Drei-Stufen-Schalter: aktive Stufe ist hervorgehoben und inaktiv. */}
-                <div className="ml-auto flex gap-1">
-                  {(["free", "pro", "business"] as const).map((p) => (
-                    <form key={p} action={setAccountPlan.bind(null, a.id, p)}>
-                      <Button
-                        type="submit"
-                        variant={plan === p ? "default" : "outline"}
-                        size="sm"
-                        disabled={plan === p}
-                      >
-                        {p === "business" ? "Business" : p === "pro" ? "Pro" : "Free"}
-                      </Button>
-                    </form>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* Kunden + Tarif-Wechsel wohnen jetzt unter /admin/kunden (Liste, Details, Support). */}
+      <p className="mt-6 text-sm font-semibold text-muted-foreground">
+        Kunden, Tarife und Support:{" "}
+        <Link href="/admin/kunden" className="font-extrabold text-primary hover:underline">
+          zur Kundenverwaltung →
+        </Link>
+      </p>
 
       <div className="mt-8">
         <CategoryManager categories={cats} />
