@@ -411,10 +411,20 @@ try {
   const toastErr = await mp.locator("[data-sonner-toast][data-type=error]").allInnerTexts().catch(() => []);
   if (toastErr.length) console.log("  ℹ Fehler-Meldung beim Abschließen:", toastErr.join(" | "));
   ok(comp.length === 1, "Mitarbeiter: Schulung (öffentlich mit Nachweis) als absolviert gespeichert");
-  // Verpixelt bleibt verpixelt: das Schulungs-Bild ist eine eingebrannte Kopie
+  // Verpixelt bleibt verpixelt: das Schulungs-Bild ist eine eingebrannte Kopie.
+  // Der Player merkt sich die Position pro Tab (sessionStorage) — nach „Fertig“ öffnete er
+  // wieder den Abschluss-Bildschirm (ohne Bild). Für die Bild-Prüfung von vorn beginnen.
+  // Wie ein Nutzer: über die Schulungs-Liste neu hinein (neuer Verlaufseintrag, leerer Tab-Speicher).
+  await mp.goto(`${BASE}/app/lernen`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await mp.evaluate(() => sessionStorage.clear()).catch(() => {});
   await mp.goto(`${BASE}/app/lernen/${tutId}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
   await mp.locator('img[src*="tutorial-images"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
   const imgSrc = await mp.locator('img[src*="tutorial-images"]').first().getAttribute("src").catch(() => null);
+  if (!imgSrc) {
+    const allImgs = await mp.locator("img").evaluateAll((els) => els.map((e) => (e.getAttribute("src") || "").slice(0, 120)));
+    const bodyTxt = (await mp.locator("main").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
+    console.log("  ℹ Schulungs-Seite: img=", JSON.stringify(allImgs), "| Text:", bodyTxt);
+  }
   ok(!!imgSrc && imgSrc.includes("_verpixelt"), `Schulung zeigt die verpixelte Kopie (${imgSrc ? imgSrc.split("?")[0].split("/").slice(-2).join("/") : "kein Bild"})`);
   if (imgSrc) {
     const shown = Buffer.from(await (await fetch(imgSrc.startsWith("http") ? imgSrc : `${BASE}${imgSrc}`)).arrayBuffer());
@@ -504,8 +514,11 @@ try {
   // ================= 6d3) Organisation verlassen =================
   // Bestehender Nutzer (hat eigene Org) verlässt das Team -> landet in seiner eigenen Org
   await bp.goto(`${BASE}/app/settings/profil`, { waitUntil: "domcontentloaded", timeout: 90_000 });
-  bp.once("dialog", (d) => d.accept());
-  await bp.getByRole("button", { name: /verlassen/ }).click();
+  // Seit 23.09.2026 Steply-Dialog statt Browser-confirm(): dort „Organisation verlassen“ bestätigen.
+  await bp.getByRole("button", { name: /verlassen/ }).first().click();
+  const leaveDlg = bp.getByRole("alertdialog").or(bp.getByRole("dialog")).first();
+  await leaveDlg.waitFor({ timeout: 20_000 });
+  await leaveDlg.getByRole("button", { name: "Organisation verlassen" }).click();
   await bp.waitForURL((u) => u.pathname === "/app", { timeout: 60_000 }).catch(() => {});
   ok(!(await memberships(best.uid)).some((m) => m.account_id === ownerAid), "Verlassen: Mitgliedschaft entfernt");
   ok((await activeMeta(best.uid)) === best.aid, "Verlassen: danach ist die eigene Organisation aktiv");
