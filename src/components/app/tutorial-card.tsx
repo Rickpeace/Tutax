@@ -110,6 +110,10 @@ export function TutorialCard({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [title, setTitle] = useState(tutorial.title);
+  // Sofort den neuen Namen zeigen (optimistisch) — vorher stand nach „Umbenannt“ noch ~3 s der
+  // alte Titel auf der Karte, bis die Seite neu geladen war (Audit 23.09.).
+  const [shownTitle, setShownTitle] = useState<string | null>(null);
+  const displayTitle = shownTitle ?? tutorial.title;
 
   // Optimistischer Veröffentlicht-Zustand.
   const [live, setLive] = useState(tutorial.status === "published");
@@ -262,7 +266,7 @@ export function TutorialCard({
       type="button"
       onClick={() => cleanup?.toggle(tutorial.id)}
       aria-pressed={checked}
-      aria-label={`${tutorial.title} ${checked ? "abwählen" : "auswählen"}`}
+      aria-label={`${displayTitle} ${checked ? "abwählen" : "auswählen"}`}
       className={`absolute inset-0 z-10 cursor-pointer ${layout === "card" ? "rounded-card" : ""}`}
     >
       <span
@@ -296,7 +300,16 @@ export function TutorialCard({
               disabled={pending || !title.trim()}
               onClick={() => {
                 setRenameOpen(false);
-                run(() => renameTutorial(tutorial.id, title), "Umbenannt");
+                const next = title.replace(/\s+/g, " ").trim();
+                setShownTitle(next);
+                run(async () => {
+                  try {
+                    await renameTutorial(tutorial.id, title);
+                  } catch (e) {
+                    setShownTitle(null); // zurück auf den gespeicherten Namen
+                    throw e;
+                  }
+                }, "Umbenannt");
               }}
             >
               Speichern
@@ -312,7 +325,7 @@ export function TutorialCard({
             <DialogTitle>Anleitung löschen?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            „{tutorial.title}“ wird mit allen Schritten dauerhaft gelöscht. Das
+            „{displayTitle}“ wird mit allen Schritten dauerhaft gelöscht. Das
             kann nicht rückgängig gemacht werden.
           </p>
           <DialogFooter>
@@ -355,7 +368,7 @@ export function TutorialCard({
           <div className="min-w-0">
             <Link href={editHref} className="flex min-w-0 items-center gap-2">
               <span className="truncate text-sm font-extrabold text-ink group-hover:text-primary">
-                {tutorial.title}
+                {displayTitle}
               </span>
               {internal && <InternBadge />}
               {stale && <StaleBadge />}
@@ -403,7 +416,7 @@ export function TutorialCard({
         <div className="flex items-start gap-2">
           <Link href={editHref} className="min-w-0 flex-1">
             <h3 className="line-clamp-2 min-h-[2.6em] break-words text-[17px] font-black leading-[1.3] text-ink [text-wrap:balance] group-hover:text-primary">
-              {tutorial.title}
+              {displayTitle}
             </h3>
           </Link>
           {menu}
