@@ -13,6 +13,7 @@ import {
   forkTemplate,
   resetTemplate,
 } from "@/app/app/template-actions";
+import { errorText } from "@/lib/action-error";
 
 export type TemplateItem = {
   templateId: string;
@@ -49,7 +50,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         await fn();
         if (msg) toast.success(msg);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
 

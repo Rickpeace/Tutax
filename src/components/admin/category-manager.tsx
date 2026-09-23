@@ -9,6 +9,7 @@ import {
   createTemplateCategory,
   deleteTemplateCategory,
 } from "@/app/admin/actions";
+import { errorText } from "@/lib/action-error";
 
 export function CategoryManager({
   categories,
@@ -47,7 +48,7 @@ export function CategoryManager({
                     try {
                       await deleteTemplateCategory(c.id);
                     } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Fehler");
+                      toast.error(errorText(e));
                     }
                   });
               }}

@@ -34,6 +34,7 @@ import { canEdit } from "@/lib/roles";
 import { aiConfigured } from "@/lib/ai";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
 import { refineStepFromSaved, suggestStepTexts, type RefineStep } from "@/lib/guide-ai";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 // Hinweis: Diese Builder-Actions persistieren NUR (kein revalidatePath).
 // Die UI führt der Client optimistisch & sofort; der Server speichert im
@@ -356,11 +357,11 @@ export async function setRootStep(tutorialId: string, stepId: string) {
 }
 
 /** Kategorie anlegen (§7.3, „on the fly" aus der Combobox). */
-export async function createCategory(name: string): Promise<{ id: string; name: string }> {
+export const createCategory = withUserErrors(async function createCategory(name: string): Promise<{ id: string; name: string }> {
   const clean = cleanCategoryName(name);
-  if (!clean) throw new Error("Name fehlt");
+  if (!clean) throw new UserError("Name fehlt");
   // Gleiche Höchstlänge wie Umbenennen und Sofort-Anleitung (lib/category-name.ts).
-  if (clean.length > CATEGORY_NAME_MAX) throw new Error(CATEGORY_NAME_TOO_LONG);
+  if (clean.length > CATEGORY_NAME_MAX) throw new UserError(CATEGORY_NAME_TOO_LONG);
   const { account } = await requireAccount();
   const supabase = await createClient();
   const { data: existing } = await supabase
@@ -375,14 +376,14 @@ export async function createCategory(name: string): Promise<{ id: string; name: 
     .single();
   if (error || !data) throw new Error(error?.message ?? "Kategorie anlegen fehlgeschlagen");
   return data;
-}
+});
 
 /** Tutorial-Titel ändern. */
-export async function setTutorialTitle(tutorialId: string, title: string) {
+export const setTutorialTitle = withUserErrors(async function setTutorialTitle(tutorialId: string, title: string) {
   await requireTutorialAccess(tutorialId);
   // Gleiche Grenze wie im Formular (maxLength) — Einfügen aus der Zwischenablage umgeht das.
   const clean = title.replace(/\s+/g, " ").trim().slice(0, GUIDE_TITLE_MAX);
-  if (!clean) throw new Error("Titel fehlt");
+  if (!clean) throw new UserError("Titel fehlt");
   const supabase = await createClient();
   const { error } = await supabase
     .from("tutorials")
@@ -393,7 +394,7 @@ export async function setTutorialTitle(tutorialId: string, title: string) {
   await markTranslationsStale(tutorialId);
   after(() => translateTitleDelta(tutorialId));
   after(() => reindexTutorialIfLive(tutorialId)); // Titel steckt in jedem Chatbot-Ausschnitt
-}
+});
 
 /**
  * Kurzbeschreibung des Tutorials (Untertitel auf der Hilfe-Seiten-Karte + Suchtreffer).

@@ -9,6 +9,7 @@ import { appBaseUrl } from "@/lib/url";
 import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
 import { teamLimit } from "@/lib/plan";
 import { INVITE_VALID_DAYS, inviteCutoffIso, isInviteExpired } from "@/lib/invitations";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 const appUrl = appBaseUrl;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
@@ -55,7 +56,7 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
  */
 async function requireOwner() {
   const { account, userId, role } = await requireAccount();
-  if (role !== "owner") throw new Error("Nur der Inhaber darf das Team verwalten.");
+  if (role !== "owner") throw new UserError("Nur der Inhaber darf das Team verwalten.");
   return { account, userId };
 }
 
@@ -290,9 +291,9 @@ export async function revokeInvitation(id: string) {
   revalidatePath("/app/settings/team");
 }
 
-export async function removeMember(userId: string) {
+export const removeMember = withUserErrors(async function removeMember(userId: string) {
   const { account, userId: me } = await requireOwner();
-  if (me === userId) throw new Error("Sie können sich nicht selbst entfernen.");
+  if (me === userId) throw new UserError("Sie können sich nicht selbst entfernen.");
   const admin = createAdminClient();
   // Letzten Inhaber nicht entfernen -> Konto würde sonst ohne Inhaber verwaisen.
   const { data: owners } = await admin
@@ -302,7 +303,7 @@ export async function removeMember(userId: string) {
     .eq("role", "owner");
   const list = owners ?? [];
   if (list.some((o) => o.user_id === userId) && list.length <= 1) {
-    throw new Error("Der letzte Inhaber kann nicht entfernt werden.");
+    throw new UserError("Der letzte Inhaber kann nicht entfernt werden.");
   }
   await admin
     .from("account_members")
@@ -312,14 +313,14 @@ export async function removeMember(userId: string) {
   // Ihre Steply-Erweiterung verliert damit sofort den Zugang zu diesem Konto.
   await dropRecorderTokens(admin, account.id, userId);
   revalidatePath("/app/settings/team");
-}
+});
 
 /**
  * Rolle eines Mitglieds ändern (nur Inhaber). Der letzte Inhaber kann nicht herabgestuft
  * werden (sonst verwaist das Konto) — auch nicht er selbst. Wird jemand Mitarbeiter,
  * verliert seine Erweiterung den Zugang (Mitarbeiter erstellen keine Inhalte).
  */
-export async function changeMemberRole(userId: string, nextRole: string): Promise<void> {
+export const changeMemberRole = withUserErrors(async function changeMemberRole(userId: string, nextRole: string): Promise<void> {
   const { account } = await requireOwner();
   const role = parseRole(nextRole);
   const admin = createAdminClient();
@@ -329,11 +330,11 @@ export async function changeMemberRole(userId: string, nextRole: string): Promis
     .eq("account_id", account.id);
   const list = rows ?? [];
   const target = list.find((m) => m.user_id === userId);
-  if (!target) throw new Error("Diese Person ist nicht (mehr) im Team.");
+  if (!target) throw new UserError("Diese Person ist nicht (mehr) im Team.");
   if (target.role === role) return;
   const owners = list.filter((m) => m.role === "owner");
   if (target.role === "owner" && owners.length <= 1) {
-    throw new Error("Der letzte Inhaber kann nicht herabgestuft werden. Machen Sie zuerst jemand anderen zum Inhaber.");
+    throw new UserError("Der letzte Inhaber kann nicht herabgestuft werden. Machen Sie zuerst jemand anderen zum Inhaber.");
   }
   const { error } = await admin
     .from("account_members")
@@ -343,7 +344,7 @@ export async function changeMemberRole(userId: string, nextRole: string): Promis
   if (error) throw new Error(error.message);
   if (role === "member") await dropRecorderTokens(admin, account.id, userId);
   revalidatePath("/app/settings/team");
-}
+});
 
 /**
  * Einladung neu senden (nur Inhaber): gleicher Empfänger, gleiche Rolle, NEUER Link mit

@@ -52,6 +52,7 @@ import { LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 import { STABLE_LINK_HINT, copyText, hubTutorialUrl } from "@/lib/share-link";
 import type { TutorialVisibility } from "@/lib/types";
 import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
+import { unwrap, errorText } from "@/lib/action-error";
 
 /**
  * Kopf im Anleitungs-Editor (Welle 50d, Entwurf „App-Makeover" §4; Welle 54 umgebaut):
@@ -144,7 +145,7 @@ export function TutorialHeader({
       const names = res.languages.map((l) => LANG_NAME[l]).join(", ");
       toast.success(names ? `Übersetzt in ${names}` : "Übersetzt");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Übersetzen fehlgeschlagen");
+      toast.error(errorText(e, "Übersetzen fehlgeschlagen"));
     } finally {
       setTrBusy(false);
     }
@@ -172,13 +173,13 @@ export function TutorialHeader({
     }
     if (t === saved) return;
     try {
-      await setTutorialTitle(tutorialId, t);
+      unwrap(await setTutorialTitle(tutorialId, t));
       setSaved(t);
       setTitle(t);
       toast.success("Titel gespeichert");
-    } catch {
+    } catch (e) {
       setTitle(saved);
-      toast.error("Titel konnte nicht gespeichert werden");
+      toast.error(errorText(e, "Titel konnte nicht gespeichert werden"));
     }
   }
 
@@ -188,7 +189,7 @@ export function TutorialHeader({
     setBusy(true);
     try {
       if (next) {
-        const res = await publishTutorial(tutorialId);
+        const res = unwrap(await publishTutorial(tutorialId));
         if ("slug" in res && res.slug) setSlug(res.slug);
       } else await unpublishTutorial(tutorialId);
       setPublished(next);
@@ -199,7 +200,7 @@ export function TutorialHeader({
           : "Anleitung ist jetzt veröffentlicht";
       toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Status konnte nicht geändert werden");
+      toast.error(errorText(e, "Status konnte nicht geändert werden"));
     } finally {
       setBusy(false);
     }
@@ -243,7 +244,7 @@ export function TutorialHeader({
     setInLernen(nextPublic ? nextLernen : false);
     setVisBusy(true);
     try {
-      await setTutorialAudience(tutorialId, { publicOn: nextPublic, lernenOn: nextLernen });
+      unwrap(await setTutorialAudience(tutorialId, { publicOn: nextPublic, lernenOn: nextLernen }));
       toast.success(
         nextPublic
           ? nextLernen
@@ -254,7 +255,7 @@ export function TutorialHeader({
     } catch (e) {
       setVisibility(prevVis);
       setInLernen(prevLernen);
-      toast.error(e instanceof Error ? e.message : "Sichtbarkeit konnte nicht geändert werden");
+      toast.error(errorText(e, "Sichtbarkeit konnte nicht geändert werden"));
     } finally {
       setVisBusy(false);
     }

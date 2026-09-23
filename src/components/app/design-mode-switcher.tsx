@@ -17,6 +17,7 @@ import { AiLogoUpload } from "./ai-logo-upload";
 import { BusinessPill, SettingsCard } from "./settings-ui";
 import { setThemeMode } from "@/app/app/settings/branding/actions";
 import { googleFontsHref } from "@/lib/theme";
+import { unwrap, errorText } from "@/lib/action-error";
 
 type Mode = "manual" | "ai" | "extreme";
 
@@ -80,10 +81,10 @@ export function DesignModeSwitcher({
   const activate = (m: Mode) =>
     start(async () => {
       try {
-        await setThemeMode(m);
+        unwrap(await setThemeMode(m));
         toast.success(`„${MODE_LABEL[m]}“ ist jetzt aktiv`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
 

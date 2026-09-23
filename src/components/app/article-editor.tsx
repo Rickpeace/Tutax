@@ -15,6 +15,7 @@ import {
   setArticlePublished,
   deleteArticle,
 } from "@/app/app/assistent/wissen/actions";
+import { errorText } from "@/lib/action-error";
 
 type Article = { id: string; title: string; body: unknown; status: string };
 
@@ -58,7 +59,7 @@ export function ArticleEditor({ article }: { article: Article }) {
         setDirty(false);
         toast.success("Gespeichert");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
 
@@ -74,7 +75,7 @@ export function ArticleEditor({ article }: { article: Article }) {
           setDirty(false);
           toast.success("Im KI-Assistenten aktiv");
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Fehler");
+          toast.error(errorText(e));
         }
       });
     } else {
@@ -101,7 +102,7 @@ export function ArticleEditor({ article }: { article: Article }) {
         toast.success("Artikel gelöscht");
         router.push("/app/assistent/wissen");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   };

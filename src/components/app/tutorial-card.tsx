@@ -54,6 +54,7 @@ import {
   unpublishTutorial,
 } from "@/app/app/actions";
 import { createAutomationFromTutorial } from "@/app/app/automationen/actions";
+import { unwrap, errorText } from "@/lib/action-error";
 
 /** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte/Zeile). */
 export type LibraryTutorial = {
@@ -135,7 +136,7 @@ export function TutorialCard({
         await fn();
         toast.success(success);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -150,7 +151,7 @@ export function TutorialCard({
         toast.success("Als Automation angelegt");
         router.push(`/app/automationen/${automationId}`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -167,6 +168,7 @@ export function TutorialCard({
     setLive(next);
     if (next) {
       publishTutorial(tutorial.id)
+        .then(unwrap)
         .then((res) => {
           if ("internal" in res) {
             const url = `${window.location.origin}/app/lernen/${tutorial.id}`;
@@ -188,9 +190,9 @@ export function TutorialCard({
             },
           });
         })
-        .catch(() => {
+        .catch((e) => {
           setLive(false);
-          toast.error("Konnte nicht speichern");
+          toast.error(errorText(e, "Konnte nicht veröffentlichen"));
         });
     } else {
       unpublishTutorial(tutorial.id)

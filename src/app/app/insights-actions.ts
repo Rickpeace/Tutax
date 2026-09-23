@@ -6,6 +6,7 @@ import { requireAccount } from "@/lib/account";
 import { AI, aiConfigured } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 /** Tiptap-Doc aus einem Absatz-Text bauen (gleiches Muster wie video-worker/index.mjs). */
 const mkBody = (t: string) => ({
@@ -51,10 +52,10 @@ function buildUser(question: string): string {
  * als erledigt markiert (handled_at = now), damit die Frage aus der Insights-Lücken-
  * liste verschwindet. Gibt { tutorialId } zurück (kein Redirect — das macht der Client).
  */
-export async function createDraftFromQuestion(question: string): Promise<{ tutorialId: string }> {
+export const createDraftFromQuestion = withUserErrors(async function createDraftFromQuestion(question: string): Promise<{ tutorialId: string }> {
   const q = String(question ?? "").trim();
-  if (!q) throw new Error("Keine Frage angegeben.");
-  if (!aiConfigured()) throw new Error("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
+  if (!q) throw new UserError("Keine Frage angegeben.");
+  if (!aiConfigured()) throw new UserError("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
 
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -70,7 +71,7 @@ export async function createDraftFromQuestion(question: string): Promise<{ tutor
         .not("forked_tutorial_id", "is", null),
     ]);
     if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) {
-      throw new Error(
+      throw new UserError(
         `Grenze des kostenlosen Tarifs erreicht (${FREE_TUTORIAL_LIMIT} Anleitungen). Für unbegrenzte Anleitungen wechseln Sie bitte zu Pro (Einstellungen → Tarif).`,
       );
     }
@@ -105,7 +106,7 @@ export async function createDraftFromQuestion(question: string): Promise<{ tutor
     frame = { title, steps };
   } catch (e) {
     console.error("[insights-miner] KI-Fehler:", e instanceof Error ? e.message : e);
-    throw new Error("Der Entwurf konnte nicht erstellt werden. Bitte versuchen Sie es erneut.");
+    throw new UserError("Der Entwurf konnte nicht erstellt werden. Bitte versuchen Sie es erneut.");
   }
 
   // Absicherung: immer mindestens ein Hinweis-Schritt.
@@ -205,4 +206,4 @@ export async function createDraftFromQuestion(question: string): Promise<{ tutor
   }
 
   return { tutorialId: tutorial.id };
-}
+});

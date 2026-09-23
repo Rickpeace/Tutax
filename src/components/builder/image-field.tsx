@@ -19,6 +19,7 @@ import { VideoFramePicker } from "@/components/builder/video-frame-picker";
 import { compressAndUpload, signedImageUrl } from "@/lib/upload";
 import { getTutorialVideoUrl, updateStep } from "@/app/app/tutorials/[id]/actions";
 import type { Highlight } from "@/lib/types";
+import { errorText } from "@/lib/action-error";
 
 export function ImageField({
   tutorialId,
@@ -181,7 +182,7 @@ export function ImageField({
       toast.success("Bild hochgeladen");
       if (wasReplace) setAskHighlights(true); // erst nach Erfolg fragen
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+      toast.error(errorText(err, "Upload fehlgeschlagen"));
     } finally {
       setBusy(false);
     }

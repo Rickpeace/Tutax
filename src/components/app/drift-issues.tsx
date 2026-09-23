@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Check, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { applyDriftSuggestions } from "@/app/app/alerts/actions";
+import { unwrap, errorText } from "@/lib/action-error";
 
 type Issue = { step?: string; problem?: string; suggestion?: string; applied?: boolean };
 
@@ -35,11 +36,11 @@ export function DriftIssues({ alertId, issues }: { alertId: string; issues: Issu
     setBusy(g.key);
     start(async () => {
       try {
-        const r = await applyDriftSuggestions(alertId, g.items.map((i) => i.index));
+        const r = unwrap(await applyDriftSuggestions(alertId, g.items.map((i) => i.index)));
         setApplied((p) => ({ ...p, [g.key]: true }));
         toast.success(`Übernommen – „${r?.stepTitle ?? "Schritt"}“ aktualisiert`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       } finally {
         setBusy(null);
       }

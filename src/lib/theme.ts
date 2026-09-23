@@ -140,14 +140,43 @@ function darken(hex: string, amount: number): string | null {
  * Wandelt themes.tokens (§8) in CSS-Custom-Properties für den öffentlichen
  * Viewer/Hub. Nicht gesetzte Werte fallen auf die warmen Defaults (:root) zurück.
  */
+/** Farbe: #hex, rgb()/hsl()/oklch()… mit schlichten Argumenten oder ein Farbname. */
+function isSafeCssColor(v: string): boolean {
+  return (
+    /^#[0-9a-f]{3,8}$/i.test(v) ||
+    /^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\([0-9a-z.,%/\s+-]*\)$/i.test(v) ||
+    /^[a-z]{3,30}$/i.test(v)
+  );
+}
+
+/** Schriftnamen/Gewichte: Buchstaben, Ziffern, Leerzeichen, Anführungszeichen, Komma, Bindestrich. */
+function isSafeCssPlain(v: string): boolean {
+  return v.length <= 200 && /^[\p{L}\p{N}\s"',.-]*$/u.test(v);
+}
+
+function safeTokenMap(
+  src: Record<string, string | number> | undefined,
+  ok: (v: string) => boolean,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(src ?? {})) {
+    const str = String(v ?? "").trim();
+    if (str && ok(str)) out[k] = str;
+  }
+  return out;
+}
+
 export function brandStyle(tokens: unknown): CSSProperties {
   const t = (tokens ?? {}) as {
     colors?: Record<string, string>;
     typography?: Record<string, string | number>;
     shape?: Record<string, string | number>;
   };
-  const c = t.colors ?? {};
-  const ty = t.typography ?? {};
+  // Werte kommen aus der DB (Inhaber/Bearbeiter können themes selbst beschreiben) und
+  // landen als CSS-Variablen auf der öffentlichen Seite → nur echte Farben/Schriftnamen,
+  // nie url(…) o. Ä. (sonst Tracking der Endkunden über Dritt-Hosts).
+  const c = safeTokenMap(t.colors, isSafeCssColor);
+  const ty = safeTokenMap(t.typography, isSafeCssPlain);
   const sh = t.shape ?? {};
   const s: Record<string, string> = {};
 

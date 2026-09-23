@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import type { Tutorial } from "@/lib/types";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 // Video-Export (Welle 18): aus einem veröffentlichten Tutorial ein MP4 rendern.
 // Reiht einen video_jobs-Eintrag (kind='render') ein; der Hetzner-Worker baut das MP4.
@@ -19,10 +20,10 @@ const VIDEO_BUCKET = "tutorial-videos";
  *  - isBusiness (Video-Export ist ein Business-Feature)
  *  - kein bereits laufender render-Job (queued/processing) fürs selbe Tutorial + Stil
  */
-export async function createRenderJob(tutorialId: string, style: RenderStyle) {
-  if (style !== "classic" && style !== "screencast") throw new Error("Ungültiger Stil.");
+export const createRenderJob = withUserErrors(async function createRenderJob(tutorialId: string, style: RenderStyle) {
+  if (style !== "classic" && style !== "screencast") throw new UserError("Ungültiger Stil.");
   const { account } = await requireAccount();
-  if (!isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
+  if (!isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();
 
   const { data: tutorial, error } = await supabase
@@ -31,9 +32,9 @@ export async function createRenderJob(tutorialId: string, style: RenderStyle) {
     .eq("id", tutorialId)
     .single<Pick<Tutorial, "id" | "account_id" | "title" | "status" | "visibility">>();
   if (error || !tutorial) throw new Error(error?.message ?? "Anleitung nicht gefunden.");
-  if (tutorial.account_id !== account.id) throw new Error("Kein Zugriff auf diese Anleitung.");
+  if (tutorial.account_id !== account.id) throw new UserError("Kein Zugriff auf diese Anleitung.");
   if (tutorial.status !== "published" || tutorial.visibility !== "public")
-    throw new Error("Bitte veröffentlichen Sie die Anleitung zuerst auf der Hilfe-Seite.");
+    throw new UserError("Bitte veröffentlichen Sie die Anleitung zuerst auf der Hilfe-Seite.");
 
   // Kein doppelter laufender Job (gleiches Tutorial + Stil).
   const { data: running } = await supabase
@@ -44,7 +45,7 @@ export async function createRenderJob(tutorialId: string, style: RenderStyle) {
     .eq("render_style", style)
     .in("status", ["queued", "processing"])
     .limit(1);
-  if (running && running.length) throw new Error("Für diese Anleitung läuft bereits ein Export in diesem Stil.");
+  if (running && running.length) throw new UserError("Für diese Anleitung läuft bereits ein Export in diesem Stil.");
 
   const { data: job, error: jErr } = await supabase
     .from("video_jobs")
@@ -60,7 +61,7 @@ export async function createRenderJob(tutorialId: string, style: RenderStyle) {
     .single();
   if (jErr) throw new Error(jErr.message);
   return { jobId: job.id as string };
-}
+});
 
 /**
  * Signierte Download-URL (1 h) auf das fertige Render-MP4 eines eigenen Konto-Jobs.

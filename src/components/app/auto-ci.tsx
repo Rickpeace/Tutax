@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { errorText } from "@/lib/action-error";
 
 export function AutoCi({
   initialUrl,
@@ -42,7 +43,7 @@ export function AutoCi({
           toast.error(data.error ?? "Analyse fehlgeschlagen");
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }

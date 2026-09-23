@@ -1193,57 +1193,42 @@ export async function run(c) {
   if (c.on(9)) {
     setPhase("9 — Schalter in der Bibliothek, Doppelklick auf den Schalter");
     try {
-      // Leere Anleitung anlegen (wie ein Nutzer: „Neue Anleitung" -> „Selbst bauen")
-      await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
-      await sleep(2500);
-      await page.getByRole("button", { name: /Neue Anleitung/i }).first().click();
-      await page.getByRole("dialog").waitFor({ timeout: 15_000 });
-      await page.getByRole("button", { name: "Selbst bauen" }).click();
-      await page.locator("#title").fill("Noch ganz leer");
-      await page.getByRole("button", { name: /Erstellen & bearbeiten/i }).click();
-      await page.waitForURL(/\/app\/tutorials\//, { timeout: 60_000 });
-      const emptyId = page.url().split("/app/tutorials/")[1].split(/[?#]/)[0];
-      await sleep(1500);
+      // Anleitung MIT einem Schritt — eine leere ist seit Welle 54 absichtlich gesperrt
+      // (das prueft Phase 10), hier geht es um den Schalter selbst.
+      const { data: swRow } = await admin
+        .from("tutorials")
+        .insert([{ account_id: state.accountId, title: "Schalter-Probe", status: "draft", visibility: "public" }])
+        .select("id")
+        .single();
+      const swId = swRow.id;
+      await admin.from("steps").insert([{ tutorial_id: swId, position: 0, title: "Schritt 1" }]);
 
-      // Zurueck in die Bibliothek und dort den Schalter umlegen
+      // In der Bibliothek den Schalter einmal umlegen: wird die Anleitung wirklich veroeffentlicht?
       await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
-      await page.getByText("Noch ganz leer").first().waitFor({ timeout: 60_000 });
+      await page.getByText("Schalter-Probe").first().waitFor({ timeout: 60_000 });
       await sleep(1500);
-      const emptyCard = page.locator("div.group").filter({ hasText: "Noch ganz leer" }).first();
-      const sw = emptyCard.getByRole("switch").first();
-      await sw.click();
+      const swCard = page.locator("div.group").filter({ hasText: "Schalter-Probe" }).first();
+      await swCard.getByRole("switch").first().click();
       await sleep(5000);
-      const { data: et } = await admin.from("tutorials").select("status, slug").eq("id", emptyId).single();
-      info(`Leere Anleitung nach Schalter: status=${et.status} slug=${et.slug}`);
-      await shot(page, "80-leerer-schalter");
-      if (et.status === "published") {
-        bug(
-          "aergerlich",
-          "Leere Anleitung laesst sich ueber den Schalter in der Bibliothek veroeffentlichen",
-          `Im Editor ist „Veroeffentlichen“ bei 0 Schritten gesperrt („Erst Schritte anlegen“), der Schalter auf der Karte in der Bibliothek (src/components/app/tutorial-card.tsx, toggleLive) kennt diese Sperre nicht. Ergebnis: eine leere Anleitung steht oeffentlich auf der Hilfe-Seite (/h/${state.slug}/${et.slug}).`,
-        );
-        const hp = await c.ctx.newPage();
-        c.watch(hp);
-        await hp.goto(`${BASE}/h/${state.slug}/${et.slug}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
-        await hp.waitForLoadState("networkidle").catch(() => {});
-        await sleep(1500);
-        await shot(hp, "81-leere-anleitung-oeffentlich");
-        info(`Oeffentlich: ${(await hp.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 200)}`);
-        await hp.close();
-      } else ok("Leere Anleitung wird auch ueber den Schalter nicht veroeffentlicht");
+      const { data: et } = await admin.from("tutorials").select("status, slug").eq("id", swId).single();
+      info(`Nach einem Klick auf den Schalter: status=${et.status} slug=${et.slug}`);
+      await shot(page, "80-schalter");
+      if (et.status !== "published") {
+        bug("aergerlich", "Schalter in der Bibliothek veroeffentlicht nicht", `Nach einem Klick steht die Anleitung (mit Schritt) weiter auf „${et.status}“.`);
+      } else ok("Schalter in der Bibliothek veroeffentlicht eine Anleitung mit Schritten");
 
       // Schalter zweimal schnell (Doppelklick): bleibt der Zustand konsistent?
       await page.reload({ waitUntil: "domcontentloaded" });
-      await page.getByText("Noch ganz leer").first().waitFor({ timeout: 60_000 });
+      await page.getByText("Schalter-Probe").first().waitFor({ timeout: 60_000 });
       await sleep(1500);
-      const card2 = page.locator("div.group").filter({ hasText: "Noch ganz leer" }).first();
+      const card2 = page.locator("div.group").filter({ hasText: "Schalter-Probe" }).first();
       const sw2 = card2.getByRole("switch").first();
       await sw2.click();
       await sleep(150);
       await sw2.click();
       await sleep(8000);
-      const { data: et2 } = await admin.from("tutorials").select("status").eq("id", emptyId).single();
-      const uiOn = (await card2.innerText()).includes("Veröffentlicht");
+      const { data: et2 } = await admin.from("tutorials").select("status").eq("id", swId).single();
+      const uiOn = (await sw2.getAttribute("aria-checked")) === "true";
       info(`Nach schnellem Doppel-Umlegen: DB=${et2.status}, Karte zeigt „Veröffentlicht"=${uiOn}`);
       if ((et2.status === "published") !== uiOn) {
         bug("aergerlich", "Schalter und tatsaechlicher Zustand laufen auseinander", `Nach zwei schnellen Klicks auf den Veroeffentlichen-Schalter zeigt die Karte „${uiOn ? "Veröffentlicht" : "Entwurf"}“, in der Datenbank steht aber „${et2.status}“. Erst nach dem Neuladen sieht man den echten Zustand.`);
@@ -1251,7 +1236,7 @@ export async function run(c) {
       await shot(page, "82-schalter-doppelklick");
 
       // aufraeumen
-      await admin.from("tutorials").delete().eq("id", emptyId);
+      await admin.from("tutorials").delete().eq("id", swId);
     } catch (e) {
       bug("aergerlich", "Phase 9 abgebrochen", String(e && e.message ? e.message : e));
       await shot(page, "phase9-fehler");
@@ -1389,6 +1374,8 @@ export async function run(c) {
         await sleep(2500);
         const { data: leer2 } = await admin.from("tutorials").select("status").eq("id", leer2Id).single();
         info(`Nachgestellter Veroeffentlichen-Aufruf: HTTP ${resp.status()}; status der leeren Anleitung=${leer2.status}`);
+        const respText = await resp.text().catch(() => "");
+        info(`Antwort des Servers: ${respText.replace(/\s+/g, " ").slice(0, 400)}`);
         if (leer2.status === "published") {
           bug("blockierend", "Server veroeffentlicht eine leere Anleitung", "Die Veroeffentlichen-Action laesst sich an der Oberflaeche vorbei mit einer Anleitung ohne Schritte aufrufen.");
         } else ok("Server lehnt das Veroeffentlichen einer leeren Anleitung ab (nicht nur die Oberflaeche)");

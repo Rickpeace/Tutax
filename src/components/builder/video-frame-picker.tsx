@@ -12,6 +12,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { compressAndUpload } from "@/lib/upload";
+import { errorText } from "@/lib/action-error";
 
 /**
  * Frame-Picker: aus dem Quell-Video einen anderen Moment als Schritt-Bild wählen.
@@ -96,7 +97,7 @@ export function VideoFramePicker({
       onOpenChange(false);
     } catch (err) {
       // Häufigster Fall: getaintete Canvas (CORS) oder Netzfehler beim Upload.
-      const msg = err instanceof Error ? err.message : "Frame konnte nicht übernommen werden.";
+      const msg = errorText(err, "Frame konnte nicht übernommen werden.");
       toast.error(
         /taint|secur|cross-origin/i.test(msg)
           ? "Das Video-Bild ließ sich nicht auslesen (Sicherheitssperre). Bitte später erneut versuchen."

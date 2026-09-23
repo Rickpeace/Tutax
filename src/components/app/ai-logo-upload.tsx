@@ -5,6 +5,7 @@ import imageCompression from "browser-image-compression";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { errorText } from "@/lib/action-error";
 
 /** Manuelles Logo fürs KI-Design (setzt themes.ai_logo_path). */
 export function AiLogoUpload({ logoUrl }: { logoUrl: string | null }) {
@@ -31,7 +32,7 @@ export function AiLogoUpload({ logoUrl }: { logoUrl: string | null }) {
       toast.success("Logo gesetzt");
       location.reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Fehler");
+      toast.error(errorText(err));
     } finally {
       setBusy(false);
     }

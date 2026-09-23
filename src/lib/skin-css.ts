@@ -14,6 +14,11 @@ export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
   if (typeof input !== "string" || !input.trim()) return "";
   let css = input.slice(0, 30000);
 
+  // Das Ergebnis landet roh in <style dangerouslySetInnerHTML>: ein „</style>“ würde den
+  // Block beenden und beliebiges HTML/Script einschleusen. „<“ braucht gültiges Skin-CSS nie
+  // (Kind-Kombinator ist „>“) — also ersatzlos weg, ebenso Backslash-Escapes, mit denen
+  // sich „<“ oder „url(“ als \3c bzw. \75 rl( verkleiden ließe.
+  css = css.replace(/[<\\]/g, "");
   css = css.replace(/```[a-z]*/gi, ""); // Markdown-Codefences
   css = css.replace(/\/\*[\s\S]*?\*\//g, ""); // Kommentare
   css = css.replace(/@import[^;]*;?/gi, "");
@@ -27,7 +32,8 @@ export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
     return url.startsWith("data:image/") ? m : "none";
   });
 
-  return scopeCss(css, scope).slice(0, 40000);
+  // Zweite Sicherung nach dem Kürzen: nie ein „<“ in der Ausgabe.
+  return scopeCss(css, scope).slice(0, 40000).replace(/</g, "");
 }
 
 // Nur „malende" Eigenschaften erlauben – KEINE Struktur (display/position/float/

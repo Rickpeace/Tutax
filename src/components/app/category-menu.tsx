@@ -31,6 +31,7 @@ import {
   cleanCategoryName,
 } from "@/lib/category-name";
 import { cn } from "@/lib/utils";
+import { unwrap, errorText } from "@/lib/action-error";
 
 const anleitungen = (n: number) => `${n} Anleitung${n === 1 ? "" : "en"}`;
 
@@ -79,7 +80,7 @@ export function CategoryMenu({
     if (!ok) return;
     startTransition(async () => {
       try {
-        const { moved } = await deleteCategory(categoryId);
+        const { moved } = unwrap(await deleteCategory(categoryId));
         toast.success(
           moved > 0
             ? `Kategorie gelöscht – ${anleitungen(moved)} jetzt unter „Sonstiges“`
@@ -88,7 +89,7 @@ export function CategoryMenu({
         onDeleted?.();
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+        toast.error(errorText(e, "Löschen fehlgeschlagen"));
       }
     });
   };
@@ -192,12 +193,12 @@ function RenameCategoryDialog({
     }
     setSaving(true);
     try {
-      await renameCategory(categoryId, clean);
+      unwrap(await renameCategory(categoryId, clean));
       toast.success("Kategorie umbenannt");
       onOpenChange(false);
       onRenamed();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Umbenennen fehlgeschlagen");
+      setError(errorText(err, "Umbenennen fehlgeschlagen"));
       inputRef.current?.focus();
     } finally {
       setSaving(false);

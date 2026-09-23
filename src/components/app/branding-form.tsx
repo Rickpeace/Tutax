@@ -10,6 +10,7 @@ import { saveBranding } from "@/app/app/settings/branding/actions";
 import { SaveBar } from "@/components/app/save-bar";
 import { FieldLabel, SettingsCard } from "@/components/app/settings-ui";
 import type { BrandColors } from "@/lib/theme";
+import { errorText } from "@/lib/action-error";
 
 type ColorKey = keyof BrandColors;
 
@@ -84,7 +85,7 @@ export function BrandingForm({
       toast.success("Logo gespeichert");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Fehler");
+      toast.error(errorText(err));
     } finally {
       setLogoBusy(false);
     }

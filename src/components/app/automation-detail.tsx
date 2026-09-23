@@ -47,6 +47,7 @@ import {
   markAutomationStepOptional,
   setAutomationStepJump,
 } from "@/app/app/automationen/actions";
+import { unwrap, errorText } from "@/lib/action-error";
 
 export type AutomationStepView = {
   id: string;
@@ -189,7 +190,7 @@ export function AutomationDetail({
         setSavedSchedule(toSave);
         toast.success(schedEnabled ? "Zeitplan gespeichert" : "Zeitplan entfernt");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -244,7 +245,7 @@ export function AutomationDetail({
       } catch (e) {
         setCurrentTitle(title);
         setTitleValue(title);
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -262,7 +263,7 @@ export function AutomationDetail({
         setSavedParams(paramState);
         toast.success("Angaben gespeichert");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -276,7 +277,7 @@ export function AutomationDetail({
         toast.success("Bedingung entfernt — der Schritt läuft immer.");
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -286,11 +287,11 @@ export function AutomationDetail({
   function markStepOptional(stepId: string) {
     startTransition(async () => {
       try {
-        await markAutomationStepOptional(id, stepId);
+        unwrap(await markAutomationStepOptional(id, stepId));
         toast.success("Schritt läuft nur noch, wenn das Element da ist.");
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -301,14 +302,16 @@ export function AutomationDetail({
   function setStepJump(stepId: string, toPosition: number) {
     startTransition(async () => {
       try {
-        await setAutomationStepJump(id, stepId, {
-          when: { kind: "element", negate: true },
-          to_position: toPosition,
-        });
+        unwrap(
+          await setAutomationStepJump(id, stepId, {
+            when: { kind: "element", negate: true },
+            to_position: toPosition,
+          }),
+        );
         toast.success("Block-Übersprung gesetzt — wird beim Ausführen genutzt.");
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -316,11 +319,11 @@ export function AutomationDetail({
   function clearStepJump(stepId: string) {
     startTransition(async () => {
       try {
-        await setAutomationStepJump(id, stepId, null);
+        unwrap(await setAutomationStepJump(id, stepId, null));
         toast.success("Sprung entfernt.");
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }
@@ -333,7 +336,7 @@ export function AutomationDetail({
         toast.success("Gelöscht");
         router.push("/app/automationen");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
   }

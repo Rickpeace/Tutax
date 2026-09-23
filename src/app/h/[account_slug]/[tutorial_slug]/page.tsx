@@ -18,6 +18,7 @@ import { LangSuggestBar } from "@/components/viewer/lang-suggest-bar";
 import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
+import { toPublicStep } from "@/lib/public-step";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
@@ -315,7 +316,7 @@ export default async function ViewerPage({
 
         <Wizard
           rootId={tutorial.root_step_id}
-          steps={steps}
+          steps={steps.map(toPublicStep)}
           branches={branches}
           imageUrls={imageUrls}
           audioUrls={audioUrls}

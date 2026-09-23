@@ -17,6 +17,7 @@ import {
   type EscalationSettings,
 } from "@/lib/escalation";
 import { saveEscalation } from "@/app/app/settings/eskalation/actions";
+import { unwrap, errorText } from "@/lib/action-error";
 
 /**
  * „Persönlicher Kontakt" (Entwurf A + kompakte Personen-Karten aus Entwurf B, 22.09.2026):
@@ -150,11 +151,11 @@ export function EscalationForm({
   const save = () =>
     start(async () => {
       try {
-        await saveEscalation(settings);
+        unwrap(await saveEscalation(settings));
         setSaved(snapshot(settings));
         toast.success("Gespeichert");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+        toast.error(errorText(e, "Speichern fehlgeschlagen"));
       }
     });
 

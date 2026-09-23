@@ -7,6 +7,7 @@ import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { reindexTutorialIfLive } from "@/lib/kb";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -27,10 +28,10 @@ type Issue = { step?: string; problem?: string; suggestion?: string; applied?: b
  * Wendet die Verbesserungsvorschläge EINES Schritts (eine oder mehrere Positionen)
  * gemeinsam an: ein einziges Umschreiben, das alle Probleme zusammen einarbeitet.
  */
-export async function applyDriftSuggestions(alertId: string, indices: number[]) {
+export const applyDriftSuggestions = withUserErrors(async function applyDriftSuggestions(alertId: string, indices: number[]) {
   // Nur Inhaber/Bearbeiter (KI-Kosten + Schreiben); Mitarbeiter weist requireAccount ab.
   await requireAccount();
-  if (!aiConfigured()) throw new Error("KI ist nicht aktiviert.");
+  if (!aiConfigured()) throw new UserError("KI ist nicht aktiviert.");
   const supabase = await createClient();
 
   const { data: alert } = await supabase
@@ -38,7 +39,7 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
     .select("id, tutorial_id, details")
     .eq("id", alertId)
     .single();
-  if (!alert) throw new Error("Hinweis nicht gefunden.");
+  if (!alert) throw new UserError("Hinweis nicht gefunden.");
   // Nur Anleitungen des AKTIVEN Kontos (RLS zeigt Hinweise aller Konten, in denen man
   // Mitglied ist — auch als Mitarbeiter anderswo). Vor dem KI-Aufruf prüfen.
   await requireTutorialAccess(alert.tutorial_id as string);
@@ -46,14 +47,14 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
   const details = (alert.details ?? {}) as { issues?: Issue[] };
   const issues = details.issues ?? [];
   const selected = indices.map((i) => issues[i]).filter(Boolean) as Issue[];
-  if (!selected.length) throw new Error("Position nicht gefunden.");
+  if (!selected.length) throw new UserError("Position nicht gefunden.");
 
   const { data: steps } = await supabase
     .from("steps")
     .select("id, title, body, position")
     .eq("tutorial_id", alert.tutorial_id)
     .order("position", { ascending: true });
-  if (!steps?.length) throw new Error("Keine Schritte vorhanden.");
+  if (!steps?.length) throw new UserError("Keine Schritte vorhanden.");
 
   // Ziel-Schritt aus der ersten Position bestimmen: „N. Titel" -> Nummer; sonst Titel-Match.
   const stepStr = String(selected[0].step ?? "");
@@ -69,7 +70,7 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
         return t && (want.includes(t) || t.includes(want));
       }) ?? null;
   }
-  if (!target) throw new Error("Passender Schritt nicht gefunden – bitte im Editor anpassen.");
+  if (!target) throw new UserError("Passender Schritt nicht gefunden – bitte im Editor anpassen.");
 
   const punkte = selected
     .map((it, k) => `${k + 1}) Problem: ${it.problem ?? ""}\n   Korrektur: ${it.suggestion ?? ""}`)
@@ -97,7 +98,7 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
   try {
     out = JSON.parse(completion.choices[0].message.content ?? "{}");
   } catch {
-    throw new Error("KI-Antwort unlesbar.");
+    throw new UserError("KI-Antwort unlesbar.");
   }
   const newTitle = typeof out.title === "string" && out.title.trim() ? out.title.trim() : target.title;
   const newText = typeof out.body === "string" ? out.body.trim() : "";
@@ -121,7 +122,7 @@ export async function applyDriftSuggestions(alertId: string, indices: number[]) 
 
   revalidatePath("/app/alerts");
   return { ok: true, stepTitle: newTitle };
-}
+});
 
 export async function updateAlertStatus(
   alertId: string,

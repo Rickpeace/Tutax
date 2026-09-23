@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, PenLine } from "lucide-react";
 import { createDraftFromQuestion } from "@/app/app/insights-actions";
+import { unwrap, errorText } from "@/lib/action-error";
 
 /**
  * Kleiner Client-Wrapper für den Frage-Lücken-Miner (REVIEW H1): ruft die
@@ -19,13 +20,13 @@ export function GapAction({ question }: { question: string }) {
   function create() {
     startTransition(async () => {
       try {
-        const { tutorialId } = await createDraftFromQuestion(question);
+        const { tutorialId } = unwrap(await createDraftFromQuestion(question));
         toast.success("Entwurf erstellt", {
           description: "Ergänzen Sie jetzt Screenshots und Details.",
         });
         router.push(`/app/tutorials/${tutorialId}`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Entwurf konnte nicht erstellt werden.");
+        toast.error(errorText(e, "Entwurf konnte nicht erstellt werden."));
       }
     });
   }

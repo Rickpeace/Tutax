@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { importFromWebsite } from "@/app/app/assistent/wissen/import-actions";
+import { errorText } from "@/lib/action-error";
 
 type ImportResult = { count: number; titles: string[] };
 
@@ -69,7 +70,7 @@ export function KbImport({ accountWebsite }: { accountWebsite: string }) {
         successToast(res);
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Import fehlgeschlagen.");
+        toast.error(errorText(e, "Import fehlgeschlagen."));
       }
     });
   }

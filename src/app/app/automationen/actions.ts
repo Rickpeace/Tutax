@@ -11,6 +11,7 @@ import {
 } from "@/lib/automations";
 import { validateStepCondition, validateStepJump } from "@/lib/guide";
 import { AUTOMATION_TITLE_MAX } from "@/lib/text-limits";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -116,7 +117,7 @@ export async function setAutomationStepCondition(
  * neu aufzunehmen. Der Selektor wird serverseitig gelesen (nie zum Client exponiert). Hat der
  * Schritt keinen Selektor (reiner Hinweis-Schritt), wirft die Action sprechend. Konto-scoped.
  */
-export async function markAutomationStepOptional(automationId: string, stepId: string) {
+export const markAutomationStepOptional = withUserErrors(async function markAutomationStepOptional(automationId: string, stepId: string) {
   const supabase = await createClient();
   const { data: step, error: readErr } = await supabase
     .from("automation_steps")
@@ -127,7 +128,7 @@ export async function markAutomationStepOptional(automationId: string, stepId: s
   if (readErr) throw new Error(readErr.message);
   const selector = step?.selector;
   if (!selector || typeof selector !== "object") {
-    throw new Error("Dieser Schritt hat kein Element, an dem eine Bedingung greifen könnte.");
+    throw new UserError("Dieser Schritt hat kein Element, an dem eine Bedingung greifen könnte.");
   }
   const { error } = await supabase
     .from("automation_steps")
@@ -136,7 +137,7 @@ export async function markAutomationStepOptional(automationId: string, stepId: s
     .eq("automation_id", automationId);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${automationId}`);
-}
+});
 
 /**
  * Bedingter Sprung / Block-Überspringen (Welle 47): an EINEM Automations-Schritt einen Vorwärts-
@@ -150,7 +151,7 @@ export async function markAutomationStepOptional(automationId: string, stepId: s
  * entfernt den Sprung. Validiert via validateStepJump; NUR VORWÄRTS (to_position > Position dieses
  * Schritts). Konto-scoped via RLS (+ automation_id-Filter als Gürtel-und-Hosenträger).
  */
-export async function setAutomationStepJump(
+export const setAutomationStepJump = withUserErrors(async function setAutomationStepJump(
   automationId: string,
   stepId: string,
   jump: unknown,
@@ -179,7 +180,7 @@ export async function setAutomationStepJump(
   if (readErr) throw new Error(readErr.message);
   const selector = step?.selector;
   if (!selector || typeof selector !== "object") {
-    throw new Error("Dieser Schritt hat kein Element, an dem ein Sprung greifen könnte.");
+    throw new UserError("Dieser Schritt hat kein Element, an dem ein Sprung greifen könnte.");
   }
 
   // when IMMER als „eigenes Element" — der Selektor kommt vom Server; negate (Default true) vom
@@ -198,10 +199,10 @@ export async function setAutomationStepJump(
     to_position: raw.to_position,
   };
   const clean = validateStepJump(completed);
-  if (!clean) throw new Error("Ungültiges Sprung-Ziel.");
+  if (!clean) throw new UserError("Ungültiges Sprung-Ziel.");
   // NUR VORWÄRTS: Ziel muss ein SPÄTERER Schritt sein (keine Schleife).
   if (typeof step?.position === "number" && clean.to_position <= step.position) {
-    throw new Error("Das Sprung-Ziel muss ein späterer Schritt sein.");
+    throw new UserError("Das Sprung-Ziel muss ein späterer Schritt sein.");
   }
 
   const { error } = await supabase
@@ -211,7 +212,7 @@ export async function setAutomationStepJump(
     .eq("automation_id", automationId);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${automationId}`);
-}
+});
 
 /** Automation löschen (kaskadiert Schritte + Läufe). Konto-scoped via RLS. */
 export async function deleteAutomation(id: string) {

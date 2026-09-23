@@ -10,6 +10,7 @@ import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import { backfillAccountTranslations } from "@/lib/translate-jobs";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 // Welle 50 (QA): Jedes Einstellungs-Formular schickt NUR sein eigenes Feld. Nicht übergebene
 // Felder bleiben in der DB unverändert — sonst überschriebe z. B. ein noch offenes „Aussehen“
@@ -141,10 +142,10 @@ export async function saveLanguages(
 }
 
 /** Aktive Design-Quelle wählen: Standard-CI (manuell), KI-Design oder Extrem. */
-export async function setThemeMode(mode: "manual" | "ai" | "extreme") {
+export const setThemeMode = withUserErrors(async function setThemeMode(mode: "manual" | "ai" | "extreme") {
   const { account } = await requireAccount();
   // KI-Design (ai/extreme) ist ein Business-Feature; zurück auf manuell geht immer.
-  if (mode !== "manual" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
+  if (mode !== "manual" && !isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();
   const clean = mode === "extreme" ? "extreme" : mode === "ai" ? "ai" : "manual";
   const { error } = await supabase
@@ -155,4 +156,4 @@ export async function setThemeMode(mode: "manual" | "ai" | "extreme") {
   invalidateHubTag(account.slug); // Design-Wechsel sofort öffentlich sichtbar
   revalidatePath("/app/settings", "layout");
   revalidatePath("/app");
-}
+});

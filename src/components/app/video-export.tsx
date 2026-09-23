@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { createRenderJob, getRenderDownloadUrl, type RenderStyle } from "@/app/app/actions-render";
+import { unwrap, errorText } from "@/lib/action-error";
 
 type JobStatus = "queued" | "processing" | "done" | "failed";
 type RenderJob = { id: string; render_style: RenderStyle; status: JobStatus; progress: string | null; error: string | null };
@@ -84,7 +85,7 @@ export function VideoExport({
   async function start(style: RenderStyle) {
     setStarting(style);
     try {
-      await createRenderJob(tutorialId, style);
+      unwrap(await createRenderJob(tutorialId, style));
       toast.success(`Export gestartet (${STYLE_LABEL[style]}) — das Video erscheint gleich hier.`);
       onOpenChange(false);
       // Nach dem Start neu laden + Polling ggf. wieder anwerfen.
@@ -100,7 +101,7 @@ export function VideoExport({
         }, 5000);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Export konnte nicht gestartet werden.");
+      toast.error(errorText(e, "Export konnte nicht gestartet werden."));
     } finally {
       setStarting(null);
     }

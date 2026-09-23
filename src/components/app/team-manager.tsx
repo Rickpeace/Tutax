@@ -16,6 +16,7 @@ import {
 import { ROLES, ROLE_HINT, ROLE_LABEL, asRole } from "@/lib/roles";
 import { FieldLabel, SettingsCard, settingsInputClass } from "@/components/app/settings-ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { unwrap, errorText } from "@/lib/action-error";
 
 type Member = { userId: string; role: string; email: string; isYou: boolean };
 type Invitation = { id: string; email: string; role: string; token: string; expired: boolean; expiresAt: string };
@@ -196,10 +197,10 @@ export function TeamManager({
                     const apply = () =>
                       start(async () => {
                         try {
-                          await changeMemberRole(m.userId, next);
+                          unwrap(await changeMemberRole(m.userId, next));
                           toast.success(`${m.email} ist jetzt ${roleLabel(next)}.`);
                         } catch (err) {
-                          toast.error(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden");
+                          toast.error(errorText(err, "Rolle konnte nicht geändert werden"));
                         }
                       });
                     if (!m.isYou) {
@@ -243,10 +244,10 @@ export function TeamManager({
                       if (!ok) return;
                       start(async () => {
                         try {
-                          await removeMember(m.userId);
+                          unwrap(await removeMember(m.userId));
                           toast.success(`${m.email} wurde aus dem Team entfernt.`);
                         } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Entfernen fehlgeschlagen");
+                          toast.error(errorText(e, "Entfernen fehlgeschlagen"));
                         }
                       });
                     });

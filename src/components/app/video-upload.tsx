@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { validateClicks, type Click } from "@/lib/clicks";
+import { errorText } from "@/lib/action-error";
 
 type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed" | "bulk" | "bulkDone";
 
@@ -140,7 +141,7 @@ export function VideoUpload({
       setJobId(jobId);
       setPhase("queued");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload fehlgeschlagen.");
+      setError(errorText(err, "Upload fehlgeschlagen."));
       setPhase("failed");
     }
   }
@@ -162,7 +163,7 @@ export function VideoUpload({
         await uploadOne(f, extOf(f.name), baseName(f.name));
         setBulkItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, status: "done" } : it)));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
+        const msg = errorText(err, "Upload fehlgeschlagen.");
         setBulkItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, status: "error", error: msg } : it)));
       }
     }
@@ -190,7 +191,7 @@ export function VideoUpload({
           clicks = await parseClicksFile(clickFile);
         } catch (err) {
           clicks = undefined;
-          toast.error(err instanceof Error ? err.message : "Die Klick-Datei konnte nicht gelesen werden.", {
+          toast.error(errorText(err, "Die Klick-Datei konnte nicht gelesen werden."), {
             description: "Die Anleitung wird trotzdem erstellt — nur ohne Klick-Marker.",
           });
         }
@@ -285,7 +286,7 @@ export function VideoUpload({
       timerRef.current = setInterval(() => setSecs((s) => s + 1), 1000);
       setPhase("recording");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Aufnahme konnte nicht gestartet werden.");
+      setError(errorText(err, "Aufnahme konnte nicht gestartet werden."));
       setPhase("failed");
     }
   }

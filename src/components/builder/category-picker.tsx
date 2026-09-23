@@ -9,6 +9,7 @@ import {
 } from "@/app/app/tutorials/[id]/actions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CATEGORY_NAME_MAX } from "@/lib/category-name";
+import { unwrap, errorText } from "@/lib/action-error";
 
 type Cat = { id: string; name: string };
 
@@ -50,7 +51,7 @@ export function CategoryPicker({
     if (!query.trim() || busy) return;
     setBusy(true);
     try {
-      const c = await createCategory(query.trim());
+      const c = unwrap(await createCategory(query.trim()));
       setCats((p) => [...p, c]);
       setSelectedId(c.id);
       setOpen(false);
@@ -58,7 +59,7 @@ export function CategoryPicker({
       await setTutorialCategory(tutorialId, c.id);
       toast.success("Kategorie angelegt");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Fehler");
+      toast.error(errorText(e));
     } finally {
       setBusy(false);
     }

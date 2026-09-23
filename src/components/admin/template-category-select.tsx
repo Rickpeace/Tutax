@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { setTemplateCategory } from "@/app/admin/actions";
+import { errorText } from "@/lib/action-error";
 
 export function TemplateCategorySelect({
   templateId,
@@ -25,7 +26,7 @@ export function TemplateCategorySelect({
           try {
             await setTemplateCategory(templateId, v);
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Fehler");
+            toast.error(errorText(err));
           }
         });
       }}

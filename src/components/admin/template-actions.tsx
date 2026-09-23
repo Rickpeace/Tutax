@@ -10,6 +10,7 @@ import {
   unpublishTemplate,
   deleteTemplate,
 } from "@/app/admin/actions";
+import { errorText } from "@/lib/action-error";
 
 export function TemplateActions({
   id,
@@ -25,7 +26,7 @@ export function TemplateActions({
         await fn();
         toast.success(msg);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fehler");
+        toast.error(errorText(e));
       }
     });
 

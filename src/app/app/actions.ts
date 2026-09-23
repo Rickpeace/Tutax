@@ -36,6 +36,7 @@ import {
   audienceGateError,
 } from "@/lib/plan";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
@@ -97,7 +98,7 @@ export async function createTutorial(formData: FormData) {
  * Anleitungs-Caches invalidieren und (Kategorie steckt in den KI-Ausschnitten) veröffentlichte
  * Anleitungen neu indizieren. Rückgabe: wie viele Anleitungen nach „Sonstiges“ gewandert sind.
  */
-export async function deleteCategory(categoryId: string): Promise<{ moved: number }> {
+export const deleteCategory = withUserErrors(async function deleteCategory(categoryId: string): Promise<{ moved: number }> {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
@@ -109,7 +110,7 @@ export async function deleteCategory(categoryId: string): Promise<{ moved: numbe
     .maybeSingle();
   if (ce) throw new Error(ce.message);
   if (!cat || cat.account_id !== account.id) {
-    throw new Error("Kategorie kann nicht gelöscht werden.");
+    throw new UserError("Kategorie kann nicht gelöscht werden.");
   }
 
   // Betroffene Anleitungen VOR dem Löschen merken (danach ist category_id schon null).
@@ -129,7 +130,7 @@ export async function deleteCategory(categoryId: string): Promise<{ moved: numbe
     .eq("account_id", account.id)
     .select("id");
   if (error) throw new Error(error.message);
-  if (!gone?.length) throw new Error("Kategorie kann nicht gelöscht werden.");
+  if (!gone?.length) throw new UserError("Kategorie kann nicht gelöscht werden.");
 
   invalidateHubTag(account.slug);
   for (const id of affectedIds) await invalidateTutorialTags(id);
@@ -140,7 +141,7 @@ export async function deleteCategory(categoryId: string): Promise<{ moved: numbe
   }
   revalidatePath("/app");
   return { moved: affectedIds.length };
-}
+});
 
 /**
  * EIGENE Kategorie umbenennen. Sicherheit wie deleteCategory: requireAccount() (nur Rollen
@@ -153,14 +154,14 @@ export async function deleteCategory(categoryId: string): Promise<{ moved: numbe
  * sofort den neuen deutschen Namen) und im Hintergrund neu übersetzt. Der Name steckt in
  * den KI-Ausschnitten → veröffentlichte Anleitungen der Kategorie neu indizieren.
  */
-export async function renameCategory(
+export const renameCategory = withUserErrors(async function renameCategory(
   categoryId: string,
   name: string,
 ): Promise<{ name: string }> {
   const { account } = await requireAccount();
   const clean = cleanCategoryName(String(name ?? ""));
-  if (!clean) throw new Error(CATEGORY_NAME_EMPTY);
-  if (clean.length > CATEGORY_NAME_MAX) throw new Error(CATEGORY_NAME_TOO_LONG);
+  if (!clean) throw new UserError(CATEGORY_NAME_EMPTY);
+  if (clean.length > CATEGORY_NAME_MAX) throw new UserError(CATEGORY_NAME_TOO_LONG);
   const supabase = await createClient();
 
   // Nur eigene Kategorie (account_id gesetzt + == aktives Konto). Globale ausschließen.
@@ -171,7 +172,7 @@ export async function renameCategory(
     .maybeSingle();
   if (ce) throw new Error(ce.message);
   if (!cat || cat.account_id !== account.id) {
-    throw new Error("Kategorie kann nicht umbenannt werden.");
+    throw new UserError("Kategorie kann nicht umbenannt werden.");
   }
   if (cat.name === clean) return { name: clean }; // nichts zu tun
 
@@ -185,7 +186,7 @@ export async function renameCategory(
   const taken = (siblings ?? []).find(
     (c) => c.id !== categoryId && categoryNameKey(String(c.name ?? "")) === key,
   );
-  if (taken) throw new Error(categoryNameTaken(String(taken.name)));
+  if (taken) throw new UserError(categoryNameTaken(String(taken.name)));
 
   // .select(): ein von RLS still verweigertes Update (0 Zeilen) nicht als Erfolg melden.
   const { data: done, error } = await supabase
@@ -195,7 +196,7 @@ export async function renameCategory(
     .eq("account_id", account.id)
     .select("id");
   if (error) throw new Error(error.message);
-  if (!done?.length) throw new Error("Kategorie kann nicht umbenannt werden.");
+  if (!done?.length) throw new UserError("Kategorie kann nicht umbenannt werden.");
 
   const { data: affected } = await supabase
     .from("tutorials")
@@ -213,7 +214,7 @@ export async function renameCategory(
   });
   revalidatePath("/app");
   return { name: clean };
-}
+});
 
 export async function renameTutorial(id: string, title: string) {
   await requireTutorialAccess(id);
@@ -431,13 +432,13 @@ async function copyImagesToPublic(
         } catch (e) {
           // Lieber Abbruch als unredigierte Daten veröffentlichen.
           console.error("Blur-Einbrennen fehlgeschlagen:", e instanceof Error ? e.message : e);
-          throw new Error("Veröffentlichen abgebrochen: Die Verpixelung konnte nicht angewendet werden.");
+          throw new UserError("Veröffentlichen abgebrochen: Die Verpixelung konnte nicht angewendet werden.");
         }
       }
       const { error: upErr } = await admin.storage
         .from(PUBLIC_BUCKET)
         .upload(path, buf, { upsert: true, contentType: "image/webp", cacheControl: "60" });
-      if (upErr) throw new Error("Veröffentlichen abgebrochen: Ein Bild konnte nicht hochgeladen werden.");
+      if (upErr) throw new UserError("Veröffentlichen abgebrochen: Ein Bild konnte nicht hochgeladen werden.");
     }
   }
 }
@@ -466,7 +467,7 @@ async function removePublicImages(
  *  - Intern: nur Status=published (= „fürs Team freigegeben") — KEINE public-Bilder,
  *    KEIN Index, KEINE Cache-Invalidierung, KEIN Slug nötig.
  */
-export async function publishTutorial(tutorialId: string) {
+export const publishTutorial = withUserErrors(async function publishTutorial(tutorialId: string) {
   await requireTutorialAccess(tutorialId);
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -486,7 +487,7 @@ export async function publishTutorial(tutorialId: string) {
     .select("id", { count: "exact", head: true })
     .eq("tutorial_id", tutorialId);
   if ((stepCount ?? 0) === 0) {
-    throw new Error(
+    throw new UserError(
       "Diese Anleitung hat noch keine Schritte. Legen Sie zuerst einen Schritt an, dann können Sie veröffentlichen.",
     );
   }
@@ -544,7 +545,7 @@ export async function publishTutorial(tutorialId: string) {
 
   revalidatePath("/app");
   return { slug, accountSlug: account.slug };
-}
+});
 
 type VisibilityTutorial = Pick<
   Tutorial,
@@ -635,7 +636,7 @@ export async function setTutorialVisibility(
   if (visibility !== "public" && visibility !== "internal") return;
   const { account } = await requireAccount();
   // Interne Tutorials + Schulungsnachweis sind Business (zurück auf öffentlich geht immer).
-  if (visibility === "internal" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
+  if (visibility === "internal" && !isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();
 
   const { data: tutorial, error } = await supabase
@@ -660,7 +661,7 @@ export async function setTutorialVisibility(
  * „Beide aus" gibt es nicht — die UI verhindert das; hier fällt publicOn=false immer
  * auf internal (= Team sichtbar), also nie „nirgends sichtbar".
  */
-export async function setTutorialAudience(
+export const setTutorialAudience = withUserErrors(async function setTutorialAudience(
   tutorialId: string,
   audience: { publicOn: boolean; lernenOn: boolean },
 ) {
@@ -668,7 +669,7 @@ export async function setTutorialAudience(
   const { account } = await requireAccount();
   const targetVisibility: Tutorial["visibility"] = audience.publicOn ? "public" : "internal";
   // Business-Gate: intern („nur Team“) ist Business. Öffentlich geht immer.
-  if (targetVisibility === "internal" && !isBusiness(account)) throw new Error(BUSINESS_REQUIRED);
+  if (targetVisibility === "internal" && !isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();
 
   const { data: tutorial, error } = await supabase
@@ -681,7 +682,7 @@ export async function setTutorialAudience(
   // Pro-Gate (Tarifseite: „Schulungen mit Schulungsnachweis“ ab Pro) — nur beim
   // Einschalten; bestehende Schulungen bleiben, Abwählen geht immer (lib/plan.ts).
   const gate = audienceGateError(account, tutorial, audience);
-  if (gate) throw new Error(gate);
+  if (gate) throw new UserError(gate);
 
   // Zuerst die Sichtbarkeit über die geteilte Logik umschalten (falls nötig).
   await applyVisibilityChange(supabase, account, tutorial, targetVisibility);
@@ -696,7 +697,7 @@ export async function setTutorialAudience(
 
   revalidatePath("/app");
   return { visibility: targetVisibility, inLernen: nextInLernen };
-}
+});
 
 /** Veröffentlichung zurückziehen: Status = draft, öffentliche Bilder entfernen. */
 export async function unpublishTutorial(tutorialId: string) {
