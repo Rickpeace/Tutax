@@ -151,6 +151,7 @@ try {
   // ── 4. E-Mail-Adresse ändern ──
   console.log("4. E-Mail-Adresse ändern");
   const ec = await mkUser("change");
+  await admin.from("accounts").update({ onboarded: true }).in("id", accounts); // sonst leitet /app zur Einrichtung um
   const newEmail = `mail-neu-${stamp}@example.com`;
   const cur = await admin.auth.admin.generateLink({ type: "email_change_current", email: ec.email, newEmail, options: { redirectTo: `${BASE}/auth/confirm` } });
   const nxt = await admin.auth.admin.generateLink({ type: "email_change_new", email: ec.email, newEmail, options: { redirectTo: `${BASE}/auth/confirm` } });
@@ -167,7 +168,7 @@ try {
       await page.goto(confirmLink(r.data.properties.hashed_token, "email_change"), { waitUntil: "domcontentloaded" });
       await page.getByTestId("email-notice").waitFor({ timeout: 30_000 }).catch(() => {});
       const notice = (await page.getByTestId("email-notice").innerText().catch(() => "")).replace(/\s+/g, " ");
-      ok(path_(page) === "/app/settings/profil" && notice.length > 0 && !/ungültig oder abgelaufen/.test(notice), `E-Mail ändern (${label}): Profil mit klarer Meldung („${notice.slice(0, 90)}“)`);
+      ok(path_(page) === "/app/settings/profil" && notice.length > 0 && !!path_(page) && !/ungültig oder abgelaufen/.test(notice), `E-Mail ändern (${label}): Profil mit klarer Meldung → ${path_(page)} („${notice.slice(0, 90)}“)`);
     }
     await page.context().close();
     const { data: u } = await admin.auth.admin.getUserById(ec.uid);
