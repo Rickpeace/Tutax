@@ -81,6 +81,7 @@ export async function forkTemplate(templateId: string) {
     .select("*")
     .eq("id", templateId)
     .eq("is_template", true)
+    .is("account_id", null)
     .single();
   if (!tpl) throw new Error("Template nicht gefunden");
 
@@ -107,6 +108,7 @@ export async function forkTemplate(templateId: string) {
         .from("tutorials")
         .select("slug")
         .eq("is_template", true)
+        .is("account_id", null)
         .eq("status", "published")
         .neq("id", templateId)
         .not("slug", "is", null),
@@ -118,9 +120,12 @@ export async function forkTemplate(templateId: string) {
   }
 
   const forkId = crypto.randomUUID();
+  const admin = createAdminClient();
   // Fehler NICHT verschlucken: sonst sprang der Editor auf eine Kopie, die es nicht gibt
   // („Anleitung nicht gefunden“), oder eine leere Kopie ersetzte die Vorlage auf der Hilfe-Seite.
-  const { error: forkErr } = await supabase.from("tutorials").insert({
+  // Mit Server-Rechten: Vorlagen-Kopien zählen nicht zur Gratis-Grenze, die DB-Regel
+  // (Migration 0043) prüft aber jedes Anlegen per Nutzer-Login — Konto/Rolle sind oben geprüft.
+  const { error: forkErr } = await admin.from("tutorials").insert({
     id: forkId,
     account_id: account.id,
     is_template: false,
@@ -131,11 +136,10 @@ export async function forkTemplate(templateId: string) {
   });
   if (forkErr) throw new Error("Kopie der Vorlage konnte nicht angelegt werden: " + forkErr.message);
   const abandonFork = async (why: string): Promise<never> => {
-    await supabase.from("tutorials").delete().eq("id", forkId);
+    await admin.from("tutorials").delete().eq("id", forkId).eq("account_id", account.id);
     throw new Error("Kopie der Vorlage konnte nicht angelegt werden: " + why);
   };
 
-  const admin = createAdminClient();
   const idMap = new Map<string, string>();
   for (const s of steps ?? []) idMap.set(s.id, crypto.randomUUID());
 

@@ -46,6 +46,7 @@ export default async function DashboardPage() {
         .from("tutorials")
         .select("id, title, slug, category_id")
         .eq("is_template", true)
+        .is("account_id", null)
         .eq("status", "published")
         .order("created_at", { ascending: true }),
       supabase

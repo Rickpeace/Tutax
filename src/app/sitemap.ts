@@ -27,7 +27,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .from("account_templates")
         .select("template_id, enabled, forked_tutorial_id")
         .not("forked_tutorial_id", "is", null),
-      admin.from("tutorials").select("id").eq("is_template", true).eq("status", "published"),
+      admin.from("tutorials").select("id").eq("is_template", true).is("account_id", null).eq("status", "published"),
     ]);
 
   const slugById = new Map((accounts ?? []).map((a) => [a.id, a.slug as string]));

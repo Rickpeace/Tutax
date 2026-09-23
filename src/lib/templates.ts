@@ -43,6 +43,7 @@ export async function getCatalog(
       .from("tutorials")
       .select("id, title, description, slug, status, freshness, category_id, created_at")
       .eq("is_template", true)
+      .is("account_id", null)
       .eq("status", "published"),
   ]);
 
@@ -172,6 +173,7 @@ export async function resolveCustomerTutorial(
     .from("tutorials")
     .select("id")
     .eq("is_template", true)
+    .is("account_id", null)
     .eq("status", "published")
     .eq("slug", slug)
     .order("created_at", { ascending: true })
@@ -218,6 +220,7 @@ export async function enabledStandardTemplateIds(
     .select("id")
     .in("id", ids)
     .eq("is_template", true)
+    .is("account_id", null)
     .eq("status", "published");
   return (live ?? []).map((t) => t.id as string);
 }
@@ -229,6 +232,7 @@ async function templatePublished(client: SupabaseClient, templateId: string): Pr
     .select("id")
     .eq("id", templateId)
     .eq("is_template", true)
+    .is("account_id", null)
     .eq("status", "published")
     .maybeSingle();
   return !!data;

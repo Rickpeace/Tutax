@@ -33,6 +33,7 @@ import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
 import { planMove } from "@/lib/builder/rewire";
 import { canEdit } from "@/lib/roles";
+import { isAccountStoragePath } from "@/lib/storage-path";
 import { aiConfigured } from "@/lib/ai";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
 import { refineStepFromSaved, suggestStepTexts, type RefineStep } from "@/lib/guide-ai";
@@ -546,21 +547,24 @@ export async function getTutorialVideoUrl(tutorialId: string): Promise<string | 
   // RLS-Gate: liefert nur eigene Tutorials -> unsichtbar = kein Zugriff.
   const { data: tut } = await supabase
     .from("tutorials")
-    .select("id")
+    .select("id, account_id")
     .eq("id", tutorialId)
     .maybeSingle();
-  if (!tut) return null;
+  if (!tut?.account_id) return null;
 
+  // Nur Aufträge UND Videos des eigenen Kontos (Audit 23.09.: ein per REST gefälschter Auftrag
+  // mit fremdem video_path lieferte sonst eine signierte URL auf ein fremdes privates Video).
   const admin = createAdminClient();
   const { data: job } = await admin
     .from("video_jobs")
     .select("video_path")
     .eq("tutorial_id", tutorialId)
+    .eq("account_id", tut.account_id)
     .not("video_path", "is", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!job?.video_path) return null;
+  if (!job?.video_path || !isAccountStoragePath(tut.account_id, job.video_path)) return null;
 
   const { data: signed } = await admin.storage
     .from("tutorial-videos")

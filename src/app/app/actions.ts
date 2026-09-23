@@ -435,6 +435,7 @@ async function ensureSlug(
       .from("tutorials")
       .select("slug")
       .eq("is_template", true)
+      .is("account_id", null)
       .eq("status", "published")
       .not("slug", "is", null),
   ]);

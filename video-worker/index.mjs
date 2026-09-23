@@ -636,6 +636,11 @@ async function processRenderJob(job) {
       .eq("id", job.tutorial_id)
       .single();
     if (tErr || !tutorial) throw new Error("Tutorial nicht gefunden: " + (tErr?.message || ""));
+    // Nur eigene Anleitungen, nur Business (Audit 23.09.: Auftraege liessen sich per REST
+    // faelschen — fremde Anleitung/fremdes Quell-Video rendern, Export ohne Business).
+    if (tutorial.account_id !== job.account_id) throw new Error("Kein Zugriff auf diese Anleitung.");
+    const { data: renderAcc } = await sb.from("accounts").select("plan").eq("id", job.account_id).maybeSingle();
+    if (renderAcc?.plan !== "business") throw new Error("Video-Export ist im Tarif Business enthalten.");
     if (tutorial.status !== "published" || tutorial.visibility !== "public")
       throw new Error("Tutorial ist nicht öffentlich veröffentlicht.");
 
@@ -773,6 +778,10 @@ function resolveBrandLogo(theme) {
 async function processJob(job) {
   // Free-Limit schon VOR Download + KI-Kosten (buildTutorial prüft vor dem Anlegen noch einmal).
   await assertTutorialQuota(job.account_id, job.id);
+  // Nur Videos aus dem eigenen Konto-Ordner (Audit 23.09.: gefaelschter video_path).
+  const vp = String(job.video_path || "");
+  if (!vp.startsWith(`${job.account_id}/`) || vp.includes("..") || vp.includes("//"))
+    throw new Error("Video liegt nicht im Ordner dieses Kontos.");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
     const raw = path.join(tmp, "in");
@@ -809,8 +818,15 @@ async function reapOrphanTutorial(job) {
   // einen render-Job faelschlich als Create-Waise interpretierte.
   if (job.kind && job.kind !== "create") return;
   try {
-    const { data: guardTut } = await sb.from("tutorials").select("status").eq("id", oldTutId).maybeSingle();
+    const { data: guardTut } = await sb.from("tutorials").select("status, account_id").eq("id", oldTutId).maybeSingle();
     if (!guardTut) { job.tutorial_id = null; return; }
+    // Nur Waisen DESSELBEN Kontos (Audit 23.09.: ein per REST gefaelschter Auftrag mit fremder
+    // tutorial_id liess den Worker einen fremden Entwurf loeschen).
+    if (guardTut.account_id !== job.account_id) {
+      console.log(`  ! Waisen-Cleanup verweigert: Tutorial ${oldTutId} gehoert zu einem anderen Konto.`);
+      job.tutorial_id = null;
+      return;
+    }
     if (guardTut.status !== "draft") {
       console.log(`  ! Waisen-Cleanup uebersprungen: Tutorial ${oldTutId} ist '${guardTut.status}' (kein Entwurf).`);
       return;
