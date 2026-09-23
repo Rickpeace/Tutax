@@ -126,25 +126,34 @@ try {
     ok(!!mail && mail.subject?.includes(ORG), `Mail angekommen: „${mail?.subject ?? "—"}“ (${mail?.last_event ?? "?"})`);
     const link = inviteLinkIn(mail);
     ok(!!link && link.startsWith(BASE), `Link in der Mail zeigt auf die Live-App`);
-    const p = await (await browser.newContext()).newPage();
+    // OHNE JavaScript beitreten = Extremfall „Klick, bevor die Seite fertig geladen ist“.
+    const noJs = await browser.newContext({ javaScriptEnabled: false });
+    const p = await noJs.newPage();
     await p.goto(link, { waitUntil: "domcontentloaded" });
     await p.locator("#invite-password").waitFor({ timeout: 30_000 });
     const label = await p.locator('label[for="invite-password"]').innerText().catch(() => "");
-    ok(/festlegen/i.test(label), `Einladungsseite fragt „${label}“`);
+    ok(/festlegen/i.test(label), `Einladungsseite fragt „${label}“ (Beitritt ohne JavaScript)`);
     await p.locator("#invite-password").fill(PW);
     await p.getByRole("button", { name: /Passwort setzen & beitreten/ }).click();
     await p.waitForURL((u) => u.pathname.startsWith("/app"), { timeout: 60_000 }).catch(() => {});
+    if (!path_(p).startsWith("/app"))
+      console.log(`    Seite nach dem Klick (${path_(p)}): ${(await p.locator("main, body").first().innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300)}`);
     const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     const nu = list?.users?.find((u) => u.email === neu);
     if (nu) await track(nu.id);
     const { data: mem } = await admin.from("account_members").select("account_id, role").eq("user_id", nu?.id ?? "-");
     ok(mem?.length === 1 && mem[0].account_id === owner.acc && mem[0].role === "editor", `Konto angelegt, genau im Team „${ORG}“ als Bearbeiter (${JSON.stringify(mem?.map((m) => m.role))})`);
-    await p.goto(`${BASE}/app`, { waitUntil: "networkidle" });
-    const canCreate = (await p.getByRole("button", { name: /Neue Anleitung/ }).count()) > 0;
-    ok(path_(p) === "/app" && canCreate, "Bearbeiter sieht die Anleitungen und kann neue anlegen");
-    await p.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
-    ok((await p.locator("#invite-email").count()) === 0, "Bearbeiter kann das Team NICHT verwalten (kein Einladen)");
-    await p.context().close();
+    ok(path_(p) === "/app", `Nach dem Beitritt direkt eingeloggt in der App (→ ${path_(p)})`);
+    await noJs.close();
+    // Rechte mit normalem Browser prüfen (neues Passwort gilt).
+    const q = await (await browser.newContext()).newPage();
+    await login(q, neu);
+    await q.goto(`${BASE}/app`, { waitUntil: "networkidle" });
+    const canCreate = (await q.getByRole("button", { name: /Neue Anleitung/ }).count()) > 0;
+    ok(path_(q) === "/app" && canCreate, "Bearbeiter sieht die Anleitungen und kann neue anlegen");
+    await q.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
+    ok((await q.locator("#invite-email").count()) === 0, "Bearbeiter kann das Team NICHT verwalten (kein Einladen)");
+    await q.context().close();
   }
 
   // ── B1: bestehendes Konto, nicht angemeldet ──

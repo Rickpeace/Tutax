@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { acceptInvite } from "@/app/app/settings/team/actions";
+import { acceptInviteForm } from "@/app/app/settings/team/actions";
 
 export function AcceptInviteForm({
   token,
@@ -19,30 +19,10 @@ export function AcceptInviteForm({
   orgName: string;
   hasAccount: boolean;
 }) {
-  const [password, setPassword] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!password) {
-      setError("Bitte ein Passwort eingeben.");
-      return;
-    }
-    if (!hasAccount && password.length < 8) {
-      setError("Das Passwort muss mindestens 8 Zeichen haben.");
-      return;
-    }
-    setPending(true);
-    setError(null);
-    const r = await acceptInvite(token, password);
-    if (r.ok) {
-      window.location.href = "/app"; // harte Navigation -> Server sieht die neue Session
-    } else {
-      setError(r.message ?? "Beitritt fehlgeschlagen.");
-      setPending(false);
-    }
-  }
+  // Server-Action-Formular (wie Login): klappt auch vor dem Fertigladen der Seite; Prüfungen
+  // (Passwortlänge, Einladung gültig, Team voll) macht acceptInvite serverseitig.
+  const [state, action, pending] = useActionState(acceptInviteForm, {});
+  const error = state.message ?? null;
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col justify-center px-5 py-10">
@@ -59,7 +39,8 @@ export function AcceptInviteForm({
           )}
         </p>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <form action={action} className="mt-6 space-y-4">
+          <input type="hidden" name="token" value={token} />
           <div className="space-y-1.5">
             <Label htmlFor="invite-email">E-Mail</Label>
             <Input id="invite-email" type="email" value={email} disabled readOnly />
@@ -68,12 +49,11 @@ export function AcceptInviteForm({
             <Label htmlFor="invite-password">{hasAccount ? "Ihr Passwort" : "Passwort festlegen"}</Label>
             <PasswordInput
               id="invite-password"
+              name="password"
               autoComplete={hasAccount ? "current-password" : "new-password"}
               autoFocus
               required
               minLength={hasAccount ? undefined : 8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               placeholder={hasAccount ? "Passwort Ihres Kontos" : "mindestens 8 Zeichen"}
             />
           </div>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
@@ -287,6 +288,21 @@ export async function acceptInvite(
   // Direkt in der neuen Org landen.
   await supabase.auth.updateUser({ data: { active_account_id: inv.account_id } });
   return { ok: true };
+}
+
+/**
+ * Formular-Variante von acceptInvite (useActionState, wie Login/Registrierung): funktioniert
+ * auch, wenn der Knopf gedrückt wird, bevor die Seite fertig geladen ist — vorher lud ein
+ * früher Klick die Seite nur neu und das eingegebene Passwort war weg.
+ */
+export async function acceptInviteForm(
+  _prev: { message?: string },
+  formData: FormData,
+): Promise<{ message?: string }> {
+  const r = await acceptInvite(String(formData.get("token") ?? ""), String(formData.get("password") ?? ""));
+  if (!r.ok) return { message: r.message ?? "Beitritt fehlgeschlagen." };
+  revalidatePath("/", "layout");
+  redirect("/app");
 }
 
 /**
