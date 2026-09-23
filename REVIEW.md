@@ -69,8 +69,9 @@ Test belegt (Nachweise: Kern-Durchlauf 10 Phasen, 30 DB-/Logik-Tests, Server-E2E
   sobald die Antwort darauf verweist und ein Kontakt hinterlegt ist
 - [ ] ⚪ KI-Grenzfall: „Grundfreibetrag“ an ein Projekt-Software-Konto wird teils als „unbeantwortet“ statt „fachfremd“ eingestuft
   (`test-chat-topic-e2e`, 23.09.2026 abends stabil so; mittags grün — Code unverändert, Modell-Schwankung)
-- [ ] 🟠 Migrationen (Entwurf im Audit-Bericht): Pfad-Wächter für `steps.image_path/audio_path` +
-  `themes.*logo_path` (fremde Pfade → signierte URLs), Trigger „letzter Inhaber“ (atomar)
+- [x] 🟠 DB-Schutzregeln (Migration 0042, LIVE 23.09.2026): Speicherpfade nur im eigenen Konto-Ordner
+  (steps/themes/automation_steps) + „letzter Inhaber“ atomar (Sperre je Organisation). Probelauf in
+  zurückgerollter Transaktion, dann angewendet; `scripts/test-db-guards.mjs` (22 Fälle + gleichzeitiges Austreten)
 - [ ] 🟡 Rollout: Vercel-Deploy, `deploy.sh` Video-Worker, Erweiterung 2.19.2 neu laden;
   `app.steply.de` erst nach Besitz-Nachweis in die Erweiterungs-Liste
 - [ ] ⚪ Chat-Reset + Admin-Komponenten noch mit Browser-`confirm()`; Chat-Bot-Schnellbremse nur pro Instanz
