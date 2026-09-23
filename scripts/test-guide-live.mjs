@@ -425,23 +425,25 @@ try {
     ok(typeof jD1.fallbackReason === "string" && jD1.fallbackReason.length > 0, "(d1) fallbackReason vorhanden");
     if (jD1.tutorialId) tutorialIds.push(jD1.tutorialId);
 
-    // (d2) veroeffentlichtes eigenes Tutorial (kein Entwurf).
+    // (d2) veroeffentlichtes eigenes Tutorial: seit 23.09. wird DIREKT eingefuegt (sofort live).
     const { data: pub } = await admin
       .from("tutorials")
       .insert({ account_id: accId, title: "Publik", status: "published" })
       .select("id")
       .single();
     tutorialIds.push(pub.id);
+    const { data: pubStep } = await admin.from("steps").insert({ tutorial_id: pub.id, title: "P1", position: 0 }).select("id").single();
+    await admin.from("tutorials").update({ root_step_id: pubStep.id }).eq("id", pub.id);
     const resD2 = await post("/api/recorder/guide-complete", {
       token,
       steps: mkSteps(accId, 1, "D"),
-      target: { tutorialId: pub.id, anchor: { branchId: crypto.randomUUID() } },
+      target: { tutorialId: pub.id, anchor: { afterStepId: pubStep.id } },
     });
     const jD2 = await resD2.json().catch(() => ({}));
-    ok(resD2.status === 200 && jD2.fallback === true && jD2.tutorialId !== pub.id, `(d2) veroeffentlichtes Ziel -> fallback (${resD2.status})`);
+    ok(resD2.status === 200 && jD2.inserted === true && jD2.tutorialId === pub.id, `(d2) veroeffentlichtes Ziel -> direkt eingefuegt (${resD2.status})`);
     const { count: pubCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", pub.id);
-    ok((pubCount ?? 0) === 0, "(d2) veroeffentlichtes Ziel unveraendert (0 Schritte eingefuegt)");
-    if (jD2.tutorialId) tutorialIds.push(jD2.tutorialId);
+    ok((pubCount ?? 0) === 2, "(d2) veroeffentlichtes Ziel hat jetzt 2 Schritte");
+    if (jD2.tutorialId && jD2.tutorialId !== pub.id) tutorialIds.push(jD2.tutorialId);
 
     // (d3) eigener Entwurf, aber Anker-Schritt gehoert NICHT dazu (kaputter Wert).
     const seedD = await seedLinearDraft(accId, ["A", "B"]);

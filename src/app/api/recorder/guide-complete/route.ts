@@ -35,6 +35,11 @@ import {
   type RefineStep,
 } from "@/lib/guide-ai";
 import { invalidateTutorialTags } from "@/lib/cache-tags";
+import { rebuildPublicCopy } from "@/lib/public-images";
+import { markTranslationsStale } from "@/lib/translate-stale";
+import { translateStepDelta } from "@/lib/translate-jobs";
+import { ensureStepAudio } from "@/lib/tts";
+import { reindexTutorialIfLive } from "@/lib/kb";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { isPro } from "@/lib/plan";
 
@@ -287,8 +292,16 @@ function scheduleRefine(
   tutorialId: string,
   steps: GuideStepInput[],
   rows: { id: string }[],
+  afterwards?: () => Promise<void>,
 ) {
   after(async () => {
+    try {
+      await refineNow();
+    } finally {
+      if (afterwards) await afterwards().catch((e) => console.error("[guide-complete] Live-Sync:", e instanceof Error ? e.message : e));
+    }
+  });
+  async function refineNow() {
     try {
       // KI-Feinschliff kostet → nur ab Pro (Gratis behält die regelbasierten Texte).
       const { data: owner } = await admin.from("tutorials").select("accounts!inner(plan)").eq("id", tutorialId).maybeSingle<{ accounts: { plan: string | null } | null }>();
@@ -306,11 +319,11 @@ function scheduleRefine(
     } catch (e) {
       console.error("[guide-complete] Feinschliff:", e instanceof Error ? e.message : e);
     }
-  });
+  }
 }
 
 type InsertResult =
-  | { ok: true; rows: { id: string }[] }
+  | { ok: true; rows: { id: string; image_path?: string | null }[]; live: boolean; publicLive: boolean }
   | { ok: false; reason: string };
 
 /**
@@ -326,18 +339,17 @@ async function insertIntoTarget(
   target: GuideTarget,
   steps: GuideStepInput[],
 ): Promise<InsertResult> {
-  // 1) Ziel-Tutorial: existiert, gehört dem Konto, ist ENTWURF.
+  // 1) Ziel-Tutorial: existiert und gehört dem Konto. Auch VERÖFFENTLICHTE Anleitungen werden
+  //    ergänzt (Richard, 23.09.): vorher entstand dort still eine separate neue Anleitung —
+  //    die neuen Schritte sind wie jede Bearbeitung einer veröffentlichten Anleitung sofort live.
   const { data: tut } = await admin
     .from("tutorials")
-    .select("id, account_id, status")
+    .select("id, account_id, status, visibility")
     .eq("id", target.tutorialId)
     .maybeSingle();
   if (!tut) return { ok: false, reason: "Die Ziel-Anleitung wurde nicht gefunden." };
   if (tut.account_id !== accountId) {
     return { ok: false, reason: "Die Ziel-Anleitung gehört zu einem anderen Konto." };
-  }
-  if (tut.status !== "draft") {
-    return { ok: false, reason: "Nur Entwürfe können ergänzt werden — das Ziel ist bereits veröffentlicht." };
   }
 
   // 2) Bestehende Schritte laden (Eigentums-Check des Ankers + Schrittzahl-Grenze + max. Position).
@@ -487,7 +499,31 @@ async function insertIntoTarget(
   // Cache (invalidateTutorialTags kehrt für Entwürfe früh zurück, wie die Nachbar-Mutationen).
   await invalidateTutorialTags(target.tutorialId);
 
-  return { ok: true, rows };
+  const live = tut.status === "published";
+  return { ok: true, rows, live, publicLive: live && tut.visibility === "public" };
+}
+
+/**
+ * Neue Schritte in einer VERÖFFENTLICHTEN Anleitung live nachziehen — wie der Editor bei jeder
+ * Änderung: öffentliche Bildkopien (Verpixelung eingebrannt), Übersetzungen als veraltet
+ * markieren; Delta-Übersetzung, Vorlesen und Chatbot-Index laufen nach dem KI-Feinschliff
+ * (syncLiveTexts), damit sie die endgültigen Texte bekommen.
+ */
+async function publishInsertedImages(accountId: string, tutorialId: string, rows: { image_path?: string | null }[]) {
+  for (const r of rows) {
+    if (r.image_path) await rebuildPublicCopy(r.image_path, accountId).catch(() => {});
+  }
+  await markTranslationsStale(tutorialId);
+  await invalidateTutorialTags(tutorialId);
+}
+
+async function syncLiveTexts(tutorialId: string, rows: { id: string }[]) {
+  for (const r of rows) {
+    await translateStepDelta(r.id).catch(() => {});
+    await ensureStepAudio(r.id).catch(() => {});
+  }
+  await reindexTutorialIfLive(tutorialId).catch(() => {});
+  await invalidateTutorialTags(tutorialId);
 }
 
 /** Neues Tutorial anlegen (heutiges Verhalten) — genutzt vom Standard- und vom Fallback-Pfad. */
@@ -587,8 +623,17 @@ export async function POST(req: NextRequest) {
       if (ins.ok) {
         // Seiten-Kontext (Welle 31c): site_domains als Union mit dem Ziel-Tutorial säen.
         await seedSiteDomains(admin, parsed.tutorialId, steps);
-        // KI-Feinschliff NUR über die neuen Schritte.
-        scheduleRefine(admin, account.userId, parsed.tutorialId, steps, ins.rows);
+        // Veröffentlicht: neue Bilder sofort öffentlich (Verpixelung eingebrannt), Übersetzungen veraltet.
+        if (ins.publicLive) await publishInsertedImages(account.id, parsed.tutorialId, ins.rows);
+        // KI-Feinschliff NUR über die neuen Schritte; danach (live) Übersetzung/Vorlesen/Index.
+        scheduleRefine(
+          admin,
+          account.userId,
+          parsed.tutorialId,
+          steps,
+          ins.rows,
+          ins.live ? () => syncLiveTexts(parsed.tutorialId, ins.rows) : undefined,
+        );
         return recorderJson({ tutorialId: parsed.tutorialId, inserted: true });
       }
       fallbackReason = ins.reason;
