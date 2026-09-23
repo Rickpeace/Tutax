@@ -25,10 +25,15 @@ const escapeHtml = (s: string) =>
  * Braucht RESEND_API_KEY + INVITE_FROM_EMAIL (z. B. "Steply <einladung@deine-domain.de>").
  * Ohne Konfiguration -> false (Aufrufer nutzt Fallback / Link).
  */
-async function sendInviteEmail(to: string, orgName: string, link: string, role: string): Promise<boolean> {
+async function sendInviteEmail(
+  to: string,
+  orgName: string,
+  link: string,
+  role: string,
+): Promise<"sent" | "unconfigured" | "failed"> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.INVITE_FROM_EMAIL;
-  if (!key || !from) return false;
+  if (!key || !from) return "unconfigured";
   const roleLabel = ROLE_LABEL[asRole(role)];
   const org = escapeHtml(orgName);
   const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
@@ -45,9 +50,10 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from, to: [to], subject: `Einladung zu ${orgName} auf Steply`, html }),
     });
-    return res.ok;
+    if (!res.ok) console.error("[einladung] Resend lehnt ab:", res.status, (await res.text().catch(() => "")).slice(0, 200));
+    return res.ok ? "sent" : "failed";
   } catch {
-    return false;
+    return "failed";
   }
 }
 
@@ -187,12 +193,14 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
   // BEWUSST KEIN Supabase-inviteUserByEmail-Fallback: das würde sofort einen
   // passwortlosen Auth-User anlegen ("Einladungs-Leiche"). Der Auth-User entsteht
   // erst beim Annehmen (acceptInvite). Klappt der Mailversand nicht -> Link teilen.
-  if (await sendInviteEmail(email, account.name, link, role)) {
-    return { ok: true, message: `Einladung an ${email} gesendet.`, link };
-  }
+  const sent = await sendInviteEmail(email, account.name, link, role);
+  if (sent === "sent") return { ok: true, message: `Einladung an ${email} gesendet.`, link };
   return {
     ok: true,
-    message: "E-Mail-Versand ist nicht konfiguriert – teile der Person einfach diesen Beitritts-Link:",
+    message:
+      sent === "unconfigured"
+        ? "E-Mail-Versand ist nicht eingerichtet – teilen Sie der Person einfach diesen Beitritts-Link:"
+        : `Die E-Mail an ${email} konnte nicht verschickt werden (Adresse prüfen). Die Einladung gilt trotzdem – teilen Sie diesen Beitritts-Link:`,
     link,
   };
 }

@@ -17,7 +17,7 @@ export function EmailForm({ current }: { current: string }) {
       if (res.ok) {
         toast.success("Fast geschafft!", {
           description:
-            "Wir haben Bestätigungs-Links verschickt – bitte prüfen Sie das Postfach der neuen (und ggf. alten) Adresse.",
+            "Wir haben Bestätigungs-Links an die neue (und ggf. alte) Adresse geschickt – bitte den Link in der E-Mail anklicken.",
         });
         setEmail("");
       } else {

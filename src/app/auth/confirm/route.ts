@@ -42,6 +42,12 @@ export async function GET(request: NextRequest) {
   if (tokenHash && type) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    // E-Mail-Wechsel: Supabase schickt Links an alte UND neue Adresse; hier gilt die Änderung
+    // schon nach dem ersten Klick — der zweite Link ist dann „verbraucht“. Statt „Link ungültig“
+    // (klang nach Fehlschlag) ins Profil mit klarer Meldung und der aktuellen Adresse.
+    if (type === "email_change") {
+      return dest(`/app/settings/profil?email=${error ? "link-verwendet" : "bestaetigt"}`);
+    }
     return dest(error ? "/login?error=link" : redirectTo);
   }
   if (code) {
