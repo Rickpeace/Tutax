@@ -326,7 +326,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 const STEPLY_DEFAULT_APP_URL = "https://tutax-ivory.vercel.app";
 const STEPLY_TRUSTED_APP_ORIGINS = [
   "https://tutax-ivory.vercel.app",
-  "https://app.steply.de", // geplante Produktiv-Domain (noch nicht verdrahtet)
+  // app.steply.de erst aufnehmen, wenn die Domain nachweislich uns gehört und auf die App
+  // zeigt (23.09.2026: antwortet 403, Besitz unklar) — sonst könnte ein Fremder koppeln.
 ];
 
 function steplyOriginOf(url) {
