@@ -10,6 +10,7 @@ import {
   requireBranchAccess,
 } from "@/lib/account";
 import { hasInvalidBlur, rebuildPublicCopy, removeUnusedPublicCopies } from "@/lib/public-images";
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
   markTranslationsStale,
@@ -32,7 +33,6 @@ import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
 import { canEdit } from "@/lib/roles";
 import { aiConfigured } from "@/lib/ai";
-import { takeHourlyAiRun } from "@/lib/ai-run-limit";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
 import { refineStepFromSaved, suggestStepTexts, type RefineStep } from "@/lib/guide-ai";
 import { withUserErrors, UserError } from "@/lib/action-error";
@@ -179,7 +179,7 @@ export async function updateStep(
   // muss die öffentliche Bild-Kopie nachgezogen werden — inkl. eingebranntem Blur.
   // Sonst bliebe z. B. eine nachträglich geschwärzte Stelle öffentlich lesbar.
   if (oldImagePath && oldImagePath !== patch.image_path) {
-    await removeUnusedPublicCopies([oldImagePath]);
+    await removeUnusedPublicCopies([oldImagePath], { accountId: await tutorialAccountId(tutorialId) });
   }
   if ("image_path" in patch || "highlights" in patch) {
     // Wirft sichtbar („Speichern fehlgeschlagen“), wenn die öffentliche Kopie nicht sicher neu
@@ -199,6 +199,16 @@ export async function updateStep(
   }
 }
 
+/** Konto der Anleitung aus der DB (nie aus einem Pfad) — für Admin-Storage-Aufräumarbeiten. */
+async function tutorialAccountId(tutorialId: string): Promise<string | null> {
+  const { data } = await createAdminClient()
+    .from("tutorials")
+    .select("account_id")
+    .eq("id", tutorialId)
+    .maybeSingle();
+  return (data?.account_id as string | null) ?? null;
+}
+
 /** Öffentliche Kopie des Schritt-Bilds neu erzeugen (Blur eingebrannt). */
 async function refreshPublicImage(stepId: string) {
   const supabase = await createClient();
@@ -208,7 +218,7 @@ async function refreshPublicImage(stepId: string) {
     // FK explizit: steps↔tutorials hat ZWEI Beziehungen (steps.tutorial_id und
     // tutorials.root_step_id). Ohne Hinweis antwortet PostgREST mit „more than one
     // relationship“ -> data null -> die öffentliche Kopie wurde NIE nachgezogen (Welle 51a).
-    .select("image_path, highlights, tutorials!steps_tutorial_id_fkey!inner(status, visibility)")
+    .select("image_path, highlights, tutorials!steps_tutorial_id_fkey!inner(status, visibility, account_id)")
     .eq("id", stepId)
     .maybeSingle();
   if (!step) return;
@@ -217,7 +227,7 @@ async function refreshPublicImage(stepId: string) {
   if (tut?.status !== "published" || tut?.visibility !== "public") return;
 
   if (!step.image_path) return; // Bild entfernt: alte Kopie räumt updateStep auf
-  await rebuildPublicCopy(step.image_path);
+  await rebuildPublicCopy(step.image_path, tut?.account_id as string | null | undefined);
 }
 
 /** Frage an/aus. Server spiegelt exakt die optimistische Client-Logik. */
@@ -366,7 +376,9 @@ export async function deleteStep(
   if (error) throw new Error(error.message);
   // Öffentliche Bildkopie des gelöschten Schritts entfernen, sofern kein anderer veröffentlichter
   // Schritt sie noch nutzt (Sicherheitsprüfung Welle 51, H2/M1).
-  if (victim?.image_path) await removeUnusedPublicCopies([victim.image_path as string]);
+  if (victim?.image_path) {
+    await removeUnusedPublicCopies([victim.image_path as string], { accountId: await tutorialAccountId(tutorialId) });
+  }
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
   after(() => reindexTutorialIfLive(tutorialId)); // Chatbot vergisst den Schritt
@@ -577,8 +589,8 @@ export type SuggestTextsResult =
 const TEXT_RUNS_PER_HOUR = 30;
 
 /**
- * Stunden-Zähler im app_metadata des Nutzers (Details: lib/ai-run-limit.ts). Fällt der Zähler
- * aus, läuft die Aktion trotzdem (die 40-Schritte-Kappe begrenzt die Kosten je Lauf).
+ * Stunden-Zähler im app_metadata des Nutzers (lib/ai-rate-limit). Fällt der Zähler aus, läuft
+ * die Aktion trotzdem (die 40-Schritte-Kappe begrenzt die Kosten je Lauf).
  */
 async function takeTextRun(userId: string): Promise<boolean> {
   return takeHourlyAiRun(userId, "ai_text_runs", TEXT_RUNS_PER_HOUR);

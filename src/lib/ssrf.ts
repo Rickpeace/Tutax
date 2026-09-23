@@ -76,8 +76,44 @@ export async function isSafePublicUrl(raw: string): Promise<boolean> {
   }
 }
 
-/** fetch nur für sichere/öffentliche URLs; wirft sonst (SSRF-Schutz). */
+/** Höchstens so viele Weiterleitungen folgen (jede Station wird einzeln geprüft). */
+export const MAX_REDIRECTS = 4;
+
+/**
+ * fetch nur für sichere/öffentliche URLs; wirft sonst (SSRF-Schutz).
+ *
+ * Weiterleitungen (Sicherheitsprüfung 23.09.2026): fetch folgte Redirects bisher selbst —
+ * ein öffentlicher Host konnte per 302 auf 127.0.0.1 / 169.254.169.254 umlenken. Jetzt
+ * `redirect: "manual"` und JEDE Station (relativ aufgelöst) läuft erneut durch die Prüfung,
+ * höchstens MAX_REDIRECTS Sprünge. Verhalten für Aufrufer wie bisher: `redirect` nicht gesetzt
+ * bzw. "follow" → folgt (geprüft); "manual" → 3xx-Antwort wird zurückgegeben; "error" → wirft.
+ */
 export async function safeFetch(raw: string, init?: RequestInit): Promise<Response> {
-  if (!(await isSafePublicUrl(raw))) throw new Error("Blockierte oder interne URL");
-  return fetch(raw, init);
+  return fetchWithCheckedRedirects(raw, init, isSafePublicUrl);
+}
+
+/** Kern von safeFetch mit austauschbarer Prüfung (für scripts/test-ssrf.mjs mit lokalem Server). */
+export async function fetchWithCheckedRedirects(
+  raw: string,
+  init: RequestInit | undefined,
+  isAllowed: (url: string) => Promise<boolean>,
+): Promise<Response> {
+  const mode = init?.redirect ?? "follow";
+  let current = raw;
+  let reqInit: RequestInit = { ...init, redirect: "manual" };
+  for (let hop = 0; ; hop++) {
+    if (!(await isAllowed(current))) throw new Error("Blockierte oder interne URL");
+    const resp = await fetch(current, reqInit);
+    const loc = resp.status >= 300 && resp.status < 400 ? resp.headers.get("location") : null;
+    if (!loc || mode === "manual") return resp;
+    if (mode === "error") throw new Error("Weiterleitung nicht erlaubt");
+    if (hop >= MAX_REDIRECTS) throw new Error("Zu viele Weiterleitungen");
+    await resp.body?.cancel().catch(() => {});
+    current = new URL(loc, current).href;
+    // Wie der Browser: 303 (und 301/302 nach POST) wird zu GET ohne Body.
+    const method = (reqInit.method ?? "GET").toUpperCase();
+    if (resp.status === 303 || ((resp.status === 301 || resp.status === 302) && method === "POST")) {
+      reqInit = { ...reqInit, method: "GET", body: undefined };
+    }
+  }
 }

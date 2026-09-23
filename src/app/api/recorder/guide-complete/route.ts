@@ -12,7 +12,7 @@ import {
   TUTORIAL_QUOTA_MESSAGE,
   tutorialQuotaReachedFor,
 } from "@/lib/tutorial-quota";
-import { takeHourlyAiRun } from "@/lib/ai-run-limit";
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import {
   validateGuideSteps,
   highlightFromRect,

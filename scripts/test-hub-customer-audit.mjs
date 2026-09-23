@@ -304,7 +304,7 @@ try {
   await seedTutorial({ title: "Nur intern", slug: "nur-intern", steps: [{ title: "Intern", body: "Nur fürs Team." }], visibility: "internal" });
 
   // Öffentliche Bildkopie mit eingebrannter Verpixelung erzeugen (wie publishTutorial)
-  await rebuildPublicCopy(imgPath);
+  await rebuildPublicCopy(imgPath, accId);
 
   // EN-Übersetzungen für Anleitung 1 (Schritt 3 ABSICHTLICH ohne Übersetzung -> Fallback prüfen)
   await admin.from("tutorial_translations").insert({
@@ -370,7 +370,7 @@ try {
     steps: [{ title: "Bild", body: "Test", image: negPath,
       highlights: [{ id: "bn", type: "blur", x: SECRET.x + SECRET.w, y: SECRET.y + SECRET.h, w: -SECRET.w, h: -SECRET.h }] }],
   });
-  await rebuildPublicCopy(negPath);
+  await rebuildPublicCopy(negPath, accId);
   const negRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${PUB}/${negPath}`);
   const negBuf = Buffer.from(await negRes.arrayBuffer());
   const sdNeg = await secretStddev(negBuf);

@@ -85,7 +85,7 @@ try {
   if (sErr) throw sErr;
 
   // 1) Neuaufbau brennt Verpixelung ein
-  await rebuildPublicCopy(path);
+  await rebuildPublicCopy(path, accountId);
   const { data: pubBlob } = await admin.storage.from(PUB).download(path);
   ok(!!pubBlob, "1: öffentliche Kopie erzeugt");
   const cOrig = await leftContrast(img);
@@ -93,24 +93,36 @@ try {
   ok(cPub < cOrig * 0.3, `1: Verpixelung eingebrannt (Kontrast ${cOrig.toFixed(0)} → ${cPub.toFixed(0)})`);
 
   // 2) geteilter Pfad: B ist weiter veröffentlicht -> Aufräumen für A lässt die Kopie stehen
-  await removeUnusedPublicCopies([path], { exceptTutorialId: tA });
+  await removeUnusedPublicCopies([path], { accountId, exceptTutorialId: tA });
   ok(await publicExists(path), "2: Kopie bleibt, solange Anleitung B (veröffentlicht) sie nutzt");
   await admin.from("tutorials").update({ status: "draft" }).eq("id", tB);
-  await removeUnusedPublicCopies([path], { exceptTutorialId: tA });
+  await removeUnusedPublicCopies([path], { accountId, exceptTutorialId: tA });
   ok(!(await publicExists(path)), "2: Kopie entfernt, sobald keine andere veröffentlichte Anleitung sie nutzt");
 
   // 3) Neuaufbau scheitert -> Kopie weg + Fehler
-  await rebuildPublicCopy(path); // wieder anlegen
+  await rebuildPublicCopy(path, accountId); // wieder anlegen
   ok(await publicExists(path), "3: Vorbedingung — Kopie existiert wieder");
   await admin.storage.from(PRIV).remove([path]); // Original weg -> Download scheitert
   let threw = false;
   try {
-    await rebuildPublicCopy(path);
+    await rebuildPublicCopy(path, accountId);
   } catch {
     threw = true;
   }
   ok(threw, "3: Neuaufbau ohne Original wirft (Oberfläche zeigt „nicht gespeichert“)");
   ok(!(await publicExists(path)), "3: öffentliche Kopie wurde vorsorglich ENTFERNT (kein Klartext bleibt stehen)");
+
+  // 5) Fremder Pfad (Sicherheitsprüfung 23.09.2026): Konto-Ordner stimmt nicht -> nie löschen/anlegen.
+  await admin.storage.from(PRIV).upload(path, img, { contentType: "image/webp", upsert: true });
+  await rebuildPublicCopy(path, accountId);
+  ok(await publicExists(path), "5: Vorbedingung — Kopie existiert");
+  const foreign = crypto.randomUUID();
+  await removeUnusedPublicCopies([path], { accountId: foreign });
+  ok(await publicExists(path), "5: Aufräumen mit FREMDEM Konto lässt die Kopie stehen");
+  await removeUnusedPublicCopies([path], { accountId: null });
+  ok(await publicExists(path), "5: Aufräumen ohne Konto (Vorlage) löscht nichts");
+  await rebuildPublicCopy(`${foreign}/x/y.webp`, accountId);
+  ok(!(await publicExists(`${foreign}/x/y.webp`)), "5: Neuaufbau eines fremden Pfads legt nichts an");
 
   // 4) kaputte Koordinaten
   ok(hasInvalidBlur([{ type: "blur", x: "abc", y: 0, w: 0.1, h: 0.1 }]), "4: hasInvalidBlur erkennt x=\"abc\"");

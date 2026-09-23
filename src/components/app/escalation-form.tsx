@@ -62,9 +62,12 @@ const initials = (name: string) =>
     .join("") || "?";
 
 export function EscalationForm({
+  accountId,
   initial,
   accountName,
 }: {
+  /** Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
   initial: EscalationSettings;
   accountName: string;
 }) {
@@ -152,7 +155,7 @@ export function EscalationForm({
   const save = () =>
     start(async () => {
       try {
-        unwrap(await saveEscalation(settings));
+        unwrap(await saveEscalation(accountId, settings));
         setSaved(snapshot(settings));
         toast.success("Gespeichert");
       } catch (e) {

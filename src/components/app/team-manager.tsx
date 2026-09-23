@@ -36,12 +36,15 @@ function RolePill({ role }: { role: string }) {
 }
 
 export function TeamManager({
+  accountId,
   members,
   invitations,
   isOwner,
   limit,
   used,
 }: {
+  /** Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
   members: Member[];
   invitations: Invitation[];
   isOwner: boolean;
@@ -69,6 +72,7 @@ export function TeamManager({
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
+    fd.set("accountId", accountId);
     start(async () => {
       const r = await inviteMember(fd);
       setResult(r);
@@ -197,7 +201,7 @@ export function TeamManager({
                     const apply = () =>
                       start(async () => {
                         try {
-                          unwrap(await changeMemberRole(m.userId, next));
+                          unwrap(await changeMemberRole(accountId, m.userId, next));
                           toast.success(`${m.email} ist jetzt ${roleLabel(next)}.`);
                         } catch (err) {
                           toast.error(errorText(err, "Rolle konnte nicht geändert werden"));
@@ -244,7 +248,7 @@ export function TeamManager({
                       if (!ok) return;
                       start(async () => {
                         try {
-                          unwrap(await removeMember(m.userId));
+                          unwrap(await removeMember(accountId, m.userId));
                           toast.success(`${m.email} wurde aus dem Team entfernt.`);
                         } catch (e) {
                           toast.error(errorText(e, "Entfernen fehlgeschlagen"));

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireAccount } from "@/lib/account";
+import { assertActiveAccount, requireAccount } from "@/lib/account";
 import { safeEmail, safeHttpUrl, safePhone } from "@/lib/escalation";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
@@ -25,8 +25,14 @@ type EscalationIn = {
 
 const clean = (s: unknown) => String(s ?? "").trim();
 
-export const saveEscalation = withUserErrors(async function saveEscalation(input: EscalationIn) {
-  const { account } = await requireAccount();
+export const saveEscalation = withUserErrors(async function saveEscalation(
+  expectedAccountId: string,
+  input: EscalationIn,
+) {
+  const ctx = await requireAccount();
+  // Org in einem anderen Tab gewechselt -> nicht still in die falsche Organisation schreiben.
+  assertActiveAccount(expectedAccountId, ctx);
+  const { account } = ctx;
   const supabase = await createClient();
 
   const experts = Array.isArray(input.experts)

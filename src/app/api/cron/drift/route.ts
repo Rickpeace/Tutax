@@ -7,6 +7,9 @@ import { appBaseUrl } from "@/lib/url";
 export const maxDuration = 300;
 
 const MAX_PER_RUN = 10; // Kosten-Deckel pro Lauf (teuerster KI-Call = web_search)
+const MAX_PER_ACCOUNT = 5; // kein Konto verbraucht allein den ganzen Lauf
+const CANDIDATE_POOL = 200; // so viele älteste Kandidaten laden, um fair je Konto zu verteilen
+const TIME_BUDGET_MS = 230_000; // danach keinen neuen Check starten (maxDuration 300 s, Check ≤ 55 s)
 const STALE_AFTER_DAYS = 7; // erst nach >7 Tagen erneut prüfen
 
 const escapeHtml = (s: string) =>
@@ -58,28 +61,44 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Veröffentlichte Tutorials, älteste/nie geprüfte zuerst. Den >7-Tage-Filter
-  // machen wir in JS (robuster als ein roher Timestamp in einem PostgREST-or-Filter).
+  // Veröffentlichte Anleitungen von BUSINESS-Konten (der wöchentliche Autopilot ist ein
+  // Business-Versprechen, lib/pricing.ts) — keine Vorlagen, keine Free/Pro-Konten, die sonst
+  // das Budget aufbrauchen. Älteste/nie geprüfte zuerst. Den >7-Tage-Filter machen wir in JS
+  // (robuster als ein roher Timestamp in einem PostgREST-or-Filter).
   const cutoff = Date.now() - STALE_AFTER_DAYS * 86_400_000;
   const { data: candidates, error } = await admin
     .from("tutorials")
-    .select("id, title, account_id, drift_checked_at")
+    .select("id, title, account_id, drift_checked_at, accounts!inner(plan)")
     .eq("status", "published")
+    .eq("is_template", false)
+    .eq("accounts.plan", "business")
     .order("drift_checked_at", { ascending: true, nullsFirst: true })
-    .limit(MAX_PER_RUN);
+    .limit(CANDIDATE_POOL);
   if (error) {
     console.error("[cron/drift] Kandidaten-Query:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const tutorials = (candidates ?? []).filter(
-    (t) => !t.drift_checked_at || new Date(t.drift_checked_at).getTime() < cutoff,
-  );
+  // Fair verteilen: höchstens MAX_PER_ACCOUNT je Konto, insgesamt MAX_PER_RUN.
+  const perAccount = new Map<string, number>();
+  const tutorials = (candidates ?? [])
+    .filter((t) => !t.drift_checked_at || new Date(t.drift_checked_at).getTime() < cutoff)
+    .filter((t) => {
+      const n = perAccount.get(t.account_id) ?? 0;
+      if (n >= MAX_PER_ACCOUNT) return false;
+      perAccount.set(t.account_id, n + 1);
+      return true;
+    })
+    .slice(0, MAX_PER_RUN);
   // Konten mit NEU veralteten Anleitungen: account_id -> {name, titles[]}.
   const staleByAccount = new Map<string, string[]>();
   let checked = 0;
+  let failed = 0;
+  const startedAt = Date.now();
 
   for (const t of tutorials) {
+    // Zeitbudget: keinen neuen Check mehr starten, wenn einer (≤ 55 s) nicht mehr hineinpasst.
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const res = await runDriftCheck(admin, t.id);
     if (res.kind === "not_configured") {
       // Kein KI-Key -> Cron ist wirkungslos; früh raus (spart Schleifenläufe).
@@ -92,8 +111,14 @@ export async function GET(req: NextRequest) {
         list.push(t.title ?? "Anleitung");
         staleByAccount.set(t.account_id, list);
       }
+    } else if (res.kind === "error") {
+      // Fehlgeschlagene Prüfung trotzdem als „geprüft“ stempeln: sonst bliebe die Anleitung
+      // ganz vorn in der Warteschlange und blockierte jede Woche den ganzen Lauf.
+      failed++;
+      console.error(`[cron/drift] Prüfung fehlgeschlagen (${t.id}):`, res.message);
+      await admin.from("tutorials").update({ drift_checked_at: new Date().toISOString() }).eq("id", t.id);
     }
-    // cooldown/error: still überspringen (Cooldown greift z. B. bei manuellem Check kurz zuvor).
+    // cooldown: still überspringen (greift z. B. bei manuellem Check kurz zuvor).
   }
 
   // Pro betroffenem Konto eine Digest-Mail an alle Inhaber.
@@ -121,5 +146,5 @@ export async function GET(req: NextRequest) {
     notified++;
   }
 
-  return NextResponse.json({ ok: true, checked, accountsNotified: notified });
+  return NextResponse.json({ ok: true, checked, failed, accountsNotified: notified });
 }

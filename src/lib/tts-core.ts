@@ -208,12 +208,39 @@ export async function ensureStepAudioCore(
   return "created";
 }
 
+/**
+ * Audio-Ordner der Anleitung, zu der der Schritt gehört (`{account}/{tutorial}/audio/`) —
+ * aus den DB-Zeilen abgeleitet, nie aus dem Pfad. null = nicht ermittelbar (z. B. Vorlage).
+ */
+async function stepAudioPrefix(admin: DbClient, stepId: string): Promise<string | null> {
+  const { data: s } = await admin.from("steps").select("tutorial_id").eq("id", stepId).maybeSingle();
+  if (!s?.tutorial_id) return null;
+  return tutorialAudioPrefix(admin, s.tutorial_id as string);
+}
+
+async function tutorialAudioPrefix(admin: DbClient, tutorialId: string): Promise<string | null> {
+  const { data: t } = await admin.from("tutorials").select("account_id").eq("id", tutorialId).maybeSingle();
+  if (!t?.account_id) return null;
+  return `${t.account_id}/${tutorialId}/audio/`;
+}
+
+/**
+ * Sicherheitsprüfung 23.09.2026: `steps.audio_path` ist per REST beschreibbar. Gelöscht wird
+ * mit dem Admin-Client — daher NUR Dateien im Audio-Ordner der eigenen Anleitung, nie einen
+ * eingetragenen fremden Pfad (sonst ließen sich Dateien anderer Konten löschen).
+ */
+export function isOwnAudioPath(prefix: string | null, path: string | null | undefined): boolean {
+  if (!prefix || typeof path !== "string") return false;
+  if (path.includes("..") || path.includes("\\") || path.includes("//")) return false;
+  return path.startsWith(prefix) && path.length > prefix.length;
+}
+
 /** Audio EINES Schritts entfernen (public MP3 löschen + Spalten nullen). */
 export async function removeStepAudioCore(
   admin: DbClient,
   step: { id: string; audio_path: string | null },
 ): Promise<void> {
-  if (step.audio_path) {
+  if (step.audio_path && isOwnAudioPath(await stepAudioPrefix(admin, step.id), step.audio_path)) {
     await admin.storage.from(PUBLIC_BUCKET).remove([step.audio_path]);
   }
   await admin
@@ -232,11 +259,14 @@ export async function removeTutorialAudioCore(admin: DbClient, tutorialId: strin
     .select("id, audio_path")
     .eq("tutorial_id", tutorialId)
     .not("audio_path", "is", null);
-  const paths = ((steps ?? []) as { audio_path: string | null }[])
+  const all = ((steps ?? []) as { audio_path: string | null }[])
     .map((s) => s.audio_path)
     .filter((p): p is string => !!p);
-  if (paths.length) {
-    await admin.storage.from(PUBLIC_BUCKET).remove(paths);
+  if (all.length) {
+    // Nur Dateien im Audio-Ordner DIESER Anleitung löschen (fremde Pfade: nur Spalte nullen).
+    const prefix = await tutorialAudioPrefix(admin, tutorialId);
+    const paths = all.filter((p) => isOwnAudioPath(prefix, p));
+    if (paths.length) await admin.storage.from(PUBLIC_BUCKET).remove(paths);
     await admin
       .from("steps")
       .update({ audio_path: null, audio_hash: null })

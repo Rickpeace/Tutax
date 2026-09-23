@@ -8,6 +8,8 @@ import { sanitizeSkinCss } from "@/lib/skin-css";
 import { safeFetch } from "@/lib/ssrf";
 import { activeAccountId } from "@/lib/account";
 import { revalidateHubByAccountId } from "@/lib/cache-tags";
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
+import { THEME_FORBIDDEN, THEME_RATE_LIMITED, THEME_RUN_KEY, THEME_RUNS_PER_HOUR } from "@/lib/theme-ai-limits";
 
 export const maxDuration = 60;
 
@@ -128,14 +130,18 @@ export async function POST(req: NextRequest) {
   if (!url) return NextResponse.json({ error: "URL fehlt" }, { status: 400 });
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
 
+  // Nur Inhaber/Bearbeiter der AKTIVEN Organisation (activeAccountId liefert für Mitarbeiter
+  // null) — zwei KI-Aufrufe (Vision + Review) je Lauf. Plus Kostenbremse pro Person.
   const accountId = (await activeAccountId())?.accountId;
+  if (!accountId) return NextResponse.json({ error: THEME_FORBIDDEN }, { status: 403 });
 
   if (!aiConfigured()) {
     return NextResponse.json({ configured: false, message: "OPENAI_API_KEY fehlt." });
   }
-  if (accountId) {
-    await supabase.from("themes").update({ source_url: url }).eq("account_id", accountId);
+  if (!(await takeHourlyAiRun(user.id, THEME_RUN_KEY, THEME_RUNS_PER_HOUR))) {
+    return NextResponse.json({ error: THEME_RATE_LIMITED }, { status: 429 });
   }
+  await supabase.from("themes").update({ source_url: url }).eq("account_id", accountId);
 
   try {
     const ctrl = new AbortController();

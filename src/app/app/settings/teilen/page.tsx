@@ -23,7 +23,7 @@ export default async function TeilenPage() {
       />
 
       <SettingsCard title="Adresse der Hilfe-Seite" icon={Globe}>
-        <SlugForm name={account.name} initialSlug={account.slug} appUrl={appUrl} />
+        <SlugForm accountId={account.id} name={account.name} initialSlug={account.slug} appUrl={appUrl} />
       </SettingsCard>
 
       <SettingsCard

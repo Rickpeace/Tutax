@@ -35,11 +35,14 @@ function toHex6(v: string): string {
  * „Speichern" keine Standard-Werte festschreibt. Logo wirkt sofort (eigene API).
  */
 export function BrandingForm({
+  accountId,
   name,
   initialLogoUrl,
   initialColors,
   modeHint,
 }: {
+  /** Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
   name: string;
   initialLogoUrl: string | null;
   initialColors: BrandColors;
@@ -108,7 +111,7 @@ export function BrandingForm({
     const patch: Partial<BrandColors> = {};
     for (const k of changed) patch[k] = colors[k];
     startTransition(async () => {
-      const res = await saveBranding({ colors: patch });
+      const res = await saveBranding(accountId, { colors: patch });
       if (res.ok) {
         setSaved(colors);
         toast.success("Farben gespeichert");

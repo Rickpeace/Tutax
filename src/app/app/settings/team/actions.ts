@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAccount } from "@/lib/account";
+import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
 import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { appBaseUrl } from "@/lib/url";
 import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
@@ -55,9 +55,10 @@ async function sendInviteEmail(to: string, orgName: string, link: string, role: 
  * Schützt die Team-Verwaltung serverseitig (nicht nur über die UI).
  */
 async function requireOwner() {
-  const { account, userId, role } = await requireAccount();
+  const ctx = await requireAccount();
+  const { account, userId, role } = ctx;
   if (role !== "owner") throw new UserError("Nur der Inhaber darf das Team verwalten.");
-  return { account, userId };
+  return { account, userId, ctx };
 }
 
 /** Eingabe -> gültige Rolle (unbekannt = Bearbeiter, wie bisher der Standard). */
@@ -95,7 +96,10 @@ async function dropRecorderTokens(admin: ReturnType<typeof createAdminClient>, a
 }
 
 export async function inviteMember(formData: FormData): Promise<InviteResult> {
-  const { account, userId } = await requireOwner();
+  const { account, userId, ctx } = await requireOwner();
+  // Org in einem anderen Tab gewechselt -> nicht in die falsche Organisation einladen.
+  const switched = orgSwitchedError(formData.get("accountId"), ctx);
+  if (switched) return { ok: false, message: switched };
   const admin = createAdminClient();
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -291,8 +295,9 @@ export async function revokeInvitation(id: string) {
   revalidatePath("/app/settings/team");
 }
 
-export const removeMember = withUserErrors(async function removeMember(userId: string) {
-  const { account, userId: me } = await requireOwner();
+export const removeMember = withUserErrors(async function removeMember(expectedAccountId: string, userId: string) {
+  const { account, userId: me, ctx } = await requireOwner();
+  assertActiveAccount(expectedAccountId, ctx);
   if (me === userId) throw new UserError("Sie können sich nicht selbst entfernen.");
   const admin = createAdminClient();
   // Letzten Inhaber nicht entfernen -> Konto würde sonst ohne Inhaber verwaisen.
@@ -320,8 +325,13 @@ export const removeMember = withUserErrors(async function removeMember(userId: s
  * werden (sonst verwaist das Konto) — auch nicht er selbst. Wird jemand Mitarbeiter,
  * verliert seine Erweiterung den Zugang (Mitarbeiter erstellen keine Inhalte).
  */
-export const changeMemberRole = withUserErrors(async function changeMemberRole(userId: string, nextRole: string): Promise<void> {
-  const { account } = await requireOwner();
+export const changeMemberRole = withUserErrors(async function changeMemberRole(
+  expectedAccountId: string,
+  userId: string,
+  nextRole: string,
+): Promise<void> {
+  const { account, ctx } = await requireOwner();
+  assertActiveAccount(expectedAccountId, ctx);
   const role = parseRole(nextRole);
   const admin = createAdminClient();
   const { data: rows } = await admin
@@ -364,6 +374,7 @@ export async function resendInvitation(id: string): Promise<InviteResult> {
   const fd = new FormData();
   fd.set("email", inv.email);
   fd.set("role", inv.role);
+  fd.set("accountId", account.id); // Einladung gehört nachweislich zu diesem Konto
   return inviteMember(fd);
 }
 

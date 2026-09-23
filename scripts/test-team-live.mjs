@@ -544,8 +544,9 @@ try {
 
   // ================= 7) Inhaber entfernt Bearbeiter =================
   await op.goto(`${BASE}/app/settings/team`, { waitUntil: "domcontentloaded" });
-  op.once("dialog", (d) => d.accept());
   await op.getByRole("button", { name: `${E.neu} entfernen` }).click();
+  // Steply-Abfrage (useConfirm) statt grauem Browser-Dialog (seit 807cab2).
+  await op.getByRole("button", { name: "Entfernen", exact: true }).click();
   await op.getByText("wurde aus dem Team entfernt").waitFor({ timeout: 30_000 });
   ok((await memberships(neuUid)).length === 0, "Entfernen: Mitgliedschaft in DB gelöscht");
   await np.goto(`${BASE}/app`, { waitUntil: "domcontentloaded", timeout: 90_000 });

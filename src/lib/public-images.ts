@@ -9,6 +9,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { burnBlur, unionBlurs } from "@/lib/redact";
+import { isAccountStoragePath } from "@/lib/storage-path";
 
 export const PUBLIC_IMAGE_BUCKET = "tutorial-images-public";
 const PRIVATE_IMAGE_BUCKET = "tutorial-images";
@@ -45,12 +46,17 @@ export async function pathsStillPublic(
   return out;
 }
 
-/** Öffentliche Kopien entfernen, die kein anderer veröffentlichter Schritt mehr braucht. */
+/**
+ * Öffentliche Kopien entfernen, die kein anderer veröffentlichter Schritt mehr braucht.
+ * `accountId` = Konto der Anleitung (aus der DB-Zeile): nur Pfade in DESSEN Ordner werden
+ * gelöscht — `steps.image_path` ist per REST beschreibbar, ein fremder Pfad darf nie mit dem
+ * Admin-Client gelöscht werden (Sicherheitsprüfung 23.09.2026). Vorlagen (null) → nichts.
+ */
 export async function removeUnusedPublicCopies(
   paths: (string | null | undefined)[],
-  opts: { exceptStepIds?: string[]; exceptTutorialId?: string } = {},
+  opts: { accountId: string | null | undefined; exceptStepIds?: string[]; exceptTutorialId?: string },
 ): Promise<void> {
-  const unique = [...new Set(paths.filter((p): p is string => !!p))];
+  const unique = [...new Set(paths.filter((p): p is string => isAccountStoragePath(opts.accountId, p)))];
   if (!unique.length) return;
   const admin = createAdminClient();
   const stillUsed = await pathsStillPublic(admin, unique, opts);
@@ -62,8 +68,14 @@ export async function removeUnusedPublicCopies(
  * Öffentliche Kopie EINES Bildpfads neu erzeugen (Vereinigung aller Verpixelungen der Schritte
  * mit diesem Pfad eingebrannt). Scheitert Download, Einbrennen oder Upload: Kopie entfernen und
  * werfen — nie still das alte (evtl. unverpixelte) Bild stehen lassen.
+ * `accountId` = Konto der Anleitung (aus der DB-Zeile): ein fremder Pfad wird weder gelesen
+ * noch veröffentlicht noch gelöscht (Sicherheitsprüfung 23.09.2026).
  */
-export async function rebuildPublicCopy(path: string): Promise<void> {
+export async function rebuildPublicCopy(path: string, accountId: string | null | undefined): Promise<void> {
+  if (!isAccountStoragePath(accountId, path)) {
+    console.warn("Öffentliche Bildkopie übersprungen: Pfad liegt nicht im Ordner des Kontos.");
+    return;
+  }
   const admin = createAdminClient();
   try {
     const { data: blob, error: dlErr } = await admin.storage.from(PRIVATE_IMAGE_BUCKET).download(path);

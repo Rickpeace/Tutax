@@ -34,6 +34,7 @@ const MODE_LABEL: Record<Mode, string> = {
  * Umschalten wirkt sofort (setThemeMode) — kein Speichern-Balken nötig.
  */
 export function DesignModeSwitcher({
+  accountId,
   accountName,
   accountSlug,
   mode,
@@ -46,6 +47,8 @@ export function DesignModeSwitcher({
   sourceUrl,
   business,
 }: {
+  /** Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
   accountName: string;
   accountSlug: string;
   mode: Mode;
@@ -81,7 +84,7 @@ export function DesignModeSwitcher({
   const activate = (m: Mode) =>
     start(async () => {
       try {
-        unwrap(await setThemeMode(m));
+        unwrap(await setThemeMode(accountId, m));
         toast.success(`„${MODE_LABEL[m]}“ ist jetzt aktiv`);
       } catch (e) {
         toast.error(errorText(e));

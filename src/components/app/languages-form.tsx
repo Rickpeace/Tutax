@@ -17,9 +17,11 @@ import { EXTRA_LANGS, LANG_LABEL, LANG_NAME, type ExtraLang } from "@/lib/i18n-h
  * beim Einschalten erst vom Server abgelehnt zu werden.
  */
 export function LanguagesForm({
+  accountId,
   initial,
   isBusiness,
 }: {
+  accountId: string;
   initial: ExtraLang[];
   isBusiness: boolean;
 }) {
@@ -34,7 +36,7 @@ export function LanguagesForm({
     setSelected(next); // optimistisch
 
     startTransition(async () => {
-      const res = await saveLanguages([...next]);
+      const res = await saveLanguages(accountId, [...next]);
       if (!res.ok) {
         setSelected(prev);
         toast.error(res.error || "Sprachen konnten nicht gespeichert werden");
