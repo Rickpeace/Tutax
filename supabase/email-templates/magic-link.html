@@ -1,8 +1,41 @@
-<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
-  <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
-  <h2 style="margin:0 0 8px">Dein Anmelde-Link</h2>
-  <p style="color:#5c5049;line-height:1.55">Mit einem Klick bist du angemeldet — ganz ohne Passwort:</p>
-  <p style="margin:24px 0"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/app" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Jetzt anmelden</a></p>
-  <p style="color:#8a7d75;font-size:12px;line-height:1.5">Der Link ist nur kurze Zeit gültig und funktioniert einmal. Du hast das nicht angefordert? Dann kannst du diese Mail einfach ignorieren.</p>
-  <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Button nicht geht, diesen Link öffnen:<br>{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/app</p>
-</div>
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Ihr Anmelde-Link für Steply</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:#fdf9f3;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Mit einem Klick angemeldet – ganz ohne Passwort.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf9f3">
+  <tr><td align="center" style="padding:32px 16px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+      <tr><td style="padding:0 4px 16px">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td width="28" height="28" align="center" valign="middle" style="width:28px;height:28px;border-radius:14px;background:#ef6a4e;color:#ffffff;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:900;line-height:28px">S</td>
+          <td style="padding-left:8px;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;font-size:19px;font-weight:900;letter-spacing:-0.3px;color:#33291f">Steply</td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="background:#ffffff;border:2px solid #f0e7d9;border-radius:18px;padding:30px 30px 26px;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif">
+        <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:900;color:#33291f">Ihr Anmelde-Link</h1>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#6b5e4b">Klicken Sie auf den Knopf, um sich bei Steply anzumelden – ganz ohne Passwort.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 22px"><tr>
+        <td style="background:#ef6a4e;border-radius:12px;border-bottom:3px solid #d3543a">
+          <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/app" style="display:inline-block;padding:13px 24px;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:12px">Jetzt anmelden</a>
+        </td></tr></table>
+      <p style="margin:0 0 6px;font-size:12px;line-height:1.5;color:#8a7a63">Falls der Knopf nicht funktioniert, kopieren Sie diesen Link in Ihren Browser:</p>
+      <p style="margin:0 0 18px;font-size:12px;line-height:1.5;word-break:break-all"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/app" style="color:#ef6a4e;text-decoration:underline">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/app</a></p>
+        <p style="margin:0;padding-top:16px;border-top:2px solid #f7f1e6;font-size:13px;line-height:1.55;color:#8a7a63">Der Link ist nur kurze Zeit gültig und funktioniert einmal. Sie haben keine Anmeldung angefordert? Dann ignorieren Sie diese E-Mail – ohne Klick passiert nichts.</p>
+      </td></tr>
+      <tr><td align="center" style="padding:18px 12px 0;font-family:'Nunito','Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#8a7a63">
+        Sie erhalten diese E-Mail, weil für Ihre Adresse ein Anmelde-Link angefordert wurde.<br>Steply · Schritt-für-Schritt-Anleitungen für Ihr Team und Ihre Kunden<br>
+        <a href="{{ .SiteURL }}/impressum" style="color:#8a7a63;text-decoration:underline">Impressum</a> · <a href="{{ .SiteURL }}/datenschutz" style="color:#8a7a63;text-decoration:underline">Datenschutz</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

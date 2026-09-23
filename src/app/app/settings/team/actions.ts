@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
 import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { appBaseUrl } from "@/lib/url";
-import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
+import { ROLE_HINT, ROLE_LABEL, asRole, type Role } from "@/lib/roles";
+import { sendEmail, type SendResult } from "@/lib/email/send";
+import { inviteEmail, teamJoinedEmail } from "@/lib/email/templates";
 import { teamLimit } from "@/lib/plan";
 import { INVITE_VALID_DAYS, inviteCutoffIso, isInviteExpired } from "@/lib/invitations";
 import { withUserErrors, UserError } from "@/lib/action-error";
@@ -17,44 +20,36 @@ const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g,
 
 export type InviteResult = { ok: boolean; message: string; link?: string };
 
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const roleInfo = (role: unknown) => {
+  const r = asRole(role);
+  return { label: ROLE_LABEL[r], hint: ROLE_HINT[r] };
+};
 
 /**
  * Einladungs-Mail direkt über Resend – für ALLE Adressen (neu wie bestehend).
- * Braucht RESEND_API_KEY + INVITE_FROM_EMAIL (z. B. "Steply <einladung@deine-domain.de>").
- * Ohne Konfiguration -> false (Aufrufer nutzt Fallback / Link).
+ * Ohne Konfiguration -> "unconfigured" (Aufrufer nutzt Fallback / Link).
  */
-async function sendInviteEmail(
-  to: string,
-  orgName: string,
-  link: string,
-  role: string,
-): Promise<"sent" | "unconfigured" | "failed"> {
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.INVITE_FROM_EMAIL;
-  if (!key || !from) return "unconfigured";
-  const roleLabel = ROLE_LABEL[asRole(role)];
-  const org = escapeHtml(orgName);
-  const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#2b2320">
-    <p style="margin:0 0 4px;font-weight:700;color:#ef6a4e">Steply</p>
-    <h2 style="margin:0 0 8px">Einladung zu ${org}</h2>
-    <p style="color:#5c5049;line-height:1.55">Sie wurden als <b>${roleLabel}</b> zum Team von <b>${org}</b> auf Steply eingeladen. Haben Sie schon ein Steply-Konto, melden Sie sich einfach mit Ihrem bestehenden Passwort an — Sie wechseln danach automatisch ins neue Team. Sonst legen Sie beim Beitreten ein Passwort fest:</p>
-    <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;display:inline-block">Einladung annehmen</a></p>
-    <p style="color:#8a7d75;font-size:12px">Der Link ist ${INVITE_VALID_DAYS} Tage gültig.</p>
-    <p style="color:#8a7d75;font-size:12px;word-break:break-all">Falls der Knopf nicht funktioniert, öffnen Sie diesen Link:<br>${link}</p>
-  </div>`;
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject: `Einladung zu ${orgName} auf Steply`, html }),
+async function sendInviteEmail(to: string, orgName: string, link: string, role: string): Promise<SendResult> {
+  const mail = inviteEmail({ baseUrl: appUrl(), orgName, role: roleInfo(role), link, validDays: INVITE_VALID_DAYS });
+  return sendEmail({ to, ...mail, tag: "einladung" });
+}
+
+/**
+ * Bestätigung nach dem Beitritt („Sie sind jetzt im Team …“) — nach der Antwort verschickt
+ * (after), damit das Beitreten nicht auf den Mailversand wartet. Fehler nur im Log.
+ */
+function sendJoinedEmailLater(to: string, accountId: string, role: string, newAccount: boolean) {
+  after(async () => {
+    const { data: acc } = await createAdminClient().from("accounts").select("name").eq("id", accountId).maybeSingle();
+    const mail = teamJoinedEmail({
+      baseUrl: appUrl(),
+      email: to,
+      orgName: acc?.name ?? "Ihrem Team",
+      role: roleInfo(role),
+      newAccount,
     });
-    if (!res.ok) console.error("[einladung] Resend lehnt ab:", res.status, (await res.text().catch(() => "")).slice(0, 200));
-    return res.ok ? "sent" : "failed";
-  } catch {
-    return "failed";
-  }
+    await sendEmail({ to, ...mail, tag: "team-beitritt" });
+  });
 }
 
 /**
@@ -282,6 +277,7 @@ export async function acceptInvite(
     .from("invitations")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
+  sendJoinedEmailLater(inv.email, inv.account_id, inv.role, isNew);
 
   if (isNew) {
     const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
@@ -326,6 +322,7 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
     .from("invitations")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
+  sendJoinedEmailLater(inv.email, inv.account_id, inv.role, false);
   // Direkt in der neuen Org landen.
   await supabase.auth.updateUser({ data: { active_account_id: inv.account_id } });
   return { ok: true };

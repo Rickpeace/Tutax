@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runDriftCheck } from "@/lib/drift";
 import { appBaseUrl } from "@/lib/url";
+import { sendEmail } from "@/lib/email/send";
+import { driftDigestEmail } from "@/lib/email/templates";
 
 // Cron kann bis zu 10 web_search-Läufe machen -> großzügiges Zeitbudget.
 export const maxDuration = 300;
@@ -12,41 +14,14 @@ const CANDIDATE_POOL = 200; // so viele älteste Kandidaten laden, um fair je Ko
 const TIME_BUDGET_MS = 230_000; // danach keinen neuen Check starten (maxDuration 300 s, Check ≤ 55 s)
 const STALE_AFTER_DAYS = 7; // erst nach >7 Tagen erneut prüfen
 
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-
 /**
  * Digest-Mail an alle Inhaber eines Kontos mit neu als veraltet erkannten Anleitungen.
- * Ohne RESEND_API_KEY/INVITE_FROM_EMAIL -> nur console.log (kein harter Fehler).
+ * Ohne RESEND_API_KEY/INVITE_FROM_EMAIL -> nur Log (kein harter Fehler).
  */
 async function sendDigest(to: string[], accountName: string, titles: string[]): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.INVITE_FROM_EMAIL;
-  const count = titles.length;
-  const subject = `${count} Anleitung${count === 1 ? "" : "en"} wirk${count === 1 ? "t" : "en"} veraltet`;
-  const link = `${appBaseUrl()}/app/alerts`;
-  if (!key || !from) {
-    console.log(`[cron/drift] Digest (Mail nicht konfiguriert) an ${to.join(", ")}: ${subject} — ${titles.join(", ")}`);
-    return;
-  }
-  const items = titles.map((t) => `<li style="margin:4px 0">${escapeHtml(t)}</li>`).join("");
-  const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#101524">
-    <h2 style="margin:0 0 8px">${count} Anleitung${count === 1 ? "" : "en"} wirk${count === 1 ? "t" : "en"} veraltet</h2>
-    <p style="color:#3b4254;line-height:1.55">Unser Aktualitäts-Check hat bei <b>${escapeHtml(accountName)}</b> mögliche Änderungen gefunden:</p>
-    <ul style="color:#101524;padding-left:20px;margin:12px 0">${items}</ul>
-    <p style="margin:24px 0"><a href="${link}" style="background:#ef6a4e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:700;display:inline-block">Hinweise ansehen</a></p>
-    <p style="color:#6b7280;font-size:12px">Sie erhalten diese Mail, weil Sie Inhaber dieses Kontos auf Steply sind.</p>
-  </div>`;
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to, subject, html }),
-    });
-    if (!res.ok) console.error("[cron/drift] Resend-Fehler:", res.status, await res.text().catch(() => ""));
-  } catch (e) {
-    console.error("[cron/drift] Digest-Versand:", e instanceof Error ? e.message : e);
-  }
+  const mail = driftDigestEmail({ baseUrl: appBaseUrl(), accountName, titles });
+  const res = await sendEmail({ to, ...mail, tag: "drift-digest" });
+  if (res === "unconfigured") console.log(`[cron/drift] Digest an ${to.join(", ")}: ${titles.join(", ")}`);
 }
 
 export async function GET(req: NextRequest) {

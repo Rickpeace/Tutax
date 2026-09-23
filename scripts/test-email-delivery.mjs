@@ -153,30 +153,32 @@ try {
     }
   }
 
-  // ── 3. Registrierung: kommt eine Bestätigungs-Mail? ──
+  // ── 3. Registrierung über das echte Formular → Willkommens-Mail „Konto eingerichtet“ ──
   console.log("3. Registrierung");
   {
     const to = addr("signup");
+    const org = `Willkommen GmbH ${stamp}`;
+    const page = await fresh();
+    await page.goto(`${BASE}/signup`, { waitUntil: "domcontentloaded" });
+    await page.locator("#account_name").fill(org);
+    await page.locator("#email").fill(to);
+    await page.locator("#password").fill(PW);
     const t0 = Date.now();
-    const { data, error } = await anon().auth.signUp({ email: to, password: PW, options: { emailRedirectTo: `${BASE}/auth/confirm` } });
-    if (data?.user) await track(data.user.id);
-    ok(!error, `Registrierung ausgelöst${error ? ` — ${error.message}` : ""}`);
-    if (data?.session) {
-      console.log("    Hinweis: E-Mail-Bestätigung ist in Supabase AUS — Konten sind sofort aktiv, es geht keine Mail raus.");
-    } else {
-      const mail = await waitForMail(to, t0);
-      ok(!!mail, "Bestätigungs-Mail ist bei Resend eingegangen");
-      if (mail) {
-        const d = describe(mail);
-        console.log(`    Absender: ${d.from} · Betreff: „${d.subject}“ · Zustellung: ${d.status}`);
-        if (d.target) {
-          const page = await fresh();
-          await page.goto(d.target, { waitUntil: "domcontentloaded" });
-          await page.waitForURL((u) => /\/(app|onboarding)/.test(u.pathname), { timeout: 45_000 }).catch(() => {});
-          ok(/\/(app|onboarding)/.test(path_(page)), `Link aus der Mail → bestätigt + eingeloggt (→ ${path_(page)})`);
-          await page.context().close();
-        }
-      }
+    await page.getByRole("button", { name: /registrieren/i }).click();
+    await page.waitForURL((u) => /\/(app|onboarding)/.test(u.pathname), { timeout: 45_000 }).catch(() => {});
+    ok(/\/(app|onboarding)/.test(path_(page)), `Registriert und eingeloggt (→ ${path_(page)})`);
+    await page.context().close();
+    const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const nu = list?.users?.find((u) => u.email === to);
+    if (nu) await track(nu.id);
+    const mail = await waitForMail(to, t0);
+    ok(!!mail, "Willkommens-Mail ist bei Resend eingegangen");
+    if (mail) {
+      const d = describe(mail);
+      console.log(`    Absender: ${d.from} · Betreff: „${d.subject}“ · Zustellung: ${d.status}`);
+      ok(/Ihr Konto ist eingerichtet/.test(d.subject), "Betreff bestätigt die Registrierung");
+      ok(String(mail.text ?? "").includes(to) && String(mail.html ?? "").includes(org), "Mail nennt Anmelde-Adresse und Organisation");
+      ok(linksIn(mail).includes(`${BASE}/app`), "Knopf führt in die App");
     }
   }
 

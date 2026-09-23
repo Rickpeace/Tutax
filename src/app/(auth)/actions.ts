@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { sendEmail } from "@/lib/email/send";
+import { welcomeEmail } from "@/lib/email/templates";
 import { createClient } from "@/lib/supabase/server";
 import { appBaseUrl, safeNext } from "@/lib/url";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
@@ -55,7 +58,13 @@ export async function signUp(
   if (error) return { error: uebersetzeAuthFehler(error.message) };
 
   // E-Mail-Bestätigung ist aktuell deaktiviert -> nach Registrierung direkt eingeloggt.
-  if (data.session) redirect("/app");
+  // Willkommens-Mail als Bestätigung „Konto eingerichtet“ (nach der Antwort, blockiert nicht).
+  // Ist die Bestätigung später an, übernimmt das die Supabase-Mail „Adresse bestätigen“.
+  if (data.session) {
+    const baseUrl = appUrl();
+    after(() => sendEmail({ to: email, ...welcomeEmail({ baseUrl, email, orgName: accountName }), tag: "willkommen" }));
+    redirect("/app");
+  }
 
   // Falls Bestätigung später aktiviert wird: ehrliche Meldung (kein Fake-„Link gesendet").
   return {
