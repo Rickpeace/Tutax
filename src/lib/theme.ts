@@ -90,13 +90,16 @@ export function googleFontsHref(tokens: unknown): string | null {
   return `https://fonts.googleapis.com/css2?${params}&display=swap`;
 }
 
-/** Schrift-Familien eines Themes (für fontFamily). */
+/**
+ * Schrift-Familien eines Themes (für fontFamily). Gleiche Prüfung wie in brandStyle: der Wert
+ * landet als Inline-Style im Server-HTML der öffentlichen Seite, und React übernimmt ihn dort
+ * unverändert — „Inter;background-image:url(…)“ hängte sonst eine eigene Deklaration an
+ * (Tracking der Endkunden über Dritt-Hosts). Ungültig = Standardschrift.
+ */
 export function brandFonts(tokens: unknown): { body?: string; heading?: string } {
   const ty = ((tokens ?? {}) as { typography?: Record<string, unknown> }).typography ?? {};
-  return {
-    body: typeof ty.bodyFont === "string" ? ty.bodyFont : undefined,
-    heading: typeof ty.headingFont === "string" ? ty.headingFont : undefined,
-  };
+  const font = (v: unknown) => (typeof v === "string" && v.trim() && isSafeCssPlain(v.trim()) ? v.trim() : undefined);
+  return { body: font(ty.bodyFont), heading: font(ty.headingFont) };
 }
 
 /** Hex (#rgb / #rrggbb) → {r,g,b} in 0..255, oder null bei ungültigem Wert. */

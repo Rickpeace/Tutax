@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedMany } from "@/lib/openai";
 import { embeddingsConfigured } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { forkIsServable } from "@/lib/templates";
+import { enabledStandardTemplateIds, forkIsServable } from "@/lib/templates";
 import { isPro } from "@/lib/plan";
 
 /** Tiptap-JSON -> Klartext. */
@@ -15,17 +15,21 @@ async function accountIsPro(admin: SupabaseClient, accountId: string): Promise<b
 
 /**
  * Nach einem Upgrade auf Pro/Business den Chatbot-/Such-Index des Kontos aufbauen (Gratis-Konten
- * werden nicht indiziert). Veröffentlichte öffentliche Anleitungen + veröffentlichte Artikel.
+ * werden nicht indiziert). Veröffentlichte öffentliche Anleitungen (inkl. angepasster Vorlagen),
+ * aktivierte Standard-Vorlagen (auch sie stehen auf der Hilfe-Seite; im Gratis-Tarif wurden sie
+ * beim Aktivieren nicht indiziert) + veröffentlichte Artikel. scripts/test-reindex-account.mjs
  */
 export async function reindexAccount(accountId: string): Promise<void> {
   if (!embeddingsConfigured()) return;
   const admin = createAdminClient();
   if (!(await accountIsPro(admin, accountId))) return;
-  const [{ data: tuts }, { data: arts }] = await Promise.all([
+  const [{ data: tuts }, templateIds, { data: arts }] = await Promise.all([
     admin.from("tutorials").select("id").eq("account_id", accountId).eq("status", "published").eq("visibility", "public"),
+    enabledStandardTemplateIds(admin, accountId),
     admin.from("kb_articles").select("id").eq("account_id", accountId).eq("status", "published"),
   ]);
-  for (const t of tuts ?? []) await indexTutorial(admin, accountId, t.id as string).catch(() => {});
+  const tutorialIds = [...(tuts ?? []).map((t) => t.id as string), ...templateIds];
+  for (const id of tutorialIds) await indexTutorial(admin, accountId, id).catch(() => {});
   for (const a of arts ?? []) await indexArticle(admin, accountId, a.id as string).catch(() => {});
 }
 

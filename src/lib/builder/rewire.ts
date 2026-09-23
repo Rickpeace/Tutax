@@ -110,8 +110,33 @@ export function deleteRewireTarget(
   return target === stepId ? null : target;
 }
 
+/**
+ * Ist der Tausch A↔B schon ausgeführt? („Erneut versuchen“ nach einem moveStep, der auf dem
+ * Server durchlief, dessen Antwort aber verloren ging.) swapPlan ist NICHT idempotent — ein
+ * zweiter Aufruf mit denselben Argumenten tauschte ein weiteres Mal (Schritt wanderte zwei
+ * Plätze bzw. mit dem Nachbarn). Erledigt heißt: B zeigt über seine einzige Kante auf A, und A
+ * wird nur von B erreicht. Liefert null (nicht erledigt) oder den noch zu setzenden
+ * Startschritt: steht A noch als Start, obwohl B jetzt davor liegt (Abbruch vor dem letzten
+ * Schreibschritt), muss B Start werden — sonst wäre B unerreichbar.
+ */
+export function swapAlreadyApplied(
+  branches: StepBranch[],
+  rootId: string | null,
+  aId: string,
+  bId: string,
+): { newRoot: string | null } | null {
+  const outB = branches.filter((br) => br.step_id === bId);
+  const inA = branches.filter((br) => br.target_step_id === aId);
+  const applied =
+    outB.length === 1 && outB[0].target_step_id === aId && inA.length === 1 && inA[0].step_id === bId;
+  if (!applied) return null;
+  return { newRoot: rootId === aId ? bId : null };
+}
+
 /** Ergebnis eines Tauschs: welche Kanten wohin zeigen, ggf. neue Kante B→A, ggf. neuer Start. */
 export type SwapPlan = {
+  /** Das getauschte Paar (Fluss vorher A → B). */
+  pair: { a: string; b: string };
   targets: { branchId: string; target: string | null }[];
   newBranch: { id: string; step_id: string; target_step_id: string } | null;
   newRoot: string | null;
@@ -141,6 +166,7 @@ export function swapPlan(
   const aIsRoot = rootId === a.id;
   const preds = aIsRoot ? [] : branches.filter((br) => br.target_step_id === a.id);
   return {
+    pair: { a: a.id, b: b.id },
     targets: [
       ...preds.map((p) => ({ branchId: p.id, target: b.id as string | null })),
       { branchId: outA.id, target: succ },
@@ -149,4 +175,37 @@ export function swapPlan(
     newBranch: outB ? null : { id: newBranchId, step_id: b.id, target_step_id: a.id },
     newRoot: aIsRoot ? b.id : null,
   };
+}
+
+/** Was der Server bei moveStep tun soll (siehe planMove). */
+export type MoveDecision =
+  | { kind: "apply"; plan: SwapPlan }
+  | { kind: "done"; newRoot: string | null }
+  | { kind: "stale" };
+
+/**
+ * Server-Entscheidung für „Schritt nach oben/unten“ aus dem aktuellen DB-Stand. `expect` ist das
+ * Paar, das der Editor getauscht hat (optimistisch): Nur wenn der DB-Stand GENAU diesen Tausch
+ * ergibt, wird er ausgeführt. Ist er schon ausgeführt (Wiederholung nach verlorener Antwort),
+ * ist nichts mehr zu tun (ggf. nur noch den Startschritt setzen) — statt ein zweites Mal zu
+ * tauschen. Sonst „stale“ (Seite neu laden). Ohne `expect` (ältere Editor-Stände): wie bisher.
+ */
+export function planMove(
+  steps: Step[],
+  branches: StepBranch[],
+  rootId: string | null,
+  stepId: string,
+  dir: "up" | "down",
+  newBranchId: string,
+  expect?: { a: string; b: string } | null,
+): MoveDecision {
+  const plan = swapPlan(steps, branches, rootId, stepId, dir, newBranchId);
+  if (plan && (!expect || (plan.pair.a === expect.a && plan.pair.b === expect.b))) {
+    return { kind: "apply", plan };
+  }
+  if (expect) {
+    const done = swapAlreadyApplied(branches, rootId, expect.a, expect.b);
+    if (done) return { kind: "done", newRoot: done.newRoot };
+  }
+  return { kind: "stale" };
 }

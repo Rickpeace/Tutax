@@ -13,6 +13,19 @@ export const hubTag = (accountSlug: string) => `hub-${accountSlug}`;
 export const tutTag = (accountSlug: string, tutorialSlug: string) =>
   `tut-${accountSlug}/${tutorialSlug}`;
 
+/**
+ * Tag sofort verfallen lassen. updateTag gibt es nur in Server-Actions; in Route-Handlern
+ * (z. B. Sofort-Anleitung per Erweiterung in eine veröffentlichte Anleitung) wirft es — dort
+ * greift revalidateTag (stale-while-revalidate), statt still gar nicht zu invalidieren.
+ */
+function expireTag(tag: string): void {
+  try {
+    updateTag(tag);
+  } catch {
+    revalidateTag(tag, "max");
+  }
+}
+
 /** Hub eines Kontos invalidieren (Theme-/Branding-/Katalog-Änderungen). */
 export function invalidateHubTag(accountSlug: string | null | undefined): void {
   if (accountSlug) updateTag(hubTag(accountSlug));
@@ -47,8 +60,8 @@ export async function invalidateTutorialTags(
     const acc = Array.isArray(data.accounts) ? data.accounts[0] : data.accounts;
     const accountSlug = (acc as { slug?: string } | null)?.slug;
     if (!accountSlug) return;
-    updateTag(hubTag(accountSlug));
-    if (data.slug) updateTag(tutTag(accountSlug, data.slug));
+    expireTag(hubTag(accountSlug));
+    if (data.slug) expireTag(tutTag(accountSlug, data.slug));
   } catch (e) {
     console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
   }
@@ -73,15 +86,8 @@ export async function invalidateTemplateHubs(templateId: string): Promise<void> 
       const slug = (acc as { slug?: string } | null)?.slug;
       if (slug) slugs.add(slug);
     }
-    for (const slug of slugs) {
-      // updateTag gibt es nur in Server-Actions; läuft das hier im Hintergrund (after(),
-      // z. B. nach der Vorlagen-Übersetzung), greift revalidateTag (stale-while-revalidate).
-      try {
-        updateTag(hubTag(slug));
-      } catch {
-        revalidateTag(hubTag(slug), "max");
-      }
-    }
+    // Auch im Hintergrund (after(), z. B. nach der Vorlagen-Übersetzung) — siehe expireTag.
+    for (const slug of slugs) expireTag(hubTag(slug));
   } catch (e) {
     console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
   }
