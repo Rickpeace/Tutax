@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
 import { indexArticle, removeArticleEmbeddings } from "@/lib/kb";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 // Sicherheitsprüfung 23.09.2026: Jede Änderung ist auf das AKTIVE Konto beschränkt
 // (`.eq("account_id", …)`) und bricht bei 0 getroffenen Zeilen ab — erst DANACH laufen die
@@ -19,6 +20,8 @@ export async function createArticle(formData: FormData) {
   const ctx = await requireAccount();
   // Org in einem anderen Tab gewechselt: nichts anlegen, Liste der aktiven Org neu zeigen.
   if (orgSwitchedError(formData.get("accountId"), ctx)) redirect("/app/assistent/wissen");
+  // Wissensdatenbank erst ab Pro (Tarifseite) — ohne Pro zeigt die Seite den Tarif-Hinweis.
+  if (!isPro(ctx.account)) redirect("/app/assistent/wissen");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("kb_articles")
@@ -38,6 +41,7 @@ export const saveArticle = withUserErrors(async function saveArticle(
 ) {
   const ctx = await requireAccount();
   assertActiveAccount(expectedAccountId, ctx);
+  if (!isPro(ctx.account)) throw new UserError(PRO_REQUIRED);
   const { account } = ctx;
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -62,6 +66,8 @@ export const setArticlePublished = withUserErrors(async function setArticlePubli
 ) {
   const ctx = await requireAccount();
   assertActiveAccount(expectedAccountId, ctx);
+  // Veröffentlichen (= in den Chatbot) erst ab Pro; Zurückziehen geht immer.
+  if (published && !isPro(ctx.account)) throw new UserError(PRO_REQUIRED);
   const { account } = ctx;
   const supabase = await createClient();
   const { data, error } = await supabase

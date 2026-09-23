@@ -732,6 +732,9 @@ export async function run(c) {
   if (c.on(5)) {
     setPhase("5 — KI-Assistent + Wissensdatenbank");
     try {
+      // KI-Assistent + Wissensdatenbank sind seit 23.09.2026 Pro (Gratis zeigt den Tarif-Hinweis,
+      // geprüft in scripts/test-pro-gates.mjs). Im Gesamtlauf hat Phase 4 schon hochgestuft.
+      await admin.from("accounts").update({ plan: "business" }).eq("id", state.accountId);
       await page.goto(`${BASE}/app/assistent`, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle").catch(() => {});
       await sleep(1500);

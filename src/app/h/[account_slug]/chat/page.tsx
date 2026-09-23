@@ -7,6 +7,7 @@ import { ChatWidget } from "@/components/viewer/chat-widget";
 import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, isExtraLang, LANG_BCP47 } from "@/lib/i18n-hub";
 import { EMBED_TRANSPARENT_CSS } from "./transparent";
+import { brandedTheme, isPro } from "@/lib/plan";
 
 // Chat-only-Seite (Feature H4 „Script-Chat-Bubble"): rendert NUR den ChatWidget,
 // CSS-isoliert in einem eigenen iFrame. Wiederverwendet das komplette bestehende
@@ -17,7 +18,7 @@ const load = cache(async (accountSlug: string) => {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug, languages")
+    .select("id, name, slug, languages, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -30,7 +31,7 @@ const load = cache(async (accountSlug: string) => {
     .eq("account_id", account.id)
     .single();
 
-  return { account, theme };
+  return { account, theme: brandedTheme(account, theme) }; // Logo/CI erst ab Pro
 });
 
 export const metadata: Metadata = {
@@ -51,6 +52,9 @@ export default async function ChatEmbedPage({
   if (!data) notFound();
 
   const { account, theme } = data;
+  // Chat-Bubble / KI-Assistent erst ab Pro: im Gratis-Tarif gibt es die Chat-Seite nicht
+  // (das eingebettete iFrame bleibt dann unsichtbar, embed.js zeigt es erst nach „bereit“).
+  if (!isPro(account)) notFound();
   // Sprache optional per ?lang= (embed.js reicht sie von der Kunden-Website durch). Nur
   // aktivierte Zusatzsprachen gelten, sonst Deutsch — wie auf der Hilfe-Seite selbst.
   const lang = resolveLang(

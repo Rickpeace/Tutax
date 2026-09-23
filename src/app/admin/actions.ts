@@ -7,7 +7,7 @@ import { checkAdmin } from "@/lib/admin";
 import { slugify, fallbackSlug } from "@/lib/slug";
 import { after } from "next/server";
 import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
-import { invalidateTemplateHubs } from "@/lib/cache-tags";
+import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
 import { translateTutorial } from "@/lib/translate-jobs";
 
 async function ensureAdmin() {
@@ -162,8 +162,16 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   await ensureAdmin();
   if (plan !== "free" && plan !== "pro" && plan !== "business") throw new Error("Ungültiger Tarif");
   const admin = createAdminClient();
-  const { error } = await admin.from("accounts").update({ plan }).eq("id", accountId);
+  const { data: acc, error } = await admin
+    .from("accounts")
+    .update({ plan })
+    .eq("id", accountId)
+    .select("slug")
+    .single();
   if (error) throw new Error(error.message);
+  // Der Tarif steuert, was die Hilfe-Seite zeigt (Logo/CI, Chat, „Erstellt mit Steply“) —
+  // deren Cache sofort räumen, sonst gälte der alte Tarif dort bis zu einer Stunde weiter.
+  if (acc?.slug) invalidateHubTag(acc.slug as string);
   revalidatePath("/admin");
 }
 

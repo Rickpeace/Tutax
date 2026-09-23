@@ -5,7 +5,8 @@ import { DesignModeSwitcher } from "@/components/app/design-mode-switcher";
 import { SettingsHeader } from "@/components/app/settings-ui";
 import { publicImageUrl } from "@/lib/public-image";
 import { brandColorsWithDefaults } from "@/lib/theme";
-import { isBusiness } from "@/lib/plan";
+import { isBusiness, isPro } from "@/lib/plan";
+import { ProLockCard } from "@/components/app/pro-lock";
 
 export default async function AussehenPage() {
   const { account } = await requireAccount();
@@ -49,6 +50,13 @@ export default async function AussehenPage() {
         business={isBusiness(account)}
       />
 
+      {/* Eigenes Logo & CI-Farben erst ab Pro (Tarifseite); Gratis zeigt den Steply-Standard. */}
+      {!isPro(account) ? (
+        <ProLockCard
+          title="Eigenes Logo und Farben gibt es ab Pro"
+          text="Im kostenlosen Tarif zeigt Ihre Hilfe-Seite die Steply-Standardgestaltung. Mit Pro erscheint sie mit Ihrem Logo und Ihren Farben – und ohne den Hinweis „Erstellt mit Steply“."
+        />
+      ) : (
       <BrandingForm
         accountId={account.id}
         name={account.name}
@@ -61,6 +69,7 @@ export default async function AussehenPage() {
             : `Gilt für „Steply-Standard“. Gerade ist „${mode === "ai" ? "Von Ihrer Website" : "Nachgebaut"}“ aktiv – diese Einstellungen greifen, sobald Sie oben „Steply-Standard“ verwenden.`
         }
       />
+      )}
     </div>
   );
 }

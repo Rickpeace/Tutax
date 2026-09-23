@@ -15,6 +15,7 @@ import { PrintButton } from "@/components/viewer/print-button";
 import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
+import { brandedTheme, isPro } from "@/lib/plan";
 
 // Öffentliche Druckansicht: gleiche gecachten Daten wie die Tutorial-Seite
 // (Cache Components -> 'use cache' + Hub-/Tutorial-Tags; Mutationen invalidieren).
@@ -27,7 +28,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug, languages")
+    .select("id, name, slug, languages, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -113,7 +114,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     tutorial: { ...tutorial, title: mergedTitle },
     steps: mergedSteps,
     branches: mergedBranches,
-    theme,
+    theme: brandedTheme(account, theme), // Logo/CI erst ab Pro
     languages,
   };
 }
@@ -323,7 +324,7 @@ export default async function PrintPage({
         </ol>
 
         <p className="mt-10 border-t border-black/10 pt-4 text-center text-xs text-muted-foreground">
-          {t(lang, "providedBy", { name: account.name })}
+          {t(lang, isPro(account) ? "providedByPlain" : "providedBy", { name: account.name })}
         </p>
       </div>
     </main>

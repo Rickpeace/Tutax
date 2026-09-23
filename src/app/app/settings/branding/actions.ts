@@ -8,7 +8,7 @@ import { invalidateHubTag } from "@/lib/cache-tags";
 import { slugify, SLUG_UNUSABLE } from "@/lib/slug";
 import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
-import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
+import { isBusiness, isPro, BUSINESS_REQUIRED, PRO_REQUIRED } from "@/lib/plan";
 import { backfillAccountTranslations } from "@/lib/translate-jobs";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
@@ -68,6 +68,8 @@ export async function saveBranding(
   }
 
   const colorPatch = Object.entries(input.colors ?? {}).filter(([, v]) => !!v);
+  // Eigene CI-Farben erst ab Pro (Tarifseite). Name/Adresse bleiben für alle frei.
+  if (colorPatch.length && !isPro(account)) return { ok: false, error: PRO_REQUIRED };
   if (colorPatch.length) {
     const { data: theme } = await supabase
       .from("themes")

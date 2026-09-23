@@ -2,6 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { hubTag } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { brandedTheme } from "@/lib/plan";
 
 /**
  * Schlanker, gecachter Theme-Load fürs /h-Layout: NUR was der persistente
@@ -18,7 +19,7 @@ export async function loadHubTheme(accountSlug: string) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id")
+    .select("id, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -31,5 +32,5 @@ export async function loadHubTheme(accountSlug: string) {
     .eq("account_id", account.id)
     .single();
 
-  return { theme };
+  return { theme: brandedTheme(account, theme) }; // Logo/CI erst ab Pro
 }

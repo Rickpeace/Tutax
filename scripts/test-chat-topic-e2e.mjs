@@ -68,7 +68,8 @@ async function makeAccount(name, category, titles) {
   const { data: m } = await admin.from("account_members").select("account_id").eq("user_id", created.data.user.id);
   const accountId = m[0].account_id;
   const slug = `topic-${stamp}-${users.length}`;
-  await admin.from("accounts").update({ name, slug, onboarded: true, escalation: { enabled: false } }).eq("id", accountId);
+  // KI-Assistent ist Pro (23.09.2026) -> Test-Konto wie ein echter Chat-Kunde hochstufen.
+  await admin.from("accounts").update({ name, slug, onboarded: true, plan: "pro", escalation: { enabled: false } }).eq("id", accountId);
   const { data: cat } = await admin
     .from("categories")
     .insert({ account_id: accountId, name: category, position: 0 })

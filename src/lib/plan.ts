@@ -32,6 +32,16 @@ export const PRO_REQUIRED =
   "Dieses Feature ist ab dem Pro-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
 
 /**
+ * Pro-Funktionen laut Tarifseite (lib/pricing.ts), serverseitig durchgesetzt (Produktentscheid
+ * 23.09.2026): KI-Assistent + Wissensdatenbank + Chat-Bubble, Insights/Offene Fragen, eigenes
+ * Logo & CI-Farben, ohne „Erstellt mit Steply“. Gratis-Konten zeigen auf der Hilfe-Seite die
+ * Steply-Standardgestaltung — gespeicherte Werte bleiben erhalten und gelten nach dem Upgrade.
+ */
+export function brandedTheme<T>(account: { plan?: string | null }, theme: T | null): T | null {
+  return isPro(account) ? theme : null;
+}
+
+/**
  * Tarif-Prüfung für die Zielgruppe einer Anleitung (setTutorialAudience). Liefert die
  * Fehlermeldung oder null (= erlaubt). Regeln laut Tarifseite (lib/pricing.ts):
  *  - „nur Team“ (publicOn=false → intern) ist Business;

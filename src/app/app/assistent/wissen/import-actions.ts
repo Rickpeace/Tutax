@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 import { aiConfigured } from "@/lib/ai";
 import { safeFetch } from "@/lib/ssrf";
 import {
@@ -180,6 +181,8 @@ export async function importFromWebsite(
 
 async function runWebsiteImport(rawUrl?: string, extraUrls?: string): Promise<ImportResult> {
   const { account } = await requireAccount();
+  // Wissens-Import gehört zur Wissensdatenbank → erst ab Pro (Tarifseite).
+  if (!isPro(account)) throw new KbImportError(PRO_REQUIRED);
   if (!aiConfigured()) throw new KbImportError("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
   // Kostenbremse schon VOR dem Laden der Website (spart auch die Abrufe).
   await assertImportBudget(createAdminClient(), account.id);

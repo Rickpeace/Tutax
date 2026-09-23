@@ -5,6 +5,7 @@ import { publicImageUrl } from "@/lib/public-image";
 import { activeAccountId } from "@/lib/account";
 import { revalidateHubByAccountId } from "@/lib/cache-tags";
 import { isAccountStoragePath } from "@/lib/storage-path";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 const PUBLIC_BUCKET = "tutorial-images-public";
 
@@ -27,6 +28,9 @@ async function currentAccount() {
 export async function POST(req: NextRequest) {
   const { supabase, accountId } = await currentAccount();
   if (!accountId) return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
+  // Eigenes Logo erst ab Pro (Tarifseite). Entfernen (DELETE) bleibt immer möglich.
+  const { data: acc } = await supabase.from("accounts").select("plan").eq("id", accountId).single();
+  if (!isPro(acc ?? {})) return NextResponse.json({ error: PRO_REQUIRED }, { status: 403 });
 
   const form = await req.formData();
   const file = form.get("file");

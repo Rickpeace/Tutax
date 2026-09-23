@@ -20,6 +20,8 @@ import {
   LANG_BCP47,
   type HubLang,
 } from "@/lib/i18n-hub";
+import { brandedTheme } from "@/lib/plan";
+import { isPro } from "@/lib/plan";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
 // Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
@@ -32,7 +34,7 @@ async function load(accountSlug: string, lang: HubLang) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug, languages")
+    .select("id, name, slug, languages, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -75,7 +77,8 @@ async function load(accountSlug: string, lang: HubLang) {
   }
 
   const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
-  return { account, catalog, categories: categories ?? [], theme, translations, languages };
+  // Eigenes Logo/CI erst ab Pro (Gratis: Steply-Standard, gespeicherte Werte bleiben).
+  return { account, catalog, categories: categories ?? [], theme: brandedTheme(account, theme), translations, languages };
 }
 
 /** Statische Shell: Demo-Hub zur Build-Zeit; weitere Slugs zur Laufzeit (Fallback-Shell). */
@@ -303,14 +306,19 @@ export default async function HubPage({
         className="flex items-center justify-center gap-2 border-t-2 px-4 py-4 text-xs font-bold text-muted-foreground"
         style={{ borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)" }}
       >
-        <span
-          aria-hidden
-          className="grid size-[18px] place-items-center rounded-full bg-primary text-[10px] font-black text-white"
-        >
-          S
-        </span>
-        {labels.createdWith}
-        <span className="opacity-50">·</span>
+        {/* „Erstellt mit Steply“ nur im Gratis-Tarif (Pro: ohne Hinweis, lib/pricing.ts). */}
+        {!isPro(account) && (
+          <>
+            <span
+              aria-hidden
+              className="grid size-[18px] place-items-center rounded-full bg-primary text-[10px] font-black text-white"
+            >
+              S
+            </span>
+            {labels.createdWith}
+            <span className="opacity-50">·</span>
+          </>
+        )}
         <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
           {labels.imprint}
         </a>
@@ -319,12 +327,15 @@ export default async function HubPage({
           {labels.privacy}
         </a>
       </footer>
-      <ChatWidget
-        accountSlug={account.slug}
-        accountName={account.name}
-        labels={labels}
-        lang={lang}
-      />
+      {/* KI-Assistent (Chat) erst ab Pro. */}
+      {isPro(account) && (
+        <ChatWidget
+          accountSlug={account.slug}
+          accountName={account.name}
+          labels={labels}
+          lang={lang}
+        />
+      )}
     </main>
   );
 }

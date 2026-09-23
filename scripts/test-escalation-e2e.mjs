@@ -118,7 +118,8 @@ try {
   if (created.error) throw created.error;
   userId = created.data.user.id;
   accountId = (await admin.from("account_members").select("account_id").eq("user_id", userId)).data[0].account_id;
-  await admin.from("accounts").update({ name: "Nordlicht Steuerberatung", slug, onboarded: true }).eq("id", accountId);
+  // KI-Assistent + persönlicher Kontakt sind Pro (23.09.2026) -> Test-Konto hochstufen.
+  await admin.from("accounts").update({ name: "Nordlicht Steuerberatung", slug, onboarded: true, plan: "pro" }).eq("id", accountId);
   const { error: tErr } = await admin.from("tutorials").insert(
     ["DATEV SmartLogin einrichten", "Belege mit DATEV Upload mobil hochladen", "Steuerbescheid im Postfach finden"].map(
       (title, i) => ({ account_id: accountId, title, slug: `t-${i}`, status: "published", visibility: "public" }),

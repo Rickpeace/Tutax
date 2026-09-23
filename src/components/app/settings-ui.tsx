@@ -10,6 +10,15 @@ export function BusinessPill() {
   );
 }
 
+/** Kleines „Pro"-Etikett für Funktionen, die erst ab dem Pro-Tarif gehen (Business eingeschlossen). */
+export function ProPill() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-black text-[#118576]">
+      <Crown className="size-3" /> Pro
+    </span>
+  );
+}
+
 /**
  * Bausteine der Einstellungs-Seiten (Welle 50c): Seitenkopf (Gruppe als Brotkrume,
  * H1, Erklärzeile) und Karte (2px-Rahmen, rounded-card). Server-tauglich.

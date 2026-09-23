@@ -6,6 +6,7 @@ import { chatSystem } from "@/lib/ai-prompts";
 import { recordEvent } from "@/lib/events";
 import { buildEscalationBox, type EscalationSettings } from "@/lib/escalation";
 import { isExtraLang, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
+import { isPro } from "@/lib/plan";
 
 export const maxDuration = 30;
 
@@ -163,10 +164,14 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug, escalation")
+    .select("id, name, slug, escalation, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return NextResponse.json({ error: "Unbekannt" }, { status: 404 });
+  // KI-Assistent erst ab Pro (Tarifseite) — serverseitig, nicht nur über die Oberfläche.
+  if (!isPro(account)) {
+    return NextResponse.json({ answer: tr(lang, "chatErrorRetry"), sources: [] }, { status: 403 });
+  }
 
   const esc = (account.escalation ?? {}) as EscalationSettings;
   const experts = Array.isArray(esc.experts) ? esc.experts : [];

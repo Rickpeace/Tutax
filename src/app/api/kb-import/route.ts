@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 import { aiConfigured } from "@/lib/ai";
 import { KbImportError, textToDraftArticles } from "@/lib/kb-import";
 
@@ -23,13 +24,15 @@ function looksLikePdf(buf: Uint8Array): boolean {
 export async function POST(req: NextRequest) {
   // requireAccount() macht /login-Redirect bei fehlender Auth — für eine API-Route wollen
   // wir sauberes 401/403 statt eines Redirects. Deshalb selbst prüfen und Redirect abfangen.
-  let account: { id: string };
+  let account: { id: string; plan?: string | null };
   try {
     ({ account } = await requireAccount());
   } catch {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
   if (!account?.id) return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
+  // Wissens-Import gehört zur Wissensdatenbank → erst ab Pro (Tarifseite).
+  if (!isPro(account)) return NextResponse.json({ error: PRO_REQUIRED }, { status: 403 });
 
   if (!aiConfigured()) {
     return NextResponse.json({ error: "Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt)." }, { status: 400 });

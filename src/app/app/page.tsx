@@ -12,6 +12,7 @@ import { FailedVideoNotices } from "@/components/app/failed-video-notices";
 import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
 import { relativeDe } from "@/lib/format";
 import { Loader2 } from "lucide-react";
+import { isPro } from "@/lib/plan";
 
 /**
  * Bibliothek (Design-Handoff 07/2026, Option 2a/2b): Kategorien-Sidebar +
@@ -190,10 +191,12 @@ export default async function DashboardPage() {
         ) : undefined
       }
     >
-      {/* Nutzung/Insights (streamt nach; rendert sich weg ohne Events) */}
-      <Suspense fallback={null}>
-        <InsightsCard accountId={account.id} />
-      </Suspense>
+      {/* Nutzung/Insights (streamt nach; rendert sich weg ohne Events) — erst ab Pro (Tarifseite). */}
+      {isPro(account) && (
+        <Suspense fallback={null}>
+          <InsightsCard accountId={account.id} />
+        </Suspense>
+      )}
 
       {templateItems.length > 0 && (
         <div className="mt-8">

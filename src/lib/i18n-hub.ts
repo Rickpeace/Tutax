@@ -98,6 +98,7 @@ type Key =
   | "end"
   | "printView"
   | "providedBy"
+  | "providedByPlain"
   | "createdWith"
   | "imprint"
   | "privacy"
@@ -185,6 +186,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     end: "Ende",
     printView: "Druckansicht",
     providedBy: "Bereitgestellt von {name} · Erstellt mit Steply",
+    providedByPlain: "Bereitgestellt von {name}",
     createdWith: "Erstellt mit Steply",
     imprint: "Impressum",
     privacy: "Datenschutz",
@@ -271,6 +273,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     end: "End",
     printView: "Print view",
     providedBy: "Provided by {name} · Created with Steply",
+    providedByPlain: "Provided by {name}",
     createdWith: "Created with Steply",
     imprint: "Legal notice",
     privacy: "Privacy",
@@ -357,6 +360,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     end: "Koniec",
     printView: "Wersja do druku",
     providedBy: "Udostępniane przez {name} · Utworzono w Steply",
+    providedByPlain: "Udostępniane przez {name}",
     createdWith: "Utworzono w Steply",
     imprint: "Nota prawna",
     privacy: "Prywatność",
@@ -443,6 +447,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     end: "Son",
     printView: "Yazdırma görünümü",
     providedBy: "{name} tarafından sağlanır · Steply ile oluşturuldu",
+    providedByPlain: "{name} tarafından sağlanır",
     createdWith: "Steply ile oluşturuldu",
     imprint: "Künye",
     privacy: "Gizlilik",

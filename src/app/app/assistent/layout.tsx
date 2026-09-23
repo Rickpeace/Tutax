@@ -5,6 +5,8 @@ import { requireAccount } from "@/lib/account";
 import { Button } from "@/components/ui/button";
 import { AssistentNav } from "@/components/app/assistent-nav";
 import { PageHeader } from "@/components/app/page-header";
+import { ProLockCard } from "@/components/app/pro-lock";
+import { isPro } from "@/lib/plan";
 
 /**
  * Zentrale für alles rund um den Chat-Assistenten: Wissen pflegen, offene Fragen
@@ -48,7 +50,11 @@ export default function AssistentLayout({
 
       <AssistentNav />
 
-      <div className="mt-6">{children}</div>
+      <div className="mt-6">
+        <Suspense fallback={<div className="h-40 animate-pulse rounded-card bg-line-2/70" />}>
+          <ProOnly>{children}</ProOnly>
+        </Suspense>
+      </div>
     </main>
   );
 }
@@ -65,5 +71,20 @@ async function ChatTestLink() {
     >
       <ExternalLink className="size-4" /> Chat testen
     </Button>
+  );
+}
+
+/**
+ * KI-Assistent, Wissensdatenbank und Offene Fragen erst ab Pro (Tarifseite). Die Actions/Routen
+ * sperren serverseitig; hier nur die Erklärung statt der Bearbeitungs-Seiten.
+ */
+async function ProOnly({ children }: { children: React.ReactNode }) {
+  const { account } = await requireAccount();
+  if (isPro(account)) return <>{children}</>;
+  return (
+    <ProLockCard
+      title="Der KI-Assistent ist Teil von Pro"
+      text="Mit Pro beantwortet ein Chat auf Ihrer Hilfe-Seite Fragen aus Ihren Anleitungen und Ihrer Wissensdatenbank – inklusive Offene Fragen und persönlichem Kontakt."
+    />
   );
 }

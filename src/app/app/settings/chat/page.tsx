@@ -5,9 +5,27 @@ import { appBaseUrl } from "@/lib/url";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/app/copy-field";
 import { SettingsCard, SettingsHeader } from "@/components/app/settings-ui";
+import { isPro } from "@/lib/plan";
+import { ProLockCard } from "@/components/app/pro-lock";
 
 export default async function ChatSettingsPage() {
   const { account } = await requireAccount();
+  // Chat-Blase / KI-Assistent erst ab Pro (Tarifseite).
+  if (!isPro(account)) {
+    return (
+      <div className="grid gap-[18px]">
+        <SettingsHeader
+          group="KI-Assistent"
+          title="Chat auf Ihrer Website"
+          lead="Der KI-Assistent beantwortet Fragen aus Ihren Anleitungen und Ihrem Wissen – auf Wunsch auf jeder Seite Ihrer Website."
+        />
+        <ProLockCard
+          title="Die Chat-Blase ist Teil von Pro"
+          text="Mit Pro schwebt der KI-Assistent auf jeder Seite Ihrer Website und auf Ihrer Hilfe-Seite."
+        />
+      </div>
+    );
+  }
   const appUrl = appBaseUrl();
   const bubble = `<script src="${appUrl}/h/embed.js?account=${account.slug}" async></script>`;
 

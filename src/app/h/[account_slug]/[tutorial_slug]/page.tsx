@@ -19,6 +19,8 @@ import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { toPublicStep } from "@/lib/public-step";
+import { brandedTheme } from "@/lib/plan";
+import { isPro } from "@/lib/plan";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
@@ -31,7 +33,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug, languages")
+    .select("id, name, slug, languages, plan")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -123,7 +125,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     tutorial: { ...tutorial, title: mergedTitle },
     steps: mergedSteps,
     branches: mergedBranches,
-    theme,
+    theme: brandedTheme(account, theme), // Logo/CI erst ab Pro
     languages,
   };
 }
@@ -340,7 +342,7 @@ export default async function ViewerPage({
         </div>
 
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
-          {t(lang, "providedBy", { name: account.name })}
+          {t(lang, isPro(account) ? "providedByPlain" : "providedBy", { name: account.name })}
           <span className="mx-1.5 opacity-50">·</span>
           <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
             {labels.imprint}
@@ -351,12 +353,15 @@ export default async function ViewerPage({
           </a>
         </p>
       </div>
-      <ChatWidget
-        accountSlug={account.slug}
-        accountName={account.name}
-        labels={labels}
-        lang={lang}
-      />
+      {/* KI-Assistent (Chat) erst ab Pro. */}
+      {isPro(account) && (
+        <ChatWidget
+          accountSlug={account.slug}
+          accountName={account.name}
+          labels={labels}
+          lang={lang}
+        />
+      )}
     </main>
   );
 }

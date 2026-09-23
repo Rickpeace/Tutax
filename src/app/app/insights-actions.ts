@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import { AI, aiConfigured } from "@/lib/ai";
 import { openai } from "@/lib/openai";
-import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
 /** Tiptap-Doc aus einem Absatz-Text bauen (gleiches Muster wie video-worker/index.mjs). */
@@ -60,22 +60,8 @@ export const createDraftFromQuestion = withUserErrors(async function createDraft
   const { account } = await requireAccount();
   const supabase = await createClient();
 
-  // Free-Limit gilt auch hier — sonst wäre der Miner ein Gating-Bypass.
-  if (!isPro(account)) {
-    const [{ count: total }, { count: forks }] = await Promise.all([
-      supabase.from("tutorials").select("id", { count: "exact", head: true }).eq("account_id", account.id),
-      supabase
-        .from("account_templates")
-        .select("template_id", { count: "exact", head: true })
-        .eq("account_id", account.id)
-        .not("forked_tutorial_id", "is", null),
-    ]);
-    if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) {
-      throw new UserError(
-        `Grenze des kostenlosen Tarifs erreicht (${FREE_TUTORIAL_LIMIT} Anleitungen). Für unbegrenzte Anleitungen wechseln Sie bitte zu Pro (Einstellungen → Tarif).`,
-      );
-    }
-  }
+  // Offene Fragen → „Entwurf erstellen“ ist Pro (Tarifseite: Insights & Offene Fragen).
+  if (!isPro(account)) throw new UserError(PRO_REQUIRED);
 
   // 1) KI-Entwurfsrahmen erzeugen.
   let frame: DraftFrame;

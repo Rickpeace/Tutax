@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { assertActiveAccount, requireAccount } from "@/lib/account";
 import { safeEmail, safeHttpUrl, safePhone } from "@/lib/escalation";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
 type ExpertIn = {
   name?: string;
@@ -32,6 +33,8 @@ export const saveEscalation = withUserErrors(async function saveEscalation(
   const ctx = await requireAccount();
   // Org in einem anderen Tab gewechselt -> nicht still in die falsche Organisation schreiben.
   assertActiveAccount(expectedAccountId, ctx);
+  // Persönlicher Kontakt erscheint nur im KI-Assistenten → erst ab Pro (Tarifseite).
+  if (!isPro(ctx.account)) throw new UserError(PRO_REQUIRED);
   const { account } = ctx;
   const supabase = await createClient();
 
