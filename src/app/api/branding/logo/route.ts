@@ -4,8 +4,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { publicImageUrl } from "@/lib/public-image";
 import { activeAccountId } from "@/lib/account";
 import { revalidateHubByAccountId } from "@/lib/cache-tags";
+import { isAccountStoragePath } from "@/lib/storage-path";
 
 const PUBLIC_BUCKET = "tutorial-images-public";
+
+/**
+ * Nur Logos im EIGENEN Branding-Ordner löschen: `logo_path`/`ai_logo_path` sind per REST
+ * beschreibbar — ein eingetragener fremder Pfad darf nie mit dem Admin-Client gelöscht werden.
+ * `branding/` = Upload hier, `brand/` = KI-Design (theme/analyze, theme/extreme).
+ */
+const isOwnLogoPath = (accountId: string, path: string | null | undefined) =>
+  isAccountStoragePath(accountId, path, ["branding", "brand"]);
 
 async function currentAccount() {
   const supabase = await createClient();
@@ -35,7 +44,7 @@ export async function POST(req: NextRequest) {
     .eq("account_id", accountId)
     .single();
   const oldPath = target === "ai" ? theme?.ai_logo_path : theme?.logo_path;
-  if (oldPath) await admin.storage.from(PUBLIC_BUCKET).remove([oldPath]);
+  if (oldPath && isOwnLogoPath(accountId, oldPath)) await admin.storage.from(PUBLIC_BUCKET).remove([oldPath]);
 
   const path = `${accountId}/branding/${target === "ai" ? "ai-logo" : "logo"}-${Date.now()}.webp`;
   const { error } = await admin.storage
@@ -63,7 +72,7 @@ export async function DELETE(req: NextRequest) {
     .eq("account_id", accountId)
     .single();
   const oldPath = target === "ai" ? theme?.ai_logo_path : theme?.logo_path;
-  if (oldPath) {
+  if (oldPath && isOwnLogoPath(accountId, oldPath)) {
     const admin = createAdminClient();
     await admin.storage.from(PUBLIC_BUCKET).remove([oldPath]);
   }

@@ -27,7 +27,7 @@ export default async function SprachenPage() {
         lead="Ihre Hilfe-Seite in mehreren Sprachen – Steply übersetzt automatisch und kann jeden Schritt vorlesen."
       />
 
-      <LanguagesForm initial={languages} isBusiness={business} />
+      <LanguagesForm accountId={account.id} initial={languages} isBusiness={business} />
 
       {/* Stand laut OVERVIEW (Auto-Sync): Publish = Vollübersetzung, Änderung = Delta,
           Sprache einschalten = Backfill — alles automatisch im Hintergrund. */}

@@ -15,10 +15,12 @@ import { slugify, SLUG_UNUSABLE } from "@/lib/slug";
  * und meldet belegte Adressen.
  */
 export function SlugForm({
+  accountId,
   name,
   initialSlug,
   appUrl,
 }: {
+  accountId: string;
   name: string;
   initialSlug: string;
   appUrl: string;
@@ -38,7 +40,7 @@ export function SlugForm({
       return;
     }
     startTransition(async () => {
-      const res = await saveBranding({ slug });
+      const res = await saveBranding(accountId, { slug });
       if (res.ok) {
         setSaved(res.slug);
         setSlug(res.slug);

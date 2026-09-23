@@ -38,6 +38,7 @@ export default async function KnowledgePage() {
         <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
           {aiOn && <KbImport accountWebsite={accountWebsite} />}
           <form action={createArticle}>
+            <input type="hidden" name="accountId" value={account.id} />
             <Button type="submit">
               <Plus className="size-4" /> Neuer Artikel
             </Button>
@@ -69,6 +70,7 @@ export default async function KnowledgePage() {
             der KI-Assistent beantwortet damit Kundenfragen.
           </p>
           <form action={createArticle} className="mt-5">
+            <input type="hidden" name="accountId" value={account.id} />
             <Button type="submit">
               <Plus className="size-4" /> Ersten Artikel anlegen
             </Button>

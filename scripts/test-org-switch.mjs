@@ -195,6 +195,42 @@ try {
   await page.waitForURL((u) => u.pathname === "/app", { timeout: 30_000 }).catch(() => {});
   ok((await activeMeta(a.uid)) === b.aid, "Fehlerfall: erneuter Versuch wechselt zu Org B");
 
+  // ---- 4) Veralteter Tab (Sicherheitsprüfung 23.09.2026): Seite zeigt Org B, in einem
+  //         anderen Tab wurde zu Org A gewechselt -> Speichern darf NICHT still in Org A
+  //         schreiben, sondern bittet um Neuladen. ----
+  const { data: art } = await admin
+    .from("kb_articles")
+    .insert({ account_id: b.aid, title: "Artikel B", status: "draft" })
+    .select("id")
+    .single();
+  const stale = await ctx.newPage();
+  await stale.goto(`${BASE}/app/settings/allgemein`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+  await stale.locator("#org-name").waitFor({ timeout: 90_000 });
+  const staleArt = await ctx.newPage();
+  await staleArt.goto(`${BASE}/app/assistent/wissen/${art.id}`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+  const artTitle = staleArt.getByPlaceholder("Titel des Artikels");
+  await artTitle.waitFor({ timeout: 90_000 });
+  // Wechsel „im anderen Tab“: aktive Org in den Metadaten auf A setzen.
+  await admin.auth.admin.updateUserById(a.uid, { user_metadata: { active_account_id: a.aid } });
+
+  await stale.fill("#org-name", `Falsche Org ${stamp}`);
+  await stale.press("#org-name", "Enter");
+  await stale.getByText("inzwischen die Organisation gewechselt").waitFor({ timeout: 30_000 }).then(
+    () => ok(true, "Veralteter Tab: Name speichern -> Hinweis „Organisation gewechselt“"),
+    () => ok(false, "Veralteter Tab: Name speichern -> Hinweis „Organisation gewechselt“"),
+  );
+  const { data: names } = await admin.from("accounts").select("name").in("id", [a.aid, b.aid]);
+  ok((names ?? []).every((n) => n.name === SAME), "Veralteter Tab: keine Organisation umbenannt");
+
+  await artTitle.fill("Umbenannt im falschen Tab");
+  await staleArt.getByRole("button", { name: "Speichern" }).click();
+  await staleArt.getByText("inzwischen die Organisation gewechselt").waitFor({ timeout: 30_000 }).then(
+    () => ok(true, "Veralteter Tab: Artikel speichern -> Hinweis „Organisation gewechselt“"),
+    () => ok(false, "Veralteter Tab: Artikel speichern -> Hinweis „Organisation gewechselt“"),
+  );
+  const { data: artRow } = await admin.from("kb_articles").select("title").eq("id", art.id).single();
+  ok(artRow?.title === "Artikel B", `Veralteter Tab: Artikel unverändert („${artRow?.title}“)`);
+
   if (errors.length) console.log("Browser-Fehler:\n  " + errors.slice(0, 10).join("\n  "));
 } catch (e) {
   ok(false, "Fehler: " + (e && e.stack ? e.stack : e));

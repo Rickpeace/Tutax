@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireAccount } from "@/lib/account";
+import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
 import { invalidateHubTag } from "@/lib/cache-tags";
 import { slugify, SLUG_UNUSABLE } from "@/lib/slug";
 import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
@@ -26,10 +26,16 @@ export type BrandingInput = {
   };
 };
 
+// Org-Wechsel in einem anderen Tab: alle Aktionen hier bekommen die auf der Seite angezeigte
+// Organisation (`expectedAccountId`) und lehnen ab, wenn inzwischen eine andere aktiv ist.
 export async function saveBranding(
+  expectedAccountId: string,
   input: BrandingInput,
 ): Promise<{ ok: true; slug: string } | { ok: false; error: string }> {
-  const { account } = await requireAccount();
+  const ctx = await requireAccount();
+  const switched = orgSwitchedError(expectedAccountId, ctx);
+  if (switched) return { ok: false, error: switched };
+  const { account } = ctx;
   const supabase = await createClient();
 
   const accUpdate: { name?: string; slug?: string } = {};
@@ -95,9 +101,13 @@ export async function saveBranding(
  * Autorisierung wie die übrigen Branding-Actions (requireAccount = aktives Konto).
  */
 export async function saveLanguages(
+  expectedAccountId: string,
   langs: string[],
 ): Promise<{ ok: true; languages: ExtraLang[] } | { ok: false; error: string }> {
-  const { account } = await requireAccount();
+  const ctx = await requireAccount();
+  const switched = orgSwitchedError(expectedAccountId, ctx);
+  if (switched) return { ok: false, error: switched };
+  const { account } = ctx;
   // Mehrsprachigkeit ist ein Business-Feature (Abschalten/Leeren bleibt immer erlaubt).
   if (langs.some(isExtraLang) && !isBusiness(account)) {
     return { ok: false, error: BUSINESS_REQUIRED };
@@ -142,8 +152,13 @@ export async function saveLanguages(
 }
 
 /** Aktive Design-Quelle wählen: Standard-CI (manuell), KI-Design oder Extrem. */
-export const setThemeMode = withUserErrors(async function setThemeMode(mode: "manual" | "ai" | "extreme") {
-  const { account } = await requireAccount();
+export const setThemeMode = withUserErrors(async function setThemeMode(
+  expectedAccountId: string,
+  mode: "manual" | "ai" | "extreme",
+) {
+  const ctx = await requireAccount();
+  assertActiveAccount(expectedAccountId, ctx);
+  const { account } = ctx;
   // KI-Design (ai/extreme) ist ein Business-Feature; zurück auf manuell geht immer.
   if (mode !== "manual" && !isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();

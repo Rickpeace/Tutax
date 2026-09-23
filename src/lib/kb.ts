@@ -175,6 +175,8 @@ function chunkText(text: string, maxLen = 800): string[] {
 /**
  * Indiziert einen Wissensartikel für die semantische Suche (Chatbot-RAG).
  * Nur veröffentlichte Artikel; No-op ohne OPENAI_API_KEY.
+ * Nur Artikel, die `accountId` gehören (Sicherheitsprüfung 23.09.2026): sonst ließe sich ein
+ * fremder veröffentlichter Artikel per ID in den eigenen Chatbot-Index kopieren.
  */
 export async function indexArticle(
   admin: SupabaseClient,
@@ -185,13 +187,15 @@ export async function indexArticle(
 
   const { data: a } = await admin
     .from("kb_articles")
-    .select("title, body, status")
+    .select("title, body, status, account_id")
     .eq("id", articleId)
-    .single();
+    .maybeSingle();
+
+  if (a && a.account_id !== accountId) return; // fremder Artikel: nichts anfassen
 
   if (!a || a.status !== "published") {
     // Nicht (mehr) veröffentlicht: Index entfernen (Unpublish/Delete).
-    await removeArticleEmbeddings(admin, articleId);
+    await removeArticleEmbeddings(admin, accountId, articleId);
     return;
   }
 
@@ -210,13 +214,16 @@ export async function indexArticle(
   );
 }
 
+/** Index-Einträge eines Artikels entfernen — nur im Index von `accountId` (Admin-Client!). */
 export async function removeArticleEmbeddings(
   admin: SupabaseClient,
+  accountId: string,
   articleId: string,
 ): Promise<void> {
   const { error } = await admin
     .from("kb_embeddings")
     .delete()
+    .eq("account_id", accountId)
     .eq("source_type", "kb_article")
     .eq("source_id", articleId);
   if (error) {

@@ -13,7 +13,7 @@ import { ORG_NAME_MAX, ORG_NAME_TOO_LONG } from "@/lib/text-limits";
  * Server-Action wie früher das Branding-Formular (saveBranding) — Adresse bleibt
  * unverändert, Farben werden nicht angefasst (leeres colors-Objekt = nichts mergen).
  */
-export function OrgNameForm({ initialName }: { initialName: string }) {
+export function OrgNameForm({ accountId, initialName }: { accountId: string; initialName: string }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initialName);
   const [name, setName] = useState(initialName);
@@ -31,7 +31,7 @@ export function OrgNameForm({ initialName }: { initialName: string }) {
       return;
     }
     startTransition(async () => {
-      const res = await saveBranding({ name });
+      const res = await saveBranding(accountId, { name });
       if (res.ok) {
         setSaved(name.trim());
         setName(name.trim());

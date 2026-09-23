@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Account } from "@/lib/types";
 import { asRole, canEdit, MEMBER_HOME, type Role } from "@/lib/roles";
+import { UserError } from "@/lib/action-error";
 
 export type Membership = { id: string; name: string; role: string };
 
@@ -90,6 +91,25 @@ export async function requireAccount(opts?: { allowMember?: boolean }): Promise<
   const ctx = await loadAccount();
   if (!opts?.allowMember && !canEdit(ctx.role)) redirect(MEMBER_HOME);
   return ctx;
+}
+
+export const ORG_SWITCHED =
+  "Sie haben inzwischen die Organisation gewechselt – bitte laden Sie die Seite neu.";
+
+/**
+ * Org-Wechsel in einem anderen Tab: Aktionen schreiben ins AKTIVE Konto (Metadaten), die
+ * offene Seite zeigt aber evtl. noch die vorige Organisation. Seiten geben deshalb die
+ * angezeigte `account.id` mit; stimmt sie nicht mehr, lehnen die Aktionen ab, statt still in
+ * die falsche Organisation zu schreiben. Liefert die Meldung oder null (= passt).
+ */
+export function orgSwitchedError(expectedAccountId: unknown, ctx: { account: { id: string } }): string | null {
+  return typeof expectedAccountId === "string" && expectedAccountId === ctx.account.id ? null : ORG_SWITCHED;
+}
+
+/** Wie orgSwitchedError, wirft aber `UserError` (für mit `withUserErrors` exportierte Aktionen). */
+export function assertActiveAccount(expectedAccountId: unknown, ctx: { account: { id: string } }): void {
+  const err = orgSwitchedError(expectedAccountId, ctx);
+  if (err) throw new UserError(err);
 }
 
 /**

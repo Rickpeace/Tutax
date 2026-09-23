@@ -35,6 +35,7 @@ export default async function AussehenPage() {
       />
 
       <DesignModeSwitcher
+        accountId={account.id}
         accountName={account.name}
         accountSlug={account.slug}
         mode={mode}
@@ -49,6 +50,7 @@ export default async function AussehenPage() {
       />
 
       <BrandingForm
+        accountId={account.id}
         name={account.name}
         initialLogoUrl={manualLogoUrl}
         // Fehlende Farben = warme Standard-Farben der echten Hilfe-Seite (EINE Quelle).

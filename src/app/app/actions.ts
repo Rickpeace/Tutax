@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { slugify, fallbackSlug } from "@/lib/slug";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
+import { isAccountStoragePath } from "@/lib/storage-path";
 import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
 import { burnBlur, unionBlurs } from "@/lib/redact";
@@ -260,7 +261,7 @@ export async function deleteTutorial(id: string) {
   if (error) throw new Error(error.message);
   await removeUnusedPublicCopies(
     (goneSteps ?? []).map((s) => s.image_path as string | null),
-    { exceptTutorialId: id },
+    { accountId: account.id, exceptTutorialId: id },
   ).catch((e) => console.error("Öffentliche Bilder nicht entfernt:", e instanceof Error ? e.message : e));
   revalidatePath("/app");
 }
@@ -396,16 +397,28 @@ async function copyImagesToPublic(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tutorialId: string,
 ): Promise<void> {
-  const { data: steps } = await supabase
-    .from("steps")
-    .select("image_path, highlights")
-    .eq("tutorial_id", tutorialId)
-    .not("image_path", "is", null);
+  const [{ data: steps }, accountId] = await Promise.all([
+    supabase
+      .from("steps")
+      .select("image_path, highlights")
+      .eq("tutorial_id", tutorialId)
+      .not("image_path", "is", null),
+    tutorialAccountId(supabase, tutorialId),
+  ]);
 
   // Welle 51a: Schritte können sich ein Bild teilen („Bild in neuen Schritt übernehmen“, auch
   // Duplikate). Die öffentliche Kopie gibt es je Pfad nur einmal -> je Pfad EINMAL kopieren und
   // die Vereinigung ALLER Verpixelungen der Schritte mit diesem Bild einbrennen (RLS: eigene).
-  const paths = [...new Set((steps ?? []).map((s) => s.image_path).filter(Boolean) as string[])];
+  // SICHERHEIT (23.09.2026): `steps.image_path` ist per REST beschreibbar. Nur Bilder im Ordner
+  // des Kontos der Anleitung veröffentlichen — sonst ließe sich ein fremdes privates Bild mit
+  // Admin-Rechten in den öffentlichen Bucket kopieren.
+  const paths = [
+    ...new Set(
+      (steps ?? [])
+        .map((s) => s.image_path as string | null)
+        .filter((p): p is string => isAccountStoragePath(accountId, p)),
+    ),
+  ];
   const blursByPath = new Map<string, unknown[]>();
   if (paths.length) {
     const { data: sharing } = await supabase
@@ -443,6 +456,15 @@ async function copyImagesToPublic(
   }
 }
 
+/** Konto einer Anleitung aus der DB-Zeile (nie aus einem Pfad ableiten). */
+async function tutorialAccountId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tutorialId: string,
+): Promise<string | null> {
+  const { data } = await supabase.from("tutorials").select("account_id").eq("id", tutorialId).maybeSingle();
+  return (data?.account_id as string | null) ?? null;
+}
+
 /** Öffentliche Bild-Kopien eines Tutorials entfernen (Wechsel zu intern / unpublish). */
 async function removePublicImages(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -456,7 +478,7 @@ async function removePublicImages(
   // Nur Kopien entfernen, die keine ANDERE veröffentlichte Anleitung nutzt (geteilte Pfade, M1).
   await removeUnusedPublicCopies(
     (steps ?? []).map((s) => s.image_path as string | null),
-    { exceptTutorialId: tutorialId },
+    { accountId: await tutorialAccountId(supabase, tutorialId), exceptTutorialId: tutorialId },
   );
 }
 
@@ -713,7 +735,7 @@ export async function unpublishTutorial(tutorialId: string) {
   // Nur Kopien entfernen, die keine ANDERE veröffentlichte Anleitung nutzt (geteilte Pfade, M1).
   await removeUnusedPublicCopies(
     (steps ?? []).map((s) => s.image_path as string | null),
-    { exceptTutorialId: tutorialId },
+    { accountId: await tutorialAccountId(supabase, tutorialId), exceptTutorialId: tutorialId },
   );
 
   const { error } = await supabase

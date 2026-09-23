@@ -15,11 +15,12 @@ import {
   setArticlePublished,
   deleteArticle,
 } from "@/app/app/assistent/wissen/actions";
-import { errorText } from "@/lib/action-error";
+import { errorText, unwrap } from "@/lib/action-error";
 
 type Article = { id: string; title: string; body: unknown; status: string };
 
-export function ArticleEditor({ article }: { article: Article }) {
+/** `accountId` = Organisation, die diese Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+export function ArticleEditor({ article, accountId }: { article: Article; accountId: string }) {
   const router = useRouter();
   const [title, setTitle] = useState(article.title);
   const [body, setBody] = useState<unknown>(article.body);
@@ -55,7 +56,7 @@ export function ArticleEditor({ article }: { article: Article }) {
   const save = () =>
     start(async () => {
       try {
-        await saveArticle(article.id, title, body);
+        unwrap(await saveArticle(accountId, article.id, title, body));
         setDirty(false);
         toast.success("Gespeichert");
       } catch (e) {
@@ -69,8 +70,8 @@ export function ArticleEditor({ article }: { article: Article }) {
       // Erst speichern, damit der Chatbot-Index den aktuellen Stand bekommt.
       start(async () => {
         try {
-          await saveArticle(article.id, title, body);
-          await setArticlePublished(article.id, true);
+          unwrap(await saveArticle(accountId, article.id, title, body));
+          unwrap(await setArticlePublished(accountId, article.id, true));
           setPublished(true);
           setDirty(false);
           toast.success("Im KI-Assistenten aktiv");
@@ -80,10 +81,12 @@ export function ArticleEditor({ article }: { article: Article }) {
       });
     } else {
       setPublished(false);
-      setArticlePublished(article.id, false).catch(() => {
-        setPublished(true);
-        toast.error("Konnte nicht ändern");
-      });
+      setArticlePublished(accountId, article.id, false)
+        .then(unwrap)
+        .catch((e) => {
+          setPublished(true);
+          toast.error(errorText(e, "Konnte nicht ändern"));
+        });
     }
   };
 
@@ -98,7 +101,7 @@ export function ArticleEditor({ article }: { article: Article }) {
     if (!ok) return;
     start(async () => {
       try {
-        await deleteArticle(article.id);
+        unwrap(await deleteArticle(accountId, article.id));
         toast.success("Artikel gelöscht");
         router.push("/app/assistent/wissen");
       } catch (e) {

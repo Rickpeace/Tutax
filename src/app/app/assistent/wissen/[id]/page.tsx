@@ -19,5 +19,5 @@ export default async function ArticlePage({
     .maybeSingle();
   if (!article) notFound();
 
-  return <ArticleEditor article={article} />;
+  return <ArticleEditor article={article} accountId={account.id} />;
 }

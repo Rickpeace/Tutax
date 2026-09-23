@@ -8,14 +8,18 @@ import { Button } from "@/components/ui/button";
 import { BusinessPill, FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
 import { completeOnboarding, skipOnboarding } from "@/app/onboarding/actions";
 import { ORG_NAME_MAX } from "@/lib/text-limits";
+import { isActionFailure } from "@/lib/action-error";
 import { saveLanguages } from "@/app/app/settings/branding/actions";
 import { EXTRA_LANGS, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 
 export function OnboardingWizard({
+  accountId,
   initialName,
   isBusiness,
   initialLanguages,
 }: {
+  /** Organisation, die eingerichtet wird (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
   initialName: string;
   isBusiness: boolean;
   initialLanguages: ExtraLang[];
@@ -40,17 +44,19 @@ export function OnboardingWizard({
       // Sprachen über die bestehende Branding-Action speichern (Server-Gate bleibt dort).
       // Nur Business-Konten können hier überhaupt etwas ausgewählt haben.
       if (isBusiness && langs.size > 0) {
-        const res = await saveLanguages([...langs]);
+        const res = await saveLanguages(accountId, [...langs]);
         if (!res.ok) {
           toast.error(res.error || "Sprachen konnten nicht gespeichert werden");
           return; // Onboarding NICHT abschließen, Nutzer kann korrigieren
         }
       }
-      await completeOnboarding({ name, websiteUrl: website });
+      // Kein try/catch: der Erfolg endet in redirect("/app"). Ablehnung kommt als Rückgabewert.
+      const done = await completeOnboarding(accountId, { name, websiteUrl: website });
+      if (isActionFailure(done)) toast.error(done.userError);
     });
   }
   function skip() {
-    startTransition(() => skipOnboarding());
+    startTransition(() => skipOnboarding(accountId));
   }
 
   return (

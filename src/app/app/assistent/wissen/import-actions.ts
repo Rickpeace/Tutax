@@ -44,27 +44,16 @@ const FETCH_TIMEOUT_MS = 8000;
 const UA = "Mozilla/5.0 (compatible; TutaxBot/1.0)";
 
 /**
- * SSRF-sicher laden UND Weiterleitungen einzeln prüfen: fetch folgt Redirects sonst selbst —
- * ein öffentlicher Host könnte so auf eine interne Adresse umlenken. Jede Station geht durch
- * safeFetch (DNS-Prüfung), höchstens 4 Sprünge.
+ * SSRF-sicher laden: safeFetch prüft jede Station einer Weiterleitung einzeln (DNS-Prüfung,
+ * höchstens 4 Sprünge) — ein öffentlicher Host kann so nicht auf eine interne Adresse umlenken.
+ * null = Weiterleitung ohne Ziel (Aufrufer behandeln das wie „nicht ladbar“).
  */
 async function fetchChecked(url: string, accept: string): Promise<Response | null> {
-  let current = url;
-  for (let hop = 0; hop < 5; hop++) {
-    const resp = await safeFetch(current, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": UA, Accept: accept },
-    });
-    if (resp.status >= 300 && resp.status < 400) {
-      const loc = resp.headers.get("location");
-      if (!loc) return null;
-      current = new URL(loc, current).href;
-      continue;
-    }
-    return resp;
-  }
-  return null;
+  const resp = await safeFetch(url, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    headers: { "User-Agent": UA, Accept: accept },
+  });
+  return resp.status >= 300 && resp.status < 400 ? null : resp;
 }
 
 /**

@@ -2,14 +2,21 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireAccount } from "@/lib/account";
+import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
+import { withUserErrors } from "@/lib/action-error";
 import { ORG_NAME_MAX } from "@/lib/text-limits";
 
-export async function completeOnboarding(input: {
-  name: string;
-  websiteUrl: string;
-}) {
-  const { account } = await requireAccount();
+// Org-Wechsel in einem anderen Tab: nur die Organisation einrichten, die die Seite zeigt.
+export const completeOnboarding = withUserErrors(async function completeOnboarding(
+  expectedAccountId: string,
+  input: {
+    name: string;
+    websiteUrl: string;
+  },
+) {
+  const ctx = await requireAccount();
+  assertActiveAccount(expectedAccountId, ctx);
+  const { account } = ctx;
   const supabase = await createClient();
   // Einrichtung soll nie an einer zu langen Eingabe scheitern -> hier gekappt (das
   // Formular begrenzt bereits auf ORG_NAME_MAX), Einstellungen lehnen dagegen ab.
@@ -30,10 +37,13 @@ export async function completeOnboarding(input: {
       .eq("account_id", account.id);
   }
   redirect("/app");
-}
+});
 
-export async function skipOnboarding() {
-  const { account } = await requireAccount();
+export async function skipOnboarding(expectedAccountId: string) {
+  const ctx = await requireAccount();
+  // Gewechselt: nichts markieren, die App zeigt die jetzt aktive Organisation.
+  if (orgSwitchedError(expectedAccountId, ctx)) redirect("/app");
+  const { account } = ctx;
   const supabase = await createClient();
   await supabase.from("accounts").update({ onboarded: true }).eq("id", account.id);
   redirect("/app");
