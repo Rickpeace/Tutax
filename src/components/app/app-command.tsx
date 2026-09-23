@@ -70,13 +70,17 @@ export function AppCommand({
   const [hits, setHits] = useState<TutorialHit[]>([]);
   const [searching, startSearch] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Zähler je Suche: nur die JÜNGSTE Antwort darf die Treffer setzen. Sonst schrieb eine noch
+  // laufende Suche ihre Treffer nach dem Leeren/Schließen zurück (alte Treffer beim Öffnen).
+  // Nur im Such-Effekt benutzt (jede Eingabe-Änderung, auch das Leeren beim Schließen).
+  const searchSeq = useRef(0);
 
   // Öffnen/Schließen an den Parent durchreichen; beim Schließen frisch zurücksetzen
   // (kein Effect → kein setState-in-Effect-Cascade).
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
-        setQuery("");
+        setQuery(""); // → Such-Effekt läuft neu und verwirft noch laufende Antworten
         setHits([]);
       }
       onOpenChange(next);
@@ -101,6 +105,7 @@ export function AppCommand({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
     // Mitarbeiter durchsuchen keine Anleitungs-Bibliothek (nur Schulungen).
+    const seq = ++searchSeq.current;
     if (q.length < 2 || member) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Ergebnisliste leeren, sobald die (externe) Eingabe zu kurz ist, kein Cascade
       setHits([]);
@@ -109,7 +114,7 @@ export function AppCommand({
     debounceRef.current = setTimeout(() => {
       startSearch(async () => {
         const res = await searchMyTutorials(q);
-        setHits(res);
+        if (seq === searchSeq.current) setHits(res);
       });
     }, 200);
     return () => {

@@ -25,6 +25,8 @@ export async function reindexAccount(accountId: string): Promise<void> {
   if (!(await accountIsPro(admin, accountId))) return;
   const [{ data: tuts }, templateIds, { data: arts }] = await Promise.all([
     admin.from("tutorials").select("id").eq("account_id", accountId).eq("status", "published").eq("visibility", "public"),
+    // Aktivierte, zentral veröffentlichte Standard-Vorlagen OHNE eigene Kopie (Kopien stecken
+    // schon in `tuts`) — im Gratis-Tarif wurden sie beim Aktivieren nicht indiziert.
     enabledStandardTemplateIds(admin, accountId),
     admin.from("kb_articles").select("id").eq("account_id", accountId).eq("status", "published"),
   ]);
@@ -62,13 +64,17 @@ export async function indexTutorial(
 
   const { data: tut } = await admin
     .from("tutorials")
-    .select("title, slug, category_id, visibility")
+    .select("title, slug, category_id, visibility, is_template, status")
     .eq("id", tutorialId)
     .single();
   if (!tut) return;
   // Zentraler Schutz für ALLE Aufrufer (Publish/Miner/Cron): interne Tutorials
   // dürfen NIE in den Chatbot-RAG-Index. Nur 'public' wird indiziert.
   if (tut.visibility !== "public") return;
+  // Zurückgezogene Vorlage nie (wieder) indizieren — z. B. wenn ein Hintergrund-Reindex nach
+  // „Veröffentlichen“ erst nach einem schnellen „Zurückziehen“ läuft (sonst verlinkte der
+  // Chatbot eine Seite, die es nicht gibt).
+  if (tut.is_template && tut.status !== "published") return;
   // Angepasste Vorlage (Fork), deren Vorlage abgeschaltet oder zentral zurückgezogen ist:
   // nicht (wieder) in den Chatbot — sonst verlinkte er eine Seite, die es öffentlich nicht gibt.
   if (!(await forkIsServable(admin, accountId, tutorialId))) {
@@ -174,11 +180,40 @@ export async function reindexTutorialIfLive(tutorialId: string): Promise<void> {
       .select("account_id, status, visibility, is_template")
       .eq("id", tutorialId)
       .maybeSingle();
-    if (!t || !t.account_id || t.is_template) return;
+    if (!t) return;
     if (t.status !== "published" || t.visibility !== "public") return;
+    // Veröffentlichte Vorlage bearbeitet (Admin): das Wissen aller Konten, die sie nutzen,
+    // nachziehen — früher antworteten Kunden-Chatbots weiter mit dem alten Text.
+    if (t.is_template) {
+      await reindexTemplateForAccounts(tutorialId);
+      return;
+    }
+    if (!t.account_id) return;
     await indexTutorial(admin, t.account_id, tutorialId);
   } catch (e) {
     console.error("[kb] Reindex nach Änderung fehlgeschlagen:", tutorialId, e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Chatbot-Wissen aller Konten, die die Vorlage aktiviert haben, neu aufbauen: Standard-
+ * Vorlage -> deren Inhalt, angepasste Kopie -> die Kopie (nur wenn live). Wirft nie.
+ * (Gratis-Konten überspringt indexTutorial selbst.)
+ */
+export async function reindexTemplateForAccounts(templateId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from("account_templates")
+    .select("account_id, forked_tutorial_id")
+    .eq("template_id", templateId)
+    .eq("enabled", true);
+  for (const r of rows ?? []) {
+    try {
+      if (r.forked_tutorial_id) await reindexTutorialIfLive(r.forked_tutorial_id as string);
+      else await indexTutorial(admin, r.account_id as string, templateId);
+    } catch (e) {
+      console.error("Vorlagen-Reindex:", templateId, e instanceof Error ? e.message : e);
+    }
   }
 }
 

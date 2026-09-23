@@ -5,6 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
 import {
+  AUTOMATION_ERR_BRANCHING,
+  AUTOMATION_ERR_NOT_FOUND,
+  AUTOMATION_ERR_TOO_FEW,
+  AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD,
+  SCHEDULE_ERR_DAY,
+  SCHEDULE_ERR_FREQ,
+  SCHEDULE_ERR_TIME,
+  SCHEDULE_ERR_WEEKDAY,
   convertTutorialToAutomation,
   sanitizeParams,
   sanitizeSchedule,
@@ -18,25 +26,44 @@ import { withUserErrors, UserError } from "@/lib/action-error";
 // „members manage own automations“). Das Umwandeln braucht den Admin-Client (liest
 // Tutorial-Schritte + legt Snapshot an) — die Kern-Logik ist streng accountId-gescoped.
 
+// Die Kern-Logik (lib/automations.ts) wirft ihre sprechenden Meldungen als normales Error —
+// sie bleibt so ohne Next-Aliase direkt testbar (scripts/test-automations-live.mjs). Im
+// Produktions-Build käme davon aber nur die englische Standardmeldung an (lib/action-error.ts),
+// deshalb werden genau diese bekannten Texte hier zu UserError.
+const CORE_USER_ERRORS = new Set([
+  AUTOMATION_ERR_BRANCHING,
+  AUTOMATION_ERR_TOO_FEW,
+  AUTOMATION_ERR_NOT_FOUND,
+  AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD,
+  SCHEDULE_ERR_FREQ,
+  SCHEDULE_ERR_TIME,
+  SCHEDULE_ERR_WEEKDAY,
+  SCHEDULE_ERR_DAY,
+]);
+function asUserError(e: unknown): unknown {
+  return e instanceof Error && CORE_USER_ERRORS.has(e.message) ? new UserError(e.message) : e;
+}
+
 /**
  * Ein Tutorial (Sofort-Aufnahme) in eine Automation umwandeln. Gibt die neue
  * automationId zurück (der Client springt danach in die Detailseite). Wirft die
  * sprechende Fehlermeldung aus der Kern-Logik (Verzweigungen / zu wenige Schritte /
  * fremdes Tutorial) — der Aufrufer zeigt sie als Toast.
  */
-export async function createAutomationFromTutorial(
+export const createAutomationFromTutorial = withUserErrors(async function createAutomationFromTutorial(
   tutorialId: string,
 ): Promise<{ automationId: string }> {
   const { account } = await requireAccount();
   const admin = createAdminClient();
-  const { automationId } = await convertTutorialToAutomation(
-    admin,
-    account.id,
-    tutorialId,
-  );
+  let automationId: string;
+  try {
+    ({ automationId } = await convertTutorialToAutomation(admin, account.id, tutorialId));
+  } catch (e) {
+    throw asUserError(e);
+  }
   revalidatePath("/app/automationen");
   return { automationId };
-}
+});
 
 /** Automation umbenennen (konto-scoped via RLS). */
 export async function renameAutomation(id: string, title: string) {
@@ -76,8 +103,13 @@ export async function updateAutomationParams(id: string, params: unknown) {
  * GET /api/recorder/automations. WERTE für geplante Läufe bleiben lokal in der Extension;
  * die App kann sie nicht sehen (sie warnt nur textlich, dass Pflicht-Werte gemerkt sein müssen).
  */
-export async function setAutomationSchedule(id: string, schedule: unknown) {
-  const clean = sanitizeSchedule(schedule); // wirft bei ungültigen Werten (sprechend)
+export const setAutomationSchedule = withUserErrors(async function setAutomationSchedule(id: string, schedule: unknown) {
+  let clean: ReturnType<typeof sanitizeSchedule>;
+  try {
+    clean = sanitizeSchedule(schedule); // wirft bei ungültigen Werten (sprechend)
+  } catch (e) {
+    throw asUserError(e);
+  }
   const supabase = await createClient();
   const { error } = await supabase
     .from("automations")
@@ -86,7 +118,7 @@ export async function setAutomationSchedule(id: string, schedule: unknown) {
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${id}`);
   revalidatePath("/app/automationen");
-}
+});
 
 /**
  * Bedingte Schritte (Welle 42): Ausführ-Bedingung an EINEM Automations-Schritt setzen/entfernen.

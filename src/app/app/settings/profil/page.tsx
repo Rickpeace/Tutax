@@ -61,7 +61,7 @@ export default async function ProfilPage() {
           </>
         }
       >
-        <LeaveTeam orgName={account.name} blockedReason={blockedReason} />
+        <LeaveTeam accountId={account.id} orgName={account.name} blockedReason={blockedReason} />
       </SettingsCard>
     </div>
   );

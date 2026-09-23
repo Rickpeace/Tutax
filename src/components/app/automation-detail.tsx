@@ -186,7 +186,7 @@ export function AutomationDetail({
     const toSave = schedEnabled ? currentSchedule : null;
     startTransition(async () => {
       try {
-        await setAutomationSchedule(id, toSave);
+        unwrap(await setAutomationSchedule(id, toSave));
         setSavedSchedule(toSave);
         toast.success(schedEnabled ? "Zeitplan gespeichert" : "Zeitplan entfernt");
       } catch (e) {

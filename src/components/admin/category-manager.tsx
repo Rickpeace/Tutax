@@ -43,7 +43,7 @@ export function CategoryManager({
               aria-label={`Kategorie ${c.name} löschen`}
               className="text-muted-foreground hover:text-no disabled:opacity-50"
               onClick={() => {
-                if (confirm(`Kategorie „${c.name}" löschen? Zuordnungen werden gelöst.`))
+                if (confirm(`Kategorie „${c.name}“ löschen? Zuordnungen werden gelöst.`))
                   start(async () => {
                     try {
                       await deleteTemplateCategory(c.id);

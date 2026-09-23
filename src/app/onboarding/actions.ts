@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { assertActiveAccount, orgSwitchedError, requireAccount } from "@/lib/account";
-import { withUserErrors } from "@/lib/action-error";
+import { withUserErrors, UserError } from "@/lib/action-error";
+import { invalidateHubTag } from "@/lib/cache-tags";
 import { ORG_NAME_MAX } from "@/lib/text-limits";
 
 // Org-Wechsel in einem anderen Tab: nur die Organisation einrichten, die die Seite zeigt.
@@ -24,10 +25,13 @@ export const completeOnboarding = withUserErrors(async function completeOnboardi
     input.name.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim().slice(0, ORG_NAME_MAX) ||
     account.name;
 
-  await supabase
+  const { error } = await supabase
     .from("accounts")
     .update({ name, onboarded: true })
     .eq("id", account.id);
+  if (error) throw new UserError("Die Einrichtung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.");
+  // Name erscheint auf der Hilfe-Seite (Kopf, Titel) — gecachte Seiten sofort erneuern.
+  if (name !== account.name) invalidateHubTag(account.slug);
 
   const url = input.websiteUrl.trim();
   if (url) {

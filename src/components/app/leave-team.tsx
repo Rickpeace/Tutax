@@ -12,7 +12,16 @@ import { leaveTeam } from "@/app/app/settings/team/actions";
  * (Server prüft das und erklärt es). Danach frisch in die nächste Organisation; gibt es
  * keine mehr, meldet die App ab und erklärt es auf der Anmeldeseite.
  */
-export function LeaveTeam({ orgName, blockedReason }: { orgName: string; blockedReason?: string }) {
+export function LeaveTeam({
+  accountId,
+  orgName,
+  blockedReason,
+}: {
+  /** Organisation, die die Seite zeigt (Schutz gegen Org-Wechsel in einem anderen Tab). */
+  accountId: string;
+  orgName: string;
+  blockedReason?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -26,7 +35,7 @@ export function LeaveTeam({ orgName, blockedReason }: { orgName: string; blocked
     if (!ok) return;
     setBusy(true);
     try {
-      const res = await leaveTeam();
+      const res = await leaveTeam(accountId);
       if (!res.ok) {
         toast.error(res.error);
         setBusy(false);

@@ -51,15 +51,25 @@ export async function changeEmail(
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean))
     return { ok: false, error: "Bitte eine gültige E-Mail-Adresse eingeben." };
   const supabase = await createClient();
+  // Eigene Adresse: Supabase meldet dann Erfolg, verschickt aber nichts — die App zeigte
+  // trotzdem „Bestätigungs-Links verschickt“.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.email && user.email.toLowerCase() === clean)
+    return { ok: false, error: "Mit dieser E-Mail-Adresse melden Sie sich bereits an." };
   const { error } = await supabase.auth.updateUser({ email: clean });
   if (error) return { ok: false, error: uebersetzeAuthFehler(error.message) };
   return { ok: true };
 }
 
-/** Onboarding erneut durchlaufen (Einrichtung nochmal zeigen). */
+/**
+ * Onboarding erneut durchlaufen (Einrichtung nochmal zeigen). Setzt BEWUSST nicht mehr
+ * `accounts.onboarded=false`: der Merker gilt für die ganze Organisation — früher wurden
+ * dadurch alle anderen Inhaber/Bearbeiter beim nächsten Klick in die Einrichtung gezwungen
+ * (und kamen per „Zurück“ nicht mehr heraus). Die Einrichtung öffnet nur für diese Person.
+ */
 export async function reopenOnboarding(): Promise<void> {
-  const { account } = await requireAccount();
-  const supabase = await createClient();
-  await supabase.from("accounts").update({ onboarded: false }).eq("id", account.id);
-  redirect("/onboarding");
+  await requireAccount(); // nur Inhaber/Bearbeiter (die Einrichtung ändert Organisations-Daten)
+  redirect("/onboarding?erneut=1");
 }

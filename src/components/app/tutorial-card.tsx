@@ -147,7 +147,7 @@ export function TutorialCard({
   function convertToAutomation() {
     startTransition(async () => {
       try {
-        const { automationId } = await createAutomationFromTutorial(tutorial.id);
+        const { automationId } = unwrap(await createAutomationFromTutorial(tutorial.id));
         toast.success("Als Automation angelegt");
         router.push(`/app/automationen/${automationId}`);
       } catch (e) {
