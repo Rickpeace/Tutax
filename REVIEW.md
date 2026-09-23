@@ -1,4 +1,4 @@
-# Steply — Produkt- & Code-Review (Stand: 01.07.2026)
+# Steply — Produkt- & Code-Review (Stand: 01.07.2026 · abgeglichen 23.09.2026)
 
 **Kontext:** MVP in aktiver Entwicklung. Vollständige Findings aus 4 parallelen
 Deep-Reviews (Endkunden-Oberfläche, Funnel/Settings, Builder/Authoring,
@@ -8,6 +8,95 @@ Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig.
 > Dieses Dokument ist eine **Roadmap, kein Zeugnis** — die glücklichen Pfade sind
 > durchweg gut gebaut; fast alles hier ist „letzter Meter" (Ränder, Fehlerfälle,
 > Betrieb), nicht Architektur.
+
+## Audit + Bugsuche 23.09.2026 (Branch `audit-2026-09-23`)
+
+Kern-Durchlauf gegen den Produktions-Build + 4 unabhängige Bug-Reviews (Editor, Hilfe-Seite,
+Konto/Team/Tarife, Erweiterung) → ~40 verifizierte Befunde, alle unten **behoben** und per
+Test belegt (Nachweise: Kern-Durchlauf 10 Phasen, 30 DB-/Logik-Tests, Server-E2E-Serie).
+
+**Sicherheit (behoben):**
+- [x] 🔴 Erweiterung: jede Website konnte per `postMessage` die Kopplung auf einen fremden
+  Server umbiegen (Aufnahmen/Automationen beim Angreifer) → feste Herkunftsliste + Absender-
+  Herkunft von Chrome (`extension/background.js`, v2.19.2; `scripts/test-bridge-origin.mjs`)
+- [x] 🔴 Gespeichertes XSS über Extrem-Design-CSS (`</style>`) auf /h, per `?preview=extreme`
+  auslösbar → `src/lib/skin-css.ts` (kein `<`, keine Escapes); Design-Farben/Schriften geprüft (`theme.ts`)
+- [x] 🔴 Öffentlicher Player bekam ganze Schritt-Zeilen (Seiten-URLs inkl. Query, Selektor-Texte,
+  Dateinamen) → `src/lib/public-step.ts`
+- [x] 🔴 Logo-Upload löschte beliebige Dateien fremder Konten (Pfad aus DB-Spalte) → `src/lib/storage-path.ts`,
+  gleiche Prüfung in tts-core/public-images; Publish kopiert nur noch Bilder des eigenen Kontos
+- [x] 🔴 Wissensartikel-Aktionen ohne Konto-Filter (fremden Chatbot-Index löschen/kopieren) → `assistent/wissen/actions.ts`, `kb.ts`
+- [x] 🟠 SSRF über HTTP-Weiterleitungen (Theme-Analyse, Video-Import) → `safeFetch` prüft jede Station (33 Fälle)
+- [x] 🟠 Open Redirect `/logout?next=/%09/evil.com` → `safeNext` (26 Fälle)
+- [x] 🟠 Theme-KI-Routen ohne Rollen-Prüfung/Limit (Kosten) → nur Inhaber/Bearbeiter, 20/h
+- [x] 🟡 M7: Passwort ändern ohne altes Passwort / `/reset` in jeder Sitzung → altes Passwort bzw.
+  frischer E-Mail-Link (amr „otp“ < 30 min) (`scripts/test-reset-password.mjs`, 8/8)
+
+**Funktion (behoben):**
+- [x] 🟠 Fehlertexte aus Server-Actions kamen im Produktions-Build nie an (Next ersetzt geworfene
+  Fehler durch englischen Standardtext) → `src/lib/action-error.ts` (`UserError`/`withUserErrors`/
+  `unwrap`/`errorText`), 16 Actions + 40 Anzeige-Stellen; Kern-Durchlauf Phase 10 prüft es
+- [x] 🟠 Editor: neuer Schritt nach Löschen des letzten unsichtbar · „nach unten“ schob Ast-Schritt
+  hinter den Zusammenführungspunkt · Frage löschen schnitt den Rest ab (`src/lib/builder/rewire.ts`)
+- [x] 🟡 Editor: Ungespeichertes ohne Warnung weg · Kopf zeigte nach Auto-Entwurf „Veröffentlicht“ ·
+  Duplizieren verlor Live-Führungsdaten · „Erneut versuchen“ endlos (Anlegen/Löschen idempotent) ·
+  falsche Verwerfen-Abfrage · KI-Texte teilweise gespeichert
+- [x] 🟠 Abgeschaltete angepasste Vorlage blieb per URL/Druck/Chat/Sitemap öffentlich · Vorlagen-
+  Änderungen erreichten Kunden-Caches nicht · Slug-Kollision eigene Anleitung ↔ Vorlage ·
+  Vorlagen wurden nie übersetzt
+- [x] 🟡 Player-„Zurück“ sprang hin und her (`src/lib/wizard-history.ts`) · Chat-Blase mit Farbring
+  + ohne Sprache auf Kunden-Websites · Kontaktbox nur deutsch · Chat-Verlauf sprach-unabhängig
+- [x] 🟡 Org-Wechsel in anderem Tab → Aktionen schrieben still in die falsche Organisation
+  (`assertActiveAccount`) · Autopilot-Cron: nur Business, max. 5/Konto, Fehler blockieren nicht
+- [x] 🟡 Erweiterung: Tarif-Grenze als „erneut versuchen“ + Doppel-Anleitung bei Retry · Free-Limit
+  über Video umgehbar (auch im Worker) · >500 Klicks → alle weg · Läufe ewig „Läuft“ ·
+  Zeilen-Grenze bei Schrittzahlen · Wecker nach Trennen · KI-Feinschliff ohne Limit
+- [x] ⚪ Datenschutz nennt jetzt Vercel (USA), Hetzner, Resend, ElevenLabs, thum.io, Google Fonts;
+  „Organisation verlassen“/„Auf Standard zurücksetzen“ im Steply-Dialog
+
+**Offen — braucht Richard (Entscheidung/Zugang):**
+- [ ] 🔴 Impressum/Datenschutz: Betreiber-Angaben · Landing/Footer „DSGVO-konform, Hosting in der EU“
+  stimmt so nicht (Vercel + OpenAI USA)
+- [ ] 🟠 Tarif-Umfang: Chatbot, Logo/CI, Insights, Wissen laufen für Free (pricing.ts sagt Pro)
+- [ ] 🟠 Migrationen (Entwurf im Audit-Bericht): Pfad-Wächter für `steps.image_path/audio_path` +
+  `themes.*logo_path` (fremde Pfade → signierte URLs), Trigger „letzter Inhaber“ (atomar)
+- [ ] 🟡 Rollout: Vercel-Deploy, `deploy.sh` Video-Worker, Erweiterung 2.19.2 neu laden;
+  `app.steply.de` erst nach Besitz-Nachweis in die Erweiterungs-Liste
+- [ ] ⚪ Chat-Reset + Admin-Komponenten noch mit Browser-`confirm()`; Chat-Bot-Schnellbremse nur pro Instanz
+
+## Abgleich 23.09.2026
+
+Alle 110 bis dahin offenen Checkboxen (Top 5, A–I, Lückenliste) gegen den Code geprüft
+(`src/`, `extension/`, `video-worker/`, `supabase/migrations/`). Ergebnis:
+**66 erledigt · 24 teilweise/unklar (⏳) · 2 entfallen (➖) · 18 offen.**
+Abgehakt wurde nur mit Code-Beleg (Datei steht jeweils am Punkt).
+
+**Wichtigste offene Punkte (schwerste zuerst):**
+- 🔴 Impressum + Datenschutz: Betreiber-Angaben weiter „[ANGABE FOLGT]“; Datenschutz nennt
+  ElevenLabs, Resend, thum.io, Google Fonts, Hetzner-Video-Server nicht → *Top 5*
+- 🔴 Kein Zahlungsanbieter (LemonSqueezy), Upgrade nur von Hand → *Top 5*
+- 🟠 Tarif-Versprechen ohne Durchsetzung: KI-Chat/Bubble, Logo/CI, Insights, Video-Limit,
+  Autopilot für alle frei; „Erstellt mit Steply“ auch bei Pro/Business sichtbar → *B / Monetarisierung*
+- 🟠 Kein Error-Tracking (Sentry/instrumentation) → *D*
+- 🟡 M7: /reset setzt Passwort in jeder eingeloggten Session (Übernahme am entsperrten Gerät) → *F*
+- 🟡 Drift-Check: DB-Writes ungeprüft, alter Hinweis wird vor dem neuen aufgelöst → *E*
+- 🟡 handleAddStep-Fallback hängt Branch mit position 0 an Schritt mit Ausgang → *C / Code-Bugs*
+- 🟡 Chat ohne „Erneut versuchen“ → *A / UX*
+- 🟡 Onboarding verspricht KI-CI „sobald aktiv“ (ist live, aber nur Business) → *B / Funnel*
+- 🟡 „Organisation löschen → Support“ ohne Adresse → *B / Auth + Settings*
+- 🟡 Env-Vars ohne Boot-Validierung → *D*
+- 🟡 iFrame-Snippet fixe Höhe 700, ohne lazy → *A / Technik*
+- 🟡 Kein Text-Werkzeug im Bild-Editor; Schritt-Löschen ohne Rückgängig → *C*
+- ⚪ Signierte Bild-URLs im Builder laufen nach 1 h stumm ab → *C / UX-Reibung*
+- ⚪ Video-Worker: deploy.sh-Stand unklar; Whisper hart `de` → *F, I*
+
+**Nebenfunde beim Abgleich (neu, noch ohne eigene Checkbox):** `src/components/app/category-jump.tsx`
+ist toter Code (nirgends eingebunden) · natives `confirm()` noch in `leave-team.tsx`,
+`template-section.tsx`, Admin-Komponenten und Chat-Reset · `src/app/admin/technik/inventory.ts`
+beschreibt noch die entfernte Route `/api/steps/suggest` · `rebuildPublicCopy` in
+`src/lib/public-images.ts` lädt JPEG/PNG-Quellen mit `contentType: "image/webp"` hoch
+(Browser verzeihen das, sauber ist es nicht) · Landing wirbt mit „DSGVO-konform“, obwohl die
+Rechtstexte unvollständig sind.
 
 ## ✅ Erledigt in der Nachtschicht 02.07. (Welle 1 + Welle 4 Schritt 1)
 
@@ -680,10 +769,17 @@ Steply-Hilfe-Texte + Screenshots auf die neuen Pfade nachgezogen.
 - [ ] 🔴 **Impressum + Datenschutz sind Platzhalter** (live verlinkt, Abmahnrisiko);
   Datenschutz behauptet fälschlich „keine Drittland-Übermittlung" trotz OpenAI.
   → echte Angaben; OpenAI als Auftragsverarbeiter inkl. Drittland/DPF aufnehmen.
+  — ⏳ teilweise: OpenAI/Drittland/DPF-Passus steht (`src/app/datenschutz/page.tsx` §5), aber
+  `src/app/impressum/page.tsx` + Datenschutz §1 haben weiter „[ANGABE FOLGT — Betreiber …]“;
+  Datenschutz nennt ElevenLabs, Resend, thum.io, Google Fonts und den Hetzner-Video-Server nicht
+  (Admin-Inventar `src/app/admin/technik/inventory.ts` listet sie selbst als US-Übermittlung).
 - [ ] 🔴 **Kein Billing, keine Limit-Durchsetzung** — kein Stripe, Upgrade-Buttons
   disabled, „Preise sind Platzhalter" für Kunden sichtbar (`abo/page.tsx:64-79`);
   Free-Limits (5 Tutorials, Branding) nirgends enforced (`createTutorial` ohne Limit).
   → Stripe Checkout + Portal; Limits gaten; Preise auf die Landing.
+  — ⏳ teilweise: Tarife + Gates da (`src/lib/plan.ts`, Free-Limit in `src/app/app/actions.ts`,
+  `guide-complete`, `insights-actions.ts`; Preise auf Landing; Platzhalter-Fußnote weg). Fehlt:
+  Zahlungsanbieter (LemonSqueezy) — Knöpfe „Bald buchbar“ disabled (`settings/tarif/page.tsx`).
 - [x] 🟠 ~~Kein error.tsx/not-found.tsx/global-error.tsx~~ **GEFIXT (02.07., Opus/W1):**
   alle drei, deutsch + gebrandet; /h/gibtsnicht liefert deutsche 404 (curl-verifiziert).
 - [x] 🟠 ~~Publish-Moment verpufft~~ **GEFIXT (02.07., Opus/W1):** Erfolgs-Toast
@@ -694,58 +790,87 @@ Steply-Hilfe-Texte + Screenshots auf die neuen Pfade nachgezogen.
 ## A. Endkunden-Oberfläche (/h)
 
 ### UX
-- [ ] 🟠 `wizard.tsx:34-51` Kein Fortschritt („Schritt 3 von 8") + kompletter
+- [x] 🟠 `wizard.tsx:34-51` Kein Fortschritt („Schritt 3 von 8") + kompletter
   Zustandsverlust bei Reload/Zurück → Position in sessionStorage oder `?step=`.
-- [ ] 🟡 `hub-browser.tsx:55-60` Leere Suche = Sackgasse → CTA „Fragen Sie den
+  — ✅ erledigt (Beleg: `src/components/viewer/wizard.tsx`, „Schritt {n} von {total}“ + Balken
+  bei linearen Anleitungen, Position/Verlauf in sessionStorage)
+- [x] 🟡 `hub-browser.tsx:55-60` Leere Suche = Sackgasse → CTA „Fragen Sie den
   Hilfe-Assistenten" (Chat öffnen) + Reset-Button.
+  — ✅ erledigt (Beleg: `src/components/viewer/hub-browser.tsx`, Reset-Knopf + „Meinten Sie“ +
+  Hinweis auf den Assistenten unten rechts)
 - [ ] 🟡 `chat-widget.tsx:151` Fehlerblase ohne „Erneut versuchen"; Nutzer-Frage ist
   weg (Input vor fetch geleert) → Retry-Button, der die letzte Frage erneut sendet.
-- [ ] ⚪ `hub-browser.tsx:27-32` Suche matcht nur Titel+Beschreibung, nicht
+  — ⏳ teilweise: Frage bleibt als Blase sichtbar, aber es gibt weiter keinen „Erneut
+  versuchen“-Knopf (`src/components/viewer/chat-widget.tsx`, catch → nur `chatError`)
+- [x] ⚪ `hub-browser.tsx:27-32` Suche matcht nur Titel+Beschreibung, nicht
   Schritt-Inhalte → serverseitige Suche (FTS/pgvector existiert fürs RAG).
+  — ✅ erledigt (Beleg: `src/app/api/hub-search/route.ts` pgvector-Fallback bei 0 Titel-Treffern;
+  lokal zusätzlich Kategorienamen)
 
 ### Mobile + Accessibility
-- [ ] 🟠 `chat-widget.tsx:159-169` Kein Fokus-Management: kein role="dialog"/
+- [x] 🟠 `chat-widget.tsx:159-169` Kein Fokus-Management: kein role="dialog"/
   aria-modal, kein Autofokus, kein Esc, kein aria-expanded → für Tastatur/Screenreader
   unbenutzbar.
-- [ ] 🟠 `chat-widget.tsx:188` Kein aria-live → gestreamte Antworten für Screenreader
+  — ✅ erledigt (Beleg: `src/components/viewer/chat-widget.tsx`, role="dialog", aria-expanded,
+  Autofokus Eingabe, Esc schließt)
+- [x] 🟠 `chat-widget.tsx:188` Kein aria-live → gestreamte Antworten für Screenreader
   stumm (polite-Wrapper, ggf. erst nach done announce).
-- [ ] 🟠 `theme.ts:89` + `wizard.tsx:101-109` **Keine Kontrastprüfung** für
+  — ✅ erledigt (Beleg: `chat-widget.tsx`, sr-only role="status" aria-live="polite", Ansage nach Abschluss)
+- [x] 🟠 `theme.ts:89` + `wizard.tsx:101-109` **Keine Kontrastprüfung** für
   Kundenfarben: brand-accent ungeprüft als Button-BG mit weißem Text UND als Text auf
   Weiß → helles Kanzlei-Gelb = unlesbar. → Luminanz prüfen, `--brand-accent-contrast`
   ableiten, zu helle Accents für Text abdunkeln.
-- [ ] 🟠 `wizard.tsx:37-40` Schrittwechsel ohne Fokus-/Announce-Management, kein
+  — ✅ erledigt (Beleg: `src/lib/theme.ts`, `--brand-accent-fg` + `--brand-accent-strong` per Luminanz)
+- [x] 🟠 `wizard.tsx:37-40` Schrittwechsel ohne Fokus-/Announce-Management, kein
   Scroll-to-top → Fokus auf Schritt-Überschrift setzen (tabIndex=-1 + focus()).
-- [ ] 🟡 `viewer-image.tsx:36` Screenshot immer `alt=""`, obwohl Kerninhalt →
+  — ✅ erledigt (Beleg: `wizard.tsx`, Titel tabIndex=-1 + focus() bei jedem Schrittwechsel)
+- [x] 🟡 `viewer-image.tsx:36` Screenshot immer `alt=""`, obwohl Kerninhalt →
   mind. `alt={step.title}`, besser Alt-Feld im Editor.
-- [ ] 🟡 `chat-widget.tsx:169` `h-[30rem]` fix + bottom-24 → auf iPhone SE Header
+  — ✅ erledigt (Beleg: `wizard.tsx` übergibt `alt={step.title}`; eigenes Alt-Feld im Editor gibt es nicht)
+- [x] 🟡 `chat-widget.tsx:169` `h-[30rem]` fix + bottom-24 → auf iPhone SE Header
   abgeschnitten, iOS-Tastatur verdeckt Input → `h-[min(30rem,calc(100dvh-7rem))]`.
+  — ✅ erledigt (Beleg: `chat-widget.tsx`, `max-h-[min(30rem,calc(100dvh-7rem))]`)
 - [ ] 🟡 `hub-browser.tsx:47-52` Suchfeld ohne aria-label/type="search"; Trefferzahl
   nicht announced → aria-label + role="status"-Zeile.
-- [ ] ⚪ `chat-widget.tsx:177-184` „Neu"-Button ~24px Touch-Ziel + löscht ohne
+  — ⏳ teilweise: `type="search"` + aria-label da (`hub-browser.tsx`); Trefferzahl wird weiter
+  nicht per role="status" angesagt
+- [x] ⚪ `chat-widget.tsx:177-184` „Neu"-Button ~24px Touch-Ziel + löscht ohne
   Rückfrage → größer + Bestätigung.
-- [ ] ⚪ `chat-widget.tsx:198-200` Enter ohne isComposing-Check (IME).
+  — ✅ erledigt (Beleg: `chat-widget.tsx`, größerer Knopf px-2.5 py-2 + Rückfrage vor dem Löschen)
+- [x] ⚪ `chat-widget.tsx:198-200` Enter ohne isComposing-Check (IME).
+  — ✅ erledigt (Beleg: `chat-widget.tsx`, `!e.nativeEvent.isComposing`)
 
 ### Technik (SEO / iFrame / Performance)
-- [ ] 🟠 `h/*/page.tsx` Metadata nur `title`: keine description, kein openGraph/
+- [x] 🟠 `h/*/page.tsx` Metadata nur `title`: keine description, kein openGraph/
   og:image, kein metadataBase → keine Link-Preview beim Kern-Usecase „Link per
   WhatsApp/Mail teilen". Kanzlei-Logo existiert bereits → nutzen. Zudem
   robots-Strategie: /h indexierbar, /app noindex.
+  — ✅ erledigt (Beleg: `generateMetadata` mit description/openGraph/Logo in
+  `src/app/h/[account_slug]/page.tsx` + Tutorial-Seite; `metadataBase` in `src/app/layout.tsx`;
+  `src/app/robots.ts` sperrt /app, /admin, /api)
 - [ ] 🟡 `einbetten/page.tsx:12` iFrame-Snippet mit fixer height=700 →
   Scrollbalken-im-Scrollbalken; kein loading="lazy" → postMessage-Auto-Höhe oder
   mind. Hinweis + lazy. (Positiv: Framing funktioniert, localStorage im iFrame ok.)
-- [ ] 🟡 `viewer-image.tsx:36` + `wizard.tsx:67-69` `<img>` ohne width/height →
+- [x] 🟡 `viewer-image.tsx:36` + `wizard.tsx:67-69` `<img>` ohne width/height →
   Layout-Shift bei jedem Schritt; `image_width/height` liegen in der DB → durchreichen,
   aspect-ratio setzen.
+  — ✅ erledigt (Beleg: `src/components/viewer/viewer-image.tsx`, aspect-ratio aus DB-Maßen + loading="lazy")
 - [ ] 🟡 `public-image.ts:4-6` Originale ungedrosselt aufs Handy → Supabase
   Image-Transform (`?width=800`) oder vorskalierte Varianten.
-- [ ] ⚪ `h/*/page.tsx` Google-Fonts-<link> ohne preconnect zu fonts.gstatic.com und
+- [x] ⚪ `h/*/page.tsx` Google-Fonts-<link> ohne preconnect zu fonts.gstatic.com und
   ohne precedence → FOUT. → preconnect ergänzen.
+  — ✅ erledigt (Beleg: preconnect in allen vier /h-Seiten, z. B. `src/app/h/[account_slug]/page.tsx`;
+  Achtung: Google Fonts live eingebunden = DSGVO-Thema, s. Admin-Inventar „selbst hosten“)
 
 ### Fehlende Features (Endkunde)
-- [ ] 🟡 **„War das hilfreich? 👍/👎"** am Fertig-Screen — geringster Aufwand,
+- [x] 🟡 **„War das hilfreich? 👍/👎"** am Fertig-Screen — geringster Aufwand,
   zugleich erstes Nutzungssignal für die Kanzlei (Analytics-Grundstein).
-- [ ] 🟡 Druck-/PDF-Ansicht (alle Schritte untereinander) — Zielgruppe druckt.
+  — ✅ erledigt (Beleg: `wizard.tsx` sendFeedback → events, Migration 0018)
+- [x] 🟡 Druck-/PDF-Ansicht (alle Schritte untereinander) — Zielgruppe druckt.
+  — ✅ erledigt (Beleg: `src/app/h/[account_slug]/[tutorial_slug]/drucken/page.tsx`)
 - [ ] ⚪ Schriftgrößen-Option; Video/GIF pro Schritt; i18n (alles hart deutsch).
+  — ⏳ teilweise: i18n erledigt (EN/PL/TR, `src/lib/i18n-hub.ts`); Schriftgrößen-Option und
+  Video/GIF pro Schritt fehlen
 
 ---
 
@@ -755,96 +880,145 @@ Steply-Hilfe-Texte + Screenshots auf die neuen Pfade nachgezogen.
 - [ ] 🟡 `onboarding-wizard.tsx:81-86` Wizard verspricht KI-CI „sobald aktiv",
   Feature ist aber live → im Onboarding direkt aus der eingegebenen Website anstoßen
   (Wow-Moment).
-- [ ] ⚪ `onboarding/actions.ts:33` Onboarding unwiederholbar → „Einrichtung erneut
+- [x] ⚪ `onboarding/actions.ts:33` Onboarding unwiederholbar → „Einrichtung erneut
   zeigen"-Link in Settings.
+  — ✅ erledigt (Beleg: `src/app/app/settings/allgemein/page.tsx` „Einrichtung erneut zeigen“ →
+  `reopenOnboarding` in `settings/konto/actions.ts`)
 - [ ] ⚪ `app/page.tsx:114-126` Empty-State ohne Fortschritts-Checkliste (die 7
   Schritte aus /anleitung existieren schon als Text).
 
 ### Monetarisierung
 - [ ] 🟠 Free-Limits enforce'n: `createTutorial` ohne Limit, Chatbot/KI-CI/Logo für
   alle frei, „powered by Steply" für alle → ohne Gating kein Upgrade-Motiv.
-- [ ] 🟠 `page.tsx` Landing ohne Preise (nur „0 €") → Pricing-Sektion mit den 3
+  — ⏳ teilweise: gegatet sind 5-Anleitungen-Limit, KI-CI, Sprachen, Vorlesen, Intern, Team-Größe
+  (`src/lib/plan.ts`, `src/app/app/actions.ts`, `settings/branding/actions.ts`). NICHT gegatet,
+  obwohl `src/lib/pricing.ts` sie als Pro/Business verkauft: KI-Chat + Chat-Bubble, eigenes
+  Logo/CI-Farben, Insights, Erweiterungs-Direkt-Upload, Video-Limit 3, wöchentlicher Autopilot
+  (`src/app/api/cron/drift/route.ts` prüft alle Konten); „Erstellt mit Steply“ steht im Hub-Fuß
+  auch bei Pro/Business (`src/app/h/[account_slug]/page.tsx`, ohne Tarif-Abfrage)
+- [x] 🟠 `page.tsx` Landing ohne Preise (nur „0 €") → Pricing-Sektion mit den 3
   Tarifen aus abo/page.tsx.
+  — ✅ erledigt (Beleg: `src/app/page.tsx` rendert `PLANS` aus `src/lib/pricing.ts` + FAQ)
 - [ ] ⚪ Trial-Logik: bewusst entscheiden (free-forever bis Stripe vs. Trial) und
   dokumentieren.
+  — ⏳ unklar: Code ist faktisch free-forever (kein Trial in `src/lib/plan.ts`), eine
+  dokumentierte Entscheidung fand ich nicht
 - [ ] ⚪ Kurzfristig: „Preise sind Platzhalter"-Fußnote raus; „Pro vormerken"-CTA
   (Mailto) zur Nachfragemessung.
+  — ⏳ teilweise: Fußnote raus; statt Mailto-CTA nur Text „schreiben Sie dem Steply-Support“
+  ohne Adresse + Knopf „Bald buchbar“ disabled (`src/app/app/settings/tarif/page.tsx`)
 
 ### Marketing
 - [x] ~~Zielgruppen-Sprache~~ **Entschieden (01.07.26): Steply ist bewusst generisch**
   — für jede Firma mit Tutorial-Bedarf, nicht steuer-spezifisch. „Organisationen"-
   Sprache ist korrekt. (Offen bleibt nur: Landing braucht trotzdem konkrete
   Anwendungsbeispiele/Branchen-Cases als Beweis.)
-- [ ] 🟡 Kein echter Screenshot/keine Demo auf der Landing (nur Mocks) → öffentlichen
+- [x] 🟡 Kein echter Screenshot/keine Demo auf der Landing (nur Mocks) → öffentlichen
   `/h/demo`-Hub bauen und verlinken (stärkster Beweis).
+  — ✅ erledigt (Beleg: `src/app/page.tsx`, echte Produkt-Screenshots via next/image + Link auf `/h/steply`)
 - [ ] 🟡 Null Social Proof → solange Kunden fehlen: Gründer-Note + „EU-Hosting,
   DSGVO"-Trust-Block.
-- [ ] ⚪ `page.tsx:113` „KI übernimmt Ihr CI" trägt „bald"-Badge, ist aber live →
+  — ⏳ teilweise: nur Zeile „Keine Kreditkarte nötig · DSGVO-konform · Made in Germany“
+  (`src/app/page.tsx`); kein Trust-Block/Gründer-Note. Achtung: „DSGVO-konform“ ist bei
+  Platzhalter-Impressum + unvollständiger Datenschutzerklärung selbst ein Abmahnrisiko
+- [x] ⚪ `page.tsx:113` „KI übernimmt Ihr CI" trägt „bald"-Badge, ist aber live →
   Badge weg, Feature verkaufen.
+  — ✅ erledigt (Beleg: `src/app/page.tsx` ohne „bald“-Badge, Landing neu aufgebaut)
 
 ### Auth + Settings
 - [ ] 🟡 `settings/konto/page.tsx:49-55` „Konto löschen → Support kontaktieren", aber
   nirgends eine Support-Adresse (Impressum Platzhalter) → Mailto ergänzen.
-- [ ] 🟡 E-Mail-Adresse ändern fehlt komplett → updateUser({email}) + Bestätigung.
-- [ ] ⚪ `konto/actions.ts:11` changePassword gibt englische Supabase-Fehler roh
+  — ⏳ teilweise: Landing-Fuß hat `mailto:kontakt@steply.de`, aber „Organisation löschen“ in
+  `src/app/app/settings/allgemein/page.tsx` sagt weiter nur „kontaktieren Sie den Steply-Support“ ohne Adresse
+- [x] 🟡 E-Mail-Adresse ändern fehlt komplett → updateUser({email}) + Bestätigung.
+  — ✅ erledigt (Beleg: `src/app/app/settings/konto/actions.ts`, `updateUser({ email })`)
+- [x] ⚪ `konto/actions.ts:11` changePassword gibt englische Supabase-Fehler roh
   zurück → uebersetzeAuthFehler wiederverwenden.
-- [ ] ⚪ `team-manager.tsx:137` Mitglied entfernen nutzt natives confirm(), Tutorial-
+  — ✅ erledigt (Beleg: `settings/konto/actions.ts` nutzt `uebersetzeAuthFehler`)
+- [x] ⚪ `team-manager.tsx:137` Mitglied entfernen nutzt natives confirm(), Tutorial-
   Löschen hat schönen Dialog → vereinheitlichen.
-- [ ] ⚪ `team/page.tsx:45` duzt („Du gehörst…"), Rest siezt → vereinheitlichen.
+  — ✅ erledigt (Beleg: `src/components/app/team-manager.tsx` nutzt Steply-`confirm`-Dialog;
+  Rest-Nativ-confirm noch in `leave-team.tsx`, `template-section.tsx`, Admin, Chat-Reset)
+- [x] ⚪ `team/page.tsx:45` duzt („Du gehörst…"), Rest siezt → vereinheitlichen.
+  — ✅ erledigt (Beleg: keine Du-Formen mehr in `src/app/app/settings/team/` + `team-manager.tsx`)
 
 ### Recht + Vertrauen
-- [ ] 🟡 Chat-Widget ohne KI-/Datenschutz-Hinweis für Mandanten → „Antworten werden
+- [x] 🟡 Chat-Widget ohne KI-/Datenschutz-Hinweis für Mandanten → „Antworten werden
   automatisiert per KI erstellt – bitte keine personenbezogenen Daten eingeben" + Link.
-- [ ] 🟡 Gehostete /h-Seiten ohne Impressum-/Datenschutz-Link → beide in den Footer
+  — ✅ erledigt (Beleg: `src/lib/i18n-hub.ts` KI-Hinweis + Datenschutz-Link in `chat-widget.tsx`)
+- [x] 🟡 Gehostete /h-Seiten ohne Impressum-/Datenschutz-Link → beide in den Footer
   neben „powered by Steply".
+  — ✅ erledigt (Beleg: Footer in `src/app/h/[account_slug]/page.tsx` + `[tutorial_slug]/page.tsx`)
 
 ---
 
 ## C. Builder / Authoring
 
 ### Fehlende Features
-- [ ] 🟠 **Kein Schritt-Umordnen** (kein Drag&Drop, kein Hoch/Runter) — Reihenfolge
+- [x] 🟠 **Kein Schritt-Umordnen** (kein Drag&Drop, kein Hoch/Runter) — Reihenfolge
   ändern nur destruktiv → „Nach oben/unten"-Buttons im StepPanel (Branch-Verdrahtung
   umschreiben).
+  — ✅ erledigt (Beleg: `src/components/builder/builder.tsx` swapPair/Hoch-Runter per Branch-Rewiring)
 - [ ] 🟡 Schritt duplizieren fehlt (nur ganzes Tutorial); Copy zwischen Tutorials fehlt.
+  — ⏳ teilweise: nur „Bild in neuen Schritt übernehmen“ (`src/components/builder/image-field.tsx`);
+  echtes Schritt-Duplizieren und Kopieren zwischen Anleitungen fehlen
 - [ ] 🟡 Kein Undo für strukturelle Aktionen; Schritt-Löschen unwiederbringlich →
   Soft-Delete mit „Rückgängig"-Toast (Sonner-Action).
+  — ⏳ teilweise: „Rückgängig“ für Bild-Entfernen (`builder.tsx`) und KI-Texte
+  (`improve-texts.tsx`); Schritt-Löschen hat nur eine Rückfrage, kein Undo
 - [ ] 🟡 Kein Text-Werkzeug im Highlight-Editor („1.", „Hier klicken") — Pfeil ohne
   Beschriftung oft nicht selbsterklärend.
-- [ ] 🟡 `rich-text.tsx` + `rich-text-view.tsx:42-47` **Kein Link-Support**: Tiptap
+- [x] 🟡 `rich-text.tsx` + `rich-text-view.tsx:42-47` **Kein Link-Support**: Tiptap
   akzeptiert Links beim Einfügen, Viewer rendert sie nicht → **beim Kunden toter
   Text** (underline/strike ebenso). → Link-Button + Viewer-Rendering.
+  — ✅ erledigt (Beleg: `src/components/viewer/rich-text-view.tsx` rendert link/underline/strike, nur http/https)
 - [ ] ⚪ Keine Tastatur-Shortcuts (Entf für Highlight, Strg+S, Pfeiltasten-Nudge) —
   billig, große Wirkung.
+  — ⏳ teilweise: Entf/Backspace löscht Form (`highlight-editor.tsx`); Strg+S und Pfeil-Nudge fehlen
 
 ### UX-Reibung
 - [ ] 🟡 `flow.tsx` skaliert mäßig ab ~20 Schritten: kein Zoom, keine Suche, kein
   Collapse-All → Titel-Suchfeld mit Scroll-to + Collapse-Toggle.
-- [ ] 🟡 `image-field.tsx:74-86` „Bild ersetzen" behält alte (falsch sitzende)
+- [x] 🟡 `image-field.tsx:74-86` „Bild ersetzen" behält alte (falsch sitzende)
   Highlights → nachfragen „Markierungen behalten/löschen?".
+  — ✅ erledigt (Beleg: `src/components/builder/image-field.tsx` Dialog „Markierungen behalten?“)
 - [ ] 🟡 `builder.tsx:246-270` Frage-Toggle AUS löscht kommentarlos alle Antworten
   außer der ersten + verwaist Teilbäume (unsichtbar, aber in Zählung/Nav) →
   Confirm-Dialog + „nicht verbundene Schritte"-Hinweis im Flow.
+  — ⏳ teilweise: Rückfrage mit Folgen-Text da (`step-panel.tsx` toggleDecision); ein
+  „nicht verbundene Schritte“-Hinweis im Flow fehlt weiter
 - [ ] 🟡 `article-editor.tsx:77-105` KB-Editor: kein Auto-Save, kein Verlassen-Guard
   (auch kein beforeunload im Builder) → Änderungen können stumm verloren gehen.
-- [ ] ⚪ Drift-Check: nur manuell (kein Cron), Ergebnis-Toast ohne Link zu /app/alerts,
+  — ⏳ teilweise: KB-Editor hat beforeunload + Verwerfen-Rückfrage (`article-editor.tsx`), Builder
+  fragt beim Schrittwechsel (`builder.tsx` confirmDiscard); kein Auto-Save, kein beforeunload im Builder
+- [x] ⚪ Drift-Check: nur manuell (kein Cron), Ergebnis-Toast ohne Link zu /app/alerts,
   **kein Cooldown** (teuerster Call: web_search) → 1×/Tutorial/Stunde + Link im Toast.
+  — ✅ erledigt (Beleg: Cooldown/429 in `src/app/api/tutorials/[id]/check/route.ts`, Toast-Link
+  „Hinweise ansehen“ in `drift-check-button.tsx`, Cron `vercel.json` → `/api/cron/drift`)
 - [ ] ⚪ `upload.ts:45-51` Signierte URLs laufen nach 1 h ab → in langen Sessions
   brechen Bilder stumm (Re-Sign / onError-Retry).
 
 ### Code-Bugs
-- [ ] 🟡 `step-panel.tsx:326` „Speichern & weiter" wartet save() nicht ab → Navigation
+- [x] 🟡 `step-panel.tsx:326` „Speichern & weiter" wartet save() nicht ab → Navigation
   vor Ergebnis, Fehler zeigt sich nur als Refresh. → await + nur bei Erfolg navigieren.
-- [ ] 🟡 `builder.tsx:148-151` handleAddStep-Fallback ohne Blatt: hängt Branch mit
+  — ✅ erledigt (Beleg: `src/components/builder/step-panel.tsx`, `if (await save())` vor der Navigation)
+- [x] 🟡 `builder.tsx:148-151` handleAddStep-Fallback ohne Blatt: hängt Branch mit
   position 0 an Schritt mit vorhandenem Ausgang → neuer Schritt **unsichtbar/verwaist**.
   → position max+1 bzw. nur echte Blätter verdrahten.
-- [ ] ⚪ `step-panel.tsx:131-143` KI-Vorschlag persistiert Highlight sofort, Titel/Text
+  — (Abgleich-Stand, überholt: Blätter wurden bevorzugt, aber der Fallback
+  (kein Blatt, z. B. alle Enden als Branch mit Ziel null) hängt weiter einen Branch mit
+  `position: 0` an einen Schritt, der schon einen Ausgang hat) — ✅ erledigt 23.09.2026 (`src/lib/builder/rewire.ts` appendAnchor, `scripts/test-builder-rewire.ts`)
+- [x] ⚪ `step-panel.tsx:131-143` KI-Vorschlag persistiert Highlight sofort, Titel/Text
   nur dirty → „Verwerfen" entfernt das KI-Highlight nicht (halbe Transaktion).
-- [ ] ⚪ `highlight-editor.tsx:74,117` Move/Resize nicht auf 0..1 geklemmt → Formen
+  — ➖ entfällt: KI-Bild-Vorschlag samt Route `/api/steps/suggest` entfernt (Welle 19)
+- [x] ⚪ `highlight-editor.tsx:74,117` Move/Resize nicht auf 0..1 geklemmt → Formen
   fast ganz aus dem Bild schiebbar, im Viewer unsichtbar. → clamp wie im Crop-Dialog.
-- [ ] ⚪ `category-picker.tsx:33-42` Optimistische Auswahl ohne Rollback bei Fehler.
-- [ ] ⚪ `preview/[id]/page.tsx:48-52` Signierte URLs sequenziell (Wasserfall) →
+  — ✅ erledigt (Beleg: `src/components/builder/highlight-editor.tsx` clamp01 bei Move/Resize)
+- [x] ⚪ `category-picker.tsx:33-42` Optimistische Auswahl ohne Rollback bei Fehler.
+  — ✅ erledigt (Beleg: `src/components/builder/category-picker.tsx`, setSelectedId(prev) im catch)
+- [x] ⚪ `preview/[id]/page.tsx:48-52` Signierte URLs sequenziell (Wasserfall) →
   Promise.all.
+  — ✅ erledigt (Beleg: `src/app/app/preview/[id]/page.tsx` Promise.all)
 - [ ] ⚪ `alerts/actions.ts:50-64` Drift-Vorschlag→Schritt-Zuordnung per Titel-Fuzzy-
   Match fragil → Step-IDs schon im Check-Ergebnis speichern.
 - [ ] ⚪ Video-KI erzeugt nur Rechteck-Highlights (Editor kann mehr) — ok, aber
@@ -859,51 +1033,69 @@ Steply-Hilfe-Texte + Screenshots auf die neuen Pfade nachgezogen.
   /h bleibt bewusst einbettbar; global nosniff + Referrer-Policy + Permissions-Policy.
 - [ ] 🟠 **Kein Error-Tracking** (kein Sentry, kein instrumentation.ts) — Produktions-
   fehler beim Kunden unsichtbar → Sentry + onRequestError.
-- [ ] 🟡 Kein CI (kein .github/): Vercel deployt ungeprüft → GitHub Action mit
+- [x] 🟡 Kein CI (kein .github/): Vercel deployt ungeprüft → GitHub Action mit
   next build + eslint pro Push/PR (Live-Tests optional dazu).
+  — ✅ erledigt (Beleg: `.github/workflows/ci.yml`, Typecheck + Lint blockierend; `next build`
+  bewusst weggelassen, Vercel baut pro Deploy)
 - [ ] 🟡 Env-Vars überall per `!`-Assertion, keine Boot-Validierung → env-Check in
   instrumentation.ts (klarer Fehler statt kryptischem Request-Crash).
-- [ ] 🟡 Kein robots.ts / sitemap.ts / manifest; kein metadataBase / OG-Default →
+- [x] 🟡 Kein robots.ts / sitemap.ts / manifest; kein metadataBase / OG-Default →
   ergänzen (robots: Disallow /app, /api; sitemap für /h-Hubs).
+  — ✅ erledigt (Beleg: `src/app/robots.ts`, `src/app/sitemap.ts`, `metadataBase` in
+  `src/app/layout.tsx`; nur ein Web-Manifest fehlt — unkritisch)
 - [ ] ⚪ Durchgängig `<img>` statt next/image → mind. loading="lazy" + sizes;
   next/image mit remotePatterns abwägen.
+  — ⏳ teilweise: Endkunden-Bilder lazy (`viewer-image.tsx`), Landing nutzt next/image; übrige
+  ~16 `<img>` (Builder, Hub-Logo, Admin, Automationen) ohne lazy/sizes
 
 ## E. Backend / API / Datenbank
 
-- [ ] 🟠 `lib/openai.ts:9` OpenAI-Client ohne timeout/maxRetries (Default 600 s!) bei
+- [x] 🟠 `lib/openai.ts:9` OpenAI-Client ohne timeout/maxRetries (Default 600 s!) bei
   maxDuration=30 → hängender embed killt Function ohne Antwort. →
   `new OpenAI({ timeout: 20_000, maxRetries: 1 })`.
-- [ ] 🟡 `api/steps/suggest/route.ts:63-77` Einzige Route ohne Token-Cap; kein
+  — ✅ erledigt (Beleg: `src/lib/openai.ts`, `timeout: 20_000, maxRetries: 1`)
+- [x] 🟡 `api/steps/suggest/route.ts:63-77` Einzige Route ohne Token-Cap; kein
   maxDuration (Vercel-Default ~15 s, Vision detail:high!); rohes e.message an Client →
   maxDuration 30 + Cap ~300 + generische Fehlermeldung.
+  — ➖ entfällt: Route `/api/steps/suggest` gibt es nicht mehr (Welle 19 entfernt)
 - [ ] 🟡 `api/tutorials/[id]/check/route.ts` Drift ohne Rate-Limit/Cooldown (teuerster
   Call) + DB-Writes ungeprüft (Ergebnis kann lautlos verschwinden) → Cooldown +
   Error-Checks.
-- [ ] 🟡 `lib/kb.ts:59-75,124-146` Delete-then-Insert nicht atomar, {error} ignoriert →
+  — ⏳ teilweise: Cooldown (429) da; in `src/lib/drift.ts` werden alte Hinweise auf „resolved“
+  gesetzt und der neue per insert geschrieben, ohne `{error}` zu prüfen → Hinweis kann weiter
+  lautlos verschwinden
+- [x] 🟡 `lib/kb.ts:59-75,124-146` Delete-then-Insert nicht atomar, {error} ignoriert →
   Tutorial kann still aus dem RAG-Index verschwinden → Fehler prüfen, Insert-vor-Delete.
-- [ ] 🟡 **HNSW-Index nie angelegt** (0004 auskommentiert) → match_kb macht Seq-Scan
+  — ✅ erledigt (Beleg: `src/lib/kb.ts` atomare RPC `replace_kb_source` (Migration 0040) + Fehler werfen/loggen)
+- [x] 🟡 **HNSW-Index nie angelegt** (0004 auskommentiert) → match_kb macht Seq-Scan
   über ALLE Embeddings pro Chat-Nachricht; degradiert linear mit Kundenzahl. →
   `create index ... using hnsw (embedding vector_cosine_ops)` + Index
   (source_type, source_id) für Delete-Pfade.
-- [ ] ⚪ `tutorials.updated_at` ohne Trigger; Step-Änderungen bumpen es nicht →
+  — ✅ erledigt (Beleg: `supabase/migrations/0016_perf_indexes_triggers.sql`, HNSW + source-Index)
+- [x] ⚪ `tutorials.updated_at` ohne Trigger; Step-Änderungen bumpen es nicht →
   Dashboard-Sortierung/„Geändert vor…" lügt → moddatetime-Trigger + Bump.
+  — ✅ erledigt (Beleg: `0016_perf_indexes_triggers.sql`, Trigger steps/branches → tutorials.updated_at)
 - [ ] ⚪ status/freshness/severity als freier text ohne CHECK-Constraints.
 - [ ] ⚪ Chat-Rate-Limit ist pro Serverless-Instanz (20×N/min, Cold-Start-Reset) —
   als Best-Effort ok; für echten Schutz später Upstash Redis/Vercel KV.
 
 ## F. Bekannt & bewusst offen (aus früheren Audits)
 
-- [ ] 🟡 **M7 updatePassword**: /reset ist von jeder eingeloggten Session nutzbar
+- [x] 🟡 **M7 updatePassword**: /reset ist von jeder eingeloggten Session nutzbar
   (Passwort-Übernahme bei entsperrtem Gerät). Sauberer Fix braucht Recovery-Nonce im
-  Auth-Confirm-Fluss — bewusst zurückgestellt (Umbau-Risiko), Plan liegt vor.
+  Auth-Confirm-Fluss — bewusst zurückgestellt (Umbau-Risiko), Plan liegt vor. — ✅ erledigt 23.09.2026 (amr-Nachweis in `(auth)/actions.ts`, `scripts/test-reset-password.mjs`)
 - [ ] ⚪ Middleware getUser→getClaims (warmer /app-Pfad): nur nötig, falls Inhalt nach
   Skeleton weiter träge; vorher Supabase-SSR-Docs prüfen (Token-Refresh!).
-- [ ] ⚪ cacheComponents-Pilot auf /h (statische Instant-Shell): gestufte Migration,
+- [x] ⚪ cacheComponents-Pilot auf /h (statische Instant-Shell): gestufte Migration,
   cache-components-Skill + Bundled Docs nutzen.
-- [ ] ⚪ Analytics/Events-Tabelle (Entwurf 0015 existierte, verworfen — bei Analytics-
+  — ✅ erledigt (Beleg: `next.config.ts` `cacheComponents: true`, /h-`load()` mit 'use cache' + Tags)
+- [x] ⚪ Analytics/Events-Tabelle (Entwurf 0015 existierte, verworfen — bei Analytics-
   Feature neu aufsetzen; „War das hilfreich?" ist der Einstieg).
+  — ✅ erledigt (Beleg: `supabase/migrations/0018_events.sql` + `src/lib/events.ts`, Insights-Karte)
 - [ ] ⚪ Video-Worker-Deploy prüfen: Batch-3-Fixes (reapStale, note, Rotation) wirken
   erst nach `deploy.sh` auf Hetzner.
+  — ⏳ unklar: aus dem Repo nicht belegbar, ob `deploy.sh` gelaufen ist; `TODO.md` führt
+  „deploy.sh ausführen + Test-Video“ weiter offen (inkl. W51-Tonspur-Fix in `video-worker/media.mjs`)
 
 ---
 
@@ -917,28 +1109,40 @@ Gesamteindruck: Landing stark (~8/10), **Builder = stärkste Oberfläche**, Mobi
 > **geklonte CI** (Jakus Tax) und gewollt — das KI-CI-Feature funktioniert. Findings
 > unten betreffen nur die *Dosierung* der Akzentfarbe, nie die Farbe selbst.
 
-- [ ] 🟠 **Chat-Widget fehlt auf den Tutorial-Seiten** (`/h/[slug]/[tutorial]`) — nur
+- [x] 🟠 **Chat-Widget fehlt auf den Tutorial-Seiten** (`/h/[slug]/[tutorial]`) — nur
   der Hub hat es; genau beim Feststecken gibt es keinen Chat. → Widget auch dort.
-- [ ] 🟠 **Dashboard = Wand identischer weißer Kacheln** (26 Stück, kein Blickanker):
+  — ✅ erledigt (Beleg: `ChatWidget` in `src/app/h/[account_slug]/[tutorial_slug]/page.tsx`)
+- [x] 🟠 **Dashboard = Wand identischer weißer Kacheln** (26 Stück, kein Blickanker):
   keine Thumbnails, und der Publish-Toggle steht ÜBER dem Titel (erstes Lese-Element
   ist ein Schalter). → Thumbnail (erstes Schritt-Bild) + Titel zuerst.
-- [ ] 🟡 **Landing-Hero zeigt Wireframe-Mock statt Produkt** → echten
+  — ✅ erledigt (Beleg: `src/components/app/tutorial-card.tsx` — Bibliothek neu (W49): Titel +
+  Website im Kategorie-Farbfeld, ein Status-Schalter, Karten/Liste)
+- [x] 🟡 **Landing-Hero zeigt Wireframe-Mock statt Produkt** → echten
   Builder-Screenshot (Browser-Rahmen) einsetzen; „bald"-Badge bei „KI übernimmt Ihr
   CI" entfernen (Feature ist live).
-- [ ] 🟡 Landing endet nach dem CTA: **Preise-, FAQ-, Demo-Hub-Sektion fehlen**
+  — ✅ erledigt (Beleg: `src/app/page.tsx` „Browser-Mockup mit echtem Produkt-Screenshot“)
+- [x] 🟡 Landing endet nach dem CTA: **Preise-, FAQ-, Demo-Hub-Sektion fehlen**
   (deckt sich mit B/Monetarisierung).
-- [ ] 🟡 **Wizard auf Desktop zu schmal** (Karte ~430 px in 1440, Titel klein) →
+  — ✅ erledigt (Beleg: `src/app/page.tsx` Preise (PLANS) + FAQ + Link `/h/steply`)
+- [x] 🟡 **Wizard auf Desktop zu schmal** (Karte ~430 px in 1440, Titel klein) →
   breiter (max-w-xl/2xl), größerer Schritt-Titel, Fortschritt „Schritt x von y",
   Bild-Lightbox (mobil: Tap-to-Zoom).
-- [ ] 🟡 Hilfe-Seiten **Akzent-Dosierung** (Empfehlung, CI bleibt): Markenfarbe färbt
+  — ✅ erledigt (Beleg: `[tutorial_slug]/page.tsx` bis `lg:max-w-4xl`, Fortschritt + Großansicht in `wizard.tsx`)
+- [x] 🟡 Hilfe-Seiten **Akzent-Dosierung** (Empfehlung, CI bleibt): Markenfarbe färbt
   jeden Kartenrahmen, jeden Titel, alle Icons → Titel in Ink, Rahmen neutral/dezenter
   Tint; Akzent konzentriert auf Logo/Topbar/Buttons/Chat-Bubble. Wirkt ruhiger,
   CI bleibt klar erkennbar.
+  — ✅ erledigt (Beleg: `hub-browser.tsx` Karten mit neutralen Rahmen/`--brand-title`, Commit `61c371c`)
 - [ ] 🟡 Dashboard mobil: endloser Ein-Spalten-Scroll → sticky Kategorie-Sprungleiste
   oder einklappbare Sektionen. **Produkt-Nebenfund:** kein Bulk-Löschen/Archivieren
   (15 Test-Tutorials unter „Sonstiges" ohne Aufräum-Werkzeug).
-- [ ] ⚪ Chat-Panel: fixe Höhe lässt Leerraum; Bot-Antwort könnte direkter zum Klick
+  — ⏳ teilweise: Bulk-Aufräumen da (`src/components/app/bulk-cleanup.tsx` in `library-browser.tsx`);
+  die Sprungleiste `src/components/app/category-jump.tsx` wird seit der neuen Bibliothek nirgends
+  mehr eingebunden (toter Code), Listenansicht gruppiert nur
+- [x] ⚪ Chat-Panel: fixe Höhe lässt Leerraum; Bot-Antwort könnte direkter zum Klick
   auf die verlinkte Anleitung auffordern.
+  — ✅ erledigt (Beleg: `chat-widget.tsx` h-auto + max-h; Prompt in `src/lib/ai-prompts.ts`
+  nennt passende Anleitungen, die als Link erscheinen)
 - [x] ~~Mobile-App-Header quillt über~~ — nach Sichtung **herabgestuft**: komprimiert
   ordentlich (E-Mail wird ausgeblendet).
 
@@ -951,29 +1155,39 @@ Landing-Typo/Bento/Rhythmus professionell.
 ## H. Produkt-Erweiterungen (Backlog — „geil"-Kandidaten)
 
 **Schwungrad (Produkt verbessert sich selbst):**
-- [ ] ⭐ **Frage-Lücken-Miner** (M): `no_answer`-Chatfragen sammeln → „Diese 7 Fragen
+- [x] ⭐ **Frage-Lücken-Miner** (M): `no_answer`-Chatfragen sammeln → „Diese 7 Fragen
   blieben unbeantwortet — Tutorial erstellen?" → KI legt Entwurfs-Rahmen an.
   Schließt die Schleife Content → Chat → Content. Kein Wettbewerber hat das.
-- [ ] **Aktualitäts-Autopilot** (M): Drift-Check als Cron + Digest-Mail + 1-Klick-
+  — ✅ erledigt (Beleg: `src/lib/gaps.ts` + „Entwurf erstellen“ in `src/app/app/insights-actions.ts`)
+- [x] **Aktualitäts-Autopilot** (M): Drift-Check als Cron + Digest-Mail + 1-Klick-
   Übernahme („Deine Hilfe hält sich selbst aktuell" = Abo-Argument).
-- [ ] **Semantische Endkunden-Suche** (S): vorhandenes pgvector-RAG ins Hub-Suchfeld.
+  — ✅ erledigt (Beleg: `src/app/api/cron/drift/route.ts` + `vercel.json` Mo 6:00 + Resend-Digest;
+  läuft nur mit `CRON_SECRET` in Vercel — laut `TODO.md` noch Richards Handgriff)
+- [x] **Semantische Endkunden-Suche** (S): vorhandenes pgvector-RAG ins Hub-Suchfeld.
+  — ✅ erledigt (Beleg: `src/app/api/hub-search/route.ts` + „Meinten Sie“ in `hub-browser.tsx`)
 
 **Reichweite & Verteilung:**
-- [ ] ⭐ **Script-Chat-Bubble** (M): ein `<script>`-Tag → KI-Hilfe schwebt auf JEDER
+- [x] ⭐ **Script-Chat-Bubble** (M): ein `<script>`-Tag → KI-Hilfe schwebt auf JEDER
   Seite der Firmen-Website, nicht nur im Hub. Größter Adoptions-Hebel.
+  — ✅ erledigt (Beleg: `src/app/h/embed.js/route.ts` + `src/app/h/[account_slug]/chat/page.tsx`)
 - [ ] **Custom Domain** (M): `hilfe.firma.de` per CNAME — White-Label komplett,
   klassisches Bezahl-Feature.
-- [ ] **QR-Codes pro Tutorial** (S): für Brief, Rechnung, Aushang, Gerät.
+- [x] **QR-Codes pro Tutorial** (S): für Brief, Rechnung, Aushang, Gerät.
+  — ✅ erledigt (Beleg: `src/app/api/qr/route.ts`, nur eingeloggt + nur /h-URLs)
 
 **Neuer Markt (großer Hebel):**
-- [ ] ⭐ **Interne Tutorials + Schulungsnachweis** (L): Zugriffsschutz (Login/Einladung)
+- [x] ⭐ **Interne Tutorials + Schulungsnachweis** (L): Zugriffsschutz (Login/Einladung)
   + „Mitarbeiter X hat Anleitung Y am … durchgearbeitet ✓" → SOP-/Onboarding-Markt
   (Scribes Kernmarkt); Video-Pipeline ist dort stärker (Desktop-Software).
+  — ✅ erledigt (Beleg: Migration `0021_internal_tutorials.sql`, `src/app/app/lernen/` „Schulungen“ mit Nachweis)
 - [ ] **Freigabe-Workflow** (M): Entwurf → Review → Freigabe durch Owner (Teams ≥5).
+  — ⏳ teilweise: Rollen Inhaber/Bearbeiter/Mitarbeiter (`0037_team_roles.sql`); einen
+  Review-/Freigabe-Status zwischen Entwurf und Veröffentlicht gibt es nicht
 
 **Endkunde:**
-- [ ] **Inline-Feedback pro Schritt** (S–M): „Hier komme ich nicht weiter" am Schritt
+- [x] **Inline-Feedback pro Schritt** (S–M): „Hier komme ich nicht weiter" am Schritt
   (ergänzt „War das hilfreich?" aus A) → zeigt exakt den schwachen Schritt.
+  — ✅ erledigt (Beleg: `wizard.tsx` sendStuck → events → Insights-Wissenslücken)
 
 **Top-3-Empfehlung:** Frage-Lücken-Miner · Script-Bubble · Interne Tutorials.
 Story: *überall erreichbar → weiß, was fehlt → funktioniert auch nach innen.*
@@ -983,32 +1197,46 @@ Story: *überall erreichbar → weiß, was fehlt → funktioniert auch nach inne
 ## I. Video→Tutorial-Pipeline (Kern-Feature — Roadmap)
 
 **Nächstes Paket (abgesegnet 01.07.):**
-- [ ] ① **Fortschritt + Live-Aufbau**: `video_jobs.progress` („Schritt 3/6"), Tutorial
+- [x] ① **Fortschritt + Live-Aufbau**: `video_jobs.progress` („Schritt 3/6"), Tutorial
   früh als Draft anlegen + Schritte einfügen sobald fertig; „Wird erstellt…"-Karte im
   Dashboard → Dialog darf zu, kein „Fenster offen lassen" mehr.
-- [ ] ② **Timestamps → Scrubber**: `video_path` + Zeitpunkt pro Schritt speichern; im
+  — ✅ erledigt (Beleg: `video-worker/index.mjs` progress „Schritt X von Y“ + Live-Insert,
+  Migration `0017_video_progress_scrubber.sql`; wirkt erst nach deploy.sh)
+- [x] ② **Timestamps → Scrubber**: `video_path` + Zeitpunkt pro Schritt speichern; im
   Builder „anderes Bild aus dem Video wählen" (Mini-Timeline). Macht KI-Fehlgriffe zu
   5-Sekunden-Fixes statt Neuaufnahmen.
+  — ✅ erledigt (Beleg: `steps.video_time` im Worker, `src/components/builder/video-frame-picker.tsx`)
 - [ ] ③ **Quick-Wins**: Whisper `prompt:"Schnitt"` (Marker-Bias) + Marker-Varianten
   konfigurierbar + Sprache als Konto-Setting statt hart `de`; Vision-Calls parallel
   (3–4); Retry mit Backoff um alle OpenAI-Calls; schärfsten von 3 Kandidaten-Frames
   wählen; Frames auf ~1280 px für Vision verkleinern (Kosten).
+  — ⏳ teilweise: Marker-Bias, 3er-Batches, withRetry, grabSharpestFrame, 1280 px erledigt
+  (`video-worker/index.mjs`); Whisper-Sprache weiter hart `language: "de"`, Marker nicht konfigurierbar
 
 **Danach:**
-- [ ] Szenen-Erkennung (ffmpeg `scdet`) als Fallback ohne Ton (statt Gleichverteilung).
+- [x] Szenen-Erkennung (ffmpeg `scdet`) als Fallback ohne Ton (statt Gleichverteilung).
+  — ✅ erledigt (Beleg: `video-worker/index.mjs` scdet-Pass in der Fallback-Kette)
 - [ ] **Mini-Clip/GIF pro Schritt** (2–4 s Loop aus dem Video) — Marktlücke: Scribe hat
   nur Screenshots, Loom keine Schritte.
 - [ ] **Auto-Redaktion**: Vision findet sensible Stellen (Namen, IBAN, Kundennr.) →
   Blur-Vorschläge. Setzt Top-1 „Blur einbrennen" voraus → macht daraus ein Premium-Feature.
-- [ ] Mehrsprachige Ausgabe (Übersetzungs-Pass über fertige Schritte).
-- [ ] Import per Loom-/MP4-Link („bring dein vorhandenes Video mit").
-- [ ] E-Mail „Tutorial ist fertig → im Builder öffnen".
+  — ⏳ teilweise: Auto-Schwärzung für die Sofort-Aufnahme per DOM (Passwort/IBAN/Token-Felder →
+  `suggested`-Blur, Welle 28, `extension/content.js`); per Vision im Video gibt es sie nicht
+- [x] Mehrsprachige Ausgabe (Übersetzungs-Pass über fertige Schritte).
+  — ✅ erledigt (Beleg: `src/lib/translate.ts` + Migration `0022_translations_tts.sql`, EN/PL/TR Auto-Sync)
+- [x] Import per Loom-/MP4-Link („bring dein vorhandenes Video mit").
+  — ✅ erledigt (Beleg: `src/app/api/video-import/route.ts`, SSRF-geschützt; Loom bewusst nur
+  über „Video herunterladen“ und hochladen)
+- [x] E-Mail „Tutorial ist fertig → im Builder öffnen".
+  — ✅ erledigt (Beleg: `video-worker/index.mjs` sendDoneEmail, env-gated; wirkt nach deploy.sh)
 
 **Nordstern:**
-- [ ] **Browser-Extension mit Klick- + DOM-Telemetrie**: exakte Highlights ohne
+- [x] **Browser-Extension mit Klick- + DOM-Telemetrie**: exakte Highlights ohne
   Vision-Raten, Schrittgrenzen aus echten Klicks, „Schnitt" optional. Kombi-USP:
   Extension für Web-Apps **plus** Video-Pipeline für Desktop-Software (DATEV & Co.) —
   das kann kein Wettbewerber beides.
+  — ✅ erledigt (Beleg: `extension/` v2.19.1 — Sofort-Anleitung mit DOM-Box + Selektor je Klick,
+  Klick-Modus im Worker, Live-Führung, Automationen)
 
 > ⚠️ Worker-Änderungen wirken erst nach menschlich ausgelöstem `deploy.sh` (Hetzner).
 
@@ -1106,8 +1334,14 @@ sauber getrennt in **Browser-Grenze** (nicht behebbar) und **behebbar**.
 - [x] Farbwähler: Schritt beim `change` statt Klick davor (Screenshot zeigt die gewählte Farbe)
 - [x] Kontrollkästchen ohne Label: Text von rechts statt „input“
 - [x] `label[for=…]` als stabiler Selektor-Anker
-- [ ] 🟠 **L1** Seitenwechsel ohne Klick (Zurück-Knopf, F5, Weiterleitung) erzeugt keinen Schritt
-- [ ] 🟠 **L3** Strg-/Shift-Klick: Modifikator fehlt im Schritt (falsche Anleitung + Automation)
+- [x] 🟠 **L1** Seitenwechsel ohne Klick (Zurück-Knopf, F5, Weiterleitung) erzeugt keinen Schritt
+  — ✅ erledigt (Beleg: `extension/content.js` pageshow/popstate → `interaction.variant:"nav"`, v2.19.0)
+- [x] 🟠 **L3** Strg-/Shift-Klick: Modifikator fehlt im Schritt (falsche Anleitung + Automation)
+  — ✅ erledigt (Beleg: `interaction.modifiers` in `extension/content.js`, `src/lib/guide.ts`, `extension/exec-plan.js`)
 - [ ] 🟠 **L2** Ergebnis nach langem Laden ist in keinem Screenshot (zweites Bild je Schritt)
-- [ ] 🟡 **L4** Pfeiltasten-Menüs · **L5** Canvas · **L6** geschlossenes Shadow DOM · **L7** Doppelklick in Tabellenzellen
+  — ⏳ teilweise: Variante A (ein Abschluss-Bild beim „Fertig“, `extension/panel.js`); Ergebnis-Bild
+  je Schritt (Variante C) offen
+- [x] 🟡 **L4** Pfeiltasten-Menüs · **L5** Canvas · **L6** geschlossenes Shadow DOM · **L7** Doppelklick in Tabellenzellen
+  — ✅ erledigt (Beleg: Commit `1ded246`, `extension/content.js` Pfeil-Serien + `variant:"spot"` + Zellen-dblclick;
+  Nachweis in `REVIEW-aufnahme-luecken.md`)
 - [ ] ⚪ **L9** reines Scrollen · **L10** Markierung bei Strg+C · **L11** Hover-Tooltips
