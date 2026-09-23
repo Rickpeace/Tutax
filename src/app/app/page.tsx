@@ -13,6 +13,7 @@ import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
 import { relativeDe } from "@/lib/format";
 import { Loader2 } from "lucide-react";
 import { isPro, videoAllowed } from "@/lib/plan";
+import { countTutorialSteps } from "@/lib/tutorial-step-counts";
 
 /**
  * Bibliothek (Design-Handoff 07/2026, Option 2a/2b): Kategorien-Sidebar +
@@ -84,20 +85,11 @@ export default async function DashboardPage() {
   // Eigene Tutorials ohne Forks (Forks erscheinen als Vorlagen-Eintrag)
   const own = allOwn.filter((t) => !forkIds.has(t.id));
 
-  // Schritt-Zahl pro Anleitung: EINE Query für ALLE eigenen Anleitungen (kein N+1).
+  // Schritt-Zahl pro Anleitung: gemeinsam für ALLE eigenen Anleitungen (kein N+1), aber
+  // seitenweise (PostgREST kappt bei 1000 Zeilen — sonst „0 Schritte“ bei großen Konten).
   // (Welle 49: keine Vorschaubilder mehr — Richards Wahl: Titel im Kategorie-Farbfeld.)
-  const stepCountById = new Map<string, number>();
   const ownIds = own.map((t) => t.id);
-  if (ownIds.length) {
-    const admin = createAdminClient();
-    const { data: stepRows } = await admin
-      .from("steps")
-      .select("tutorial_id")
-      .in("tutorial_id", ownIds);
-    for (const r of stepRows ?? []) {
-      stepCountById.set(r.tutorial_id, (stepCountById.get(r.tutorial_id) ?? 0) + 1);
-    }
-  }
+  const stepCountById = await countTutorialSteps(createAdminClient(), ownIds);
 
   // Standard-Anleitungen (Vorlagen)
   const templateItems: TemplateItem[] = templates.map((t) => {

@@ -4,16 +4,17 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
 import { updateAlertStatus } from "@/app/app/alerts/actions";
+import { errorText, unwrap } from "@/lib/action-error";
 
 export function AlertActions({ id }: { id: string }) {
   const [pending, start] = useTransition();
   const act = (status: "resolved" | "dismissed", label: string) =>
     start(async () => {
       try {
-        await updateAlertStatus(id, status);
+        unwrap(await updateAlertStatus(id, status));
         toast.success(label);
-      } catch {
-        toast.error("Fehler");
+      } catch (e) {
+        toast.error(errorText(e));
       }
     });
 

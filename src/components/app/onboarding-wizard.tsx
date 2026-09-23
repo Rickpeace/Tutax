@@ -17,16 +17,19 @@ export function OnboardingWizard({
   initialName,
   isBusiness,
   initialLanguages,
+  initialWebsite = "",
 }: {
   /** Organisation, die eingerichtet wird (Schutz gegen Org-Wechsel in einem anderen Tab). */
   accountId: string;
   initialName: string;
   isBusiness: boolean;
   initialLanguages: ExtraLang[];
+  /** Bereits gespeicherte Website (erneuter Durchlauf). */
+  initialWebsite?: string;
 }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName);
-  const [website, setWebsite] = useState("");
+  const [website, setWebsite] = useState(initialWebsite);
   const [langs, setLangs] = useState<Set<ExtraLang>>(new Set(initialLanguages));
   const [pending, startTransition] = useTransition();
 
@@ -42,8 +45,11 @@ export function OnboardingWizard({
   function finish() {
     startTransition(async () => {
       // Sprachen über die bestehende Branding-Action speichern (Server-Gate bleibt dort).
-      // Nur Business-Konten können hier überhaupt etwas ausgewählt haben.
-      if (isBusiness && langs.size > 0) {
+      // Nur Business-Konten können hier überhaupt etwas ändern. Gespeichert wird jede
+      // Änderung — auch das Abwählen ALLER Sprachen (früher still ignoriert).
+      const langsChanged =
+        langs.size !== initialLanguages.length || initialLanguages.some((l) => !langs.has(l));
+      if (isBusiness && langsChanged) {
         const res = await saveLanguages(accountId, [...langs]);
         if (!res.ok) {
           toast.error(res.error || "Sprachen konnten nicht gespeichert werden");

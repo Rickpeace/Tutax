@@ -19,8 +19,12 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
 
   const url = req.nextUrl.searchParams.get("url")?.trim() ?? "";
-  const allowedPrefix = `${appBaseUrl()}/h/`;
-  if (!url || !url.startsWith(allowedPrefix)) {
+  // Erlaubt: die konfigurierte App-Adresse ODER die Adresse, unter der die App gerade läuft.
+  // Die Bibliothek baut den QR-Link aus window.location.origin — lief die App unter einer
+  // anderen Adresse als NEXT_PUBLIC_APP_URL (Vorschau-Deploy, zweite Domain, lokal), bekam
+  // „QR-Code öffnen“ nur eine rohe JSON-Fehlermeldung. Beides zeigt auf die eigene /h/-Seite.
+  const allowedPrefixes = [`${appBaseUrl()}/h/`, `${req.nextUrl.origin}/h/`];
+  if (!url || !allowedPrefixes.some((p) => url.startsWith(p))) {
     return NextResponse.json({ error: "Nur Hilfe-Seiten-Links erlaubt." }, { status: 400 });
   }
 

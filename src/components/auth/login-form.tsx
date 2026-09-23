@@ -21,6 +21,10 @@ const NOTICES: Record<string, string> = {
   verlassen: "Sie haben die Organisation verlassen. Wenn Sie wieder dazugehören möchten, bitten Sie den Inhaber um eine neue Einladung.",
   "invite-abgelaufen":
     "Diese Einladung ist abgelaufen (gültig 14 Tage). Bitten Sie den Inhaber, sie neu zu senden.",
+  // /auth/confirm + /auth/hash: E-Mail-Link (Magic Link, Zurücksetzen, Bestätigung) ungültig,
+  // schon benutzt oder abgelaufen — früher landete man hier ohne jede Erklärung.
+  link:
+    "Dieser E-Mail-Link ist ungültig oder abgelaufen – jeder Link funktioniert nur einmal und nur für kurze Zeit. Melden Sie sich mit Ihrem Passwort an oder fordern Sie unter „Passwort vergessen?“ einen neuen Link an.",
   "kein-team":
     "Ihr Zugang gehört zu keiner Organisation mehr – vermutlich wurden Sie aus dem Team entfernt. Bitten Sie den Inhaber um eine neue Einladung.",
 };

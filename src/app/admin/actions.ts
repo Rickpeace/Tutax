@@ -6,10 +6,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkAdmin } from "@/lib/admin";
 import { slugify, fallbackSlug } from "@/lib/slug";
 import { after } from "next/server";
-import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
+import { reindexAccount, reindexTemplateForAccounts, removeTutorialEmbeddings } from "@/lib/kb";
 import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
 import { translateTutorial } from "@/lib/translate-jobs";
-import { reindexAccount } from "@/lib/kb";
+import { retireHiddenTemplateForks } from "@/lib/template-forks";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -70,27 +70,6 @@ export async function publishTemplate(id: string) {
   revalidatePath("/admin");
 }
 
-/**
- * Chatbot-Wissen aller Konten, die die Vorlage aktiviert haben, neu aufbauen: Standard-
- * Vorlage -> deren Inhalt, angepasste Kopie -> die Kopie (nur wenn live). Wirft nie.
- */
-async function reindexTemplateForAccounts(templateId: string): Promise<void> {
-  const admin = createAdminClient();
-  const { data: rows } = await admin
-    .from("account_templates")
-    .select("account_id, forked_tutorial_id")
-    .eq("template_id", templateId)
-    .eq("enabled", true);
-  for (const r of rows ?? []) {
-    try {
-      if (r.forked_tutorial_id) await reindexTutorialIfLive(r.forked_tutorial_id as string);
-      else await indexTutorial(admin, r.account_id as string, templateId);
-    } catch (e) {
-      console.error("Vorlagen-Reindex:", templateId, e instanceof Error ? e.message : e);
-    }
-  }
-}
-
 export async function unpublishTemplate(id: string) {
   await ensureAdmin();
   const admin = createAdminClient();
@@ -120,6 +99,9 @@ export async function deleteTemplate(id: string) {
   await removeTutorialEmbeddings(admin, id).catch(() => {});
   // VOR dem Delete: danach sind die account_templates-Zeilen (Cascade) weg.
   await invalidateTemplateHubs(id);
+  // Abgeschaltete/verborgene angepasste Kopien der Kunden würden ohne Vorlage zu normalen
+  // eigenen Anleitungen und damit wieder öffentlich → vorher auf Entwurf setzen.
+  await retireHiddenTemplateForks(admin, id);
   const { error } = await admin.from("tutorials").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
@@ -133,13 +115,18 @@ export async function createTemplateCategory(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   const admin = createAdminClient();
-  const { count } = await admin
+  // Höchste Position + 1 (nicht die Anzahl): nach einem Löschen gäbe es sonst doppelte
+  // Positionen und die Reihenfolge in Admin + Kunden-Hubs würde zufällig.
+  const { data: last } = await admin
     .from("categories")
-    .select("id", { count: "exact", head: true })
-    .is("account_id", null);
+    .select("position")
+    .is("account_id", null)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   const { error } = await admin
     .from("categories")
-    .insert({ account_id: null, name, position: count ?? 0 });
+    .insert({ account_id: null, name, position: ((last?.position as number | null) ?? -1) + 1 });
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
 }
@@ -147,9 +134,17 @@ export async function createTemplateCategory(formData: FormData) {
 export async function deleteTemplateCategory(id: string) {
   await ensureAdmin();
   const admin = createAdminClient();
+  // Kunden-Hubs gruppieren Vorlagen nach dieser Kategorie — VOR dem Löschen die betroffenen
+  // Hubs merken (danach ist die Zuordnung weg), sonst zeigen sie sie bis zu 1 h weiter.
+  const { data: tpls } = await admin
+    .from("tutorials")
+    .select("id")
+    .eq("is_template", true)
+    .eq("category_id", id);
   // Templates der Kategorie werden via FK (on delete set null) freigestellt.
   const { error } = await admin.from("categories").delete().eq("id", id).is("account_id", null);
   if (error) throw new Error(error.message);
+  for (const t of tpls ?? []) await invalidateTemplateHubs(t.id as string);
   revalidatePath("/admin");
 }
 
@@ -163,6 +158,7 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   await ensureAdmin();
   if (plan !== "free" && plan !== "pro" && plan !== "business") throw new Error("Ungültiger Tarif");
   const admin = createAdminClient();
+  const { data: before } = await admin.from("accounts").select("plan").eq("id", accountId).maybeSingle();
   const { data: acc, error } = await admin
     .from("accounts")
     .update({ plan })
@@ -174,7 +170,10 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   // deren Cache sofort räumen, sonst gälte der alte Tarif dort bis zu einer Stunde weiter.
   if (acc?.slug) invalidateHubTag(acc.slug as string);
   // Gratis-Konten haben keinen Chatbot-/Such-Index (Embeddings kosten) — beim Upgrade nachbauen.
-  if (plan !== "free") after(() => reindexAccount(accountId));
+  // Nur beim Schritt VON Gratis: Pro ↔ Business hat den Index schon (sonst alles neu einbetten,
+  // was nur OpenAI-Kosten erzeugt).
+  const wasPaid = before?.plan === "pro" || before?.plan === "business";
+  if (plan !== "free" && !wasPaid) after(() => reindexAccount(accountId));
   revalidatePath("/admin");
 }
 

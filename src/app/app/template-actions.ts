@@ -8,6 +8,7 @@ import { requireAccount } from "@/lib/account";
 import { indexTutorial, reindexTutorialIfLive } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateHubTag } from "@/lib/cache-tags";
+import { removeUnusedPublicCopies } from "@/lib/public-images";
 import type { Step, StepBranch } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -116,7 +117,9 @@ export async function forkTemplate(templateId: string) {
   }
 
   const forkId = crypto.randomUUID();
-  await supabase.from("tutorials").insert({
+  // Fehler NICHT verschlucken: sonst sprang der Editor auf eine Kopie, die es nicht gibt
+  // („Anleitung nicht gefunden“), oder eine leere Kopie ersetzte die Vorlage auf der Hilfe-Seite.
+  const { error: forkErr } = await supabase.from("tutorials").insert({
     id: forkId,
     account_id: account.id,
     is_template: false,
@@ -125,6 +128,11 @@ export async function forkTemplate(templateId: string) {
     status: "published", // bleibt nahtlos sichtbar (UI ändert sich nicht, §14)
     slug: forkSlug,
   });
+  if (forkErr) throw new Error("Kopie der Vorlage konnte nicht angelegt werden: " + forkErr.message);
+  const abandonFork = async (why: string): Promise<never> => {
+    await supabase.from("tutorials").delete().eq("id", forkId);
+    throw new Error("Kopie der Vorlage konnte nicht angelegt werden: " + why);
+  };
 
   const admin = createAdminClient();
   const idMap = new Map<string, string>();
@@ -174,10 +182,11 @@ export async function forkTemplate(templateId: string) {
         ...(s.interaction ? { interaction: s.interaction } : {}),
       });
     }
-    await supabase.from("steps").insert(stepRows);
+    const { error: stepsErr } = await supabase.from("steps").insert(stepRows);
+    if (stepsErr) await abandonFork(stepsErr.message);
   }
   if (branches?.length) {
-    await supabase.from("step_branches").insert(
+    const { error: brErr } = await supabase.from("step_branches").insert(
       branches.map((b) => ({
         step_id: idMap.get(b.step_id)!,
         label: b.label,
@@ -186,6 +195,7 @@ export async function forkTemplate(templateId: string) {
         position: b.position,
       })),
     );
+    if (brErr) await abandonFork(brErr.message);
   }
   if (tpl.root_step_id && idMap.get(tpl.root_step_id)) {
     await supabase.from("tutorials").update({ root_step_id: idMap.get(tpl.root_step_id) }).eq("id", forkId);
@@ -218,8 +228,26 @@ export async function resetTemplate(templateId: string) {
     .eq("template_id", templateId)
     .single();
   if (row?.forked_tutorial_id) {
-    await dropEmbeddings(account.id, row.forked_tutorial_id);
-    await supabase.from("tutorials").delete().eq("id", row.forked_tutorial_id);
+    const forkId = row.forked_tutorial_id as string;
+    await dropEmbeddings(account.id, forkId);
+    // Bildpfade VOR dem Löschen merken: die öffentlichen Kopien der verworfenen Kopie müssen
+    // weg (wie bei deleteTutorial) — sonst blieben ihre Screenshots per URL abrufbar.
+    const { data: goneSteps } = await supabase
+      .from("steps")
+      .select("image_path")
+      .eq("tutorial_id", forkId)
+      .not("image_path", "is", null);
+    const { error: delErr } = await supabase
+      .from("tutorials")
+      .delete()
+      .eq("id", forkId)
+      .eq("account_id", account.id);
+    // Ohne Löschen NICHT die Verknüpfung lösen — sonst stünde die Kopie als eigene Anleitung da.
+    if (delErr) throw new Error("Die eigene Kopie konnte nicht verworfen werden: " + delErr.message);
+    await removeUnusedPublicCopies(
+      (goneSteps ?? []).map((s) => s.image_path as string | null),
+      { accountId: account.id, exceptTutorialId: forkId },
+    ).catch((e) => console.error("Öffentliche Bilder nicht entfernt:", e instanceof Error ? e.message : e));
   }
   await supabase
     .from("account_templates")

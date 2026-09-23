@@ -108,7 +108,7 @@ export type AutomationParam = {
 export const AUTOMATION_ERR_BRANCHING =
   "Automationen unterstützen (noch) keine Verzweigungen.";
 export const AUTOMATION_ERR_TOO_FEW =
-  "Zu wenige ausführbare Schritte.";
+  "Zu wenige ausführbare Schritte. Eine Automation braucht mindestens zwei mit der Steply-Erweiterung aufgenommene Klicks oder Eingaben (Sofort-Anleitung).";
 export const AUTOMATION_ERR_NOT_FOUND =
   "Anleitung nicht gefunden.";
 

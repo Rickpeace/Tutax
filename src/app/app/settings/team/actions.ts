@@ -384,8 +384,15 @@ export async function resendInvitation(id: string): Promise<InviteResult> {
  * nächste eigene Organisation aktiv; gibt es keine mehr, meldet die App beim nächsten
  * Aufruf sauber ab (requireAccount -> /login?error=kein-team).
  */
-export async function leaveTeam(): Promise<{ ok: true; hasOtherOrg: boolean } | { ok: false; error: string }> {
-  const { account, userId, role, memberships } = await requireAccount({ allowMember: true });
+export async function leaveTeam(
+  expectedAccountId: string,
+): Promise<{ ok: true; hasOtherOrg: boolean } | { ok: false; error: string }> {
+  const ctx = await requireAccount({ allowMember: true });
+  // Org in einem anderen Tab gewechselt: NICHT die jetzt aktive Organisation verlassen —
+  // die Seite (und die Abfrage „„A“ verlassen?“) zeigte eine andere.
+  const switched = orgSwitchedError(expectedAccountId, ctx);
+  if (switched) return { ok: false, error: switched };
+  const { account, userId, role, memberships } = ctx;
   const admin = createAdminClient();
   if (role === "owner") {
     const { count } = await admin

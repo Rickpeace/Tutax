@@ -7,6 +7,10 @@ import { requireAccount, requireTutorialAccess } from "@/lib/account";
 import { aiConfigured, AI } from "@/lib/ai";
 import { openai } from "@/lib/openai";
 import { reindexTutorialIfLive } from "@/lib/kb";
+import { invalidateStepTags } from "@/lib/cache-tags";
+import { markTranslationsStaleByStep } from "@/lib/translate-stale";
+import { translateStepDelta } from "@/lib/translate-jobs";
+import { ensureStepAudio } from "@/lib/tts";
 import { withUserErrors, UserError } from "@/lib/action-error";
 import { isPro, PRO_REQUIRED } from "@/lib/plan";
 
@@ -115,8 +119,16 @@ export const applyDriftSuggestions = withUserErrors(async function applyDriftSug
     .update({ title: newTitle, body: bodyDoc })
     .eq("id", target.id);
   if (upErr) throw new Error(upErr.message);
-  // Chatbot soll den korrigierten Schritt kennen (nur wenn die Anleitung live ist).
+  // Dieselben Folgen wie beim Speichern im Editor (updateStep): Hilfe-Seite sofort neu,
+  // Übersetzungen veraltet + Delta nachziehen, Vorlesen neu, Chatbot-Index nachziehen.
+  // Früher lief nur der Chatbot-Index — die Hilfe-Seite zeigte bis zu 1 h den alten Text,
+  // Übersetzungen und Vorlesen blieben dauerhaft beim alten Stand.
+  const stepId = target.id as string;
   const tutorialId = alert.tutorial_id as string;
+  await invalidateStepTags(stepId);
+  await markTranslationsStaleByStep(stepId);
+  after(() => translateStepDelta(stepId));
+  after(() => ensureStepAudio(stepId));
   after(() => reindexTutorialIfLive(tutorialId));
 
   // Alle einbezogenen Positionen als übernommen markieren.
@@ -127,7 +139,7 @@ export const applyDriftSuggestions = withUserErrors(async function applyDriftSug
   return { ok: true, stepTitle: newTitle };
 });
 
-export async function updateAlertStatus(
+export const updateAlertStatus = withUserErrors(async function updateAlertStatus(
   alertId: string,
   status: "acknowledged" | "resolved" | "dismissed",
 ) {
@@ -137,8 +149,8 @@ export async function updateAlertStatus(
     .from("change_alerts")
     .select("tutorial_id")
     .eq("id", alertId)
-    .single();
-  if (!alert) throw new Error("Hinweis nicht gefunden.");
+    .maybeSingle();
+  if (!alert) throw new UserError("Diesen Hinweis gibt es nicht mehr – bitte die Seite neu laden.");
   await requireTutorialAccess(alert.tutorial_id as string);
 
   const patch: Record<string, unknown> = { status };
@@ -162,4 +174,4 @@ export async function updateAlertStatus(
 
   revalidatePath("/app/alerts");
   revalidatePath("/app");
-}
+});

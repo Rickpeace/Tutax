@@ -9,7 +9,9 @@ export function uebersetzeAuthFehler(msg: string): string {
     return "E-Mail oder Passwort ist falsch.";
   if (m.includes("email not confirmed"))
     return "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.";
-  if (m.includes("user already registered"))
+  // „User already registered“ (Registrierung) bzw. „A user with this email address has already
+  // been registered“ (E-Mail-Wechsel im Profil, Code email_exists).
+  if (m.includes("user already registered") || m.includes("already been registered") || m.includes("email_exists"))
     return "Für diese E-Mail existiert bereits ein Konto.";
   if (m.includes("rate limit"))
     return "Zu viele Versuche. Bitte warten Sie einen Moment.";
