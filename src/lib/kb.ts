@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedMany } from "@/lib/openai";
 import { embeddingsConfigured } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { forkIsServable } from "@/lib/templates";
 
 /** Tiptap-JSON -> Klartext. */
 function plainBody(body: unknown): string {
@@ -38,6 +39,17 @@ export async function indexTutorial(
   // Zentraler Schutz für ALLE Aufrufer (Publish/Miner/Cron): interne Tutorials
   // dürfen NIE in den Chatbot-RAG-Index. Nur 'public' wird indiziert.
   if (tut.visibility !== "public") return;
+  // Angepasste Vorlage (Fork), deren Vorlage abgeschaltet oder zentral zurückgezogen ist:
+  // nicht (wieder) in den Chatbot — sonst verlinkte er eine Seite, die es öffentlich nicht gibt.
+  if (!(await forkIsServable(admin, accountId, tutorialId))) {
+    await admin
+      .from("kb_embeddings")
+      .delete()
+      .eq("account_id", accountId)
+      .eq("source_type", "tutorial")
+      .eq("source_id", tutorialId);
+    return;
+  }
 
   let category: string | null = null;
   if (tut.category_id) {

@@ -13,6 +13,8 @@ import { loadHubTheme } from "@/lib/hub-theme";
  * Cache Components: der (gecachte) Theme-Load steckt in einer eigenen
  * Suspense-Boundary, damit die Fallback-Shell unbekannter Slugs statisch bleibt.
  * Die Seiten setzen ihre Brand-Vars weiterhin selbst (identisch, harmlos doppelt).
+ * Ausnahme Chat-only-Seite (chat/): sie schaltet den Hintergrund des Wrappers per CSS
+ * (EMBED_TRANSPARENT_CSS) ab, weil sie als kleines rundes iFrame auf Kunden-Websites läuft.
  */
 export default function HubLayout({
   children,
@@ -45,6 +47,9 @@ async function Themed({
 
   return (
     <div
+      // data-hub-brand: die Chat-only-Seite (Script-Bubble im fremden iFrame) macht genau
+      // diesen Wrapper transparent — sonst läge ein farbiger Ring um den runden Knopf.
+      data-hub-brand=""
       className="min-h-screen"
       style={{
         ...brandStyle(tokens),

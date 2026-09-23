@@ -31,18 +31,57 @@ export async function invalidateTutorialTags(
     const admin = createAdminClient();
     const { data } = await admin
       .from("tutorials")
-      .select("slug, status, accounts(slug)")
+      .select("slug, status, is_template, account_id, accounts(slug)")
       .eq("id", tutorialId)
       .maybeSingle();
     if (!data) return;
     // Draft-Edits betreffen die öffentlichen Seiten nicht -> Cache in Ruhe lassen.
     // force: für Übergänge (unpublish wurde gerade auf draft gesetzt).
     if (!opts?.force && data.status !== "published") return;
+    // Globale Vorlage (kein Konto): sie erscheint in den Hubs ALLER Konten, die sie
+    // aktiviert/angepasst haben -> deren Hubs (und damit ihre Seiten) invalidieren.
+    if (data.is_template && !data.account_id) {
+      await invalidateTemplateHubs(tutorialId);
+      return;
+    }
     const acc = Array.isArray(data.accounts) ? data.accounts[0] : data.accounts;
     const accountSlug = (acc as { slug?: string } | null)?.slug;
     if (!accountSlug) return;
     updateTag(hubTag(accountSlug));
     if (data.slug) updateTag(tutTag(accountSlug, data.slug));
+  } catch (e) {
+    console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Alle Hubs invalidieren, in denen eine globale Vorlage vorkommt (Konten mit einer
+ * account_templates-Zeile — aktiviert, abgeschaltet oder angepasst). Die Tutorial- und
+ * Druckseiten tragen den Hub-Tag mit, fallen also mit. Für Admin-Änderungen an Vorlagen
+ * (zurückziehen/löschen/veröffentlichen/Kategorie/Inhalt); VOR einem Delete aufrufen.
+ * Wirft nie.
+ */
+export async function invalidateTemplateHubs(templateId: string): Promise<void> {
+  try {
+    const { data } = await createAdminClient()
+      .from("account_templates")
+      .select("accounts(slug)")
+      .eq("template_id", templateId);
+    const slugs = new Set<string>();
+    for (const row of data ?? []) {
+      const acc = Array.isArray(row.accounts) ? row.accounts[0] : row.accounts;
+      const slug = (acc as { slug?: string } | null)?.slug;
+      if (slug) slugs.add(slug);
+    }
+    for (const slug of slugs) {
+      // updateTag gibt es nur in Server-Actions; läuft das hier im Hintergrund (after(),
+      // z. B. nach der Vorlagen-Übersetzung), greift revalidateTag (stale-while-revalidate).
+      try {
+        updateTag(hubTag(slug));
+      } catch {
+        revalidateTag(hubTag(slug), "max");
+      }
+    }
   } catch (e) {
     console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
   }

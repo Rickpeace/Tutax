@@ -47,39 +47,53 @@ export function ChatWidget({
     role: "bot",
     text: translate(lang, "chatGreeting", { name: accountName }),
   };
-  const storageKey = `tutax-chat-${accountSlug}`;
+  // Ein Gespräch JE SPRACHE: nach dem Sprachwechsel soll nicht die deutsche Begrüßung
+  // (und ein deutsches Gespräch) stehen bleiben. Deutsch behält den bisherigen Schlüssel,
+  // damit bestehende Gespräche erhalten bleiben.
+  const storageKey = lang === "de" ? `tutax-chat-${accountSlug}` : `tutax-chat-${accountSlug}-${lang}`;
 
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([greeting]);
-  const [hydrated, setHydrated] = useState(false);
+  // Für welchen Schlüssel ist `msgs` geladen? Gespeichert wird erst, wenn er zum aktuellen
+  // passt — sonst landete beim Sprachwechsel das alte Gespräch unter dem neuen Schlüssel.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const hydrated = loadedKey !== null;
+  const firstLoadRef = useRef(true);
   const [status, setStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Gespräch aus localStorage wiederherstellen (übersteht Navigieren/Reload).
+  // Gespräch aus localStorage wiederherstellen (übersteht Navigieren/Reload) — beim ersten
+  // Rendern und erneut, wenn die Sprache wechselt (die Komponente bleibt dabei gemountet).
   useEffect(() => {
+    let restored: Msg[] | null = null;
+    let savedOpen: boolean | null = null;
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: einmalige Gesprächs-Wiederherstellung aus localStorage nach Mount (hydration-sicher), kein Cascade
-        if (Array.isArray(saved?.msgs) && saved.msgs.length) setMsgs(saved.msgs);
-        if (typeof saved?.open === "boolean") setOpen(saved.open);
+        if (Array.isArray(saved?.msgs) && saved.msgs.length) restored = saved.msgs;
+        if (typeof saved?.open === "boolean") savedOpen = saved.open;
       }
     } catch {}
-    setHydrated(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Gesprächs-Wiederherstellung aus localStorage nach Mount/Sprachwechsel (hydration-sicher), kein Cascade
+    setMsgs(restored ?? [{ role: "bot", text: translate(lang, "chatGreeting", { name: accountName }) }]);
+    // Offen/zu nur beim ersten Laden übernehmen — ein Sprachwechsel klappt den Chat nicht zu.
+    if (firstLoadRef.current && savedOpen !== null) setOpen(savedOpen);
+    firstLoadRef.current = false;
+    setLoadedKey(storageKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Schlüssel-(=Sprach-)Wechsel
+  }, [storageKey]);
 
   // Gespräch speichern (max. 60 Nachrichten).
   useEffect(() => {
-    if (!hydrated) return;
+    if (loadedKey !== storageKey) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify({ msgs: msgs.slice(-60), open }));
     } catch {}
-  }, [msgs, open, hydrated, storageKey]);
+  }, [msgs, open, loadedKey, storageKey]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });

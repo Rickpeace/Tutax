@@ -32,12 +32,24 @@ export async function GET() {
     }
   }
   var account = "";
-  try { account = new URL(me.src).searchParams.get("account") || ""; } catch (e) {}
+  var lang = "";
+  try {
+    var params = new URL(me.src).searchParams;
+    account = params.get("account") || "";
+    lang = params.get("lang") || "";
+  } catch (e) {}
   if (!account) return;
+  // Sprache (optional): ?lang= am Script, sonst die Sprache der Website (<html lang="en-GB">
+  // -> "en"). Die Chat-Seite nimmt sie nur, wenn das Konto sie aktiviert hat, sonst Deutsch.
+  if (!lang) {
+    try { lang = (document.documentElement.getAttribute("lang") || "").split("-")[0]; } catch (e) {}
+  }
+  lang = String(lang).toLowerCase().replace(/[^a-z]/g, "").slice(0, 5);
 
   var CLOSED = 76;
   var iframe = document.createElement("iframe");
-  iframe.src = ORIGIN + "/h/" + encodeURIComponent(account) + "/chat?embedded=1";
+  iframe.src = ORIGIN + "/h/" + encodeURIComponent(account) + "/chat?embedded=1" +
+    (lang && lang !== "de" ? "&lang=" + encodeURIComponent(lang) : "");
   iframe.title = "Hilfe-Assistent";
   iframe.setAttribute("allowtransparency", "true");
   iframe.style.cssText = [
@@ -51,7 +63,10 @@ export async function GET() {
     "z-index:2147483000",
     "border-radius:9999px",
     "box-shadow:none",
-    "transition:width .18s ease, height .18s ease, border-radius .18s ease",
+    // Erst zeigen, wenn der Chat-Knopf bereit ist (meldet sich per postMessage) — sonst
+    // blitzt während des Ladens eine farbige Fläche im runden Rahmen auf.
+    "opacity:0",
+    "transition:width .18s ease, height .18s ease, border-radius .18s ease, opacity .18s ease",
     "color-scheme:normal"
   ].join(";");
 
@@ -70,6 +85,7 @@ export async function GET() {
     if (ev.origin !== ORIGIN) return;
     var d = ev.data;
     if (!d || typeof d !== "object") return;
+    if (d.steply === "chat-open" || d.steply === "chat-close") iframe.style.opacity = "1";
     if (d.steply === "chat-open") setOpen();
     else if (d.steply === "chat-close") setClosed();
   });

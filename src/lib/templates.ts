@@ -90,7 +90,7 @@ export async function getCatalog(
         categoryId: t.category_id ?? row.category_id ?? fork.category_id,
         kind: "fork",
         enabled: !!row.enabled,
-        visible: !!row.enabled && fork.status === "published",
+        visible: !!row.enabled && fork.status === "published" && fork.visibility === "public",
       });
     } else {
       entries.push({
@@ -110,24 +110,63 @@ export async function getCatalog(
     }
   }
 
-  return entries;
+  // Gleicher Slug mehrfach sichtbar (Altbestand: eigene Anleitung heißt wie eine später
+  // veröffentlichte Vorlage) -> nur EIN Eintrag, in derselben Rangfolge wie
+  // resolveCustomerTutorial: eigene vor angepasster Vorlage vor Standard-Vorlage. Sonst
+  // zeigte der Hub zwei Karten mit derselben Adresse, von denen eine nie erreichbar ist.
+  const rank = { own: 0, fork: 1, standard: 2 } as const;
+  const winner = new Map<string, CatalogEntry>();
+  for (const e of entries) {
+    if (!e.visible || !e.slug) continue;
+    const cur = winner.get(e.slug);
+    if (!cur || rank[e.kind] < rank[cur.kind]) winner.set(e.slug, e);
+  }
+  return entries.map((e) =>
+    e.visible && e.slug && winner.get(e.slug) !== e ? { ...e, visible: false } : e,
+  );
 }
 
-/** Welche Tutorial-ID gehört zum öffentlichen Slug eines Accounts? (Hub-Viewer) */
+/**
+ * Welche Tutorial-ID gehört zum öffentlichen Slug eines Accounts? (Hub-Viewer, Druck)
+ *
+ * Reihenfolge (gleich wie im Hub-Katalog):
+ *  1. eigene, veröffentlichte + öffentliche Anleitung, die KEINE angepasste Vorlage ist
+ *  2. angepasste Vorlage (Fork) — nur solange die Vorlage beim Kunden aktiviert UND
+ *     zentral noch veröffentlicht ist. Sonst bliebe eine abgeschaltete Kopie über ihre
+ *     URL, die Druckansicht und den Chatbot erreichbar, obwohl der Hub sie verbirgt.
+ *  3. Standard-Vorlage mit diesem Slug (wenn aktiviert)
+ */
 export async function resolveCustomerTutorial(
   client: SupabaseClient,
   accountId: string,
   slug: string,
 ): Promise<string | null> {
-  const { data: own } = await client
-    .from("tutorials")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .maybeSingle();
-  if (own) return own.id;
+  const [{ data: own }, { data: ats }] = await Promise.all([
+    client
+      .from("tutorials")
+      .select("id")
+      .eq("account_id", accountId)
+      .eq("slug", slug)
+      .eq("status", "published")
+      .eq("visibility", "public")
+      .order("created_at", { ascending: true }),
+    client
+      .from("account_templates")
+      .select("template_id, enabled, forked_tutorial_id")
+      .eq("account_id", accountId),
+  ]);
+  const atsList = (ats ?? []) as { template_id: string; enabled: boolean | null; forked_tutorial_id: string | null }[];
+  const forkRow = new Map(
+    atsList.filter((a) => a.forked_tutorial_id).map((a) => [a.forked_tutorial_id as string, a]),
+  );
+
+  const ownRows = own ?? [];
+  const plain = ownRows.find((o) => !forkRow.has(o.id));
+  if (plain) return plain.id;
+  for (const o of ownRows) {
+    const at = forkRow.get(o.id);
+    if (at?.enabled && (await templatePublished(client, at.template_id))) return o.id;
+  }
 
   const { data: tpl } = await client
     .from("tutorials")
@@ -135,15 +174,12 @@ export async function resolveCustomerTutorial(
     .eq("is_template", true)
     .eq("status", "published")
     .eq("slug", slug)
+    .order("created_at", { ascending: true })
+    .limit(1)
     .maybeSingle();
   if (!tpl) return null;
 
-  const { data: at } = await client
-    .from("account_templates")
-    .select("enabled, forked_tutorial_id")
-    .eq("account_id", accountId)
-    .eq("template_id", tpl.id)
-    .maybeSingle();
+  const at = atsList.find((a) => a.template_id === tpl.id);
   if (!at?.enabled) return null;
 
   // Fork: NUR ausliefern, wenn die eigene Kopie selbst veröffentlicht ist. Sonst wäre ein
@@ -158,4 +194,36 @@ export async function resolveCustomerTutorial(
     return fork && fork.status === "published" && fork.visibility === "public" ? fork.id : null;
   }
   return tpl.id;
+}
+
+/** Ist die globale Vorlage (noch) veröffentlicht? */
+async function templatePublished(client: SupabaseClient, templateId: string): Promise<boolean> {
+  const { data } = await client
+    .from("tutorials")
+    .select("id")
+    .eq("id", templateId)
+    .eq("is_template", true)
+    .eq("status", "published")
+    .maybeSingle();
+  return !!data;
+}
+
+/**
+ * Darf eine angepasste Vorlage (Fork) öffentlich erscheinen (Hub-URL, Druck, Chatbot,
+ * Sitemap)? Nur, wenn der Kunde die Vorlage aktiviert hat und sie zentral noch
+ * veröffentlicht ist. Für Nicht-Forks immer true. Eine Quelle für Viewer, Index, Sitemap.
+ */
+export async function forkIsServable(
+  client: SupabaseClient,
+  accountId: string,
+  tutorialId: string,
+): Promise<boolean> {
+  const { data: at } = await client
+    .from("account_templates")
+    .select("template_id, enabled")
+    .eq("account_id", accountId)
+    .eq("forked_tutorial_id", tutorialId)
+    .maybeSingle();
+  if (!at) return true; // kein Fork
+  return !!at.enabled && (await templatePublished(client, at.template_id));
 }
