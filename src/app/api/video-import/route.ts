@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { activeAccountId, getCurrentUser } from "@/lib/account";
 import { safeFetch } from "@/lib/ssrf";
+import {
+  PLAN_LIMIT_CODE,
+  TUTORIAL_QUOTA_MESSAGE,
+  tutorialQuotaReachedFor,
+} from "@/lib/tutorial-quota";
 
 // Import per direktem Video-Link (MP4/WebM). Lädt selbst herunter (SSRF-geschützt),
 // prüft Typ + Größe, legt Video im privaten Bucket ab und reiht einen video_job ein.
@@ -53,6 +58,11 @@ export async function POST(req: NextRequest) {
   const categoryId = typeof body?.categoryId === "string" && body.categoryId ? body.categoryId : null;
   const topic = typeof body?.topic === "string" ? body.topic.trim().slice(0, 120) : "";
   if (!url) return NextResponse.json({ error: "URL fehlt" }, { status: 400 });
+
+  // Free-Limit VOR dem Herunterladen: jeder Import wird zu einer NEUEN Anleitung.
+  if (await tutorialQuotaReachedFor(createAdminClient(), accountId)) {
+    return NextResponse.json({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, { status: 403 });
+  }
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   try {
     new URL(url);

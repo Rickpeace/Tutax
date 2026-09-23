@@ -8,6 +8,7 @@ import {
   type AutomationStepView,
   type AutomationRunView,
 } from "@/components/app/automation-detail";
+import { effectiveRunStatus } from "@/components/app/automation-run-status";
 
 /**
  * Automation-Detail (Welle 36): Titel (editierbar), Parameter-Tabelle, Schritt-Vorschau,
@@ -84,7 +85,8 @@ export default async function AutomationDetailPage({
 
   const runs: AutomationRunView[] = (runsData ?? []).map((r) => ({
     id: r.id as string,
-    status: r.status as string,
+    // Nie zurückgemeldete Läufe (> 1 h „running“) als „Abgebrochen“ zeigen.
+    status: effectiveRunStatus(r.status as string, r.started_at as string | null),
     mode: r.mode as string,
     // Auslöser (Welle 41): manuell (Panel) vs. geplant (Wecker). Bestandsläufe: default 'manual'.
     trigger: (r.trigger as string | null) === "scheduled" ? "scheduled" : "manual",

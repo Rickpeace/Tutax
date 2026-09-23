@@ -3,7 +3,8 @@ import { Zap, Globe, ChevronRight } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { relativeDe } from "@/lib/format";
-import { RunStatusBadge } from "@/components/app/automation-run-status";
+import { RunStatusBadge, effectiveRunStatus } from "@/components/app/automation-run-status";
+import { countAutomationSteps } from "@/lib/automation-step-counts";
 import { PageHeader } from "@/components/app/page-header";
 
 /**
@@ -24,29 +25,30 @@ export default async function AutomationenPage() {
   const automations = rows ?? [];
   const ids = automations.map((a) => a.id as string);
 
-  // Schrittzahl + letzter Lauf je Automation: je EINE Query (kein N+1), in JS aggregiert.
-  const stepCount = new Map<string, number>();
+  // Schrittzahl (seitenweise, keine 1000er-Kappung) + NUR der jüngste Lauf je Automation
+  // (je eine limit(1)-Abfrage, parallel — früher wurden ALLE Läufe aller Automationen geladen).
   const lastRun = new Map<string, { status: string; started_at: string }>();
-  if (ids.length) {
-    const [{ data: steps }, { data: runs }] = await Promise.all([
-      supabase.from("automation_steps").select("automation_id").in("automation_id", ids),
-      supabase
-        .from("automation_runs")
-        .select("automation_id, status, started_at")
-        .in("automation_id", ids)
-        .order("started_at", { ascending: false }),
-    ]);
-    for (const s of steps ?? []) {
-      const k = s.automation_id as string;
-      stepCount.set(k, (stepCount.get(k) ?? 0) + 1);
-    }
-    for (const r of runs ?? []) {
-      const k = r.automation_id as string;
-      if (!lastRun.has(k)) {
-        lastRun.set(k, { status: r.status as string, started_at: r.started_at as string });
-      }
-    }
-  }
+  const [stepCount] = await Promise.all([
+    countAutomationSteps(supabase, ids),
+    Promise.all(
+      ids.map(async (id) => {
+        const { data } = await supabase
+          .from("automation_runs")
+          .select("status, started_at")
+          .eq("automation_id", id)
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          lastRun.set(id, {
+            // Nie zurückgemeldete Läufe (> 1 h „running“) als „Abgebrochen“ zeigen.
+            status: effectiveRunStatus(data.status as string, data.started_at as string | null),
+            started_at: data.started_at as string,
+          });
+        }
+      }),
+    ),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">

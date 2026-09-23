@@ -55,7 +55,13 @@ export function recorderPreflight() {
   return new NextResponse(null, { status: 204, headers: RECORDER_CORS });
 }
 
-export type RecorderAccount = { id: string; name: string; slug: string };
+export type RecorderAccount = {
+  id: string;
+  name: string;
+  slug: string;
+  /** Person hinter dem Token (für personenbezogene Kostenbremsen, z. B. KI-Feinschliff). */
+  userId: string;
+};
 
 /**
  * Token → Konto. Gibt das Konto zurück oder null (unbekannt/leer/kein String).
@@ -86,7 +92,12 @@ export async function accountForRecorderToken(token: unknown): Promise<RecorderA
   ]);
   if (!data || !member || (member.role !== "owner" && member.role !== "editor")) return null;
   touchRecorderToken(t);
-  return { id: data.id as string, name: data.name as string, slug: data.slug as string };
+  return {
+    id: data.id as string,
+    name: data.name as string,
+    slug: data.slug as string,
+    userId: tok.user_id as string,
+  };
 }
 
 // „Zuletzt genutzt" (Migration 0041) gedrosselt pflegen: höchstens alle 10 Minuten je Token

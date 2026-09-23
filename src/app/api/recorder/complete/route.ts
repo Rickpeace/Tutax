@@ -4,8 +4,14 @@ import {
   accountForRecorderToken,
   recorderJson,
   recorderPreflight,
+  VIDEO_BUCKET,
 } from "@/lib/recorder";
-import { validateClicksOrNull } from "@/lib/clicks";
+import { MAX_CLICKS, validateClicksOrNull } from "@/lib/clicks";
+import {
+  PLAN_LIMIT_CODE,
+  TUTORIAL_QUOTA_MESSAGE,
+  tutorialQuotaReachedFor,
+} from "@/lib/tutorial-quota";
 
 // Steply-Recorder-Direkt-Upload, Schritt 2: complete.
 // Nachdem die Extension das Video an die signierte URL hochgeladen hat, meldet sie
@@ -44,9 +50,21 @@ export async function POST(req: NextRequest) {
   // Klicks: streng validieren, aber NICHT hart scheitern — kaputte Klicks werden
   // verworfen und das Tutorial trotzdem erstellt (gleiche Regeln wie video-upload.tsx,
   // Logik in src/lib/clicks.ts). Nur wenn valide → als jsonb in die Row.
-  const clicks = body?.clicks === undefined ? null : validateClicksOrNull(body.clicks);
+  // Mehr als MAX_CLICKS (lange Aufnahmen): die ersten MAX_CLICKS behalten statt ALLE zu
+  // verwerfen (validateClicks lehnt Listen > MAX_CLICKS komplett ab).
+  const rawClicks = Array.isArray(body?.clicks) ? body.clicks.slice(0, MAX_CLICKS) : body?.clicks;
+  const clicks = rawClicks === undefined ? null : validateClicksOrNull(rawClicks);
 
   const admin = createAdminClient();
+
+  // Free-Limit: jede Video-Aufnahme wird zu einer NEUEN Anleitung (der Worker prüft kurz vor dem
+  // Anlegen noch einmal, falls zwischendurch weitere entstanden sind).
+  if (await tutorialQuotaReachedFor(admin, account.id)) {
+    // Das hochgeladene Video bleibt sonst verwaist liegen (die Erweiterung lädt es lokal herunter).
+    await admin.storage.from(VIDEO_BUCKET).remove([path]).catch(() => {});
+    return recorderJson({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, 403);
+  }
+
   const row: Record<string, unknown> = {
     account_id: account.id,
     video_path: path,

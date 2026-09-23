@@ -29,6 +29,15 @@ Letztes Update: 2026-09-22 (Editor-Überarbeitung + KI-Texte + Eingaben, s. §7i
 > - **Geparkt:** „Aktualität prüfen“-Umbau (Text vs. Screenshot) auf Branch
 >   `welle-53-drift-text-vs-screenshot` — Richard: „erstmal weglassen“.
 > - **Parallel (andere Sitzung):** Team-Rollen Inhaber/Bearbeiter/Mitarbeiter, Migrationen 0037–0040.
+> - **Erweiterung v2.19.2 (23.09.2026, Branch `fix-extension-0923`):** Seiten-Brücke nur noch
+>   von echten Steply-Adressen (`STEPLY_TRUSTED_APP_ORIGINS` in background.js; localhost nur
+>   ohne Store-Installation) + Herkunft aus dem Chrome-Sender — vorher konnte jede Website die
+>   Erweiterung auf ihren Server umbiegen. Free-Limit schon im Handshake (403 `plan_limit`,
+>   `src/lib/tutorial-quota.ts`) und für Video (recorder/handshake+complete, video-import,
+>   Browser-Upload, Worker); guide-complete idempotent über den Upload-Ordner; >500 Klicks →
+>   erste 500; Läufe melden beim Schließen „abgebrochen“ (alte „Läuft“ > 1 h = Abgebrochen);
+>   401 räumt Zeitplan-Wecker; KI-Feinschliff nach Aufnahme max. 30/h je Person.
+>   Tests: `scripts/test-bridge-origin.mjs` (neu), `test:panel` Abschnitt 10.
 > - **Mehrere Erweiterungs-Verbindungen je Person (22.09.2026):** Migration **0041** (`recorder_multi_connection`) am 22.09.2026 LIVE angewendet (nach Code-Deploy); `test-recorder-connections-live` (26/26), `test-recorder-live`, `test-team-live` grün. Extension v2.18.6 (inkl. TradingView-Schalter-Fix: role=row/treeitem/aria-checked/aria-pressed gelten als interaktiv).
 
 ## 7h. Live-Führung + Seiten-Erkennung (06.07.2026, Wellen 31a–d) — LIVE, Extension v2.5.1

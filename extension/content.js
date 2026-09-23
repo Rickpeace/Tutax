@@ -103,8 +103,12 @@
   //   - event.data.__steply === true UND type === "steply-pair"
   //   - token ein plausibler String (Laenge gekappt)
   // Dann reichen wir NUR den Token an background.js weiter - mit appUrl = event.origin
-  // (der verifizierten Herkunft, NICHT einem im Payload behaupteten Wert). background.js
-  // validiert den Token GEGEN die Ziel-App, BEVOR etwas gespeichert wird. Das Ergebnis
+  // (der verifizierten Herkunft, NICHT einem im Payload behaupteten Wert). ACHTUNG: Diese
+  // Pruefungen halten nur fremde Fenster ab — das Script JEDER Seite besteht sie. Die
+  // eigentliche Grenze zieht background.js (v2.19.2): nur feste Steply-Adressen, Herkunft
+  // aus dem Chrome-Sender; gleiches gilt fuer steply-open-panel/steply-record-into (nur von
+  // der gekoppelten App). background.js validiert zudem den Token GEGEN die Ziel-App, BEVOR
+  // etwas gespeichert wird. Das Ergebnis
   // (inkl. Kontoname) posten wir an die Seite zurueck -> sie zeigt Erfolg/Fehler an.
   function postPairResult(payload) {
     try {

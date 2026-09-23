@@ -205,6 +205,27 @@ async function rewireLinear(tutId, rows) {
   await sb.from("tutorials").update({ root_step_id: rows[0].id }).eq("id", tutId);
 }
 
+// Free-Limit (v2.19.2): spiegelt src/lib/tutorial-quota.ts (FREE_TUTORIAL_LIMIT in
+// src/lib/plan.ts — bei Änderung BEIDE Stellen anpassen). Eigene Tutorials OHNE Template-Forks;
+// Pro/Business unbegrenzt. Die App prüft schon beim Einreihen; hier maßgeblich, weil Aufträge
+// auch direkt aus dem Browser entstehen und mehrere gleichzeitig eingereiht sein können.
+const FREE_TUTORIAL_LIMIT = 5;
+const TUTORIAL_QUOTA_MESSAGE =
+  "Der kostenlose Tarif erlaubt keine weiteren Anleitungen. Einen größeren Tarif wählen Sie in Steply unter „Einstellungen → Tarif“.";
+// Kann die Prüfung selbst nicht lesen (DB-Aussetzer), läuft der Auftrag weiter — eine Aufnahme
+// geht nicht wegen eines Zähl-Fehlers verloren (die App hat beim Einreihen schon geprüft).
+async function assertTutorialQuota(accountId) {
+  const { data: acc, error: aErr } = await sb.from("accounts").select("plan").eq("id", accountId).maybeSingle();
+  if (aErr) { console.error("  Tarif-Prüfung übersprungen:", aErr.message); return; }
+  if (acc?.plan === "pro" || acc?.plan === "business") return;
+  const [{ count: total, error: tErr }, { count: forks, error: fErr }] = await Promise.all([
+    sb.from("tutorials").select("id", { count: "exact", head: true }).eq("account_id", accountId),
+    sb.from("account_templates").select("template_id", { count: "exact", head: true }).eq("account_id", accountId).not("forked_tutorial_id", "is", null),
+  ]);
+  if (tErr || fErr) { console.error("  Tarif-Prüfung übersprungen:", (tErr || fErr).message); return; }
+  if ((total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT) throw new Error(TUTORIAL_QUOTA_MESSAGE);
+}
+
 async function buildTutorial(job, videoPath, dir) {
   // Dauer aus dem Header, sonst aus dem letzten Paket (WebM ohne Dauer-Metadaten).
   const duration = probeVideoDuration(videoPath);
@@ -395,6 +416,9 @@ async function buildTutorial(job, videoPath, dir) {
   // 3) LIVE-AUFBAU: Tutorial FRÜH anlegen, dann pro fertigem Schritt einzeln inserten.
   //    So erscheint der Entwurf schon während der Verarbeitung auf dem Dashboard und
   //    wächst Schritt für Schritt (statt Big-Bang am Ende).
+  // Free-Limit direkt vor dem Anlegen erneut prüfen (während der KI-Analyse kann eine andere
+  // Anleitung entstanden sein). Wirft mit deutscher Meldung → Job „failed“ mit diesem Grund.
+  await assertTutorialQuota(job.account_id);
   const tutId = uuid();
   const rows = [];          // erfolgreich eingefügte Step-Rows (für Cleanup + Wiring)
   const branchIds = [];     // eingefügte Branch-IDs (für Cleanup)
@@ -739,6 +763,8 @@ function resolveBrandLogo(theme) {
 }
 
 async function processJob(job) {
+  // Free-Limit schon VOR Download + KI-Kosten (buildTutorial prüft vor dem Anlegen noch einmal).
+  await assertTutorialQuota(job.account_id);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
     const raw = path.join(tmp, "in");

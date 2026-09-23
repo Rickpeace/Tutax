@@ -6,6 +6,11 @@ import {
   recorderPreflight,
   VIDEO_BUCKET,
 } from "@/lib/recorder";
+import {
+  PLAN_LIMIT_CODE,
+  TUTORIAL_QUOTA_MESSAGE,
+  tutorialQuotaReachedFor,
+} from "@/lib/tutorial-quota";
 
 // Steply-Recorder-Direkt-Upload, Schritt 1: Handshake.
 // Die Extension schickt ihren Verbindungs-Token; wir prüfen ihn (Admin-Client, keine
@@ -25,8 +30,14 @@ export async function POST(req: NextRequest) {
     return recorderJson({ error: "Ungültiger oder unbekannter Verbindungs-Token." }, 401);
   }
 
-  const path = `${account.id}/${crypto.randomUUID()}.webm`;
   const admin = createAdminClient();
+  // Free-Limit VOR dem Video-Upload (sonst lädt die Erweiterung das ganze Video hoch, und erst
+  // complete lehnt ab). complete + Worker prüfen zusätzlich.
+  if (await tutorialQuotaReachedFor(admin, account.id)) {
+    return recorderJson({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, 403);
+  }
+
+  const path = `${account.id}/${crypto.randomUUID()}.webm`;
   const { data, error } = await admin.storage
     .from(VIDEO_BUCKET)
     .createSignedUploadUrl(path);

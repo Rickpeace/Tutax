@@ -35,6 +35,7 @@ import {
   BUSINESS_REQUIRED,
   audienceGateError,
 } from "@/lib/plan";
+import { TUTORIAL_QUOTA_MESSAGE } from "@/lib/tutorial-quota";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
@@ -62,6 +63,17 @@ async function tutorialQuotaReached(
       .not("forked_tutorial_id", "is", null),
   ]);
   return (total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT;
+}
+
+/**
+ * Vorab-Prüfung für den Video-Upload im Browser (video-upload.tsx): Free-Limit erreicht? Dann
+ * die deutsche Meldung, sonst null — BEVOR das Video hochgeladen und der Auftrag eingereiht
+ * wird. Der Video-Worker prüft kurz vor dem Anlegen noch einmal (maßgeblich).
+ */
+export async function videoUploadQuotaError(): Promise<string | null> {
+  const { account } = await requireAccount();
+  const supabase = await createClient();
+  return (await tutorialQuotaReached(supabase, account)) ? TUTORIAL_QUOTA_MESSAGE : null;
 }
 
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */

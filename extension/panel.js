@@ -1098,7 +1098,9 @@ function setUploadProgress(text) {
 
 function showUploadError(message, videoBlob, clicksBlob) {
   setStatus(
-    "Das Hochladen hat nicht geklappt – die Dateien wurden stattdessen heruntergeladen.",
+    /Tarif/i.test(String(message || ""))
+      ? "Tarif-Grenze erreicht – Einstellungen → Tarif. Die Dateien wurden stattdessen heruntergeladen."
+      : "Das Hochladen hat nicht geklappt – die Dateien wurden stattdessen heruntergeladen.",
     "error",
     message
   );
@@ -2454,12 +2456,17 @@ async function runGuideUpload() {
     result = await uploadGuide();
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
-    els.guideErrorText.textContent = guideUploadErrorText(msg);
+    const planLimit = isPlanLimitError(err);
+    els.guideErrorText.textContent = planLimit ? GUIDE_PLAN_LIMIT_TEXT : guideUploadErrorText(msg);
     els.guideErrorText.title = msg; // Technik-Detail nur als Tooltip
+    // Tarif-Grenze: „Erneut versuchen“ hilft nicht (lädt nur wieder hoch) → Knopf weg; die
+    // Schritte bleiben über „Zurück zur Prüfung“ erhalten (z. B. nach einem Tarif-Wechsel).
+    els.guideRetry.hidden = planLimit;
     setGuideUploadState("error");
     return;
   }
   // Erfolg: jetzt erst ist die Aufnahme abgeschlossen.
+  guideUploadSession = null;
   guidePhase = "idle";
   guideFinishing = false;
   guideExtraTabs.clear();
@@ -2469,9 +2476,32 @@ async function runGuideUpload() {
   await clearPendingTarget();
 }
 
+// Tarif-Grenze (v2.19.2): der Server lehnt mit 403 + code "plan_limit" ab (seit v2.19.2 schon
+// im Handshake, also BEVOR Screenshots hochgeladen werden). Kein „versuchen Sie es erneut“.
+const GUIDE_PLAN_LIMIT_TEXT =
+  "Tarif-Grenze erreicht – Ihr kostenloser Tarif erlaubt keine weiteren Anleitungen. Einen größeren Tarif wählen Sie in Steply unter Einstellungen → Tarif. Ihre Schritte bleiben erhalten.";
+
+function planLimitError(status, body) {
+  const err = new Error((body && body.error) || "Tarif-Grenze erreicht (" + status + ")");
+  err.code = "plan_limit";
+  return err;
+}
+
+// 403 mit code "plan_limit" (neue Server) ODER Tarif-Meldung (ältere Server ohne code).
+function isPlanLimitResponse(status, body) {
+  if (status !== 403) return false;
+  if (body && body.code === "plan_limit") return true;
+  return /Tarif/i.test(String((body && body.error) || ""));
+}
+
+function isPlanLimitError(err) {
+  return !!(err && err.code === "plan_limit");
+}
+
 // Menschliche Fehlermeldung (der technische Grund steht nur im title).
 function guideUploadErrorText(msg) {
   const m = String(msg || "");
+  if (/Tarif/i.test(m)) return GUIDE_PLAN_LIMIT_TEXT;
   if (/Failed to fetch|NetworkError|Netzwerk/i.test(m)) {
     return "Steply ist gerade nicht erreichbar. Prüfen Sie die Internetverbindung und versuchen Sie es erneut. Ihre Schritte bleiben erhalten.";
   }
@@ -2511,33 +2541,84 @@ function guideBackToReview() {
   renderGuidePhase();
 }
 
+// Upload-Sitzung (v2.19.2): „Erneut versuchen“ nutzt denselben Handshake (gleicher Upload-
+// Ordner = Wiederholungs-Schlüssel von guide-complete) und lädt nur fehlende Bilder nach —
+// statt bei jedem Versuch alle Screenshots in einen neuen Ordner zu laden und bei verlorener
+// Antwort eine zweite Anleitung anzulegen. Gilt nur, solange Schritte, Ziel, Verbindung und
+// App-Adresse unverändert sind und die signierten URLs (~2 h) sicher noch gültig sind.
+let guideUploadSession = null; // { steps, intoTarget, base, token, at, hs, uploaded:Set }
+const GUIDE_UPLOAD_SESSION_TTL = 90 * 60 * 1000;
+
+function reusableGuideUploadSession(base, intoTarget) {
+  const s = guideUploadSession;
+  if (!s) return null;
+  if (s.base !== base || s.token !== cfg.token || s.intoTarget !== intoTarget) return null;
+  if (Date.now() - s.at > GUIDE_UPLOAD_SESSION_TTL) return null;
+  if (s.steps.length !== guideSteps.length) return null;
+  for (let i = 0; i < guideSteps.length; i++) {
+    if (s.steps[i] !== guideSteps[i]) return null;
+  }
+  return s;
+}
+
+// Liegt das Bild schon im Speicher (erster Versuch kam an, nur die Antwort ging verloren)?
+// Supabase meldet das als 409 bzw. 400 mit „Duplicate“/„already exists“ — der Pfad gehört
+// exklusiv zu diesem Handshake, also ist es unser eigenes Bild.
+async function isAlreadyUploaded(put) {
+  if (put.status === 409) return true;
+  if (put.status !== 400) return false;
+  const text = await put.text().catch(() => "");
+  return /Duplicate|already exists/i.test(text);
+}
+
 async function uploadGuide() {
   const base = appBase();
   setGuideProgress("Verbindung zu Steply wird hergestellt …", 0.05);
+  // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.
+  const uploadTarget = targetForUpload();
 
-  // 1) Handshake: N signierte Upload-URLs.
+  // 1) Handshake: N signierte Upload-URLs (bei „Erneut versuchen“ die bisherigen).
   const count = guideSteps.length;
-  const hsRes = await fetch(base + "/api/recorder/guide-handshake", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: cfg.token, count }),
-  });
-  const hs = await hsRes.json().catch(() => ({}));
-  if (!hsRes.ok || !Array.isArray(hs.uploads) || hs.uploads.length !== count) {
-    throw new Error(hs.error || "Handshake fehlgeschlagen (" + hsRes.status + ")");
+  let session = reusableGuideUploadSession(base, !!uploadTarget);
+  if (!session) {
+    const hsRes = await fetch(base + "/api/recorder/guide-handshake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // intoTarget (v2.19.2): false = neue Anleitung → der Server prüft die Tarif-Grenze
+      // schon hier, bevor ein einziger Screenshot hochgeladen wird.
+      body: JSON.stringify({ token: cfg.token, count, intoTarget: !!uploadTarget }),
+    });
+    const hsBody = await hsRes.json().catch(() => ({}));
+    if (isPlanLimitResponse(hsRes.status, hsBody)) throw planLimitError(hsRes.status, hsBody);
+    if (!hsRes.ok || !Array.isArray(hsBody.uploads) || hsBody.uploads.length !== count) {
+      throw new Error(hsBody.error || "Handshake fehlgeschlagen (" + hsRes.status + ")");
+    }
+    session = {
+      steps: guideSteps.slice(),
+      intoTarget: !!uploadTarget,
+      base,
+      token: cfg.token,
+      at: Date.now(),
+      hs: hsBody,
+      uploaded: new Set(),
+    };
+    guideUploadSession = session;
   }
+  const hs = session.hs;
 
-  // 2) Alle WebPs per PUT hochladen (Fortschritt).
+  // 2) Alle (noch fehlenden) WebPs per PUT hochladen (Fortschritt).
   for (let i = 0; i < count; i++) {
+    if (session.uploaded.has(i)) continue;
     setGuideProgress("Screenshot " + (i + 1) + " von " + count + " wird hochgeladen …", 0.1 + (0.75 * i) / count);
     const put = await fetch(hs.uploads[i].uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": guideSteps[i].blob.type || "image/webp" },
       body: guideSteps[i].blob,
     });
-    if (!(put.status >= 200 && put.status < 300)) {
+    if (!(put.status >= 200 && put.status < 300) && !(await isAlreadyUploaded(put))) {
       throw new Error("Bild " + (i + 1) + " (" + put.status + ")");
     }
+    session.uploaded.add(i);
   }
 
   // 3) Complete: Entwurf anlegen.
@@ -2567,8 +2648,6 @@ async function uploadGuide() {
     if (s.action === "type" && s.typedValue) step.typed_value = s.typedValue;
     return step;
   });
-  // Aufnahme-Anker (Welle 27): Ziel nur mitschicken, wenn die Herkunft zur App-URL passt.
-  const uploadTarget = targetForUpload();
   const completeBody = { token: cfg.token, steps };
   if (uploadTarget) completeBody.target = uploadTarget;
   // Titel + Kategorie (Welle 31d): NUR im Neu-Anleitungs-Modus. guideTitleValue/
@@ -2585,6 +2664,7 @@ async function uploadGuide() {
     body: JSON.stringify(completeBody),
   });
   const comp = await compRes.json().catch(() => ({}));
+  if (isPlanLimitResponse(compRes.status, comp)) throw planLimitError(compRes.status, comp);
   if (!compRes.ok || !comp.tutorialId) {
     throw new Error(comp.error || "Anleitung konnte nicht erstellt werden (" + compRes.status + ")");
   }
@@ -3458,10 +3538,14 @@ try {
 // ============================================================================
 
 // Video-Modus: Klick-Zeitstempel.
+const MAX_VIDEO_CLICKS = 500;
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-click") return;
   if (!mediaRecorder || mediaRecorder.state === "inactive") return;
   if (!fromPanelWindow(sender)) return;
+  // Server-Grenze (src/lib/clicks.ts MAX_CLICKS = 500): mehr Klicks würden früher ALLE Klick-
+  // Marker verwerfen — die ersten 500 behalten (v2.19.2).
+  if (clicks.length >= MAX_VIDEO_CLICKS) return;
   clicks.push(msg.click);
   els.clickCount.textContent = String(clicks.length);
 });
@@ -3782,6 +3866,7 @@ function resetGuide() {
     }
   });
   guideSteps = [];
+  guideUploadSession = null; // alte Upload-Sitzung gehört zur verworfenen Aufnahme
   guideQueue = [];
   guideLastImage = null;
   guideCapturing = false;
@@ -6351,7 +6436,9 @@ async function execPostStart() {
   }
 }
 
-async function execPostFinish(status, detail) {
+// keepalive (v2.19.2): beim Schließen der Seitenleiste (pagehide) muss die Meldung den Abbau
+// des Dokuments überleben — sonst bliebe der Lauf in Steply für immer auf „Läuft“.
+async function execPostFinish(status, detail, keepalive) {
   if (!cfg.token || !exec.runId) return;
   const body = { token: cfg.token, runId: exec.runId, event: "finish", status: status };
   body.currentStep = exec.index + 1;
@@ -6365,6 +6452,7 @@ async function execPostFinish(status, detail) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      keepalive: !!keepalive,
     });
   } catch (err) {
     /* Fehler still — der Lauf ist für den Nutzer trotzdem beendet */
@@ -7181,6 +7269,12 @@ window.addEventListener("pagehide", () => {
   // Der Port bricht beim Dokument-Abbau ohnehin ab → background sendet exec-hide (robust);
   // das direkte hide hier ist nur Best-effort. KEIN Resume — ein Ausführ-Lauf startet nie
   // ungefragt von selbst weiter (Sicherheit).
+  // Läuft ein Lauf noch (gestartet, nicht beendet), in Steply als „abgebrochen“ abschließen —
+  // per keepalive-fetch, der den Abbau der Seitenleiste überlebt (v2.19.2).
+  if (exec.runId && !exec.finished) {
+    exec.finished = true;
+    execPostFinish("aborted", "Seitenleiste geschlossen", true);
+  }
   exec.running = false;
   execPingStop();
   execDisarmDownload();

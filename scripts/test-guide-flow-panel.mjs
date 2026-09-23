@@ -13,6 +13,8 @@
 //      registriertem Popup angenommen, Screenshot aus DESSEN Fenster; nach onRemoved verworfen.
 //   7) Hinweis „kann nicht aufnehmen": chrome://-Tab / Tab ohne Content-Script -> Hinweis;
 //      Nachimpfen + Retry erfolgreich -> kein Hinweis; aufnehmbarer Tab -> Hinweis weg.
+//  10) Hochladen (v2.19.2): Tarif-Grenze im Handshake -> klare Meldung ohne „Erneut versuchen";
+//      Wiederholen nutzt denselben Handshake, lädt nur fehlende Bilder, gleiche Pfade.
 //
 // Nutzung:  node scripts/test-guide-flow-panel.mjs [--shots <verzeichnis>]
 // Playwright wird lokal ODER aus dem npx-Cache aufgeloest (wie test-guide-capture.mjs).
@@ -852,6 +854,96 @@ try {
   await click("again");
   await sleep(4500);
   ok(!(statusHits["job-x"] > 0),"Video-Status: „Neue Aufnahme“ beendet die Abfrage");
+
+  // ---- 10) Sofort-Anleitung hochladen: Tarif-Grenze + Wiederholen (v2.19.2) ----
+  // (a) Tarif-Grenze kommt schon im Handshake (403 plan_limit) → klare Meldung, KEIN
+  //     „Erneut versuchen“, kein einziger Screenshot hochgeladen.
+  // (b) „Erneut versuchen“ nutzt denselben Handshake (Upload-Ordner = Wiederholungs-Schlüssel)
+  //     und lädt nur fehlende Bilder nach; eine verlorene complete-Antwort erzeugt beim
+  //     Wiederholen keinen zweiten Handshake/Upload.
+  const up = { hs: 0, hsBodies: [], puts: {}, failPut1: true, complete: 0, completeBodies: [], limit: true };
+  await page.route(/\/api\/recorder\/guide-handshake/, (r) => {
+    up.hs++;
+    up.hsBodies.push(r.request().postDataJSON());
+    if (up.limit) {
+      return r.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Der kostenlose Tarif erlaubt keine weiteren Anleitungen.", code: "plan_limit" }),
+      });
+    }
+    const n = up.hsBodies[up.hsBodies.length - 1].count;
+    const uploads = Array.from({ length: n }, (_, i) => ({
+      path: `acc/guide-00000000-0000-0000-0000-00000000000${up.hs}/${i}.webp`,
+      uploadUrl: `https://storage.example.test/up/${up.hs}/${i}`,
+      token: "t",
+    }));
+    return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ uploads }) });
+  });
+  await page.route(/storage\.example\.test\/up\//, (r) => {
+    const key = new URL(r.request().url()).pathname;
+    up.puts[key] = (up.puts[key] || 0) + 1;
+    if (up.failPut1 && key.endsWith("/1")) {
+      up.failPut1 = false;
+      return r.fulfill({ status: 500, body: "boom" });
+    }
+    return r.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.route(/\/api\/recorder\/guide-complete/, (r) => {
+    up.complete++;
+    up.completeBodies.push(r.request().postDataJSON());
+    if (up.complete === 1) return r.abort("connectionreset"); // Antwort geht verloren
+    return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ tutorialId: "tut-9" }) });
+  });
+  await page.evaluate(() => show("start"));
+  await click("recStart");
+  await page.waitForFunction(() => guideActive, null, { timeout: 3000 });
+  await sleep(1300);
+  await sendStep(TAB1, "Upload A");
+  ok(await waitSteps(1, 4000), "Upload: Schritt 1 aufgenommen");
+  await sleep(1300);
+  await sendStep(TAB1, "Upload B");
+  ok(await waitSteps(2, 4000), "Upload: Schritt 2 aufgenommen");
+  await click("guideStop");
+  await page.waitForFunction(() => !guideActive, null, { timeout: 4000 });
+  await sleep(1600); // Abschluss-Bild
+  const nUp = (await st()).steps;
+  ok(nUp >= 2, `Upload: gestoppt mit ${nUp} Schritten`);
+
+  await click("guideCreate");
+  await page.waitForFunction(() => !document.getElementById("guideUploadError").hidden, null, { timeout: 5000 }).catch(() => {});
+  ok(await vis("guideUploadError"), "Tarif-Grenze: Fehler-Bildschirm");
+  ok(/Tarif-Grenze erreicht/.test(await page.textContent("#guideErrorText")), "Tarif-Grenze: Meldung „Tarif-Grenze erreicht“");
+  ok(/Einstellungen → Tarif/.test(await page.textContent("#guideErrorText")), "Tarif-Grenze: Weg „Einstellungen → Tarif“ genannt");
+  ok(!(await vis("guideRetry")), "Tarif-Grenze: KEIN „Erneut versuchen“");
+  ok(Object.keys(up.puts).length === 0, "Tarif-Grenze: kein Screenshot hochgeladen");
+  ok(up.hsBodies[0] && up.hsBodies[0].intoTarget === false, "Handshake meldet intoTarget:false (neue Anleitung)");
+  ok((await st()).steps === nUp, "Tarif-Grenze: Schritte bleiben erhalten");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "11-tarif-grenze.png"), fullPage: true });
+
+  await click("guideBackReview");
+  up.limit = false;
+  await click("guideCreate");
+  await page.waitForFunction(() => !document.getElementById("guideUploadError").hidden, null, { timeout: 5000 }).catch(() => {});
+  ok(await vis("guideUploadError") && (await vis("guideRetry")), "Bild-Fehler: Fehler-Bildschirm MIT „Erneut versuchen“");
+  const hsAfterFirst = up.hs;
+  await click("guideRetry");
+  for (let i = 0; i < 50 && up.complete < 1; i++) await sleep(100);
+  await page.waitForFunction(() => !document.getElementById("guideUploadError").hidden, null, { timeout: 5000 }).catch(() => {});
+  ok(up.complete === 1, `Verlorene Antwort: complete einmal gesendet (${up.complete})`);
+  ok(await vis("guideUploadError") && (await vis("guideRetry")), "Verlorene Antwort: Fehler MIT „Erneut versuchen“");
+  await click("guideRetry");
+  await page.waitForFunction(() => !document.getElementById("guideUploadDone").hidden, null, { timeout: 5000 }).catch(() => {});
+  ok(await vis("guideUploadDone"), "Wiederholen: Anleitung fertig");
+  ok(up.hs === hsAfterFirst, `Wiederholen: KEIN neuer Handshake (${up.hs - hsAfterFirst} zusätzlich)`);
+  {
+    const k = (i) => `/up/${hsAfterFirst}/${i}`;
+    ok(up.puts[k(0)] === 1, `Wiederholen: Bild 1 nicht erneut hochgeladen (${up.puts[k(0)]}×)`);
+    ok(up.puts[k(1)] === 2, `Wiederholen: gescheitertes Bild 2 genau einmal nachgeladen (${up.puts[k(1)]}×)`);
+    const pathsA = up.completeBodies[0].steps.map((x) => x.path).join("|");
+    const pathsB = up.completeBodies[1].steps.map((x) => x.path).join("|");
+    ok(up.complete === 2 && pathsA === pathsB, "Wiederholen: complete mit DENSELBEN Bild-Pfaden (Wiederholungs-Schlüssel)");
+  }
 
   ok(pageErrors.length === 0, "keine Seitenfehler" + (pageErrors.length ? ": " + pageErrors.join(" | ") : ""));
 } catch (err) {
