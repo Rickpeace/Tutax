@@ -314,8 +314,12 @@ export function TeamManager({
                       disabled={pending}
                       onClick={() =>
                         start(async () => {
-                          await revokeInvitation(inv.id);
-                          toast.success("Einladung zurückgezogen");
+                          try {
+                            unwrap(await revokeInvitation(inv.id));
+                            toast.success("Einladung zurückgezogen");
+                          } catch (e) {
+                            toast.error(errorText(e, "Zurückziehen fehlgeschlagen"));
+                          }
                         })
                       }
                     >

@@ -10,6 +10,7 @@ import { ROLE_LABEL, asRole, type Role } from "@/lib/roles";
 import { teamLimit } from "@/lib/plan";
 import { INVITE_VALID_DAYS, inviteCutoffIso, isInviteExpired } from "@/lib/invitations";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 
 const appUrl = appBaseUrl;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
@@ -61,6 +62,21 @@ async function requireOwner() {
   return { account, userId, ctx };
 }
 
+/**
+ * Wie requireOwner, aber für Aktionen mit `InviteResult`-Rückgabe: die Ablehnung kommt als
+ * `{ ok: false, message }` zurück statt als Wurf. Sonst sah ein inzwischen herabgestufter
+ * Inhaber (Team-Seite noch offen) beim Einladen/Neu senden im Produktions-Build nur Nexts
+ * englische Standardmeldung bzw. die Fehlerseite.
+ */
+async function ownerOrRejection(): Promise<Awaited<ReturnType<typeof requireOwner>> | InviteResult> {
+  try {
+    return await requireOwner();
+  } catch (e) {
+    if (e instanceof UserError) return { ok: false, message: e.message };
+    throw e;
+  }
+}
+
 /** Eingabe -> gültige Rolle (unbekannt = Bearbeiter, wie bisher der Standard). */
 function parseRole(v: unknown): Role {
   return v === "owner" || v === "member" ? v : "editor";
@@ -96,7 +112,9 @@ async function dropRecorderTokens(admin: ReturnType<typeof createAdminClient>, a
 }
 
 export async function inviteMember(formData: FormData): Promise<InviteResult> {
-  const { account, userId, ctx } = await requireOwner();
+  const owner = await ownerOrRejection();
+  if ("message" in owner) return owner;
+  const { account, userId, ctx } = owner;
   // Org in einem anderen Tab gewechselt -> nicht in die falsche Organisation einladen.
   const switched = orgSwitchedError(formData.get("accountId"), ctx);
   if (switched) return { ok: false, message: switched };
@@ -206,17 +224,22 @@ export async function acceptInvite(
   if (!(await teamHasRoom(admin, inv.account_id, existing?.id ?? ""))) return { ok: false, message: TEAM_FULL };
 
   let userId: string;
+  const isNew = !existing;
   if (existing) {
     // Hat schon ein Konto -> mit dem VORHANDENEN Passwort anmelden (NICHT überschreiben).
     const { error } = await supabase.auth.signInWithPassword({ email: inv.email, password });
-    if (error)
+    if (error) {
+      const wrongPassword = /invalid login credentials/i.test(error.message);
       return {
         ok: false,
-        message: "Das Passwort stimmt nicht. Bitte verwenden Sie das Passwort Ihres bestehenden Kontos – oder setzen Sie es über „Passwort vergessen“ neu.",
+        message: wrongPassword
+          ? "Das Passwort stimmt nicht. Bitte verwenden Sie das Passwort Ihres bestehenden Kontos – oder setzen Sie es über „Passwort vergessen“ neu."
+          : uebersetzeAuthFehler(error.message),
       };
+    }
     userId = existing.id;
   } else {
-    // Neu -> Konto anlegen (Invite-Metadaten => Trigger legt kein Eigen-Konto an) + einloggen.
+    // Neu -> Konto anlegen (Invite-Metadaten => Trigger legt kein Eigen-Konto an).
     if (password.length < 8)
       return { ok: false, message: "Das Passwort muss mindestens 8 Zeichen haben." };
     const { data: created, error } = await admin.auth.admin.createUser({
@@ -225,13 +248,24 @@ export async function acceptInvite(
       email_confirm: true,
       user_metadata: { tutax_invite_token: token },
     });
-    if (error || !created?.user) return { ok: false, message: error?.message ?? "Konto konnte nicht angelegt werden." };
+    if (error || !created?.user) {
+      // Supabase-Texte sind englisch; parallel angelegtes Konto eigens erklären.
+      const taken = !!error && /already (been )?registered|already exists/i.test(error.message);
+      return {
+        ok: false,
+        message: taken
+          ? "Für diese Adresse gibt es inzwischen ein Konto. Bitte laden Sie die Seite neu und melden Sie sich mit dessen Passwort an."
+          : error
+            ? uebersetzeAuthFehler(error.message)
+            : "Konto konnte nicht angelegt werden. Bitte versuchen Sie es erneut.",
+      };
+    }
     userId = created.user.id;
-    const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
-    if (signErr) return { ok: false, message: "Konto angelegt – bitte melden Sie sich jetzt an." };
   }
 
-  // Beitritt (idempotent) + Einladung als akzeptiert markieren.
+  // Beitritt (idempotent) + Einladung als akzeptiert markieren — beim neuen Konto VOR dem
+  // Einloggen: scheitert das Einloggen, ist die Person trotzdem im Team und kann sich normal
+  // anmelden (vorher: Konto ohne Organisation -> „kein Team“, Einladung weiter offen).
   await admin.from("account_members").upsert(
     { account_id: inv.account_id, user_id: userId, role: inv.role },
     { onConflict: "account_id,user_id", ignoreDuplicates: true },
@@ -240,6 +274,11 @@ export async function acceptInvite(
     .from("invitations")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", inv.id);
+
+  if (isNew) {
+    const { error: signErr } = await supabase.auth.signInWithPassword({ email: inv.email, password });
+    if (signErr) return { ok: false, message: "Konto angelegt – bitte melden Sie sich jetzt mit Ihrem neuen Passwort an." };
+  }
 
   // Direkt in der neuen Org landen.
   await supabase.auth.updateUser({ data: { active_account_id: inv.account_id } });
@@ -284,16 +323,17 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
   return { ok: true };
 }
 
-export async function revokeInvitation(id: string) {
+export const revokeInvitation = withUserErrors(async function revokeInvitation(id: string): Promise<void> {
   const { account } = await requireOwner();
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("invitations")
     .update({ status: "revoked" })
     .eq("id", id)
     .eq("account_id", account.id);
+  if (error) throw new Error(error.message);
   revalidatePath("/app/settings/team");
-}
+});
 
 export const removeMember = withUserErrors(async function removeMember(expectedAccountId: string, userId: string) {
   const { account, userId: me, ctx } = await requireOwner();
@@ -362,7 +402,9 @@ export const changeMemberRole = withUserErrors(async function changeMemberRole(
  * an dieselbe Adresse). Geht auch für abgelaufene Einladungen.
  */
 export async function resendInvitation(id: string): Promise<InviteResult> {
-  const { account } = await requireOwner();
+  const owner = await ownerOrRejection();
+  if ("message" in owner) return owner;
+  const { account } = owner;
   const admin = createAdminClient();
   const { data: inv } = await admin
     .from("invitations")

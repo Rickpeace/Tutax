@@ -29,22 +29,35 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Einladung ist nur EINMAL einlösbar: nur „pending" ist aktiv. Bereits eingelöste
-  // oder zurückgezogene Links -> eingeloggte Nutzer in die App, sonst zur Anmeldung.
-  // (verhindert Re-Join eines entfernten Mitglieds über einen alten Link).
-  if (!inv || inv.status !== "pending") redirect(user ? "/app" : "/login?error=invite");
+  // Einladung ist nur EINMAL einlösbar: nur „pending" ist aktiv (verhindert Re-Join eines
+  // entfernten Mitglieds über einen alten Link). Abgemeldet -> Anmeldeseite mit Hinweis.
+  // Angemeldet: der EIGENE, schon angenommene Link führt einfach in die App; jeder andere
+  // (neu gesendet, zurückgezogen, von jemand anderem eingelöst) bekommt eine Erklärung —
+  // vorher landete man kommentarlos in der App und hielt den Beitritt für geglückt.
+  if (!inv || inv.status !== "pending") {
+    if (!user) redirect("/login?error=invite");
+    if (inv) {
+      const { data: member } = await admin
+        .from("account_members")
+        .select("user_id")
+        .eq("account_id", inv.account_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (member) redirect("/app");
+    }
+    return (
+      <InviteNotice title="Einladung nicht mehr gültig" withAppLink>
+        Diese Einladung wurde schon angenommen, neu gesendet oder zurückgezogen. Bitten Sie den Inhaber
+        bei Bedarf um eine neue Einladung.
+      </InviteNotice>
+    );
+  }
   // Abgelaufen (14 Tage, lib/invitations.ts) -> erklären statt Formular zeigen.
   if (isInviteExpired(inv.created_at)) {
     return (
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col justify-center px-5 py-10">
-        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-          <h1 className="text-lg font-extrabold text-ink">Einladung abgelaufen</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Einladungen sind {INVITE_VALID_DAYS} Tage gültig. Bitten Sie den Inhaber, Ihnen die Einladung neu zu
-            senden.
-          </p>
-        </div>
-      </div>
+      <InviteNotice title="Einladung abgelaufen" withAppLink={!!user}>
+        Einladungen sind {INVITE_VALID_DAYS} Tage gültig. Bitten Sie den Inhaber, Ihnen die Einladung neu zu senden.
+      </InviteNotice>
     );
   }
 
@@ -78,4 +91,32 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   let hasAccount = false;
   if (inv.email) hasAccount = !!(await findAuthUserByEmail(admin, inv.email));
   return <AcceptInviteForm token={token} email={inv.email ?? ""} orgName={orgName} hasAccount={hasAccount} />;
+}
+
+/** Hinweis-Karte statt Formular (abgelaufen / nicht mehr gültig). */
+function InviteNotice({
+  title,
+  withAppLink,
+  children,
+}: {
+  title: string;
+  withAppLink?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-sm flex-col justify-center px-5 py-10">
+      <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <h1 className="text-lg font-extrabold text-ink">{title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{children}</p>
+        {withAppLink && (
+          <a
+            href="/app"
+            className="mt-5 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            Zu Steply
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
