@@ -148,7 +148,7 @@ export function TutorialHeader({
     if (trBusy) return;
     setTrBusy(true);
     try {
-      const res = await translateTutorial(tutorialId);
+      const res = unwrap(await translateTutorial(tutorialId));
       setStale(false);
       const names = res.languages.map((l) => LANG_NAME[l]).join(", ");
       toast.success(names ? `Übersetzt in ${names}` : "Übersetzt");

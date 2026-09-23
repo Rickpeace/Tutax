@@ -20,8 +20,7 @@ import {
   LANG_BCP47,
   type HubLang,
 } from "@/lib/i18n-hub";
-import { brandedTheme } from "@/lib/plan";
-import { isPro } from "@/lib/plan";
+import { brandedTheme, isPro, planLanguages } from "@/lib/plan";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
 // Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
@@ -76,7 +75,8 @@ async function load(accountSlug: string, lang: HubLang) {
     }
   }
 
-  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+  // Mehrsprachigkeit ist Business — darunter nur Deutsch (gespeicherte Übersetzungen bleiben).
+  const languages = planLanguages(account, ((account.languages as string[] | null) ?? []).filter(isExtraLang));
   // Eigenes Logo/CI erst ab Pro (Gratis: Steply-Standard, gespeicherte Werte bleiben).
   return { account, catalog, categories: categories ?? [], theme: brandedTheme(account, theme), translations, languages };
 }

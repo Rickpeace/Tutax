@@ -15,7 +15,7 @@ import { PrintButton } from "@/components/viewer/print-button";
 import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
-import { brandedTheme, isPro } from "@/lib/plan";
+import { brandedTheme, isPro, planLanguages } from "@/lib/plan";
 
 // Öffentliche Druckansicht: gleiche gecachten Daten wie die Tutorial-Seite
 // (Cache Components -> 'use cache' + Hub-/Tutorial-Tags; Mutationen invalidieren).
@@ -57,7 +57,8 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     .eq("account_id", account.id)
     .single();
 
-  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+  // Mehrsprachigkeit ist Business — darunter nur Deutsch (gespeicherte Übersetzungen bleiben).
+  const languages = planLanguages(account, ((account.languages as string[] | null) ?? []).filter(isExtraLang));
 
   // Übersetzungen laden + in Titel/Steps/Branches mergen (DE-Fallback pro Feld) —
   // identisch zur Viewer-Seite, damit Druck & Wizard denselben übersetzten Text zeigen.

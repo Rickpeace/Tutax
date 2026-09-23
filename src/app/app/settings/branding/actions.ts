@@ -110,13 +110,9 @@ export async function saveLanguages(
   const switched = orgSwitchedError(expectedAccountId, ctx);
   if (switched) return { ok: false, error: switched };
   const { account } = ctx;
-  // Mehrsprachigkeit ist ein Business-Feature (Abschalten/Leeren bleibt immer erlaubt).
-  if (langs.some(isExtraLang) && !isBusiness(account)) {
-    return { ok: false, error: BUSINESS_REQUIRED };
-  }
   const supabase = await createClient();
 
-  // Vorherige Sprachen für den Delta-Backfill (nur NEU aktivierte nachziehen).
+  // Vorherige Sprachen: für das Tarif-Gate und den Delta-Backfill (nur NEU aktivierte nachziehen).
   const { data: prevRow } = await supabase
     .from("accounts")
     .select("languages")
@@ -127,6 +123,12 @@ export async function saveLanguages(
   );
 
   const clean = [...new Set(langs.filter(isExtraLang))] as ExtraLang[];
+  // Mehrsprachigkeit ist ein Business-Feature: nur das EINSCHALTEN ist gesperrt. Abschalten —
+  // auch einzeln, etwa nach einem Herabstufen mit noch zwei aktiven Sprachen — geht immer
+  // (vorher scheiterte das Abschalten von einer von zwei Sprachen an diesem Gate).
+  if (clean.some((l) => !prev.has(l)) && !isBusiness(account)) {
+    return { ok: false, error: BUSINESS_REQUIRED };
+  }
   const { error } = await supabase
     .from("accounts")
     .update({ languages: clean })

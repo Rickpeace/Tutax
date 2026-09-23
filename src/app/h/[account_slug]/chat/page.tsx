@@ -7,7 +7,7 @@ import { ChatWidget } from "@/components/viewer/chat-widget";
 import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, isExtraLang, LANG_BCP47 } from "@/lib/i18n-hub";
 import { EMBED_TRANSPARENT_CSS } from "./transparent";
-import { brandedTheme, isPro } from "@/lib/plan";
+import { brandedTheme, isPro, planLanguages } from "@/lib/plan";
 
 // Chat-only-Seite (Feature H4 „Script-Chat-Bubble"): rendert NUR den ChatWidget,
 // CSS-isoliert in einem eigenen iFrame. Wiederverwendet das komplette bestehende
@@ -59,7 +59,7 @@ export default async function ChatEmbedPage({
   // aktivierte Zusatzsprachen gelten, sonst Deutsch — wie auf der Hilfe-Seite selbst.
   const lang = resolveLang(
     langParam,
-    ((account.languages as string[] | null) ?? []).filter(isExtraLang),
+    planLanguages(account, ((account.languages as string[] | null) ?? []).filter(isExtraLang)),
   );
   const { tokens } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
