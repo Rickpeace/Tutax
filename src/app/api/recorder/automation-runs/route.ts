@@ -146,7 +146,10 @@ export async function POST(req: NextRequest) {
         // current_step nur überschreiben, wenn mitgeschickt (sonst Start-Wert behalten).
         ...(curStep != null ? { current_step: curStep } : {}),
       })
-      .eq("id", runId);
+      .eq("id", runId)
+      // Ein abgeschlossener Lauf bleibt abgeschlossen (Audit 23.09.: ein zweites „finish“
+      // überschrieb „erfolgreich“ nachträglich mit „fehlgeschlagen“).
+      .eq("status", "running");
     if (error) {
       return recorderJson({ error: "Der Lauf konnte nicht abgeschlossen werden." }, 500);
     }

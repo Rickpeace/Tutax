@@ -54,7 +54,7 @@ import {
   unpublishTutorial,
 } from "@/app/app/actions";
 import { createAutomationFromTutorial } from "@/app/app/automationen/actions";
-import { unwrap, errorText } from "@/lib/action-error";
+import { unwrap, errorText, isNavigationError } from "@/lib/action-error";
 
 /** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte/Zeile). */
 export type LibraryTutorial = {
@@ -139,6 +139,7 @@ export function TutorialCard({
         await fn();
         toast.success(success);
       } catch (e) {
+        if (isNavigationError(e)) return; // Weiterleitung (z. B. Tarif-Grenze) übernimmt Next
         toast.error(errorText(e));
       }
     });
@@ -154,6 +155,7 @@ export function TutorialCard({
         toast.success("Als Automation angelegt");
         router.push(`/app/automationen/${automationId}`);
       } catch (e) {
+        if (isNavigationError(e)) return; // Weiterleitung (z. B. Tarif-Grenze) übernimmt Next
         toast.error(errorText(e));
       }
     });

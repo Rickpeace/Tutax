@@ -7,6 +7,22 @@ import { requireAccount } from "@/lib/account";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 
 /**
+ * Prüft das aktuelle Passwort per Wegwerf-Anmeldung (eigener Client ohne Cookies); deren
+ * Sitzung wird sofort verworfen, die laufende Sitzung bleibt unberührt.
+ */
+async function currentPasswordOk(email: string, currentPassword: string): Promise<boolean> {
+  const probe = createPlainClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { error } = await probe.auth.signInWithPassword({ email, password: currentPassword });
+  if (error) return false;
+  await probe.auth.signOut({ scope: "local" }).catch(() => {});
+  return true;
+}
+
+/**
  * Passwort ändern — nur mit dem AKTUELLEN Passwort. Sonst könnte jeder, der kurz an ein
  * entsperrtes Gerät kommt, das Passwort neu setzen und das Konto übernehmen.
  * Geprüft wird per Wegwerf-Anmeldung (eigener Client ohne Cookies), deren Sitzung
@@ -24,29 +40,25 @@ export async function changePassword(
   } = await supabase.auth.getUser();
   if (!user?.email) return { ok: false, error: "Sitzung abgelaufen – bitte neu anmelden." };
 
-  const probe = createPlainClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
-  const { error: checkError } = await probe.auth.signInWithPassword({
-    email: user.email,
-    password: currentPassword,
-  });
-  if (checkError) {
+  if (!(await currentPasswordOk(user.email, currentPassword)))
     return { ok: false, error: "Das aktuelle Passwort stimmt nicht." };
-  }
-  await probe.auth.signOut({ scope: "local" }).catch(() => {});
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { ok: false, error: uebersetzeAuthFehler(error.message) };
   return { ok: true };
 }
 
-/** E-Mail-Adresse ändern. Supabase verschickt Bestätigungs-Links (alte + neue Adresse). */
+/**
+ * E-Mail-Adresse ändern — wie beim Passwort nur mit dem AKTUELLEN Passwort (Audit 23.09.:
+ * Supabase stellt schon nach EINEM Bestätigungs-Klick um; wer kurz an ein entsperrtes Gerät
+ * kam, konnte die Adresse auf seine eigene setzen, selbst bestätigen und per „Passwort
+ * vergessen“ das Konto übernehmen). Supabase verschickt Links an alte + neue Adresse.
+ */
 export async function changeEmail(
   email: string,
+  currentPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!currentPassword) return { ok: false, error: "Bitte geben Sie Ihr aktuelles Passwort ein." };
   const clean = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean))
     return { ok: false, error: "Bitte eine gültige E-Mail-Adresse eingeben." };
@@ -58,6 +70,12 @@ export async function changeEmail(
   } = await supabase.auth.getUser();
   if (user?.email && user.email.toLowerCase() === clean)
     return { ok: false, error: "Mit dieser E-Mail-Adresse melden Sie sich bereits an." };
+  if (!user?.email) return { ok: false, error: "Sitzung abgelaufen – bitte neu anmelden." };
+  if (!(await currentPasswordOk(user.email, currentPassword)))
+    return {
+      ok: false,
+      error: "Das aktuelle Passwort stimmt nicht. (Noch kein Passwort? Legen Sie über „Passwort vergessen“ eines fest.)",
+    };
   const { error } = await supabase.auth.updateUser({ email: clean });
   if (error) return { ok: false, error: uebersetzeAuthFehler(error.message) };
   return { ok: true };

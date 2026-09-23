@@ -28,6 +28,7 @@ import { createTutorial } from "@/app/app/actions";
 import { VideoUpload } from "@/components/app/video-upload";
 import { useRecorderExtension } from "@/lib/use-recorder-extension";
 import { ProPill } from "@/components/app/settings-ui";
+import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 
 /**
  * „Neues Tutorial" (Welle 20): öffnet zuerst eine Weiche mit zwei Karten —
@@ -186,6 +187,7 @@ export function NewTutorialButton({
                     placeholder="z. B. SmartLogin einrichten"
                     autoFocus
                     required
+                    maxLength={GUIDE_TITLE_MAX}
                   />
                 </div>
                 <DialogFooter>

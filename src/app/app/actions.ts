@@ -80,7 +80,7 @@ export async function videoUploadQuotaError(): Promise<string | null> {
 
 /** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */
 export async function createTutorial(formData: FormData) {
-  const title = String(formData.get("title") ?? "").trim() || "Neue Anleitung";
+  const title = String(formData.get("title") ?? "").trim().slice(0, GUIDE_TITLE_MAX) || "Neue Anleitung";
   const categoryId = (String(formData.get("category_id") ?? "") || null) as string | null;
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -307,6 +307,10 @@ export async function duplicateTutorial(id: string) {
       title: `${src.title} (Kopie)`,
       description: src.description,
       status: "draft",
+      // Sichtbarkeit mitkopieren: sonst wurde aus einer „Nur Team“-Anleitung eine öffentliche
+      // Kopie — ein Klick auf „Veröffentlichen“ brachte internen Inhalt auf die Hilfe-Seite.
+      visibility: src.visibility,
+      in_lernen: src.in_lernen,
       // Live-Führung/Extension-Matching: für welche Websites die Anleitung gilt.
       site_domains: src.site_domains ?? [],
     })

@@ -234,6 +234,15 @@ export async function resetTemplate(templateId: string) {
     .single();
   if (row?.forked_tutorial_id) {
     const forkId = row.forked_tutorial_id as string;
+    // Erst prüfen, DANN aufräumen: Audio/Index werden mit Server-Rechten entfernt (Audit 23.09.:
+    // eine gefälschte Verknüpfung auf eine fremde Anleitung löschte deren Vorlese-Dateien).
+    const { data: ownFork } = await supabase
+      .from("tutorials")
+      .select("id")
+      .eq("id", forkId)
+      .eq("account_id", account.id)
+      .maybeSingle();
+    if (!ownFork) throw new Error("Die angepasste Kopie gehört nicht zu dieser Organisation.");
     await dropEmbeddings(account.id, forkId);
     // Bildpfade VOR dem Löschen merken: die öffentlichen Kopien der verworfenen Kopie müssen
     // weg (wie bei deleteTutorial) — sonst blieben ihre Screenshots per URL abrufbar.

@@ -1,5 +1,6 @@
 "use server";
 
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 import { translateTutorial as translateTutorialJob, type TranslateResult } from "@/lib/translate-jobs";
@@ -17,7 +18,7 @@ import { withUserErrors, UserError } from "@/lib/action-error";
 export const translateTutorial = withUserErrors(async function translateTutorial(
   tutorialId: string,
 ): Promise<TranslateResult> {
-  const { account } = await requireAccount();
+  const { account, userId: ctxUser } = await requireAccount();
   if (!isBusiness(account)) throw new UserError(BUSINESS_REQUIRED);
   const supabase = await createClient();
   const { data: tut } = await supabase
@@ -27,5 +28,8 @@ export const translateTutorial = withUserErrors(async function translateTutorial
     .eq("account_id", account.id)
     .maybeSingle();
   if (!tut) throw new UserError("Anleitung nicht gefunden.");
+  // Kostenbremse pro Person (Audit 23.09.: ohne Grenze beliebig oft auslösbar).
+  if (!(await takeHourlyAiRun(ctxUser, "ai_translate", 20)))
+    throw new UserError("Sie haben diese KI-Funktion in dieser Stunde schon oft genutzt. Bitte später erneut versuchen.");
   return translateTutorialJob(tutorialId);
 });

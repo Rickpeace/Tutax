@@ -5,6 +5,7 @@ import { requireAccount } from "@/lib/account";
 import { isBusiness, BUSINESS_REQUIRED } from "@/lib/plan";
 import type { Tutorial } from "@/lib/types";
 import { withUserErrors, UserError } from "@/lib/action-error";
+import { hasBlur } from "@/lib/redact";
 
 // Video-Export (Welle 18): aus einem veröffentlichten Tutorial ein MP4 rendern.
 // Reiht einen video_jobs-Eintrag (kind='render') ein; der Hetzner-Worker baut das MP4.
@@ -35,6 +36,16 @@ export const createRenderJob = withUserErrors(async function createRenderJob(tut
   if (tutorial.account_id !== account.id) throw new UserError("Kein Zugriff auf diese Anleitung.");
   if (tutorial.status !== "published" || tutorial.visibility !== "public")
     throw new UserError("Bitte veröffentlichen Sie die Anleitung zuerst auf der Hilfe-Seite.");
+
+  // Screencast schneidet echte Ausschnitte aus der Aufnahme — Verpixelungen gibt es dort nur
+  // auf den Standbildern (Audit 23.09.: verpixelte Stellen wären im Video lesbar gewesen).
+  if (style === "screencast") {
+    const { data: steps } = await supabase.from("steps").select("highlights").eq("tutorial_id", tutorialId);
+    if ((steps ?? []).some((s) => hasBlur(s.highlights)))
+      throw new UserError(
+        "Diese Anleitung enthält verpixelte Stellen. Im Stil „Screencast“ wären sie im Video sichtbar – bitte „Klassisch“ wählen.",
+      );
+  }
 
   // Kein doppelter laufender Job (gleiches Tutorial + Stil).
   const { data: running } = await supabase

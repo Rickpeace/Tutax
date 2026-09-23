@@ -78,9 +78,10 @@ try {
   // --- Kontrolle: dasselbe Tutorial auf public → anon sieht es (Gegenprobe) ---
   await member.from("tutorials").update({ visibility: "public", slug: `rls-test-${stamp}` }).eq("id", tutId);
   const { data: anonPub } = await anon.from("tutorials").select("id").eq("id", tutId);
-  ok(anonPub?.length === 1, "Gegenprobe: anon sieht öffentliches Tutorial");
+  // Seit 0044 liest die Öffentlichkeit nur über die Hilfe-Seite (Server-Rechte), nie direkt per REST.
+  ok(anonPub?.length === 0, "anon liest auch öffentliche Tutorials nicht direkt (0044)");
   const { data: anonPubStep } = await anon.from("steps").select("id").eq("id", stepId);
-  ok(anonPubStep?.length === 1, "Gegenprobe: anon sieht Schritte des öffentlichen Tutorials");
+  ok(anonPubStep?.length === 0, "anon liest Schritte öffentlicher Tutorials nicht direkt (0044)");
   await member.from("tutorials").update({ visibility: "internal" }).eq("id", tutId);
 
   // --- Mitglied sieht das interne Tutorial + Schritte ---

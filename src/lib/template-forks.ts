@@ -32,12 +32,21 @@ export async function retireHiddenTemplateForks(
     forked_tutorial_id: string;
   }[];
   if (!hidden.length) return [];
-  const ids = hidden.map((r) => r.forked_tutorial_id);
+  // Nur Kopien, die wirklich dem verknüpften Konto gehören (Schutz gegen gefälschte
+  // Verknüpfungen auf fremde Anleitungen; seit Migration 0043 zusätzlich in der DB).
+  const { data: owned } = await admin
+    .from("tutorials")
+    .select("id, account_id")
+    .in("id", hidden.map((r) => r.forked_tutorial_id));
+  const ownerOf = new Map((owned ?? []).map((t) => [t.id as string, t.account_id as string]));
+  const own = hidden.filter((r) => ownerOf.get(r.forked_tutorial_id) === r.account_id);
+  const ids = own.map((r) => r.forked_tutorial_id);
+  if (!ids.length) return [];
   const { error: upErr } = await admin
     .from("tutorials")
     .update({ status: "draft" })
     .in("id", ids)
     .eq("status", "published");
   if (upErr) throw new Error("Verborgene Kopien konnten nicht zurückgezogen werden: " + upErr.message);
-  return hidden.map((r) => ({ accountId: r.account_id, tutorialId: r.forked_tutorial_id }));
+  return own.map((r) => ({ accountId: r.account_id, tutorialId: r.forked_tutorial_id }));
 }

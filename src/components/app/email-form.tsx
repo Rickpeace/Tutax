@@ -4,22 +4,25 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { FieldLabel, settingsInputClass } from "@/components/app/settings-ui";
 import { changeEmail } from "@/app/app/settings/konto/actions";
 
 export function EmailForm({ current }: { current: string }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [pending, startTransition] = useTransition();
 
   function save() {
     startTransition(async () => {
-      const res = await changeEmail(email);
+      const res = await changeEmail(email, password);
       if (res.ok) {
         toast.success("Fast geschafft!", {
           description:
             "Wir haben Bestätigungs-Links an die neue (und ggf. alte) Adresse geschickt – bitte den Link in der E-Mail anklicken.",
         });
         setEmail("");
+        setPassword("");
       } else {
         toast.error(res.error ?? "Fehler");
       }
@@ -40,7 +43,17 @@ export function EmailForm({ current }: { current: string }) {
           className={settingsInputClass}
         />
       </div>
-      <Button onClick={save} disabled={pending || !email.trim()} className="w-fit">
+      <div className="grid gap-1.5">
+        <FieldLabel htmlFor="email-current-password">Aktuelles Passwort</FieldLabel>
+        <PasswordInput
+          id="email-current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          className={settingsInputClass}
+        />
+      </div>
+      <Button onClick={save} disabled={pending || !email.trim() || !password} className="w-fit">
         {pending ? "Sendet …" : "E-Mail ändern"}
       </Button>
     </div>

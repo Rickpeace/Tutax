@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { asRole, canEdit } from "@/lib/roles";
+import { safeNext } from "@/lib/url";
 
 /**
  * Hält die Supabase-Session frisch (Token-Refresh) und macht einen
@@ -46,12 +47,15 @@ export async function updateSession(request: NextRequest) {
   // WICHTIG: getUser() direkt nach Client-Erstellung -> aktualisiert das Token.
   // Robust: bei Netz-Aussetzer (Supabase kurz nicht erreichbar) NICHT 10s hängen
   // oder crashen, sondern "fail-open" (durchlassen) nach kurzem Timeout.
+  // Zeitüberschreitung WIRKLICH durchlassen (Audit 23.09.): vorher lieferte sie `user: null`
+  // und wurde wie „abgemeldet“ behandelt — unter Last landeten angemeldete Nutzer zufällig auf
+  // /login. Sicher, weil jede geschützte Seite/Aktion selbst prüft (requireAccount/AdminGate).
   let user = null;
   try {
-    const timeout = new Promise<{ data: { user: null } }>((resolve) =>
-      setTimeout(() => resolve({ data: { user: null } }), 3000),
-    );
+    const TIMED_OUT = Symbol("timeout");
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), 3000));
     const res = await Promise.race([supabase.auth.getUser(), timeout]);
+    if (res === TIMED_OUT) return response;
     user = res.data.user;
   } catch {
     return response; // Supabase nicht erreichbar -> Request unverändert durchlassen
@@ -72,10 +76,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/app";
-    url.search = "";
-    return NextResponse.redirect(url);
+    // Schon angemeldet: direkt zum gewünschten Ziel (?next=), nicht pauschal nach /app.
+    const target = safeNext(request.nextUrl.searchParams.get("next") ?? "/app", "/app");
+    const redirect = NextResponse.redirect(new URL(target, request.url));
+    for (const c of response.cookies.getAll()) redirect.cookies.set(c);
+    return redirect;
   }
 
   // Öffentliche Seite der Steply-Erweiterung: eingeloggte Inhaber/Bearbeiter gehören zur

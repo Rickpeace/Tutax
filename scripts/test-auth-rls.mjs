@@ -83,7 +83,9 @@ try {
 
   await userA.from("tutorials").update({ status: "published" }).eq("id", tutId);
   const { data: anonPub } = await anon.from("tutorials").select("id").eq("id", tutId);
-  ok(anonPub?.length === 1, "RLS: anon sieht veröffentlichtes Tutorial");
+  // Seit 0044: öffentliche Seiten lesen mit Server-Rechten; direkt per REST sieht anon nichts
+  // (sonst lagen Aufnahme-Adressen/Selektoren aller Konten offen).
+  ok(anonPub?.length === 0, "RLS: anon liest auch veröffentlichte Tutorials NICHT direkt (0044)");
   await userA.from("tutorials").update({ status: "draft" }).eq("id", tutId);
 
   // --- 5. Mandanten-Isolation (User B) ---

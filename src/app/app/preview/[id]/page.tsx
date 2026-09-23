@@ -6,6 +6,7 @@ import { requireAccount } from "@/lib/account";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { publicImageUrl } from "@/lib/public-image";
+import { brandedTheme } from "@/lib/plan";
 import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 
@@ -67,7 +68,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
 
   const { account, tutorial, steps, branches, theme, imageUrls } = data;
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
-  const { tokens, logoPath } = resolveTheme(theme);
+  // Wie auf der Hilfe-Seite: Logo/CI erst ab Pro, KI-Design erst ab Business — sonst zeigte
+  // die Vorschau („so sehen es Ihre Kunden“) ein anderes Design als live (Audit 23.09.).
+  const { tokens, logoPath } = resolveTheme(brandedTheme(account, theme));
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
   const logoUrl = logoPath ? publicImageUrl(logoPath) : null;

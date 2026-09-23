@@ -1,5 +1,6 @@
 "use server";
 
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -35,10 +36,13 @@ type Issue = { step?: string; problem?: string; suggestion?: string; applied?: b
  */
 export const applyDriftSuggestions = withUserErrors(async function applyDriftSuggestions(alertId: string, indices: number[]) {
   // Nur Inhaber/Bearbeiter (KI-Kosten + Schreiben); Mitarbeiter weist requireAccount ab.
-  const { account } = await requireAccount();
+  const { account, userId } = await requireAccount();
   // KI-Aufruf (kostet) → erst ab Pro.
   if (!isPro(account)) throw new UserError(PRO_REQUIRED);
   if (!aiConfigured()) throw new UserError("KI ist nicht aktiviert.");
+  // Kostenbremse pro Person (Audit 23.09.: ohne Grenze beliebig oft auslösbar).
+  if (!(await takeHourlyAiRun(userId, "ai_drift_apply", 30)))
+    throw new UserError("Sie haben diese KI-Funktion in dieser Stunde schon oft genutzt. Bitte später erneut versuchen.");
   const supabase = await createClient();
 
   const { data: alert } = await supabase

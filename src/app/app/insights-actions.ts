@@ -1,5 +1,6 @@
 "use server";
 
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
@@ -57,11 +58,14 @@ export const createDraftFromQuestion = withUserErrors(async function createDraft
   if (!q) throw new UserError("Keine Frage angegeben.");
   if (!aiConfigured()) throw new UserError("Die KI ist nicht aktiviert (OPENAI_API_KEY fehlt).");
 
-  const { account } = await requireAccount();
+  const { account, userId } = await requireAccount();
   const supabase = await createClient();
 
   // Offene Fragen → „Entwurf erstellen“ ist Pro (Tarifseite: Insights & Offene Fragen).
   if (!isPro(account)) throw new UserError(PRO_REQUIRED);
+  // Kostenbremse pro Person (Audit 23.09.: ohne Grenze beliebig oft auslösbar).
+  if (!(await takeHourlyAiRun(userId, "ai_gap_draft", 20)))
+    throw new UserError("Sie haben diese KI-Funktion in dieser Stunde schon oft genutzt. Bitte später erneut versuchen.");
 
   // 1) KI-Entwurfsrahmen erzeugen.
   let frame: DraftFrame;

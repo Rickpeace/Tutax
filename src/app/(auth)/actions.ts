@@ -39,7 +39,8 @@ export async function signUp(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const accountName = String(formData.get("account_name") ?? "").trim();
+  // Länge begrenzen: der Name landet als Organisation und in der Willkommens-Mail.
+  const accountName = String(formData.get("account_name") ?? "").trim().slice(0, 80);
 
   if (!email || !password)
     return { error: "Bitte E-Mail und Passwort eingeben." };
@@ -81,13 +82,20 @@ export async function signInWithMagicLink(
   if (!email) return { error: "Bitte E-Mail eingeben." };
 
   const supabase = await createClient();
+  // shouldCreateUser: false — der Anmelde-Link ist KEINE Registrierung (Audit 23.09.: sonst
+  // entstand für jede eingetippte fremde Adresse ein Konto samt Organisation).
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${appUrl()}/auth/confirm` },
+    options: { emailRedirectTo: `${appUrl()}/auth/confirm`, shouldCreateUser: false },
   });
-  if (error) return { error: uebersetzeAuthFehler(error.message) };
+  // Unbekannte Adresse: dieselbe Antwort wie bei Erfolg (keine Konto-Enumeration).
+  // Andere Fehler (z. B. zu viele Anfragen) weiterhin anzeigen.
+  if (error && !/signups? not allowed|user not found/i.test(error.message))
+    return { error: uebersetzeAuthFehler(error.message) };
 
-  return { message: "Magic Link gesendet – prüfen Sie Ihr Postfach." };
+  return {
+    message: "Wenn es ein Konto mit dieser Adresse gibt, ist der Anmelde-Link unterwegs – prüfen Sie Ihr Postfach. Noch kein Konto? Dann registrieren Sie sich zuerst.",
+  };
 }
 
 /** Passwort-Reset anfordern (Mail mit Link). */

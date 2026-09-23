@@ -66,6 +66,11 @@ export async function GET() {
     // Erst zeigen, wenn der Chat-Knopf bereit ist (meldet sich per postMessage) — sonst
     // blitzt während des Ladens eine farbige Fläche im runden Rahmen auf.
     "opacity:0",
+    // Bis zur Bereit-Meldung auch unsichtbar FÜR KLICKS: sonst lag ein 76-px-Feld über der
+    // Kunden-Website und schluckte Klicks (Audit 23.09.) — dauerhaft, wenn der Chat nie bereit
+    // wird (Konto ohne Pro, falscher Konto-Name).
+    "visibility:hidden",
+    "pointer-events:none",
     "transition:width .18s ease, height .18s ease, border-radius .18s ease, opacity .18s ease",
     "color-scheme:normal"
   ].join(";");
@@ -85,10 +90,20 @@ export async function GET() {
     if (ev.origin !== ORIGIN) return;
     var d = ev.data;
     if (!d || typeof d !== "object") return;
-    if (d.steply === "chat-open" || d.steply === "chat-close") iframe.style.opacity = "1";
+    if (d.steply === "chat-open" || d.steply === "chat-close") {
+      ready = true;
+      iframe.style.opacity = "1";
+      iframe.style.visibility = "visible";
+      iframe.style.pointerEvents = "auto";
+    }
     if (d.steply === "chat-open") setOpen();
     else if (d.steply === "chat-close") setClosed();
   });
+
+  // Meldet sich der Chat nicht (kein Pro-Tarif, falscher Konto-Name, Netzfehler), das iFrame
+  // wieder entfernen, statt es unsichtbar liegen zu lassen.
+  var ready = false;
+  setTimeout(function () { if (!ready && iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 20000);
 
   function mount() {
     if (document.body) document.body.appendChild(iframe);

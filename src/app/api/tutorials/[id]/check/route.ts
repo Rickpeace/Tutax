@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runDriftCheck } from "@/lib/drift";
 import { isPro, PRO_REQUIRED } from "@/lib/plan";
+import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 
 export const maxDuration = 60;
 
@@ -33,6 +34,14 @@ export async function POST(
     .eq("id", id)
     .maybeSingle<{ accounts: { plan: string | null } | null }>();
   if (!isPro(planRow?.accounts ?? {})) return NextResponse.json({ error: PRO_REQUIRED }, { status: 403 });
+
+  // Kosten-Bremse pro Person (Audit 23.09.): der 60-Min-Cooldown hängt an drift_checked_at, das
+  // Bearbeiter per REST zurücksetzen können — das Stundenlimit hier nicht.
+  if (!(await takeHourlyAiRun(user.id, "ai_drift", 10)))
+    return NextResponse.json(
+      { configured: true, cooldown: true, error: "Sie haben in dieser Stunde schon viele Prüfungen gestartet. Bitte später erneut versuchen." },
+      { status: 429 },
+    );
 
   const result = await runDriftCheck(supabase, id);
 
