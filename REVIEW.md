@@ -95,7 +95,7 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
 - [x] Video-Export nur Business im Menü; Vorlesen nur auf deutschen Seiten (Aufnahmen sind deutsch)
 
 **Offen — Entscheidung Richard:**
-- [ ] Alte Hilfe-Seiten-Adresse nach Umbenennen: sofort 404 und von Fremden belegbar (QR/iFrame/Chat-Script
+- [x] Alte Hilfe-Seiten-Adresse nach Umbenennen: sofort 404 und von Fremden belegbar (QR/iFrame/Chat-Script — ➖ entfällt (Richard 23.09.: wird ohnehin neu gebaut)
   zeigten dann fremde Seite) → Adressen reservieren + weiterleiten (Migration)
 - [ ] Vorlage löschen: sichtbare Kunden-Kopien bleiben als eigene Anleitungen (zählen dann aufs Gratis-Limit)
 - [ ] Leere Vorlage lässt sich veröffentlichen · Nur-Einladungs-Nutzer ohne eigene Org nach Entfernen ·
