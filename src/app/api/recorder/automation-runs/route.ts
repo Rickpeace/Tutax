@@ -5,6 +5,7 @@ import {
   recorderPreflight,
 } from "@/lib/recorder";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { STALE_RUN_MS } from "@/components/app/automation-run-status";
 
 // Automationen-Ausführung (Welle 36), Kontrakt 3: POST /api/recorder/automation-runs.
 //
@@ -72,6 +73,24 @@ export async function POST(req: NextRequest) {
       .maybeSingle<{ id: string; account_id: string | null }>();
     if (!auto || auto.account_id !== account.id) {
       return recorderJson({ error: "Automation nicht gefunden." }, 404);
+    }
+
+    // Hängengebliebene Läufe des Kontos aufräumen (best effort): ein Lauf, der sich nach
+    // STALE_RUN_MS noch nicht zurückgemeldet hat (z. B. Seitenleiste vor v2.19.2 geschlossen),
+    // läuft sicher nicht mehr → „Abgebrochen“ statt für immer „Läuft“.
+    try {
+      await admin
+        .from("automation_runs")
+        .update({
+          status: "aborted",
+          finished_at: new Date().toISOString(),
+          detail: "Keine Rückmeldung der Erweiterung (z. B. Seitenleiste geschlossen).",
+        })
+        .eq("account_id", account.id)
+        .eq("status", "running")
+        .lt("started_at", new Date(Date.now() - STALE_RUN_MS).toISOString());
+    } catch {
+      /* egal — die Anzeige wertet alte running-Läufe ohnehin als abgebrochen */
     }
 
     const { data: run, error } = await admin

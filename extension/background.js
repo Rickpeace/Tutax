@@ -301,10 +301,110 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // Antwort kommt asynchron
 });
 
+// ============================================================================
+// VERTRAUENSWUERDIGE APP-HERKUNFT fuer die Seiten-Bruecke (v2.19.2, Sicherheits-Fix)
+//
+// content.js laeuft auf JEDER http(s)-Seite. Die Pruefung dort (event.origin ===
+// location.origin) haelt nur FREMDE Fenster ab — das Script der Seite selbst besteht sie
+// immer. Ohne weitere Pruefung konnte daher jede beliebige Website per postMessage
+// „steply-pair" die Erweiterung auf ihren eigenen Server umbiegen (Aufnahmen, Screenshots,
+// getippte Werte und geplante Automationen liefen dann ueber den Angreifer).
+//
+// Darum gilt hier, im Hintergrund (die Seite kann das nicht faelschen):
+//   * steply-pair: nur von einer FESTEN Liste echter Steply-Adressen (unten) — und die
+//     Herkunft des SENDERS (sender.origin/sender.url, von Chrome gesetzt) muss exakt der
+//     angegebenen App-Adresse entsprechen.
+//   * steply-open-panel / steply-record-into: nur von der Herkunft der GEKOPPELTEN App
+//     (gespeicherte steplyAppUrl, sonst die Standard-App).
+// Lokale Entwicklung (http://localhost:*, http://127.0.0.1:*) ist nur erlaubt, solange die
+// Erweiterung NICHT aus dem Chrome Web Store stammt (kein update_url im Manifest, also
+// „Entpackt laden"). Eine abweichende eigene Server-Adresse bleibt ueber die manuelle
+// Einrichtung in der Seitenleiste moeglich (bewusste Nutzer-Handlung, keine Seiten-Bruecke).
+// Beim Domain-Umzug: STEPLY_DEFAULT_APP_URL + panel.js/runner.js DEFAULT_APP_URL umstellen und
+// die neue Adresse hier in STEPLY_TRUSTED_APP_ORIGINS aufnehmen.
+// ============================================================================
+const STEPLY_DEFAULT_APP_URL = "https://tutax-ivory.vercel.app";
+const STEPLY_TRUSTED_APP_ORIGINS = [
+  "https://tutax-ivory.vercel.app",
+  "https://app.steply.de", // geplante Produktiv-Domain (noch nicht verdrahtet)
+];
+
+function steplyOriginOf(url) {
+  try {
+    const u = new URL(String(url || ""));
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+    return u.origin;
+  } catch (err) {
+    return "";
+  }
+}
+
+function steplyIsStoreInstall() {
+  try {
+    return !!chrome.runtime.getManifest().update_url;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Ist origin eine echte Steply-App-Adresse, an die die Seiten-Bruecke koppeln darf?
+function steplyIsTrustedAppOrigin(origin) {
+  if (!origin) return false;
+  if (STEPLY_TRUSTED_APP_ORIGINS.indexOf(origin) !== -1) return true;
+  if (!steplyIsStoreInstall()) {
+    try {
+      const u = new URL(origin);
+      if (u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) {
+        return true;
+      }
+    } catch (err) {
+      return false;
+    }
+  }
+  return false;
+}
+
+// Herkunft des Absenders — von Chrome gesetzt, nicht aus dem Payload. Nur das Hauptfenster
+// eines Tabs zaehlt (content.js prueft IS_TOP; hier doppelt, falls ein iframe es versucht).
+function steplySenderOrigin(sender) {
+  if (!sender || sender.id !== chrome.runtime.id || !sender.tab) return "";
+  if (typeof sender.frameId === "number" && sender.frameId !== 0) return "";
+  return steplyOriginOf(sender.origin || sender.url || "");
+}
+
+// Herkunft der gekoppelten App — im Speicher gehalten, damit steply-open-panel SYNCHRON
+// pruefen kann (sidePanel.open braucht die Nutzer-Geste, ein await davor verliert sie).
+// null = noch nicht geladen (Worker gerade erst aufgewacht).
+let steplyPairedOrigin = null;
+function steplyPairedOriginFrom(storedUrl) {
+  return steplyOriginOf(storedUrl || STEPLY_DEFAULT_APP_URL) || steplyOriginOf(STEPLY_DEFAULT_APP_URL);
+}
+async function steplyLoadPairedOrigin() {
+  try {
+    const cfg = await chrome.storage.local.get("steplyAppUrl");
+    steplyPairedOrigin = steplyPairedOriginFrom(cfg && cfg.steplyAppUrl);
+  } catch (err) {
+    steplyPairedOrigin = steplyPairedOriginFrom("");
+  }
+  return steplyPairedOrigin;
+}
+steplyLoadPairedOrigin();
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes && changes.steplyAppUrl) {
+      steplyPairedOrigin = steplyPairedOriginFrom(changes.steplyAppUrl.newValue);
+    }
+  });
+} catch (err) {
+  /* storage-API nicht verfuegbar */
+}
+
 // Ein-Klick-Pairing (Welle 25): content.js reicht {type:"steply-pair", token, appUrl}
 // weiter, nachdem die App-Seite es per Klick angestossen hat (Origin-Bindung dort).
 //
-// SICHERHEIT — der Token wird ZUERST gegen die Ziel-App validiert (GET /api/recorder/me
+// SICHERHEIT — Herkunft zuerst (s. o.): appUrl muss eine vertrauenswuerdige Steply-Adresse
+// sein UND exakt der Herkunft des sendenden Tabs entsprechen. Sonst: sofort ablehnen, ohne
+// Netzwerkzugriff. Danach wird der Token gegen die Ziel-App validiert (GET /api/recorder/me
 // mit „Authorization: Bearer <token>"), BEVOR wir irgendetwas speichern:
 //   * Nur bei HTTP 200 mit Kontoname -> chrome.storage.local.set({steplyToken,steplyAppUrl})
 //     und Bestaetigung (inkl. Kontoname) zurueck an den Tab. Die Seite UND das Panel zeigen
@@ -319,6 +419,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     typeof msg.appUrl === "string" ? msg.appUrl.trim().replace(/\/+$/, "") : "";
   if (!token || token.length > 200 || !/^https?:\/\//i.test(appUrl) || appUrl.length > 300) {
     sendResponse({ ok: false, error: "Ungültige Verbindungsdaten." });
+    return true;
+  }
+  // Herkunfts-Bindung: nur echte Steply-Adressen, und nur vom Tab genau dieser Adresse.
+  // appUrl wird auf die reine Herkunft reduziert (kein Pfad/Query aus dem Payload).
+  const appOrigin = steplyOriginOf(appUrl);
+  if (
+    !appOrigin ||
+    appOrigin !== appUrl ||
+    !steplyIsTrustedAppOrigin(appOrigin) ||
+    steplySenderOrigin(sender) !== appOrigin
+  ) {
+    sendResponse({
+      ok: false,
+      error: "Diese Seite darf die Steply-Erweiterung nicht verbinden. Bitte in der Steply-App verbinden.",
+    });
     return true;
   }
 
@@ -373,6 +488,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-open-panel") return false;
   if (!sender || !sender.tab || sender.tab.id == null) return false;
+  // Nur von der gekoppelten App (SYNCHRON pruefen — Geste!). Ist die gekoppelte Herkunft
+  // noch nicht geladen (Worker frisch aufgewacht), genuegt eine echte Steply-Adresse: das
+  // Oeffnen der Seitenleiste allein gibt nichts preis.
+  const origin = steplySenderOrigin(sender);
+  const allowed =
+    steplyPairedOrigin !== null ? origin === steplyPairedOrigin : steplyIsTrustedAppOrigin(origin);
+  if (!allowed) return false;
   try {
     if (chrome.sidePanel && typeof chrome.sidePanel.open === "function") {
       chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {
@@ -397,13 +519,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "steply-record-into") return false;
   if (!sender || !sender.tab || sender.tab.id == null) return false;
 
-  // Herkunft aus dem Sender bestimmen (vertrauenswuerdiger als ein Payload-Wert).
-  let origin = "";
-  try {
-    origin = sender.origin || (sender.url ? new URL(sender.url).origin : "");
-  } catch (err) {
-    origin = "";
-  }
+  // Herkunft aus dem Sender bestimmen (vertrauenswuerdiger als ein Payload-Wert) und NUR
+  // von der gekoppelten App annehmen (synchrone Vorpruefung wie bei steply-open-panel).
+  const origin = steplySenderOrigin(sender);
+  const allowedNow =
+    steplyPairedOrigin !== null ? origin === steplyPairedOrigin : steplyIsTrustedAppOrigin(origin);
+  if (!allowedNow) return false;
 
   // (1) Seitenleiste SYNCHRON oeffnen (Geste!).
   try {
@@ -416,21 +537,23 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     /* sidePanel.open nicht verfuegbar */
   }
 
-  // (2) Ziel merken (best effort). target/label kamen bereits gehygienet aus content.js.
-  try {
-    chrome.storage.local
-      .set({
+  // (2) Ziel merken (best effort) — erst nach der endgueltigen Pruefung gegen die GEKOPPELTE
+  // Herkunft (hier darf gewartet werden). target/label kamen bereits gehygienet aus content.js.
+  steplyLoadPairedOrigin()
+    .then((paired) => {
+      if (origin !== paired) return;
+      return chrome.storage.local.set({
         pendingTarget: {
           target: msg.target || null,
           label: typeof msg.label === "string" ? msg.label : "",
           origin,
           ts: Date.now(),
         },
-      })
-      .catch(() => {});
-  } catch (err) {
-    /* storage nicht verfuegbar */
-  }
+      });
+    })
+    .catch(() => {
+      /* storage nicht verfuegbar */
+    });
   return false;
 });
 
@@ -448,7 +571,7 @@ const BADGE_COLOR = "#ef6a4e"; // Koralle (--brand)
 const BADGE_TTL = 5 * 60 * 1000; // 5 min
 // Gleicher Fallback wie DEFAULT_APP_URL im Panel (app.steply.de ist noch nicht
 // verdrahtet) — beim Domain-Umzug BEIDE Stellen umstellen.
-const BADGE_DEFAULT_APP_URL = "https://tutax-ivory.vercel.app";
+const BADGE_DEFAULT_APP_URL = STEPLY_DEFAULT_APP_URL;
 
 async function badgeAppBase() {
   try {
@@ -699,8 +822,7 @@ async function syncSchedules() {
     (a) => a && a.name && a.name.indexOf(STEPLY_RUN_PREFIX) === 0,
   );
 
-  // Ohne Token: alle geplanten Läufe entfernen (nichts zu tun ohne Konto).
-  if (!token) {
+  async function clearRunAlarms() {
     for (const a of runAlarms) {
       try {
         await chrome.alarms.clear(a.name);
@@ -708,6 +830,11 @@ async function syncSchedules() {
         /* egal */
       }
     }
+  }
+
+  // Ohne Token: alle geplanten Läufe entfernen (nichts zu tun ohne Konto).
+  if (!token) {
+    await clearRunAlarms();
     return;
   }
 
@@ -722,6 +849,12 @@ async function syncSchedules() {
       signal: controller.signal,
     });
     clearTimeout(timer);
+    // 401 = Verbindung in der App getrennt / Token widerrufen ⇒ geplante Läufe dieser
+    // (nicht mehr gültigen) Verbindung entfernen, sonst feuern sie weiter und laufen ins Leere.
+    if (res.status === 401) {
+      await clearRunAlarms();
+      return;
+    }
     if (!res.ok) return;
     const body = await res.json().catch(() => ({}));
     list = Array.isArray(body.automations) ? body.automations : [];

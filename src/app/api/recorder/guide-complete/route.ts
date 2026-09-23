@@ -7,7 +7,12 @@ import {
   recorderJson,
   recorderPreflight,
 } from "@/lib/recorder";
-import { FREE_TUTORIAL_LIMIT, isPro } from "@/lib/plan";
+import {
+  PLAN_LIMIT_CODE,
+  TUTORIAL_QUOTA_MESSAGE,
+  tutorialQuotaReachedFor,
+} from "@/lib/tutorial-quota";
+import { takeHourlyAiRun } from "@/lib/ai-run-limit";
 import {
   validateGuideSteps,
   highlightFromRect,
@@ -59,26 +64,64 @@ export async function OPTIONS() {
   return recorderPreflight();
 }
 
-/**
- * Free-Limit für den token-basierten Pfad (keine Session → Admin-Client).
- * Spiegelt tutorialQuotaReached aus app/app/actions.ts: eigene Tutorials OHNE
- * Template-Forks; Pro/Business = unbegrenzt.
- */
-async function quotaReached(
-  admin: ReturnType<typeof createAdminClient>,
+// Kostenbremse (v2.19.2): KI-Feinschliff nach einer Aufnahme höchstens so oft je Stunde und
+// Person (eigener Zähler neben dem Editor-Knopf „Texte mit KI verbessern“, 30/h). Darüber
+// wird NUR der Feinschliff übersprungen — die Aufnahme selbst landet immer (Vorlagen-Texte).
+const GUIDE_REFINE_RUNS_PER_HOUR = 30;
+
+// Wiederholungs-Schutz (v2.19.2): Geht die Antwort verloren und die Erweiterung schickt
+// dieselbe Aufnahme erneut (gleicher Upload-Ordner aus dem Handshake), liefern wir das schon
+// angelegte Ergebnis zurück statt eine zweite Anleitung anzulegen. Gesucht wird in den jüngst
+// angelegten Anleitungen des Kontos (+ dem Einfüge-Ziel) — signierte Upload-URLs gelten ohnehin
+// nur ~2 h, 24 h Rückblick reichen also sicher. Keine neue Spalte nötig.
+const IDEMPOTENCY_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+/** Gemeinsamer Upload-Ordner aller Schritt-Bilder ({konto}/guide-{uuid}) — oder null. */
+function uploadFolderOf(steps: GuideStepInput[]): string | null {
+  const folders = new Set(steps.map((s) => s.path.slice(0, s.path.lastIndexOf("/"))));
+  if (folders.size !== 1) return null;
+  const folder = [...folders][0];
+  return /\/guide-[0-9a-f-]{36}$/i.test(folder) ? folder : null;
+}
+
+/** Anleitung, die schon Schritte aus diesem Upload-Ordner hat (oder null). Wirft nie. */
+async function tutorialFromUpload(
+  admin: SupabaseClient,
   accountId: string,
-  plan: string | null,
-): Promise<boolean> {
-  if (isPro({ plan })) return false;
-  const [{ count: total }, { count: forks }] = await Promise.all([
-    admin.from("tutorials").select("id", { count: "exact", head: true }).eq("account_id", accountId),
-    admin
-      .from("account_templates")
-      .select("template_id", { count: "exact", head: true })
+  folder: string,
+  targetTutorialId: string | null,
+): Promise<string | null> {
+  try {
+    const since = new Date(Date.now() - IDEMPOTENCY_LOOKBACK_MS).toISOString();
+    const { data: recent } = await admin
+      .from("tutorials")
+      .select("id")
       .eq("account_id", accountId)
-      .not("forked_tutorial_id", "is", null),
-  ]);
-  return (total ?? 0) - (forks ?? 0) >= FREE_TUTORIAL_LIMIT;
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    const ids = (recent ?? []).map((t) => t.id as string);
+    if (targetTutorialId) {
+      const { data: tgt } = await admin
+        .from("tutorials")
+        .select("id")
+        .eq("id", targetTutorialId)
+        .eq("account_id", accountId)
+        .maybeSingle();
+      if (tgt && !ids.includes(tgt.id as string)) ids.push(tgt.id as string);
+    }
+    if (!ids.length) return null;
+    const { data: hit } = await admin
+      .from("steps")
+      .select("tutorial_id")
+      .in("tutorial_id", ids)
+      .like("image_path", `${folder}/%`)
+      .limit(1);
+    return hit && hit.length ? (hit[0].tutorial_id as string) : null;
+  } catch (e) {
+    console.error("[guide-complete] Wiederholungs-Prüfung:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 // Eine gespeicherte Step-Zeile (Eingabe des KI-Feinschliffs, der nur über NEUE Schritte läuft).
@@ -237,9 +280,19 @@ function refineInput(steps: GuideStepInput[], rows: { id: string }[]): SavedStep
 }
 
 /** Feinschliff im Hintergrund starten (Titel des Ziel-Tutorials wird dafür nachgeschlagen). */
-function scheduleRefine(admin: SupabaseClient, tutorialId: string, steps: GuideStepInput[], rows: { id: string }[]) {
+function scheduleRefine(
+  admin: SupabaseClient,
+  userId: string,
+  tutorialId: string,
+  steps: GuideStepInput[],
+  rows: { id: string }[],
+) {
   after(async () => {
     try {
+      if (!(await takeHourlyAiRun(userId, "guide_refine_runs", GUIDE_REFINE_RUNS_PER_HOUR))) {
+        console.warn("[guide-complete] Feinschliff übersprungen: Stunden-Limit erreicht.");
+        return;
+      }
       const { data: tut } = await admin.from("tutorials").select("title").eq("id", tutorialId).maybeSingle();
       await refineGuideSteps(
         admin,
@@ -437,6 +490,7 @@ async function insertIntoTarget(
 async function createNewTutorial(
   admin: SupabaseClient,
   accountId: string,
+  userId: string,
   title: string,
   steps: GuideStepInput[],
 ): Promise<{ tutorialId: string } | { error: string; status: number }> {
@@ -466,7 +520,7 @@ async function createNewTutorial(
   }));
   if (branches.length) await admin.from("step_branches").insert(branches);
 
-  scheduleRefine(admin, tutorialId, steps, stepRows);
+  scheduleRefine(admin, userId, tutorialId, steps, stepRows);
   return { tutorialId };
 }
 
@@ -494,12 +548,34 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const parsed = body?.target != null ? parseGuideTarget(body.target) : null;
+
+  // ── Wiederholung derselben Aufnahme (gleicher Upload-Ordner) → vorhandenes Ergebnis ──
+  // Vor dem Free-Limit: sonst bekäme ein Retry nach verlorener Antwort beim 5. Entwurf ein 403.
+  const folder = uploadFolderOf(steps);
+  if (folder) {
+    const existingId = await tutorialFromUpload(admin, account.id, folder, parsed?.tutorialId ?? null);
+    if (existingId) {
+      if (parsed && existingId === parsed.tutorialId) {
+        return recorderJson({ tutorialId: existingId, inserted: true, repeated: true });
+      }
+      return recorderJson(
+        body?.target != null
+          ? {
+              tutorialId: existingId,
+              fallback: true,
+              fallbackReason: "Die Aufnahme war bereits als eigene Anleitung gespeichert.",
+              repeated: true,
+            }
+          : { tutorialId: existingId, repeated: true },
+      );
+    }
+  }
 
   // ── Aufnahme-Anker (Welle 27): nur wenn ein `target` mitgeschickt wurde ──────────
   // Kein Fallback-Feld, wenn gar kein Ziel dabei war (Abwärtskompatibilität).
   let fallbackReason = "";
   if (body?.target != null) {
-    const parsed = parseGuideTarget(body.target);
     if (!parsed) {
       fallbackReason = "Die Zielangabe war unvollständig oder ungültig.";
     } else {
@@ -508,7 +584,7 @@ export async function POST(req: NextRequest) {
         // Seiten-Kontext (Welle 31c): site_domains als Union mit dem Ziel-Tutorial säen.
         await seedSiteDomains(admin, parsed.tutorialId, steps);
         // KI-Feinschliff NUR über die neuen Schritte.
-        scheduleRefine(admin, parsed.tutorialId, steps, ins.rows);
+        scheduleRefine(admin, account.userId, parsed.tutorialId, steps, ins.rows);
         return recorderJson({ tutorialId: parsed.tutorialId, inserted: true });
       }
       fallbackReason = ins.reason;
@@ -516,22 +592,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Neues Tutorial (Standard-Pfad UND Fallback) — Free-Limit gilt hier ───────────
-  const { data: acc } = await admin
-    .from("accounts")
-    .select("plan")
-    .eq("id", account.id)
-    .maybeSingle();
-  if (await quotaReached(admin, account.id, (acc?.plan as string | null) ?? null)) {
-    return recorderJson(
-      { error: "Der kostenlose Tarif erlaubt keine weiteren Anleitungen. Einen größeren Tarif wählen Sie in Steply unter „Einstellungen → Tarif“." },
-      403,
-    );
+  if (await tutorialQuotaReachedFor(admin, account.id)) {
+    return recorderJson({ error: TUTORIAL_QUOTA_MESSAGE, code: PLAN_LIMIT_CODE }, 403);
   }
 
   const rawTitle = typeof body?.title === "string" ? body.title.trim() : "";
   const title = rawTitle ? rawTitle.slice(0, 120) : defaultGuideTitle();
 
-  const created = await createNewTutorial(admin, account.id, title, steps);
+  const created = await createNewTutorial(admin, account.id, account.userId, title, steps);
   if ("error" in created) return recorderJson({ error: created.error }, created.status);
 
   // Seiten-Kontext (Welle 31c): site_domains des neuen Tutorials aus den Schritt-URLs säen.

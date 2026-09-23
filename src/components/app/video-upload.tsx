@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { validateClicks, type Click } from "@/lib/clicks";
 import { errorText } from "@/lib/action-error";
+import { videoUploadQuotaError } from "@/app/app/actions";
 
 type Phase = "idle" | "recording" | "uploading" | "queued" | "processing" | "done" | "failed" | "bulk" | "bulkDone";
 
@@ -113,6 +114,9 @@ export function VideoUpload({
   // `clicks` optional: nur der Einzel-Upload reicht validierte Steply-Klick-Marker durch;
   // Bulk/URL/Aufnahme lassen das Feld weg (Row ohne `clicks`).
   async function uploadOne(blob: Blob, ext: string, niceName: string, clicks?: Click[]): Promise<{ jobId: string }> {
+    // Free-Limit vorab (sonst lädt das Video erst hoch und der Worker lehnt später ab).
+    const quotaError = await videoUploadQuotaError();
+    if (quotaError) throw new Error(quotaError);
     const supabase = createClient();
     const vpath = `${accountId}/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("tutorial-videos").upload(vpath, blob, { contentType: blob.type || "video/webm", upsert: false });

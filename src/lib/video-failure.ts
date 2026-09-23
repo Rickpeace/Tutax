@@ -14,6 +14,9 @@ export const FAILED_VIDEO_DAYS = 7;
 export function failedVideoReason(error: string | null | undefined): string {
   const e = (error ?? "").trim();
   if (!e) return "der Grund ist unbekannt";
+  // Free-Limit (Worker-Meldung „Der kostenlose Tarif erlaubt keine weiteren Anleitungen …“).
+  if (/kostenlose Tarif|Tarif-Grenze/i.test(e))
+    return "der kostenlose Tarif erlaubt keine weiteren Anleitungen (größeren Tarif unter Einstellungen → Tarif wählen)";
   if (/unvollständig|nicht gelesen|nicht verarbeitet|zu kurz|Command failed|ffmpeg|ffprobe/i.test(e))
     return "die Aufnahme ließ sich nicht lesen (möglicherweise unvollständig oder zu kurz)";
   if (/^Download|not found|Object not found/i.test(e))

@@ -306,7 +306,13 @@ Ein-Klick-Ablauf:
    `type === "steply-pair"` **und** der Token ein plausibler String ist. Dann reicht es
    `{type:"steply-pair", token, appUrl: event.origin}` (die **verifizierte** Herkunft, nicht
    der behauptete Wert) an `background.js`.
-3. **`background.js`** ruft **zuerst** `GET {appUrl}/api/recorder/me` mit dem Token auf
+3. **`background.js`** prüft **zuerst die Herkunft** (v2.19.2): `appUrl` muss auf der festen
+   Liste echter Steply-Adressen stehen (`STEPLY_TRUSTED_APP_ORIGINS`; `http://localhost:*`
+   nur ohne Store-Installation) **und** exakt der Herkunft des sendenden Tabs
+   (`sender.origin`, von Chrome gesetzt) entsprechen. Sonst sofortige Ablehnung — denn die
+   Prüfungen in `content.js` besteht das Script **jeder** Seite. Auch `steply-open-panel`
+   und `steply-record-into` werden nur von der **gekoppelten** App-Herkunft angenommen.
+   Danach ruft es `GET {appUrl}/api/recorder/me` mit dem Token auf
    (Timeout ~8 s). **Nur bei 200** speichert es `steplyToken`/`steplyAppUrl` in
    `chrome.storage.local` und meldet den **Kontonamen** an den Tab zurück. Bei jedem
    Fehler: **nichts** speichern, Ablehnung zurück.

@@ -6,6 +6,7 @@ import {
 } from "@/lib/recorder";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSchedule } from "@/lib/automations";
+import { countAutomationSteps } from "@/lib/automation-step-counts";
 
 // Automationen-Ausführung (Welle 36), Kontrakt 1: GET /api/recorder/automations.
 //
@@ -14,8 +15,8 @@ import { readSchedule } from "@/lib/automations";
 // Admin-Client/RLS-Bypass, cross-origin ohne Session). KEINE Cookies. CORS: RECORDER_ME_CORS.
 //
 // Antwort: { automations: [{ id, title, site_domains, stepCount, paramCount, schedule, updated_at }] }
-//   — NUR das Token-Konto, updated_at desc, max 100. stepCount kommt aus EINER Steps-Query
-//   (kein N+1); paramCount = Länge des params-Arrays. schedule (Welle 41) = normalisierter
+//   — NUR das Token-Konto, updated_at desc, max 100. stepCount kommt aus einer seitenweise
+//   gelesenen Steps-Abfrage (kein N+1, keine 1000er-Kappung); paramCount = Länge des params-Arrays. schedule (Welle 41) = normalisierter
 //   Wiederhol-Zeitplan | null — die Extension synct daraus ihre chrome.alarms.
 
 type AutomationRow = {
@@ -54,18 +55,8 @@ export async function GET(req: NextRequest) {
   const automations = rows ?? [];
   const ids = automations.map((a) => a.id);
 
-  // Schrittzahl je Automation: EINE Query über alle Schritte (kein N+1), in JS aggregiert.
-  const stepCounts = new Map<string, number>();
-  if (ids.length) {
-    const { data: steps } = await admin
-      .from("automation_steps")
-      .select("automation_id")
-      .in("automation_id", ids)
-      .returns<{ automation_id: string }[]>();
-    for (const s of steps ?? []) {
-      stepCounts.set(s.automation_id, (stepCounts.get(s.automation_id) ?? 0) + 1);
-    }
-  }
+  // Schrittzahl je Automation: seitenweise über alle Schritte (kein N+1, keine 1000er-Kappung).
+  const stepCounts = await countAutomationSteps(admin, ids);
 
   const out = automations.map((a) => ({
     id: a.id,
