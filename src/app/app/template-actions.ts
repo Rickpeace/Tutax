@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
-import { indexTutorial } from "@/lib/kb";
+import { indexTutorial, reindexTutorialIfLive } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateHubTag } from "@/lib/cache-tags";
 import type { Step, StepBranch } from "@/lib/types";
@@ -46,18 +46,23 @@ export async function setTemplateEnabled(templateId: string, enabled: boolean) {
     );
   if (error) throw new Error(error.message);
 
-  // Chatbot-Wissen mitziehen: aktivierte Standard-Templates indexieren, sonst entfernen.
+  // Chatbot-Wissen mitziehen: aktivierte Vorlagen indexieren, sonst entfernen — bei einer
+  // angepassten Vorlage (Fork) deren eigene Kopie. Sonst antwortete der Chatbot weiter aus
+  // einer abgeschalteten Kopie und verlinkte eine Seite, die es öffentlich nicht mehr gibt.
   const { data: row } = await supabase
     .from("account_templates")
     .select("forked_tutorial_id")
     .eq("account_id", account.id)
     .eq("template_id", templateId)
     .maybeSingle();
-  if (!row?.forked_tutorial_id) {
-    if (enabled) await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
-    else await dropEmbeddings(account.id, templateId);
-  }
-  invalidateHubTag(account.slug); // Hub zeigt Standard-Anleitungen sofort an/aus
+  const forkId = row?.forked_tutorial_id ?? null;
+  if (!enabled) await dropEmbeddings(account.id, forkId ?? templateId);
+  // Fork nur, wenn die eigene Kopie live ist (veröffentlicht + öffentlich) — Entwürfe nie.
+  else if (forkId) await reindexTutorialIfLive(forkId);
+  else await indexTutorial(createAdminClient(), account.id, templateId).catch(() => {});
+  // Hub + alle Seiten des Kontos (die Tutorial-Seiten tragen den Hub-Tag mit): die
+  // Vorlage bzw. ihre angepasste Kopie ist sofort sichtbar/verschwunden.
+  invalidateHubTag(account.slug);
   // Kein revalidatePath: das Dashboard aktualisiert den Schalter optimistisch (snappy).
 }
 
@@ -87,6 +92,29 @@ export async function forkTemplate(templateId: string) {
     ? await supabase.from("step_branches").select("*").in("step_id", stepIds).returns<StepBranch[]>()
     : { data: [] as StepBranch[] };
 
+  // Gleicher Slug -> Hilfe-URL bleibt stabil. Hat das Konto aber schon eine EIGENE
+  // Anleitung mit diesem Slug (Altbestand), bekäme die Kopie dieselbe Adresse wie sie —
+  // dann wäre eine der beiden nie erreichbar. Deterministisch: die eigene behält die
+  // Adresse (sie hatte sie schon), die Kopie bekommt den nächsten freien Zusatz (-2, -3 …).
+  let forkSlug: string | null = tpl.slug ?? null;
+  if (forkSlug) {
+    const [{ data: ownSlugs }, { data: tplSlugs }] = await Promise.all([
+      supabase.from("tutorials").select("slug").eq("account_id", account.id).not("slug", "is", null),
+      // andere veröffentlichte Vorlagen: ein Zusatz-Slug darf keine von ihnen verdecken
+      supabase
+        .from("tutorials")
+        .select("slug")
+        .eq("is_template", true)
+        .eq("status", "published")
+        .neq("id", templateId)
+        .not("slug", "is", null),
+    ]);
+    const taken = new Set([...(ownSlugs ?? []), ...(tplSlugs ?? [])].map((t) => t.slug as string));
+    const base = forkSlug;
+    let n = 1;
+    while (taken.has(forkSlug)) forkSlug = `${base}-${++n}`;
+  }
+
   const forkId = crypto.randomUUID();
   await supabase.from("tutorials").insert({
     id: forkId,
@@ -95,7 +123,7 @@ export async function forkTemplate(templateId: string) {
     title: tpl.title,
     description: tpl.description,
     status: "published", // bleibt nahtlos sichtbar (UI ändert sich nicht, §14)
-    slug: tpl.slug, // gleicher Slug -> Hilfe-URL bleibt stabil
+    slug: forkSlug,
   });
 
   const admin = createAdminClient();

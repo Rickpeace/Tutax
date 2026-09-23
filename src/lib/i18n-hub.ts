@@ -124,7 +124,12 @@ type Key =
   // Welle 30 — Browser-Sprach-Vorschlag auf der Hilfe-Seite. Text steht immer in der
   // ZIELsprache (z. B. Englisch für en), nie in der aktuellen Seitensprache.
   | "langSuggest"
-  | "langSuggestGo";
+  | "langSuggestGo"
+  // Kontaktbox im Chat (lib/escalation.ts). Ein eigener Text des Kunden bleibt, wie er ist.
+  | "escDefaultMessage"
+  | "escBook"
+  | "escBookWith"
+  | "escRightPerson";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -209,6 +214,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     chatNoAnswer: "Das kann ich Ihnen leider nicht sicher beantworten.",
     langSuggest: "Diese Hilfe-Seite auf Deutsch anzeigen?",
     langSuggestGo: "Auf Deutsch ansehen",
+    escDefaultMessage: "Gerne helfen wir Ihnen persönlich weiter.",
+    escBook: "Termin buchen",
+    escBookWith: "Termin buchen · {name}",
+    escRightPerson: "{person} ist hierfür die richtige Ansprechperson.",
   },
   en: {
     next: "Next",
@@ -291,6 +300,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     chatNoAnswer: "I'm afraid I can't answer that reliably.",
     langSuggest: "View this help page in English?",
     langSuggestGo: "View in English",
+    escDefaultMessage: "We're happy to help you personally.",
+    escBook: "Book an appointment",
+    escBookWith: "Book an appointment · {name}",
+    escRightPerson: "{person} is the right contact for this.",
   },
   pl: {
     next: "Dalej",
@@ -373,6 +386,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     chatNoAnswer: "Niestety nie mogę tego pewnie odpowiedzieć.",
     langSuggest: "Wyświetlić tę stronę pomocy po polsku?",
     langSuggestGo: "Zobacz po polsku",
+    escDefaultMessage: "Chętnie pomożemy Ci osobiście.",
+    escBook: "Umów termin",
+    escBookWith: "Umów termin · {name}",
+    escRightPerson: "{person} to właściwa osoba do kontaktu w tej sprawie.",
   },
   tr: {
     next: "İleri",
@@ -455,6 +472,10 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     chatNoAnswer: "Maalesef bunu kesin olarak yanıtlayamıyorum.",
     langSuggest: "Bu yardım sayfasını Türkçe görüntülemek ister misiniz?",
     langSuggestGo: "Türkçe görüntüle",
+    escDefaultMessage: "Size kişisel olarak yardımcı olmaktan memnuniyet duyarız.",
+    escBook: "Randevu al",
+    escBookWith: "Randevu al · {name}",
+    escRightPerson: "Bu konuda doğru kişi: {person}.",
   },
 };
 

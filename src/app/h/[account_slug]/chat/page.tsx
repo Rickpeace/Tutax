@@ -4,6 +4,9 @@ import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
 import { ChatWidget } from "@/components/viewer/chat-widget";
+import { HtmlLang } from "@/components/viewer/html-lang";
+import { resolveLang, labelsFor, isExtraLang, LANG_BCP47 } from "@/lib/i18n-hub";
+import { EMBED_TRANSPARENT_CSS } from "./transparent";
 
 // Chat-only-Seite (Feature H4 „Script-Chat-Bubble"): rendert NUR den ChatWidget,
 // CSS-isoliert in einem eigenen iFrame. Wiederverwendet das komplette bestehende
@@ -14,7 +17,7 @@ const load = cache(async (accountSlug: string) => {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, name, slug")
+    .select("id, name, slug, languages")
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
@@ -40,14 +43,20 @@ export default async function ChatEmbedPage({
   searchParams,
 }: {
   params: Promise<{ account_slug: string }>;
-  searchParams: Promise<{ embedded?: string }>;
+  searchParams: Promise<{ embedded?: string; lang?: string }>;
 }) {
   const { account_slug } = await params;
-  const { embedded } = await searchParams;
+  const { embedded, lang: langParam } = await searchParams;
   const data = await load(account_slug);
   if (!data) notFound();
 
   const { account, theme } = data;
+  // Sprache optional per ?lang= (embed.js reicht sie von der Kunden-Website durch). Nur
+  // aktivierte Zusatzsprachen gelten, sonst Deutsch — wie auf der Hilfe-Seite selbst.
+  const lang = resolveLang(
+    langParam,
+    ((account.languages as string[] | null) ?? []).filter(isExtraLang),
+  );
   const { tokens } = resolveTheme(theme);
   const fonts = brandFonts(tokens);
   const fontsHref = googleFontsHref(tokens);
@@ -56,7 +65,8 @@ export default async function ChatEmbedPage({
     <div style={{ ...brandStyle(tokens), fontFamily: fonts.body }}>
       {/* Das iFrame gibt die Größe vor; die Seite selbst bleibt transparent, damit
           die Bubble (rund/eckig) frei „schwebt". */}
-      <style>{"html,body{background:transparent!important}"}</style>
+      <style>{EMBED_TRANSPARENT_CSS}</style>
+      <HtmlLang lang={LANG_BCP47[lang]} />
       {fontsHref && (
         <>
           {/* Preconnect vor dem Stylesheet (React 19 hoisted beides in den <head>) →
@@ -70,6 +80,8 @@ export default async function ChatEmbedPage({
         accountSlug={account.slug}
         accountName={account.name}
         embedded={embedded === "1"}
+        lang={lang}
+        labels={labelsFor(lang)}
       />
     </div>
   );

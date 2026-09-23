@@ -3,6 +3,8 @@
 // Die Werte landen als href im öffentlichen Chat-Widget — deshalb nur http(s)-Links,
 // plausible E-Mail-Adressen und Telefonnummern (nie javascript:/data: o. Ä.).
 
+import { t, type HubLang } from "@/lib/i18n-hub";
+
 /** http(s)-URL oder null. */
 export function safeHttpUrl(raw: unknown): string | null {
   const s = String(raw ?? "").trim();
@@ -46,18 +48,21 @@ export type EscalationSettings = {
 export type EscalationMethod = { type: "calendar" | "email" | "phone"; label: string; value: string };
 export type EscalationBox = { message: string; methods: EscalationMethod[] };
 
-export const DEFAULT_ESCALATION_MESSAGE = "Gerne helfen wir Ihnen persönlich weiter.";
+export const DEFAULT_ESCALATION_MESSAGE = t("de", "escDefaultMessage");
 
 /**
  * Kontaktbox, die der Kunde im Chat sieht: gewählte Person (expertIdx) mit ihren
  * Kontaktwegen, fehlende Wege vom allgemeinen Kontakt ergänzt. null = nichts anzeigen
  * (ausgeschaltet oder kein gültiger Kontaktweg). EINE Quelle für /api/chat UND die
- * Vorschau auf der Einstellungsseite.
+ * Vorschau auf der Einstellungsseite (dort immer Deutsch = Default).
+ * Feste Bausteine in der Sprache der Hilfe-Seite; ein eigener Text des Kunden bleibt,
+ * wie er ihn geschrieben hat.
  */
 export function buildEscalationBox(
   esc: EscalationSettings,
   expertIdx: number | null | undefined,
   accountName: string,
+  lang: HubLang = "de",
 ): EscalationBox | null {
   if (!esc.enabled) return null;
   const experts = Array.isArray(esc.experts) ? esc.experts : [];
@@ -69,13 +74,17 @@ export function buildEscalationBox(
   const name = p?.name || esc.contactName || accountName;
   const methods: EscalationMethod[] = [];
   if (calendarUrl)
-    methods.push({ type: "calendar", label: name ? `Termin buchen · ${name}` : "Termin buchen", value: calendarUrl });
+    methods.push({
+      type: "calendar",
+      label: name ? t(lang, "escBookWith", { name }) : t(lang, "escBook"),
+      value: calendarUrl,
+    });
   if (email) methods.push({ type: "email", label: email, value: `mailto:${email}` });
   if (phone) methods.push({ type: "phone", label: phone, value: `tel:${phone}` });
   if (!methods.length) return null;
-  const base = esc.message || DEFAULT_ESCALATION_MESSAGE;
+  const base = esc.message || t(lang, "escDefaultMessage");
   const message = p?.name
-    ? `${base} ${p.name}${p.expertise ? ` (${p.expertise})` : ""} ist hierfür die richtige Ansprechperson.`
+    ? `${base} ${t(lang, "escRightPerson", { person: `${p.name}${p.expertise ? ` (${p.expertise})` : ""}` })}`
     : base;
   return { message, methods };
 }

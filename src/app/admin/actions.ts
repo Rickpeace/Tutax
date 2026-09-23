@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkAdmin } from "@/lib/admin";
 import { slugify, fallbackSlug } from "@/lib/slug";
-import { removeTutorialEmbeddings } from "@/lib/kb";
+import { after } from "next/server";
+import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
+import { invalidateTemplateHubs } from "@/lib/cache-tags";
+import { translateTutorial } from "@/lib/translate-jobs";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -52,7 +55,39 @@ export async function publishTemplate(id: string) {
     .update({ status: "published", slug, published_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  // Kunden-Hubs mit dieser Vorlage sofort aktualisieren (sonst bis zu 1 h alter Stand).
+  await invalidateTemplateHubs(id);
+  // Im Hintergrund: in alle Zusatzsprachen übersetzen (Vorlagen erscheinen auch in
+  // EN/PL/TR-Hubs) und das Chatbot-Wissen der Konten wiederherstellen, die die Vorlage
+  // aktiviert haben (Zurückziehen hatte es entfernt).
+  after(() =>
+    translateTutorial(id).catch((e) =>
+      console.error("Vorlagen-Übersetzung beim Veröffentlichen:", e instanceof Error ? e.message : e),
+    ),
+  );
+  after(() => reindexTemplateForAccounts(id));
   revalidatePath("/admin");
+}
+
+/**
+ * Chatbot-Wissen aller Konten, die die Vorlage aktiviert haben, neu aufbauen: Standard-
+ * Vorlage -> deren Inhalt, angepasste Kopie -> die Kopie (nur wenn live). Wirft nie.
+ */
+async function reindexTemplateForAccounts(templateId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from("account_templates")
+    .select("account_id, forked_tutorial_id")
+    .eq("template_id", templateId)
+    .eq("enabled", true);
+  for (const r of rows ?? []) {
+    try {
+      if (r.forked_tutorial_id) await reindexTutorialIfLive(r.forked_tutorial_id as string);
+      else await indexTutorial(admin, r.account_id as string, templateId);
+    } catch (e) {
+      console.error("Vorlagen-Reindex:", templateId, e instanceof Error ? e.message : e);
+    }
+  }
 }
 
 export async function unpublishTemplate(id: string) {
@@ -61,8 +96,19 @@ export async function unpublishTemplate(id: string) {
   const { error } = await admin.from("tutorials").update({ status: "draft" }).eq("id", id);
   if (error) throw new Error(error.message);
   // Pro-Account angelegte Embeddings dieses Templates account-übergreifend entfernen,
-  // sonst antworten Kunden-Chatbots weiter aus dem depublizierten Template.
+  // sonst antworten Kunden-Chatbots weiter aus dem depublizierten Template. Angepasste
+  // Kopien (Forks) sind ab jetzt öffentlich ebenfalls nicht mehr erreichbar
+  // (resolveCustomerTutorial) -> auch ihr Chatbot-Wissen entfernen.
   await removeTutorialEmbeddings(admin, id).catch(() => {});
+  const { data: forks } = await admin
+    .from("account_templates")
+    .select("forked_tutorial_id")
+    .eq("template_id", id)
+    .not("forked_tutorial_id", "is", null);
+  for (const f of forks ?? []) {
+    await removeTutorialEmbeddings(admin, f.forked_tutorial_id as string).catch(() => {});
+  }
+  await invalidateTemplateHubs(id); // Kunden-Hubs zeigen die Vorlage sofort nicht mehr
   revalidatePath("/admin");
 }
 
@@ -71,6 +117,8 @@ export async function deleteTemplate(id: string) {
   const admin = createAdminClient();
   // Erst die (account-übergreifenden) Embeddings weg, dann die Vorlage.
   await removeTutorialEmbeddings(admin, id).catch(() => {});
+  // VOR dem Delete: danach sind die account_templates-Zeilen (Cascade) weg.
+  await invalidateTemplateHubs(id);
   const { error } = await admin.from("tutorials").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
@@ -129,5 +177,6 @@ export async function setTemplateCategory(templateId: string, categoryId: string
     .eq("id", templateId)
     .eq("is_template", true);
   if (error) throw new Error(error.message);
+  await invalidateTemplateHubs(templateId); // Kategorie im Kunden-Hub sofort aktuell
   revalidatePath("/admin");
 }

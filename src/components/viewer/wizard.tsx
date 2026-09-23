@@ -8,10 +8,10 @@ import { RichTextView } from "@/components/viewer/rich-text-view";
 import { recordFeedback, recordStepFeedback } from "@/app/h/actions";
 import { dateDe } from "@/lib/format";
 import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
+import { backAction, nextSnapshot, type WizMove, type WizSnapshot } from "@/lib/wizard-history";
 
 /** Schlüssel, unter dem der Wizard seinen Stand im Browser-Verlaufseintrag ablegt. */
 const WIZ_STATE = "steplyWizard";
-type WizSnapshot = { cur: string | null; history: string[]; depth: number };
 
 export function Wizard({
   rootId,
@@ -123,19 +123,27 @@ export function Wizard({
   // WICHTIG: Der bestehende Zustand (Next.js-Router-Interna) wird mitkopiert —
   // ohne ihn lädt der Router bei popstate die Seite komplett neu.
   const depthRef = useRef(0);
+  // Entstand der aktuelle Verlaufseintrag durch einen Vorwärts-Schritt? Nur dann darf
+  // „Zurück“ den Browser zurückschicken (lib/wizard-history.ts, backAction).
+  const fwdRef = useRef(false);
   // Aktueller Stand für Rückrufe (Timer/„Ton zu Ende“), die sonst veraltete Werte sähen.
   const stateRef = useRef<{ cur: string | null; history: string[] }>({ cur: rootId, history: [] });
 
   const writeHistory = useCallback(
-    (nextCur: string | null, nextHistory: string[], replace: boolean) => {
+    (prevCur: string | null, nextCur: string | null, nextHistory: string[], move: WizMove) => {
       if (typeof window === "undefined") return;
-      const depth = replace ? depthRef.current : depthRef.current + 1;
-      depthRef.current = depth;
-      const snap: WizSnapshot = { cur: nextCur, history: nextHistory, depth };
+      const { snap, push } = nextSnapshot(
+        { cur: prevCur, depth: depthRef.current, fwd: fwdRef.current },
+        nextCur,
+        nextHistory,
+        move,
+      );
+      depthRef.current = snap.depth;
+      fwdRef.current = snap.fwd === true;
       try {
         const next = { ...(window.history.state ?? {}), [WIZ_STATE]: snap };
-        if (replace) window.history.replaceState(next, "");
-        else window.history.pushState(next, "");
+        if (push) window.history.pushState(next, "");
+        else window.history.replaceState(next, "");
       } catch {
         /* Verlaufs-Komfort darf nie brechen */
       }
@@ -143,16 +151,18 @@ export function Wizard({
     [],
   );
 
-  /** Einzige Stelle, die den Schritt wechselt — hält React-Zustand und Verlauf synchron. */
+  /**
+   * Einzige Stelle, die den Schritt wechselt — hält React-Zustand und Verlauf synchron.
+   * `move` bestimmt, ob ein neuer Verlaufseintrag entsteht (Vorwärts/Sprung) oder der
+   * aktuelle ersetzt wird (Zurück ohne passenden Vorgänger-Eintrag).
+   */
   const navigate = useCallback(
-    (nextCur: string | null, nextHistory: string[]) => {
-      // Gleicher Schritt (Doppelklick, Neustart auf dem Startschritt): kein neuer
-      // Eintrag, sonst wächst der Verlauf endlos.
-      const sameStep = nextCur === stateRef.current.cur;
+    (nextCur: string | null, nextHistory: string[], move: WizMove) => {
+      const prevCur = stateRef.current.cur;
       stateRef.current = { cur: nextCur, history: nextHistory };
       setCur(nextCur);
       setHistory(nextHistory);
-      writeHistory(nextCur, nextHistory, sameStep);
+      writeHistory(prevCur, nextCur, nextHistory, move);
     },
     [writeHistory],
   );
@@ -168,6 +178,7 @@ export function Wizard({
         ? snap.history.filter((h) => typeof h === "string" && stepById.has(h))
         : [];
       depthRef.current = typeof snap.depth === "number" ? snap.depth : 0;
+      fwdRef.current = snap.fwd === true;
       stateRef.current = { cur: nc, history: nh };
       setCur(nc);
       setHistory(nh);
@@ -197,7 +208,10 @@ export function Wizard({
         initCur = snap.cur;
         initHistory = snap.history;
         depthRef.current = typeof snap.depth === "number" ? snap.depth : 0;
+        fwdRef.current = snap.fwd === true;
       } else if (storKey) {
+        // Aus dem Tab-Speicher (z. B. nach Sprachwechsel oder erneutem Öffnen): der Weg
+        // steht NICHT im Browser-Verlauf -> „Zurück“ geht den Weg ohne history.back().
         const raw = sessionStorage.getItem(storKey);
         const s = raw ? (JSON.parse(raw) as { cur?: string | null; history?: string[] }) : null;
         if (s && valid(s.cur ?? null, s.history)) {
@@ -216,7 +230,7 @@ export function Wizard({
     }
     // Startposition in den BESTEHENDEN Verlaufseintrag schreiben (kein neuer Eintrag):
     // so verlässt Zurück am ersten Schritt die Seite und ein Neuladen hält die Position.
-    writeHistory(initCur, initHistory, true);
+    writeHistory(initCur, initCur, initHistory, "init");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim ersten Rendern
   }, []);
   useEffect(() => {
@@ -359,27 +373,28 @@ export function Wizard({
   const jumpTo = (idx: number) => {
     if (!linearPath) return;
     gestureRef.current = true;
-    navigate(linearPath[idx] ?? null, linearPath.slice(0, idx));
+    navigate(linearPath[idx] ?? null, linearPath.slice(0, idx), "jump");
   };
 
   const go = (target: string | null) => {
     gestureRef.current = true; // Navigation = Geste vorhanden (erlaubt Auto-Play)
     const { cur: c, history: h } = stateRef.current;
-    navigate(target, c != null ? [...h, c] : h);
+    navigate(target, c != null ? [...h, c] : h, "forward");
   };
   const back = () => {
     gestureRef.current = true;
-    // Es gibt einen eigenen Verlaufseintrag -> den Browser zurückgehen lassen, damit
-    // Knopf und Browser-Zurück denselben Weg nehmen (kein doppelter Eintrag).
-    if (depthRef.current > 0) {
-      window.history.back();
-      return;
-    }
-    const h = stateRef.current.history;
-    if (!h.length) return;
-    navigate(h[h.length - 1], h.slice(0, -1));
+    const action = backAction({
+      history: stateRef.current.history,
+      depth: depthRef.current,
+      fwd: fwdRef.current,
+    });
+    // Eintrag stammt von einem Vorwärts-Schritt -> davor liegt genau der vorige Stand:
+    // den Browser zurückgehen lassen (Knopf und Browser-Zurück nehmen denselben Weg).
+    if (action.kind === "browser") window.history.back();
+    // Sonst (wiederhergestellt, Sprung, Neustart): den Weg zurück, Eintrag ersetzen.
+    else if (action.kind === "replace") navigate(action.cur, action.history, "back");
   };
-  const restart = () => navigate(rootId, []);
+  const restart = () => navigate(rootId, [], "jump");
 
   const step = cur != null ? stepById.get(cur) : null;
 
@@ -389,7 +404,7 @@ export function Wizard({
     const { cur: c, history: h } = stateRef.current;
     if (c == null) return;
     const target = branchesByStep.get(c)?.[0]?.target_step_id ?? null;
-    navigate(target, [...h, c]);
+    navigate(target, [...h, c], "forward");
   }, [branchesByStep, navigate]);
 
   // Nach Schrittwechsel Fokus auf den Schritt-Titel (A11y: Screenreader/Tastatur).

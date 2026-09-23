@@ -13,18 +13,33 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = appBaseUrl();
   const admin = createAdminClient();
 
-  const [{ data: accounts }, { data: tutorials }] = await Promise.all([
-    admin.from("accounts").select("id, slug").not("slug", "is", null),
-    admin
-      .from("tutorials")
-      .select("slug, account_id, updated_at")
-      .eq("status", "published")
-      .eq("visibility", "public")
-      .not("slug", "is", null)
-      .not("account_id", "is", null),
-  ]);
+  const [{ data: accounts }, { data: tutorials }, { data: forks }, { data: liveTemplates }] =
+    await Promise.all([
+      admin.from("accounts").select("id, slug").not("slug", "is", null),
+      admin
+        .from("tutorials")
+        .select("id, slug, account_id, updated_at")
+        .eq("status", "published")
+        .eq("visibility", "public")
+        .not("slug", "is", null)
+        .not("account_id", "is", null),
+      admin
+        .from("account_templates")
+        .select("template_id, enabled, forked_tutorial_id")
+        .not("forked_tutorial_id", "is", null),
+      admin.from("tutorials").select("id").eq("is_template", true).eq("status", "published"),
+    ]);
 
   const slugById = new Map((accounts ?? []).map((a) => [a.id, a.slug as string]));
+  // Angepasste Vorlagen (Forks) nur, solange die Vorlage beim Kunden aktiviert und zentral
+  // veröffentlicht ist — dieselbe Regel wie resolveCustomerTutorial (sonst meldeten wir
+  // Suchmaschinen Adressen, die „Nicht gefunden“ zeigen).
+  const livePublished = new Set((liveTemplates ?? []).map((t) => t.id as string));
+  const hiddenForks = new Set(
+    (forks ?? [])
+      .filter((f) => !f.enabled || !livePublished.has(f.template_id as string))
+      .map((f) => f.forked_tutorial_id as string),
+  );
 
   const hubEntries: MetadataRoute.Sitemap = (accounts ?? [])
     .filter((a) => a.slug)
@@ -35,6 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
 
   const tutorialEntries: MetadataRoute.Sitemap = (tutorials ?? [])
+    .filter((t) => !hiddenForks.has(t.id as string))
     .map((t) => {
       const accSlug = t.account_id ? slugById.get(t.account_id) : null;
       if (!accSlug || !t.slug) return null;

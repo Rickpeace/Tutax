@@ -81,7 +81,7 @@ async function loadTopicOverview(
     const [tuts, cats, arts, tpls] = await Promise.all([
       admin
         .from("tutorials")
-        .select("title")
+        .select("id, title")
         .eq("account_id", accountId)
         .eq("status", "published")
         .eq("visibility", "public")
@@ -94,15 +94,36 @@ async function loadTopicOverview(
         .eq("account_id", accountId)
         .eq("status", "published")
         .limit(30),
-      admin.from("account_templates").select("template_id").eq("account_id", accountId).eq("enabled", true),
+      admin
+        .from("account_templates")
+        .select("template_id, enabled, forked_tutorial_id")
+        .eq("account_id", accountId),
     ]);
-    const tplIds = (tpls.data ?? []).map((r) => r.template_id as string);
-    const tplTitles = tplIds.length
-      ? ((await admin.from("tutorials").select("title").in("id", tplIds).eq("visibility", "public")).data ?? [])
+    const atRows = tpls.data ?? [];
+    const tplIds = atRows.filter((r) => r.enabled).map((r) => r.template_id as string);
+    // Nur zentral veröffentlichte Vorlagen — zurückgezogene gehören nicht ins Themenfeld.
+    const liveTpls = tplIds.length
+      ? ((
+          await admin
+            .from("tutorials")
+            .select("id, title")
+            .in("id", tplIds)
+            .eq("status", "published")
+            .eq("visibility", "public")
+        ).data ?? [])
       : [];
+    const liveTplIds = new Set(liveTpls.map((t) => t.id as string));
+    // Angepasste Kopien (Forks) zählen nur, solange ihre Vorlage aktiv + veröffentlicht ist
+    // (gleiche Regel wie die öffentliche Seite, lib/templates.ts).
+    const hiddenForks = new Set(
+      atRows
+        .filter((r) => r.forked_tutorial_id && !(r.enabled && liveTplIds.has(r.template_id as string)))
+        .map((r) => r.forked_tutorial_id as string),
+    );
     const clean = (xs: (string | null | undefined)[]) =>
       [...new Set(xs.map((x) => (x ?? "").replace(/\s+/g, " ").trim().slice(0, 80)).filter(Boolean))];
-    const titles = clean([...(tuts.data ?? []), ...tplTitles].map((t) => t.title as string)).slice(0, 60);
+    const ownTitles = (tuts.data ?? []).filter((t) => !hiddenForks.has(t.id as string));
+    const titles = clean([...ownTitles, ...liveTpls].map((t) => t.title as string)).slice(0, 60);
     const categories = clean((cats.data ?? []).map((c) => c.name as string));
     const articles = clean((arts.data ?? []).map((a) => a.title as string));
     const parts: string[] = [];
@@ -150,7 +171,8 @@ export async function POST(req: NextRequest) {
   const esc = (account.escalation ?? {}) as EscalationSettings;
   const experts = Array.isArray(esc.experts) ? esc.experts : [];
   // Eskalation: passende Person (von der KI gewählt) ODER allgemeiner Fallback.
-  const buildEscalation = (expertIdx?: number | null) => buildEscalationBox(esc, expertIdx, account.name);
+  const buildEscalation = (expertIdx?: number | null) =>
+    buildEscalationBox(esc, expertIdx, account.name, lang);
 
   if (!aiConfigured()) {
     return NextResponse.json({

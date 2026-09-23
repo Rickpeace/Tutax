@@ -16,6 +16,7 @@ import {
   safePhone,
   type EscalationSettings,
 } from "@/lib/escalation";
+import { t as hubText } from "@/lib/i18n-hub";
 import { saveEscalation } from "@/app/app/settings/eskalation/actions";
 import { unwrap, errorText } from "@/lib/action-error";
 
@@ -514,7 +515,9 @@ function ChatPreview({ settings, accountName }: { settings: EscalationSettings; 
       </div>
       <div className="overflow-hidden rounded-[22px] border-2 border-line bg-card shadow-[0_6px_0_var(--line)]">
         <div className="flex items-center justify-between bg-ink px-4 py-2.5 text-sm font-extrabold text-white">
-          KI-Assistent <span className="truncate pl-2 text-xs font-semibold text-[#d9ccb8]">{accountName}</span>
+          {/* Gleicher Kopf wie im echten Chat auf der Hilfe-Seite (dort heißt er so). */}
+          {hubText("de", "chatTitle")}{" "}
+          <span className="truncate pl-2 text-xs font-semibold text-[#d9ccb8]">{accountName}</span>
         </div>
         <div className="grid min-h-64 content-start gap-2.5 bg-background p-3.5">
           <div className="max-w-[88%] justify-self-end rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-[13px] text-white">

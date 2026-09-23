@@ -374,13 +374,24 @@ async function ensureSlug(
   // Titel ohne Buchstaben/Zahlen (z. B. „###“) ergibt keinen Slug mehr -> stabile
   // Ersatz-Adresse aus der Kennung, damit die Anleitung trotzdem einen Link bekommt.
   const base = slugify(title) || fallbackSlug("anleitung", tutorialId);
-  const { data: existing } = await supabase
-    .from("tutorials")
-    .select("slug")
-    .eq("account_id", accountId)
-    .not("slug", "is", null)
-    .neq("id", tutorialId);
-  const taken = new Set((existing ?? []).map((t) => t.slug));
+  // Belegt sind eigene Slugs UND die Slugs veröffentlichter Standard-Vorlagen: beide teilen
+  // sich den Adressraum /h/<konto>/<slug>. Sonst verdeckte die eigene Anleitung eine
+  // (später) aktivierte Vorlage — zwei Hub-Karten mit derselben Adresse, eine unerreichbar.
+  const [{ data: existing }, { data: templates }] = await Promise.all([
+    supabase
+      .from("tutorials")
+      .select("slug")
+      .eq("account_id", accountId)
+      .not("slug", "is", null)
+      .neq("id", tutorialId),
+    supabase
+      .from("tutorials")
+      .select("slug")
+      .eq("is_template", true)
+      .eq("status", "published")
+      .not("slug", "is", null),
+  ]);
+  const taken = new Set([...(existing ?? []), ...(templates ?? [])].map((t) => t.slug));
   let slug = base;
   let n = 1;
   while (taken.has(slug)) slug = `${base}-${++n}`;

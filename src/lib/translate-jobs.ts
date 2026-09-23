@@ -13,7 +13,7 @@ import {
   type ChatClient,
 } from "@/lib/translate-core";
 import { type TutorialForTranslate } from "@/lib/translate";
-import { isExtraLang, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
+import { isExtraLang, EXTRA_LANGS, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch } from "@/lib/types";
 
 export type TranslateResult = { languages: ExtraLang[] };
@@ -45,20 +45,34 @@ const chat = (): ChatClient => openai() as unknown as ChatClient;
 // ---------------------------------------------------------------------------
 // Datenzugriff über Admin-Client (für after()/Backfill ohne RLS-Kontext geeignet).
 // ---------------------------------------------------------------------------
+
+/**
+ * Zielsprachen eines Tutorials: die aktivierten Zusatzsprachen seines Kontos. Globale
+ * Standard-Vorlagen haben kein Konto, erscheinen aber in den Hubs vieler Konten mit
+ * beliebigen Sprachen -> sie werden in ALLE Zusatzsprachen übersetzt.
+ */
+function extraLanguagesOf(tut: {
+  account_id: string | null;
+  is_template: boolean | null;
+  accounts: unknown;
+}): ExtraLang[] {
+  if (!tut.account_id && tut.is_template) return [...EXTRA_LANGS];
+  const acc = Array.isArray(tut.accounts) ? tut.accounts[0] : tut.accounts;
+  return ((acc as { languages?: string[] } | null)?.languages ?? []).filter(
+    isExtraLang,
+  ) as ExtraLang[];
+}
 async function loadTutorialForTranslate(
   tutorialId: string,
-): Promise<{ source: TutorialForTranslate; languages: ExtraLang[]; accountId: string } | null> {
+): Promise<{ source: TutorialForTranslate; languages: ExtraLang[]; accountId: string | null } | null> {
   const admin = createAdminClient();
   const { data: tut } = await admin
     .from("tutorials")
-    .select("id, title, description, account_id, accounts(languages)")
+    .select("id, title, description, account_id, is_template, accounts(languages)")
     .eq("id", tutorialId)
     .maybeSingle();
   if (!tut) return null;
-  const acc = Array.isArray(tut.accounts) ? tut.accounts[0] : tut.accounts;
-  const languages = ((acc as { languages?: string[] } | null)?.languages ?? []).filter(
-    isExtraLang,
-  ) as ExtraLang[];
+  const languages = extraLanguagesOf(tut);
 
   const { data: steps } = await admin
     .from("steps")
@@ -77,7 +91,7 @@ async function loadTutorialForTranslate(
 
   return {
     languages,
-    accountId: tut.account_id as string,
+    accountId: (tut.account_id as string | null) ?? null,
     source: {
       title: tut.title,
       description: tut.description,
@@ -94,14 +108,11 @@ async function tutorialMeta(
   const admin = createAdminClient();
   const { data: tut } = await admin
     .from("tutorials")
-    .select("status, visibility, accounts(languages)")
+    .select("status, visibility, account_id, is_template, accounts(languages)")
     .eq("id", tutorialId)
     .maybeSingle();
   if (!tut) return null;
-  const acc = Array.isArray(tut.accounts) ? tut.accounts[0] : tut.accounts;
-  const languages = ((acc as { languages?: string[] } | null)?.languages ?? []).filter(
-    isExtraLang,
-  ) as ExtraLang[];
+  const languages = extraLanguagesOf(tut);
   return { languages, published: tut.status === "published" && tut.visibility === "public" };
 }
 
@@ -137,10 +148,13 @@ export async function translateTutorial(tutorialId: string): Promise<TranslateRe
   }
   // Kategorienamen des Kontos mitübersetzen (billig: idempotent, ein Batch-Call je Sprache;
   // sind alle aktuell, passiert nichts). Fehler dürfen die Tutorial-Übersetzung nicht kippen.
-  try {
-    await translateAccountCategoriesCore(admin, chat(), AI.models.chat, accountId, languages);
-  } catch (e) {
-    console.error("Kategorie-Übersetzung:", e instanceof Error ? e.message : e);
+  // Vorlagen haben kein Konto (ihre Kategorien sind global) -> hier nichts zu tun.
+  if (accountId) {
+    try {
+      await translateAccountCategoriesCore(admin, chat(), AI.models.chat, accountId, languages);
+    } catch (e) {
+      console.error("Kategorie-Übersetzung:", e instanceof Error ? e.message : e);
+    }
   }
   await invalidateTutorialTags(tutorialId, { force: true });
   return { languages: done };
