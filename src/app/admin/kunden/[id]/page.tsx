@@ -146,16 +146,30 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
           ) : (
             <ul className="divide-y-2 divide-line-2">
               {d.tutorials.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate font-bold text-ink">{t.title}</span>
+                <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm" data-testid="tutorial-row">
+                  {/* Jede Anleitung — auch Entwürfe und „nur Team“ — in der Admin-Vorschau öffnen. */}
+                  <Link
+                    href={`/admin/kunden/${a.id}/anleitung/${t.id}`}
+                    className="min-w-0 flex-1 truncate font-bold text-ink hover:text-primary hover:underline"
+                    title="Vorschau öffnen"
+                  >
+                    {t.title}
+                  </Link>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${t.status === "published" ? "bg-teal-soft text-[#118576]" : "bg-amber-soft text-amber-text"}`}>
                     {STATUS[t.status] ?? t.status}
                   </span>
                   {t.visibility === "internal" && <span className="text-[11px] font-black text-faint">nur Team</span>}
                   <span className="text-xs font-semibold text-muted-foreground">geändert {rel(t.updatedAt)}</span>
+                  <Link
+                    href={`/admin/kunden/${a.id}/anleitung/${t.id}`}
+                    className="text-xs font-extrabold text-primary hover:underline"
+                    data-testid="tutorial-preview-link"
+                  >
+                    Vorschau
+                  </Link>
                   {t.status === "published" && t.slug && t.visibility === "public" && (
-                    <Link href={`/h/${a.slug}/${t.slug}`} target="_blank" className="text-xs font-extrabold text-primary hover:underline">
-                      ansehen
+                    <Link href={`/h/${a.slug}/${t.slug}`} target="_blank" className="text-xs font-extrabold text-muted-foreground hover:text-primary hover:underline">
+                      live ↗
                     </Link>
                   )}
                 </li>

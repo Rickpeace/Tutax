@@ -78,6 +78,20 @@ try {
     .insert({ account_id: owner.acc, title: "Probe-Anleitung", status: "published", visibility: "public", slug: "probe" })
     .select("id")
     .single();
+  // Entwurf mit Schritt + Bild (für die Admin-Vorschau)
+  const { data: draft } = await admin
+    .from("tutorials")
+    .insert({ account_id: owner.acc, title: "Entwurf-Probe", status: "draft", visibility: "public" })
+    .select("id")
+    .single();
+  const draftImg = `${owner.acc}/${draft.id}/schritt.png`;
+  await admin.storage.from("tutorial-images").upload(draftImg, PNG, { contentType: "image/png", upsert: true });
+  const { data: dStep } = await admin
+    .from("steps")
+    .insert({ tutorial_id: draft.id, title: "Erster Entwurfsschritt", position: 0, image_path: draftImg, image_width: 1, image_height: 1 })
+    .select("id")
+    .single();
+  await admin.from("tutorials").update({ root_step_id: dStep.id }).eq("id", draft.id);
   await admin.from("invitations").insert({ account_id: owner.acc, email: `einladung-${stamp}@example.com`, role: "member", token: `t${stamp}${Math.random().toString(36).slice(2)}`, status: "pending", invited_by: owner.uid });
   for (const b of ["tutorial-images", "tutorial-images-public", "tutorial-videos"]) {
     await admin.storage.from(b).upload(`${owner.acc}/${tut.id}/probe.png`, PNG, { contentType: "image/png", upsert: true });
@@ -101,7 +115,7 @@ try {
   const row = page.getByTestId("customer-row").first();
   const rowTxt = (await row.innerText()).replace(/\s+/g, " ");
   ok(rowTxt.includes(CUST) && rowTxt.includes("Gratis"), `Zeile zeigt Name + Tarif („${rowTxt.slice(0, 90)}…“)`);
-  ok(/\b2\b/.test(rowTxt) && rowTxt.includes("+1") && rowTxt.includes("1/1"), "Zeile zeigt Team (2 +1 Einladung) und Anleitungen (1/1)");
+  ok(/\b2\b/.test(rowTxt) && rowTxt.includes("+1") && rowTxt.includes("1/2"), "Zeile zeigt Team (2 +1 Einladung) und Anleitungen (1/2: ein Entwurf)");
   await page.getByLabel("Kunden suchen").fill("");
   await page.getByRole("button", { name: /^Business \(/ }).click();
   const bizRows = await page.getByTestId("customer-row").allInnerTexts();
@@ -116,6 +130,31 @@ try {
   ok(body.includes("Inhaber") && body.includes("Bearbeiter"), "Details: Rollen Inhaber/Bearbeiter");
   ok(/offene einladungen/i.test(body) && body.includes(`einladung-${stamp}@example.com`), "Details: offene Einladung");
   ok(body.includes("Probe-Anleitung") && body.includes("Veröffentlicht"), "Details: Anleitung mit Status");
+
+  // Admin-Vorschau: auch ENTWÜRFE ansehen (nur lesend, zählt nicht in die Kunden-Statistik)
+  const { count: viewsBefore } = await admin.from("events").select("id", { count: "exact", head: true }).eq("account_id", owner.acc);
+  await page.getByTestId("tutorial-row").filter({ hasText: "Entwurf-Probe" }).getByTestId("tutorial-preview-link").click();
+  await page.waitForURL(/\/admin\/kunden\/.+\/anleitung\//, { timeout: 30_000 });
+  await page.getByTestId("admin-preview-bar").waitFor({ timeout: 30_000 });
+  const bar = await page.getByTestId("admin-preview-bar").innerText();
+  ok(/Entwurf/.test(bar) && bar.includes(CUST), `Vorschau: Leiste zeigt Kunde + „Entwurf“ („${bar.replace(/\s+/g, " ")}“)`);
+  ok(await page.getByText("Erster Entwurfsschritt").first().isVisible().catch(() => false), "Vorschau: Schritt des Entwurfs sichtbar");
+  // Bild kommt per signierter URL aus dem privaten Speicher — aufs fertige Laden warten.
+  const imgOk = await page
+    .waitForFunction(() => [...document.images].some((e) => e.src.includes("tutorial-images") && e.complete && e.naturalWidth > 0), null, { timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!imgOk) console.log("  ℹ Bilder:", JSON.stringify(await page.locator("img").evaluateAll((els) => els.map((e) => [e.src.slice(0, 90), e.naturalWidth, e.complete]))));
+  ok(imgOk, "Vorschau: Bild aus dem privaten Speicher lädt");
+  await page.waitForTimeout(1500);
+  const { count: viewsAfter } = await admin.from("events").select("id", { count: "exact", head: true }).eq("account_id", owner.acc);
+  ok((viewsAfter ?? 0) === (viewsBefore ?? 0), "Vorschau: zählt keinen Aufruf in die Kunden-Statistik");
+  const wrong = await page.goto(`${BASE}/admin/kunden/${boss.acc}/anleitung/${draft.id}`, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const wrongBody = (await page.locator("body").innerText()).replace(/s+/g, " ");
+  // PPR: Statuscode/Titel stehen schon fest (weiches 404) — maßgeblich ist, dass KEIN Inhalt durchsickert.
+  ok(!wrongBody.includes("Erster Entwurfsschritt") && !wrongBody.includes("Admin-Vorschau") && /nicht gefunden/i.test(wrongBody), `Vorschau: fremde Kombination zeigt „nicht gefunden“ und keinen Inhalt (HTTP ${wrong?.status()})`);
+  await page.goto(`${BASE}/admin/kunden/${owner.acc}`, { waitUntil: "networkidle" });
 
   // Tarif: Gratis -> Pro -> Gratis (mit Bestätigung)
   const sw = page.getByTestId("plan-switch");
