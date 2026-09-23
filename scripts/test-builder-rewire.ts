@@ -4,7 +4,7 @@
 // lib/builder/rewire.ts und prüft, was Flow/Player (erster Branch) danach zeigen.
 import assert from "node:assert/strict";
 import { buildRenderTree, flattenFlow } from "../src/lib/builder/tree.ts";
-import { appendAnchor, deleteRewireTarget, swapPair, swapPlan } from "../src/lib/builder/rewire.ts";
+import { appendAnchor, deleteRewireTarget, planMove, swapPair, swapPlan } from "../src/lib/builder/rewire.ts";
 import type { Step, StepBranch } from "../src/lib/types.ts";
 
 let pos = 0;
@@ -136,6 +136,71 @@ check("4b: mittlerer Schritt mit Vorgänger und Nachfolger tauschen", () => {
   assert.ok(r);
   assert.deepEqual(flow(steps, r.branches, r.root), ["A", "N", "M", "Z"]);
   assert.equal(r.root, "A");
+});
+
+// moveStep (Server): Entscheidung aus dem DB-Stand, angewandt wie im Server-Code.
+function serverMove(
+  steps: Step[],
+  db: { branches: StepBranch[]; root: string | null },
+  id: string,
+  dir: "up" | "down",
+  newBranchId: string,
+  expect?: { a: string; b: string },
+) {
+  const d = planMove(steps, db.branches, db.root, id, dir, newBranchId, expect);
+  if (d.kind === "stale") return { kind: d.kind, db };
+  if (d.kind === "done") return { kind: d.kind, db: { branches: db.branches, root: d.newRoot ?? db.root } };
+  const t = new Map(d.plan.targets.map((x) => [x.branchId, x.target]));
+  const branches = db.branches.map((b) => (t.has(b.id) ? { ...b, target_step_id: t.get(b.id) ?? null } : b));
+  if (d.plan.newBranch) branches.push({ ...d.plan.newBranch, label: null, color: null, position: 0, created_at: "" });
+  return { kind: d.kind, db: { branches, root: d.plan.newRoot ?? db.root } };
+}
+
+check("5: „Erneut versuchen“ nach durchgelaufenem Tausch tauscht NICHT ein zweites Mal", () => {
+  const steps = [S("A"), S("M"), S("N"), S("Z")];
+  const start = { branches: [B("A", "M"), B("M", "N"), B("N", "Z")], root: "A" };
+  const plan = swapPlan(steps, start.branches, start.root, "M", "down", "x1");
+  assert.ok(plan);
+  assert.deepEqual(plan.pair, { a: "M", b: "N" });
+  const first = serverMove(steps, start, "M", "down", "x1", plan.pair);
+  assert.equal(first.kind, "apply");
+  assert.deepEqual(flow(steps, first.db.branches, first.db.root), ["A", "N", "M", "Z"]);
+  // Vorher (ohne Paar-Abgleich): der Retry hätte M noch einmal nach unten geschoben.
+  const naive = serverMove(steps, first.db, "M", "down", "x1");
+  assert.deepEqual(flow(steps, naive.db.branches, naive.db.root), ["A", "N", "Z", "M"], "Nachweis: ohne Abgleich doppelt getauscht");
+  const retry = serverMove(steps, first.db, "M", "down", "x1", plan.pair);
+  assert.equal(retry.kind, "done");
+  assert.deepEqual(flow(steps, retry.db.branches, retry.db.root), ["A", "N", "M", "Z"], "Retry lässt den Ablauf wie nach dem ersten Tausch");
+});
+
+check("5b: Retry nach Tausch mit dem Startschritt (auch wenn der Start noch nicht umgestellt war)", () => {
+  const steps = [S("P"), S("Q"), S("R")];
+  const start = { branches: [B("P", "Q"), B("Q", "R")], root: "P" };
+  const plan = swapPlan(steps, start.branches, start.root, "Q", "up", "x2");
+  assert.ok(plan);
+  const first = serverMove(steps, start, "Q", "up", "x2", plan.pair);
+  assert.deepEqual(flow(steps, first.db.branches, first.db.root), ["Q", "P", "R"]);
+  const retry = serverMove(steps, first.db, "Q", "up", "x2", plan.pair);
+  assert.equal(retry.kind, "done");
+  assert.deepEqual(flow(steps, retry.db.branches, retry.db.root), ["Q", "P", "R"]);
+  // Abbruch vor dem letzten Schreibschritt: Kanten getauscht, Start steht noch auf P.
+  const half = serverMove(steps, { branches: first.db.branches, root: "P" }, "Q", "up", "x2", plan.pair);
+  assert.equal(half.kind, "done");
+  assert.equal(half.db.root, "Q", "Start wird nachgezogen");
+  assert.deepEqual(flow(steps, half.db.branches, half.db.root), ["Q", "P", "R"]);
+});
+
+check("5c: zwei Klicks nacheinander (je eigener Plan) tauschen zweimal; fremder Stand → stale", () => {
+  const steps = [S("A"), S("M"), S("N"), S("Z")];
+  let db = { branches: [B("A", "M"), B("M", "N"), B("N", "Z")], root: "A" as string | null };
+  for (let i = 0; i < 2; i++) {
+    const p = swapPlan(steps, db.branches, db.root, "M", "down", `x${bc++}`);
+    assert.ok(p);
+    db = serverMove(steps, db, "M", "down", "x", p.pair).db;
+  }
+  assert.deepEqual(flow(steps, db.branches, db.root), ["A", "N", "Z", "M"]);
+  // Editor erwartet einen Tausch, den es im DB-Stand weder gibt noch schon gab.
+  assert.equal(serverMove(steps, db, "N", "down", "x", { a: "A", b: "M" }).kind, "stale");
 });
 
 console.log(`\n${ok} Prüfungen grün`);

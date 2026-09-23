@@ -31,7 +31,7 @@ import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/
 import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder } from "@/lib/builder/tree";
-import { swapPlan } from "@/lib/builder/rewire";
+import { planMove } from "@/lib/builder/rewire";
 import { canEdit } from "@/lib/roles";
 import { aiConfigured } from "@/lib/ai";
 import { mkBody, MAX_GUIDE_STEPS } from "@/lib/guide";
@@ -404,6 +404,8 @@ export const moveStep = withUserErrors(async function moveStep(
   stepId: string,
   dir: "up" | "down",
   newBranchId: string,
+  /** Paar, das der Editor getauscht hat (A vor B) — macht „Erneut versuchen“ idempotent. */
+  expect?: { a: string; b: string } | null,
 ) {
   await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
@@ -415,8 +417,29 @@ export const moveStep = withUserErrors(async function moveStep(
   const { data: branches } = ids.length
     ? await supabase.from("step_branches").select("*").in("step_id", ids).returns<StepBranch[]>()
     : { data: [] as StepBranch[] };
-  const plan = swapPlan(steps ?? [], branches ?? [], tut?.root_step_id ?? null, stepId, dir, newBranchId);
-  if (!plan) throw new UserError("Dieser Schritt lässt sich hier nicht verschieben. Bitte laden Sie die Seite neu.");
+  const decision = planMove(
+    steps ?? [],
+    branches ?? [],
+    tut?.root_step_id ?? null,
+    stepId,
+    dir,
+    newBranchId,
+    expect,
+  );
+  if (decision.kind === "stale") {
+    throw new UserError("Dieser Schritt lässt sich hier nicht verschieben. Bitte laden Sie die Seite neu.");
+  }
+  // Wiederholung eines schon ausgeführten Tauschs: nicht erneut tauschen (sonst wanderte der
+  // Schritt einen Platz weiter) — höchstens den Startschritt nachziehen.
+  if (decision.kind === "done") {
+    if (decision.newRoot) {
+      const { error } = await supabase.from("tutorials").update({ root_step_id: decision.newRoot }).eq("id", tutorialId);
+      if (error) throw new Error(error.message);
+      await invalidateTutorialTags(tutorialId);
+    }
+    return;
+  }
+  const { plan } = decision;
 
   for (const t of plan.targets) {
     const { error } = await supabase.from("step_branches").update({ target_step_id: t.target }).eq("id", t.branchId);

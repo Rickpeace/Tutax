@@ -554,7 +554,9 @@ export function Builder({
       // ── Persist: EIN Aufruf (moveStep rechnet serverseitig neu und schreibt alles am
       // Stück) — früher drei Einzel-Aufrufe, von denen beim schnellen Wegklicken der letzte
       // (Startschritt) verloren gehen konnte → Schritt unerreichbar.
-      persist(async () => unwrap(await moveStep(tutorialId, stepId, dir, newBranchId)));
+      // `plan.pair` macht „Erneut versuchen“ idempotent: lief der Tausch schon durch (nur die
+      // Antwort ging verloren), tauscht der Server nicht ein zweites Mal.
+      persist(async () => unwrap(await moveStep(tutorialId, stepId, dir, newBranchId, plan.pair)));
     },
     [steps, branches, rootId, tutorialId, persist],
   );

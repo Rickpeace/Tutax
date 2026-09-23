@@ -196,6 +196,32 @@ export async function resolveCustomerTutorial(
   return tpl.id;
 }
 
+/**
+ * Standard-Vorlagen (zentrale Version, keine angepasste Kopie), die das Konto aktiviert hat und
+ * die zentral veröffentlicht sind — genau die, die auf seiner Hilfe-Seite stehen. Sie werden
+ * pro Konto in den Chatbot-Index aufgenommen (reindexAccount nach einem Upgrade).
+ */
+export async function enabledStandardTemplateIds(
+  client: SupabaseClient,
+  accountId: string,
+): Promise<string[]> {
+  const { data: ats } = await client
+    .from("account_templates")
+    .select("template_id")
+    .eq("account_id", accountId)
+    .eq("enabled", true)
+    .is("forked_tutorial_id", null);
+  const ids = (ats ?? []).map((a) => a.template_id as string);
+  if (!ids.length) return [];
+  const { data: live } = await client
+    .from("tutorials")
+    .select("id")
+    .in("id", ids)
+    .eq("is_template", true)
+    .eq("status", "published");
+  return (live ?? []).map((t) => t.id as string);
+}
+
 /** Ist die globale Vorlage (noch) veröffentlicht? */
 async function templatePublished(client: SupabaseClient, templateId: string): Promise<boolean> {
   const { data } = await client
