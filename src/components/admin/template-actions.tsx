@@ -10,7 +10,7 @@ import {
   unpublishTemplate,
   deleteTemplate,
 } from "@/app/admin/actions";
-import { errorText } from "@/lib/action-error";
+import { errorText, unwrap } from "@/lib/action-error";
 
 export function TemplateActions({
   id,
@@ -53,7 +53,7 @@ export function TemplateActions({
         <Button
           size="sm"
           disabled={pending}
-          onClick={() => run(() => publishTemplate(id), "Veröffentlicht")}
+          onClick={() => run(async () => { unwrap(await publishTemplate(id)); }, "Veröffentlicht")}
         >
           <Send className="size-4" /> Veröffentlichen
         </Button>

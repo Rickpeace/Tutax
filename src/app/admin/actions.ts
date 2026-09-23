@@ -10,6 +10,7 @@ import { reindexAccount, reindexTemplateForAccounts, removeTutorialEmbeddings } 
 import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
 import { translateTutorial } from "@/lib/translate-jobs";
 import { retireHiddenTemplateForks } from "@/lib/template-forks";
+import { withUserErrors, UserError } from "@/lib/action-error";
 
 async function ensureAdmin() {
   if (!(await checkAdmin())) throw new Error("Kein Admin-Zugriff");
@@ -31,11 +32,17 @@ export async function createTemplate(formData: FormData) {
 }
 
 /** Template veröffentlichen (Slug eindeutig unter Templates). */
-export async function publishTemplate(id: string) {
+export const publishTemplate = withUserErrors(async function publishTemplate(id: string) {
   await ensureAdmin();
   const admin = createAdminClient();
   const { data: t } = await admin.from("tutorials").select("title, slug").eq("id", id).single();
   if (!t) throw new Error("Nicht gefunden");
+  // Leere Vorlage nie veröffentlichen — sonst stünde bei allen Kunden mit aktivierter Vorlage
+  // eine Anleitung ohne Inhalt auf der Hilfe-Seite (gleiche Regel wie publishTutorial).
+  const { count: stepCount } = await admin.from("steps").select("id", { count: "exact", head: true }).eq("tutorial_id", id);
+  if (!stepCount) {
+    throw new UserError("Diese Vorlage hat noch keine Schritte. Legen Sie zuerst einen Schritt an, dann können Sie veröffentlichen.");
+  }
 
   let slug = t.slug as string | null;
   if (!slug) {
@@ -68,7 +75,7 @@ export async function publishTemplate(id: string) {
   );
   after(() => reindexTemplateForAccounts(id));
   revalidatePath("/admin");
-}
+});
 
 export async function unpublishTemplate(id: string) {
   await ensureAdmin();
