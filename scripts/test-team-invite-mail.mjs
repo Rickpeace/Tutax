@@ -126,13 +126,15 @@ try {
     ok(!!mail && mail.subject?.includes(ORG), `Mail angekommen: „${mail?.subject ?? "—"}“ (${mail?.last_event ?? "?"})`);
     const link = inviteLinkIn(mail);
     ok(!!link && link.startsWith(BASE), `Link in der Mail zeigt auf die Live-App`);
-    // OHNE JavaScript beitreten = Extremfall „Klick, bevor die Seite fertig geladen ist“.
-    const noJs = await browser.newContext({ javaScriptEnabled: false });
+    // Beitreten, BEVOR die App-Skripte geladen sind (= Klick vor dem Fertigladen): die
+    // Next-Chunks werden blockiert, nur die Inline-Skripte des Streamings laufen.
+    const noJs = await browser.newContext();
+    await noJs.route(/\/_next\/static\/chunks\//, (r) => r.abort());
     const p = await noJs.newPage();
     await p.goto(link, { waitUntil: "domcontentloaded" });
     await p.locator("#invite-password").waitFor({ timeout: 30_000 });
     const label = await p.locator('label[for="invite-password"]').innerText().catch(() => "");
-    ok(/festlegen/i.test(label), `Einladungsseite fragt „${label}“ (Beitritt ohne JavaScript)`);
+    ok(/festlegen/i.test(label), `Einladungsseite fragt „${label}“ (Beitritt vor dem Laden der App-Skripte)`);
     await p.locator("#invite-password").fill(PW);
     await p.getByRole("button", { name: /Passwort setzen & beitreten/ }).click();
     await p.waitForURL((u) => u.pathname.startsWith("/app"), { timeout: 60_000 }).catch(() => {});

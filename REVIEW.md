@@ -102,6 +102,23 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Team-Einladungen + E-Mails — 23.09.2026 (echte Mails über Resend, live)
+
+- [x] Einladen per Mail live geprüft (`scripts/test-team-invite-mail.mjs`, 29 Prüfungen):
+  neue Person (Bearbeiter) · bestehendes Konto abgemeldet (Mitarbeiter) · bestehendes Konto
+  angemeldet (Bearbeiter) — Rollen, Rechte, eigene Org bleibt, Org-Wechsel, keine offenen Reste
+- [x] Bug: Beitritts-Formular ging vor dem Fertigladen der Seite ins Leere (Seite lud neu,
+  Passwort weg; live nach Deploy beobachtet) → Server-Action-Formular wie Login
+- [x] Willkommens-Mail nach Registrierung („Ihr Konto ist eingerichtet“) + Bestätigung nach
+  Team-Beitritt (neu/bestehend, mit Org-Wechsel-Hinweis)
+- [x] Ein Mail-Design für alle Mails (`src/lib/email/`), Sie-Form, warme CI, Outlook-fest,
+  Text-Fassung; Hinweis-Digest nicht mehr in alten Blautönen
+- [ ] **Richard:** neue Supabase-Vorlagen einkleben (`supabase/email-templates/README.md`) —
+  live laufen noch alte Du-Texte („Dein Anmelde-Link“) · Site URL ohne `/` am Ende
+- [ ] **Richard:** Vercel `INVITE_FROM_EMAIL` auf `Steply <noreply@dentdoc.de>` (App-Mails
+  kommen noch als „Taxtut“; Supabase-Mails schon als „Steply“) + neu deployen
+- [ ] Einladung aus Org ohne Namen (Onboarding übersprungen) heißt „Einladung zu name@…“
+
 ## Abgleich 23.09.2026
 
 Alle 110 bis dahin offenen Checkboxen (Top 5, A–I, Lückenliste) gegen den Code geprüft
