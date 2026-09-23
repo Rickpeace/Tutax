@@ -17,6 +17,7 @@ import { StepPanel } from "@/components/builder/step-panel";
 import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record-into";
 import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
+import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair } from "@/lib/builder/rewire";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 import {
@@ -242,23 +243,29 @@ export function Builder({
     setSteps((prev) => [...prev, newStep]);
 
     let wire: { branchId: string; fromStepId: string } | null = null;
+    let reuseBranchId: string | null = null;
     if (setRoot) {
       setRootId(id);
     } else {
-      // Immer an einen vorhandenen Schritt anhängen: bevorzugt ein Blatt,
-      // sonst den mit höchster Position -> neuer Schritt verwaist nie.
-      const hasOut = new Set(branches.map((b) => b.step_id));
-      const fromStep =
-        steps.filter((s) => !hasOut.has(s.id)).sort((a, b) => b.position - a.position)[0] ??
-        [...steps].sort((a, b) => b.position - a.position)[0];
-      if (fromStep) {
+      // Immer an einen vorhandenen Schritt anhängen: bevorzugt ein Blatt (auch mit „Ende“-
+      // Branch, z. B. nach dem Löschen des letzten Schritts), sonst den mit höchster Position
+      // -> neuer Schritt verwaist nie. Einen vorhandenen „Ende“-Branch umhängen statt einen
+      // zweiten anzulegen: Flow und Player folgen nur dem ersten (sonst Schritt unsichtbar).
+      const anchor = appendAnchor(steps, branches, rootId);
+      if (anchor?.reuseBranchId) {
+        const reuseId = anchor.reuseBranchId;
+        reuseBranchId = reuseId;
+        setBranches((prev) =>
+          prev.map((b) => (b.id === reuseId ? { ...b, target_step_id: id } : b)),
+        );
+      } else if (anchor) {
         const branchId = crypto.randomUUID();
-        wire = { branchId, fromStepId: fromStep.id };
+        wire = { branchId, fromStepId: anchor.fromStepId };
         setBranches((prev) => [
           ...prev,
           {
             id: branchId,
-            step_id: fromStep.id,
+            step_id: anchor.fromStepId,
             label: null,
             color: null,
             target_step_id: id,
@@ -268,12 +275,15 @@ export function Builder({
         ]);
       }
     }
-    const added = persist(() => addStep(tutorialId, { id, title: "", position }, setRoot, wire));
+    const added = persist(async () => {
+      await addStep(tutorialId, { id, title: "", position }, setRoot, wire);
+      if (reuseBranchId) await updateBranch(reuseBranchId, { target_step_id: id });
+    });
     endAdd(added);
     // Erster Schritt: Kopf neu laden (Übersetzen/Aktualität/Veröffentlichen waren gesperrt).
     if (setRoot) added.then(() => router.refresh(), () => {});
     setSelectedId(id);
-  }, [steps, branches, tutorialId, persist, router, beginAdd, endAdd]);
+  }, [steps, branches, rootId, tutorialId, persist, router, beginAdd, endAdd]);
 
   // §7.4: Schritt gezielt in einen Ast einfügen (B → N → altes Ziel).
   // `seed` (Welle 51a): Bild eines Schritts + übernommene Verpixelung für den neuen Schritt.
@@ -448,15 +458,10 @@ export function Builder({
 
   const handleDeleteStep = useCallback(
     (stepId: string) => {
-      const step = steps.find((s) => s.id === stepId);
       const wasRoot = rootId === stepId;
-      let nextTarget: string | null = null;
-      if (step && !step.is_decision) {
-        const out = branches
-          .filter((b) => b.step_id === stepId)
-          .sort((a, b) => a.position - b.position)[0];
-        nextTarget = out?.target_step_id ?? null;
-      }
+      // Linear -> Folgeschritt; Frage -> Zusammenführung ihrer Äste (sonst erste Antwort).
+      // Früher zeigte der Vorgänger einer Frage aufs Ende: der ganze Rest war abgeschnitten.
+      const nextTarget = deleteRewireTarget(steps, branches, stepId);
       setBranches((prev) =>
         prev
           .filter((b) => b.step_id !== stepId)
@@ -505,44 +510,10 @@ export function Builder({
     [branches],
   );
 
-  /**
-   * Liefert das eindeutige lineare Paar (A→B) für einen Tausch, oder null wenn
-   * nicht eindeutig. Für Richtung "down" ist A=stepId; für "up" wird der eindeutige
-   * Vorgänger P gesucht und (A=P, B=stepId) getauscht. Bedingungen (beide Richtungen):
-   * weder A noch B ist Entscheidung, beide haben ≤1 ausgehende Kante, und A→B ist
-   * die einzige verbindende Nicht-Entscheidungs-Kante.
-   */
+  // Eindeutiges lineares Paar (A→B) für einen Tausch, oder null (Regeln: lib/builder/rewire.ts).
   const swapPair = useCallback(
-    (stepId: string, dir: "up" | "down"): { a: Step; b: Step } | null => {
-      const stepById = new Map(steps.map((s) => [s.id, s]));
-      const self = stepById.get(stepId);
-      if (!self) return null;
-
-      let a: Step | undefined;
-      let b: Step | undefined;
-      if (dir === "down") {
-        a = self;
-        const outA = outgoingOf(a.id);
-        if (outA.length !== 1 || !outA[0].target_step_id) return null;
-        b = stepById.get(outA[0].target_step_id);
-      } else {
-        b = self;
-        // Eindeutiger Vorgänger: genau eine eingehende Kante.
-        const inB = incomingOf(b.id);
-        if (inB.length !== 1) return null;
-        a = stepById.get(inB[0].step_id);
-      }
-      if (!a || !b || a.id === b.id) return null;
-
-      // Beide dürfen keine Entscheidung sein und höchstens eine ausgehende Kante haben.
-      if (a.is_decision || b.is_decision) return null;
-      if (outgoingOf(a.id).length > 1 || outgoingOf(b.id).length > 1) return null;
-      // A muss über GENAU eine Kante auf B zeigen (die verbindende Kante).
-      const aToB = outgoingOf(a.id).filter((br) => br.target_step_id === b.id);
-      if (aToB.length !== 1) return null;
-      return { a, b };
-    },
-    [steps, outgoingOf, incomingOf],
+    (stepId: string, dir: "up" | "down") => findSwapPair(steps, branches, stepId, dir),
+    [steps, branches],
   );
 
   const canMove = useCallback(
@@ -745,6 +716,12 @@ export function Builder({
   );
   const selectedStep = steps.find((s) => s.id === selectedId) ?? null;
   const selectedBranches = branches.filter((b) => b.step_id === selectedId);
+  // Wo der Ablauf nach dem Löschen des gewählten Schritts weitergeht (Ansage im Lösch-Dialog).
+  const deleteContinuesAt = useMemo(() => {
+    if (!selectedId) return null;
+    const target = deleteRewireTarget(steps, branches, selectedId);
+    return target ? (steps.find((s) => s.id === target) ?? null) : null;
+  }, [steps, branches, selectedId]);
 
   // Reihenfolge für Vor/Zurück = tatsächliche FLUSS-Reihenfolge (Tree-DFS), nicht die
   // Anlege-Position. Unerreichbare Schritte hängen wir (nach Position) hinten an, damit
@@ -881,6 +858,7 @@ export function Builder({
         onUpdateBranch={handleUpdateBranch}
         onDeleteBranch={handleDeleteBranch}
         onDeleteStep={handleDeleteStep}
+        deleteContinuesAt={deleteContinuesAt}
         onOpenStep={(id) => setSelectedId(id)}
         onInsertIntoBranch={insertIntoBranch}
         onDuplicateImage={duplicateImageToNewStep}

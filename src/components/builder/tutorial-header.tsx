@@ -113,6 +113,14 @@ export function TutorialHeader({
   const [savedDesc, setSavedDesc] = useState(initialDescription);
   const [descEditing, setDescEditing] = useState(false);
   const [published, setPublished] = useState(initialPublished);
+  // Server-Stand übernehmen, wenn er sich ändert (z. B. automatisch auf Entwurf, nachdem der
+  // Builder den letzten Schritt gelöscht und neu geladen hat) — sonst stünde hier weiter
+  // „Veröffentlicht“. Muster „State bei Prop-Wechsel anpassen“ (ohne Effekt).
+  const [serverPublished, setServerPublished] = useState(initialPublished);
+  if (serverPublished !== initialPublished) {
+    setServerPublished(initialPublished);
+    setPublished(initialPublished);
+  }
   const [visibility, setVisibility] = useState<TutorialVisibility>(initialVisibility);
   // Wer sieht die Anleitung? Zwei unabhängige Chips (mind. einer an):
   //   Hilfe-Seite ⇔ visibility public;  Team ⇔ internal ODER (public + in_lernen).

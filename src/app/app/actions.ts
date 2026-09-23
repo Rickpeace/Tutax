@@ -290,73 +290,103 @@ export async function duplicateTutorial(id: string) {
       title: `${src.title} (Kopie)`,
       description: src.description,
       status: "draft",
+      // Live-Führung/Extension-Matching: für welche Websites die Anleitung gilt.
+      site_domains: src.site_domains ?? [],
     })
     .select("id")
     .single();
   if (e2 || !copy) throw new Error(e2?.message ?? "Kopie fehlgeschlagen");
 
-  const { data: steps } = await supabase
-    .from("steps")
-    .select("*")
-    .eq("tutorial_id", id)
-    .returns<Step[]>();
-
-  if (steps?.length) {
-    const idMap = new Map<string, string>();
-    for (const s of steps) {
-      const { data: ns, error } = await supabase
-        .from("steps")
-        .insert({
-          tutorial_id: copy.id,
-          title: s.title,
-          body: s.body,
-          image_path: s.image_path,
-          image_width: s.image_width,
-          image_height: s.image_height,
-          highlights: s.highlights,
-          position: s.position,
-          is_decision: s.is_decision,
-          // Welle 48: Art der Bedienung (Rechtsklick/Enter/…) gehört zum Schritt-Text — mitkopieren.
-          // Nur wenn vorhanden (bleibt heil, falls Migration 0036 noch fehlt).
-          ...(s.interaction ? { interaction: s.interaction } : {}),
-        })
-        .select("id")
-        .single();
-      if (error || !ns) throw new Error(error?.message ?? "Schritt-Kopie fehlgeschlagen");
-      idMap.set(s.id, ns.id);
-    }
-
-    const { data: branches } = await supabase
-      .from("step_branches")
-      .select("*")
-      .in(
-        "step_id",
-        steps.map((s) => s.id),
-      )
-      .returns<StepBranch[]>();
-
-    if (branches?.length) {
-      const rows = branches.map((b) => ({
-        step_id: idMap.get(b.step_id)!,
-        label: b.label,
-        color: b.color,
-        target_step_id: b.target_step_id
-          ? (idMap.get(b.target_step_id) ?? null)
-          : null,
-        position: b.position,
-      }));
-      await supabase.from("step_branches").insert(rows);
-    }
-
-    if (src.root_step_id && idMap.get(src.root_step_id)) {
-      await supabase
-        .from("tutorials")
-        .update({ root_step_id: idMap.get(src.root_step_id) })
-        .eq("id", copy.id);
-    }
+  try {
+    await copyStepsInto(supabase, id, copy.id, src.root_step_id);
+  } catch (e) {
+    // Keine halbe Kopie stehen lassen (Schritte/Branches hängen per Cascade an der Anleitung).
+    await supabase.from("tutorials").delete().eq("id", copy.id).eq("account_id", account.id);
+    throw e;
   }
 
   revalidatePath("/app");
+}
+
+// Schritt-Spalten, die eine Kopie mitnimmt: Inhalt UND Live-Führungs-/Automations-Daten
+// (Selektor, Seiten-URL, Bedingung, Sprung, Bedienart, Datei-Brücke, Video-Zeitpunkt).
+// Bewusst NICHT: audio_path/audio_hash (öffentliche MP3 der Quelle — die Kopie ist Entwurf und
+// erzeugt ihr Vorlesen beim Veröffentlichen selbst; ein geteilter Pfad würde beim Löschen der
+// Kopie das Audio der Quelle mit entfernen) und chapter_id (gehört zur Quell-Anleitung).
+const COPIED_STEP_COLUMNS = [
+  "title",
+  "body",
+  "image_path",
+  "image_width",
+  "image_height",
+  "highlights",
+  "position",
+  "is_decision",
+  "page_url",
+  "selector",
+  "condition",
+  "jump", // verweist per to_position (nicht per ID) — Positionen werden 1:1 kopiert
+  "interaction",
+  "file_meta",
+  "video_time",
+] as const;
+
+/** Tiefkopie der Schritte + Branches (neue IDs, Verweise umgemappt); wirft bei jedem Fehler. */
+async function copyStepsInto(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  fromTutorialId: string,
+  toTutorialId: string,
+  rootStepId: string | null,
+) {
+  const { data: steps, error: se } = await supabase
+    .from("steps")
+    .select("*")
+    .eq("tutorial_id", fromTutorialId)
+    .returns<Step[]>();
+  if (se) throw new Error(se.message);
+  if (!steps?.length) return;
+
+  const idMap = new Map<string, string>(steps.map((s) => [s.id, crypto.randomUUID()]));
+  const stepRows = steps.map((s) => {
+    const row: Record<string, unknown> = { id: idMap.get(s.id), tutorial_id: toTutorialId };
+    // Nur Spalten, die die Quelle wirklich hat (bleibt heil, falls eine Migration noch fehlt).
+    for (const col of COPIED_STEP_COLUMNS) if (col in s) row[col] = (s as Record<string, unknown>)[col];
+    return row;
+  });
+  const { error: ie } = await supabase.from("steps").insert(stepRows);
+  if (ie) throw new Error(ie.message);
+
+  const { data: branches, error: be } = await supabase
+    .from("step_branches")
+    .select("*")
+    .in(
+      "step_id",
+      steps.map((s) => s.id),
+    )
+    .returns<StepBranch[]>();
+  if (be) throw new Error(be.message);
+
+  if (branches?.length) {
+    const rows = branches.map((b) => ({
+      step_id: idMap.get(b.step_id)!,
+      label: b.label,
+      color: b.color,
+      target_step_id: b.target_step_id
+        ? (idMap.get(b.target_step_id) ?? null)
+        : null,
+      position: b.position,
+    }));
+    const { error } = await supabase.from("step_branches").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+
+  if (rootStepId && idMap.get(rootStepId)) {
+    const { error } = await supabase
+      .from("tutorials")
+      .update({ root_step_id: idMap.get(rootStepId) })
+      .eq("id", toTutorialId);
+    if (error) throw new Error(error.message);
+  }
 }
 
 /**
