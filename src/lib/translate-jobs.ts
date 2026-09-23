@@ -14,6 +14,7 @@ import {
 } from "@/lib/translate-core";
 import { type TutorialForTranslate } from "@/lib/translate";
 import { isExtraLang, EXTRA_LANGS, LANG_NAME, type ExtraLang } from "@/lib/i18n-hub";
+import { planLanguages } from "@/lib/plan";
 import type { Step, StepBranch } from "@/lib/types";
 
 export type TranslateResult = { languages: ExtraLang[] };
@@ -57,10 +58,11 @@ function extraLanguagesOf(tut: {
   accounts: unknown;
 }): ExtraLang[] {
   if (!tut.account_id && tut.is_template) return [...EXTRA_LANGS];
-  const acc = Array.isArray(tut.accounts) ? tut.accounts[0] : tut.accounts;
-  return ((acc as { languages?: string[] } | null)?.languages ?? []).filter(
-    isExtraLang,
-  ) as ExtraLang[];
+  const acc = (Array.isArray(tut.accounts) ? tut.accounts[0] : tut.accounts) as
+    | { languages?: string[] | null; plan?: string | null }
+    | null;
+  // Mehrsprachigkeit ist Business: nach einem Herabstufen keine (kostenpflichtige) Übersetzung.
+  return planLanguages(acc ?? {}, (acc?.languages ?? []).filter(isExtraLang) as ExtraLang[]);
 }
 async function loadTutorialForTranslate(
   tutorialId: string,
@@ -68,7 +70,7 @@ async function loadTutorialForTranslate(
   const admin = createAdminClient();
   const { data: tut } = await admin
     .from("tutorials")
-    .select("id, title, description, account_id, is_template, accounts(languages)")
+    .select("id, title, description, account_id, is_template, accounts(languages, plan)")
     .eq("id", tutorialId)
     .maybeSingle();
   if (!tut) return null;
@@ -108,7 +110,7 @@ async function tutorialMeta(
   const admin = createAdminClient();
   const { data: tut } = await admin
     .from("tutorials")
-    .select("status, visibility, account_id, is_template, accounts(languages)")
+    .select("status, visibility, account_id, is_template, accounts(languages, plan)")
     .eq("id", tutorialId)
     .maybeSingle();
   if (!tut) return null;
@@ -171,10 +173,10 @@ export async function translateAccountCategories(accountId: string): Promise<voi
     const admin = createAdminClient();
     const { data: acc } = await admin
       .from("accounts")
-      .select("languages")
+      .select("languages, plan")
       .eq("id", accountId)
       .maybeSingle();
-    const languages = ((acc?.languages as string[] | null) ?? []).filter(isExtraLang);
+    const languages = planLanguages(acc ?? {}, ((acc?.languages as string[] | null) ?? []).filter(isExtraLang));
     if (!languages.length) return;
     await translateAccountCategoriesCore(admin, chat(), AI.models.chat, accountId, languages);
   } catch (e) {
@@ -258,12 +260,19 @@ export async function translateBranchDelta(branchId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: branch } = await admin
     .from("step_branches")
-    .select("id, label, step_id, steps(tutorial_id)")
+    .select("id, label, step_id")
     .eq("id", branchId)
     .maybeSingle();
   if (!branch) return;
-  const st = Array.isArray(branch.steps) ? branch.steps[0] : branch.steps;
-  const tutorialId = (st as { tutorial_id?: string } | null)?.tutorial_id;
+  // Eigene Abfrage statt Embed `steps(...)`: step_branches↔steps hat ZWEI Beziehungen (step_id
+  // UND target_step_id) — PostgREST lehnte den Embed als mehrdeutig ab, die Abfrage lieferte
+  // null und geänderte Antwort-Texte wurden nie nachübersetzt.
+  const { data: st } = await admin
+    .from("steps")
+    .select("tutorial_id")
+    .eq("id", branch.step_id)
+    .maybeSingle();
+  const tutorialId = (st?.tutorial_id as string | null) ?? null;
   if (!tutorialId) return;
   const meta = await tutorialMeta(tutorialId);
   if (!meta || !meta.published || !meta.languages.length) return;
@@ -298,10 +307,13 @@ export async function backfillAccountTranslations(accountId: string): Promise<vo
   const admin = createAdminClient();
   const { data: acc } = await admin
     .from("accounts")
-    .select("languages")
+    .select("languages, plan")
     .eq("id", accountId)
     .maybeSingle();
-  const languages = ((acc?.languages as string[] | null) ?? []).filter(isExtraLang) as ExtraLang[];
+  const languages = planLanguages(
+    acc ?? {},
+    ((acc?.languages as string[] | null) ?? []).filter(isExtraLang) as ExtraLang[],
+  );
   if (!languages.length) return;
 
   const { data: tuts } = await admin

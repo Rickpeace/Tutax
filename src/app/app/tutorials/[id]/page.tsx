@@ -5,7 +5,7 @@ import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { Builder } from "@/components/builder/builder";
 import { TutorialHeader } from "@/components/builder/tutorial-header";
 import { isExtraLang, type ExtraLang } from "@/lib/i18n-hub";
-import { isBusiness, isPro } from "@/lib/plan";
+import { isBusiness, isPro, planLanguages } from "@/lib/plan";
 
 // Server-Actions laufen im Zeitbudget dieser Seite: „Texte mit KI verbessern“ braucht bei
 // 40 Schritten mehrere parallele KI-Calls (je ≤ 20 s).
@@ -43,9 +43,11 @@ export default async function EditorPage({
     supabase.from("tutorial_translations").select("lang, stale").eq("tutorial_id", id),
   ]);
 
-  const languages = ((acc?.languages as string[] | null) ?? []).filter(
-    isExtraLang,
-  ) as ExtraLang[];
+  // Mehrsprachigkeit ist Business: darunter kein „Übersetzen“/„veraltet“ im Editor.
+  const languages = planLanguages(
+    account,
+    ((acc?.languages as string[] | null) ?? []).filter(isExtraLang) as ExtraLang[],
+  );
   // „veraltet“, wenn eine aktivierte Sprache fehlt ODER als stale markiert ist.
   const byLang = new Map((translations ?? []).map((t) => [t.lang as string, t.stale as boolean]));
   const translationsStale =

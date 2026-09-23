@@ -47,8 +47,27 @@ export const PRO_REQUIRED =
  * Logo & CI-Farben, ohne „Erstellt mit Steply“. Gratis-Konten zeigen auf der Hilfe-Seite die
  * Steply-Standardgestaltung — gespeicherte Werte bleiben erhalten und gelten nach dem Upgrade.
  */
-export function brandedTheme<T>(account: { plan?: string | null }, theme: T | null): T | null {
-  return isPro(account) ? theme : null;
+export function brandedTheme<T extends { mode?: string | null }>(
+  account: { plan?: string | null },
+  theme: T | null,
+): T | null {
+  if (!isPro(account) || !theme) return null;
+  // KI-Design („Von Ihrer Website“/„Nachgebaut“) ist Business: darunter gilt die eigene CI
+  // (Steply-Standard mit Logo/Farben). Gespeichertes KI-Design bleibt für ein Upgrade erhalten.
+  if (!isBusiness(account) && theme.mode && theme.mode !== "manual") return { ...theme, mode: "manual" };
+  return theme;
+}
+
+/**
+ * Zusatzsprachen, die tatsächlich gelten. Mehrsprachigkeit ist Business (Tarifseite): darunter
+ * keine — für Hilfe-Seite (Umschalter, ?lang=), Auto-Übersetzung (KI-Kosten) und Editor.
+ * Gespeicherte Auswahl und Übersetzungen bleiben erhalten und gelten nach einem Upgrade wieder.
+ */
+export function planLanguages<L extends string>(
+  account: { plan?: string | null },
+  languages: readonly L[] | null | undefined,
+): L[] {
+  return isBusiness(account) ? [...(languages ?? [])] : [];
 }
 
 /**

@@ -8,6 +8,7 @@ import { requireAccount } from "@/lib/account";
 import { indexTutorial, reindexTutorialIfLive } from "@/lib/kb";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import { invalidateHubTag } from "@/lib/cache-tags";
+import { removeTutorialAudio } from "@/lib/tts";
 import type { Step, StepBranch } from "@/lib/types";
 
 const PRIVATE_BUCKET = "tutorial-images";
@@ -219,6 +220,9 @@ export async function resetTemplate(templateId: string) {
     .single();
   if (row?.forked_tutorial_id) {
     await dropEmbeddings(account.id, row.forked_tutorial_id);
+    // Die Kopie ist veröffentlicht: Vorlese-MP3s (Schritt-Edits erzeugen sie) liegen im
+    // öffentlichen Bucket und müssen VOR dem Delete weg — danach fehlen die Pfade.
+    await removeTutorialAudio(row.forked_tutorial_id);
     await supabase.from("tutorials").delete().eq("id", row.forked_tutorial_id);
   }
   await supabase

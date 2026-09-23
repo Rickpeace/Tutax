@@ -202,13 +202,20 @@ export async function ensureTutorialAudio(accountId: string, tutorialId: string)
 export async function ensureStepAudio(stepId: string): Promise<void> {
   if (!aiConfigured()) return;
   const admin = createAdminClient();
+  // Zwei einfache Abfragen statt Embed `tutorials(...)`: steps↔tutorials hat ZWEI Beziehungen
+  // (steps.tutorial_id UND tutorials.root_step_id) — PostgREST lehnt den Embed als mehrdeutig ab,
+  // die Abfrage lieferte null und das Audio wurde nach einem Text-Edit nie erneuert.
   const { data: step } = await admin
     .from("steps")
-    .select("id, title, body, audio_path, audio_hash, tutorial_id, tutorials(account_id, status, visibility)")
+    .select("id, title, body, audio_path, audio_hash, tutorial_id")
     .eq("id", stepId)
     .maybeSingle();
   if (!step) return;
-  const tut = Array.isArray(step.tutorials) ? step.tutorials[0] : step.tutorials;
+  const { data: tut } = await admin
+    .from("tutorials")
+    .select("account_id, status, visibility")
+    .eq("id", step.tutorial_id)
+    .maybeSingle();
   // Gleiches Gate wie Übersetzung/public-Bilder: nur published + public.
   if (tut?.status !== "published" || tut?.visibility !== "public") return;
   // Vorlesen ist ein Business-Feature — leiser No-op darunter.

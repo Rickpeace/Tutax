@@ -19,8 +19,11 @@ export default async function AussehenPage() {
     .eq("account_id", account.id)
     .single();
 
-  const mode =
-    theme?.mode === "extreme" ? "extreme" : theme?.mode === "ai" ? "ai" : "manual";
+  // Wirksamer Modus wie auf der Hilfe-Seite (brandedTheme): KI-Design gilt nur mit Business —
+  // nach einem Herabstufen ist „Steply-Standard“ aktiv, das gespeicherte KI-Design bleibt.
+  const mode = !isBusiness(account)
+    ? "manual"
+    : theme?.mode === "extreme" ? "extreme" : theme?.mode === "ai" ? "ai" : "manual";
   const manualLogoUrl = theme?.logo_path ? publicImageUrl(theme.logo_path) : null;
   const aiLogoUrl = theme?.ai_logo_path ? publicImageUrl(theme.ai_logo_path) : null;
   const extremeLogoUrl = theme?.extreme_logo_path

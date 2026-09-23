@@ -19,8 +19,7 @@ import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { toPublicStep } from "@/lib/public-step";
-import { brandedTheme } from "@/lib/plan";
-import { isPro } from "@/lib/plan";
+import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
@@ -64,7 +63,8 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     .eq("account_id", account.id)
     .single();
 
-  const languages = ((account.languages as string[] | null) ?? []).filter(isExtraLang);
+  // Mehrsprachigkeit ist Business — darunter nur Deutsch (gespeicherte Übersetzungen bleiben).
+  const languages = planLanguages(account, ((account.languages as string[] | null) ?? []).filter(isExtraLang));
 
   // Übersetzungen laden + in Titel/Steps/Branches mergen (DE-Fallback pro Feld).
   let mergedTitle = tutorial.title;
@@ -206,8 +206,11 @@ export default async function ViewerPage({
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
   // Vorlesen (Welle 14): öffentliche MP3-URL je Schritt (v1 nur DE-Originaltext;
   // audio_path liegt auf der Original-Zeile und übersteht das Übersetzungs-Merge).
+  // Vorlesen ist Business: nach einem Herabstufen kein ▶ mehr (die Dateien bleiben liegen).
   const audioUrls: Record<string, string> = {};
-  for (const s of steps) if (s.audio_path) audioUrls[s.id] = publicAudioUrl(s.audio_path);
+  if (isBusiness(account)) {
+    for (const s of steps) if (s.audio_path) audioUrls[s.id] = publicAudioUrl(s.audio_path);
+  }
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
   const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);

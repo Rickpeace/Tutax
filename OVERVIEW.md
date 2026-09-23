@@ -268,6 +268,14 @@ Liegen in `tutax/` (nicht im Repo, s. `.gitignore`). Aus `tutax/` starten (wegen
   `unwrap(await action())`, Anzeige `errorText(e, "…")` — alles in `lib/action-error.ts`.
 - **Tarif-Gates**: Pro-Funktionen (Chat, Wissen, Offene Fragen, Logo/CI, ohne „Erstellt mit Steply“)
   über `isPro`/`brandedTheme`/`PRO_REQUIRED` in `lib/plan.ts`; Nachweis `scripts/test-pro-gates.mjs`.
+  Business-Funktionen (Sprachen, Vorlesen, KI-Design, nur Team, Video-Export) über `isBusiness`;
+  **gespeicherte** Sprachen immer durch `planLanguages(account, …)` filtern (Hilfe-Seite, Auto-
+  Übersetzung, Editor), KI-Design fällt über `brandedTheme` unter Business auf „Steply-Standard“ —
+  nach einem Herabstufen bleibt alles gespeichert, wirkt aber nicht (und kostet keine KI).
+  Nachweis Ende-zu-Ende inkl. Herabstufen: `scripts/test-business-e2e.mjs`.
+- **PostgREST-Embeds zwischen steps↔tutorials bzw. step_branches↔steps sind mehrdeutig**
+  (zwei Fremdschlüssel: `tutorial_id`/`root_step_id`, `step_id`/`target_step_id`) → Fehler,
+  `data` = null. Immer mit FK-Hinweis (`tutorials!steps_tutorial_id_fkey(…)`) oder zwei Abfragen.
 - Deutsche UI-Texte NUR mit **typografischen Anführungszeichen** („…") — gerade Quotes haben schon Skripte zerlegt; Umlaute/Sonderzeichen nie durch Shell-Pipes schleusen (Write/Edit-Tool nutzen).
 - **Arbeits-Workflow für KI-Wellen**: Agenten arbeiten in git-Worktrees auf `welle-XX-opus` (Basis origin/staging), pushen NUR ihren Branch; Review/Merge/Deploy macht die Haupt-Session. Tabu für Agenten: staging/main, package.json, next.config.ts, Migrationen, REVIEW.md, TODO.md.
 </content>

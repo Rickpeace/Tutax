@@ -35,6 +35,7 @@ import {
   isBusiness,
   BUSINESS_REQUIRED,
   audienceGateError,
+  planLanguages,
 } from "@/lib/plan";
 import { TUTORIAL_QUOTA_MESSAGE, videoQuotaErrorFor } from "@/lib/tutorial-quota";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
@@ -260,6 +261,9 @@ export async function deleteTutorial(id: string) {
     .select("image_path")
     .eq("tutorial_id", id)
     .not("image_path", "is", null);
+  // Vorlese-MP3s liegen im ÖFFENTLICHEN Bucket — VOR dem Delete entfernen (danach sind die
+  // Schritt-Zeilen weg und die Dateien blieben unter ihrer URL abrufbar).
+  await removeTutorialAudio(id);
   // SCHUTZRIEGEL (Incident 06.07.): NUR eigene Tutorials. Der Plattform-Admin hat via
   // RLS-Policy „admin manage template tutorials" auch Löschrecht auf GLOBALE Templates
   // (account_id NULL) — ohne diese Scopung konnte ein (Bulk-)Löschen in der Bibliothek
@@ -600,7 +604,8 @@ export const publishTutorial = withUserErrors(async function publishTutorial(tut
     .select("languages")
     .eq("id", account.id)
     .single();
-  const hasLangs = ((acc?.languages as string[] | null) ?? []).some(isExtraLang);
+  // Mehrsprachigkeit ist Business — nach einem Herabstufen keine KI-Übersetzung mehr.
+  const hasLangs = planLanguages(account, ((acc?.languages as string[] | null) ?? []).filter(isExtraLang)).length > 0;
   if (hasLangs) {
     after(() =>
       translateTutorial(tutorialId).catch((e) =>
@@ -682,7 +687,7 @@ async function applyVisibilityChange(
         .select("languages")
         .eq("id", account.id)
         .single();
-      if (((acc?.languages as string[] | null) ?? []).some(isExtraLang)) {
+      if (planLanguages(account, ((acc?.languages as string[] | null) ?? []).filter(isExtraLang)).length > 0) {
         after(() =>
           translateTutorial(tutorial.id).catch((e) =>
             console.error("Auto-Übersetzung (Sichtbarkeit):", e instanceof Error ? e.message : e),
