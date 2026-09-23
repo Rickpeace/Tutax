@@ -330,6 +330,13 @@ export async function deleteStep(
   nextTarget: string | null,
   wasRoot: boolean,
 ) {
+  // „Erneut versuchen“ nach einem Löschen, das beim ersten Mal schon durchlief: den Schritt
+  // gibt es nicht mehr -> erledigt (nur mit Zugriff auf die Anleitung, sonst Fehler wie bisher).
+  const { data: exists } = await createAdminClient().from("steps").select("id").eq("id", stepId).maybeSingle();
+  if (!exists) {
+    await requireTutorialAccess(tutorialId);
+    return;
+  }
   const { tutorialId: owner } = await requireStepAccess(stepId);
   if (owner !== tutorialId) throw new Error("Schritt nicht gefunden.");
   const supabase = await createClient();
