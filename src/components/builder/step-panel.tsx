@@ -53,6 +53,7 @@ export function StepPanel({
   onUpdateBranch,
   onDeleteBranch,
   onDeleteStep,
+  deleteContinuesAt = null,
   onOpenStep,
   onInsertIntoBranch,
   onDuplicateImage,
@@ -95,6 +96,8 @@ export function StepPanel({
   ) => void;
   onDeleteBranch: (branchId: string) => void;
   onDeleteStep: (id: string) => void;
+  /** Schritt, bei dem der Ablauf nach dem Löschen weitergeht (null = Ende) — für die Ansage. */
+  deleteContinuesAt?: Step | null;
   onOpenStep: (id: string) => void;
   onInsertIntoBranch: (branchId: string) => void;
   /** Welle 51a: neuen Schritt direkt danach mit demselben Bild anlegen. */
@@ -116,6 +119,24 @@ export function StepPanel({
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+  // Verschwindet das Panel (Schritt gelöscht, anderer gewählt), sind seine Eingaben weg —
+  // sonst fragte der Builder danach grundlos „Änderungen verwerfen?“.
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
+  useEffect(() => () => onDirtyChangeRef.current?.(false), []);
+
+  // Verlust-Schutz: Tab schließen/neu laden/wegnavigieren bei ungespeichertem Titel/Text abfangen.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   async function save(): Promise<boolean> {
     try {
@@ -161,9 +182,10 @@ export function StepPanel({
     onSetDecision(step.id, !step.is_decision);
   }
 
-  // Schritt löschen: Folge klar benennen. Verhalten = Builder.handleDeleteStep/deleteStep:
-  // linearer Schritt -> Vorgänger zeigen auf den nächsten Schritt; Frage -> Antworten gehen
-  // mit, Vorgänger zeigen aufs Ende, Ast-Schritte bleiben unverbunden stehen.
+  // Schritt löschen: Folge klar benennen. Verhalten = Builder.handleDeleteStep/deleteStep
+  // (lib/builder/rewire.ts): linearer Schritt -> Vorgänger zeigen auf den nächsten Schritt;
+  // Frage -> Antworten gehen mit, Vorgänger zeigen auf die Zusammenführung der Äste (sonst
+  // das Ziel der ersten Antwort); Schritte nur in den Ästen bleiben unverbunden stehen.
   async function askDeleteStep() {
     // Einziger Schritt der Anleitung: danach ist sie leer. Eine VERÖFFENTLICHTE Anleitung
     // setzt der Builder dann automatisch auf Entwurf zurück — das wird hier angesagt.
@@ -179,11 +201,20 @@ export function StepPanel({
         .sort((a, b) => a.position - b.position)
         .map((b) => `„${b.label?.trim() || "Antwort"}“`)
         .join(", ");
-      const hasBranchSteps = branches.some((b) => b.target_step_id);
+      // Ast-Schritte = Antwort-Ziele, bei denen der Ablauf NICHT weitergeht.
+      const hasBranchSteps = branches.some(
+        (b) => b.target_step_id && b.target_step_id !== deleteContinuesAt?.id,
+      );
+      const next = deleteContinuesAt
+        ? ` Der Ablauf geht danach mit „${stepLabel(deleteContinuesAt)}“ weiter.`
+        : hasPrev
+          ? " Die Anleitung endet danach beim vorigen Schritt."
+          : "";
       consequence =
         `Die Antworten ${names} werden mit gelöscht.` +
+        next +
         (hasBranchSteps
-          ? " Die Schritte in den Ästen bleiben erhalten, sind danach aber nicht mehr mit dem Ablauf verbunden."
+          ? " Schritte, die nur in den Ästen stehen, bleiben erhalten, sind danach aber nicht mehr mit dem Ablauf verbunden."
           : "");
     } else if (!step.is_decision && branches.some((b) => b.target_step_id)) {
       consequence = "Der Ablauf geht danach direkt mit dem nächsten Schritt weiter.";

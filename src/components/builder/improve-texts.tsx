@@ -97,14 +97,23 @@ export function ImproveTextsDialog({
         ? { stepId: it.stepId, title: it.newTitle }
         : { stepId: it.stepId, title: it.newTitle, body: it.newBody },
     );
+    const local = patches.map((p) => ("body" in p ? { ...p, body: docOf(p.body as string) } : p));
     setSaving(true);
     try {
       const res = await applyStepTexts(tutorialId, patches);
       if (!res.ok) {
+        // Teilweise gespeichert: die gespeicherten Schritte lokal übernehmen und aus der Liste
+        // nehmen — „Übernehmen“ versucht dann nur noch den Rest (sonst überschriebe ein späteres
+        // Speichern im Panel die schon gespeicherten KI-Texte wieder mit dem alten Stand).
+        const saved = new Set(res.savedIds ?? []);
+        if (saved.size) {
+          onApplied(local.filter((p) => saved.has(p.stepId)));
+          setPhase((ph) => (ph.kind === "ready" ? { ...ph, items: ph.items.filter((it) => !saved.has(it.stepId)) } : ph));
+        }
         toast.error(res.error);
         return;
       }
-      onApplied(patches.map((p) => ("body" in p ? { ...p, body: docOf(p.body as string) } : p)));
+      onApplied(local);
       close();
       toast.success(`${res.count} ${res.count === 1 ? "Schritt" : "Schritte"} verbessert`, {
         duration: 10_000,
@@ -113,6 +122,9 @@ export function ImproveTextsDialog({
           onClick: async () => {
             const back = await applyStepTexts(tutorialId, undo).catch(() => null);
             if (!back || !back.ok) {
+              // Teilweise zurückgesetzt: diese Schritte lokal ebenfalls zurücksetzen.
+              const saved = new Set((back && back.savedIds) ?? []);
+              if (saved.size) onApplied(undo.filter((u) => saved.has(u.stepId)));
               toast.error(back?.error ?? "Rückgängig ist fehlgeschlagen. Bitte erneut versuchen.");
               return;
             }

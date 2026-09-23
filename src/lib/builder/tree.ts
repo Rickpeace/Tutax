@@ -40,13 +40,12 @@ export type RenderMerge = {
 
 export type RenderNode = RenderStep | RenderMerge;
 
-export function buildRenderTree(
-  steps: Step[],
-  branches: StepBranch[],
-  rootStepId: string | null,
-): RenderNode | null {
-  if (!steps.length) return null;
-
+/**
+ * Graph-Helfer über die flachen Daten: ausgehende Ziele, Vorwärts-Erreichbarkeit und
+ * Join-Punkt einer Entscheidung. Gemeinsame Grundlage für den Baum UND das Umverdrahten
+ * beim Löschen einer Frage (lib/builder/rewire.ts) — beide müssen denselben Join finden.
+ */
+function graphOf(steps: Step[], branches: StepBranch[]) {
   const stepById = new Map<string, Step>(steps.map((s) => [s.id, s]));
   const branchesByStep = new Map<string, StepBranch[]>();
   for (const b of branches) {
@@ -57,15 +56,6 @@ export function buildRenderTree(
   for (const list of branchesByStep.values()) {
     list.sort((a, b) => a.position - b.position);
   }
-
-  // Wurzel: explizit gesetzt, sonst der Schritt mit Eingangsgrad 0,
-  // sonst der erste nach position.
-  const root =
-    (rootStepId && stepById.has(rootStepId) && rootStepId) ||
-    inferRoot(steps, branches) ||
-    [...steps].sort((a, b) => a.position - b.position)[0].id;
-
-  const title = (id: string) => stepById.get(id)?.title?.trim() || "Schritt";
 
   const forwardTargets = (id: string): string[] =>
     (branchesByStep.get(id) ?? [])
@@ -108,6 +98,39 @@ export function buildRenderTree(
     );
     return common[0];
   };
+
+  return { stepById, branchesByStep, joinPoint };
+}
+
+/**
+ * Join-Punkt einer Entscheidung: der Schritt, in dem alle Äste wieder zusammenlaufen
+ * (derselbe, den der Karten-Flow unter „danach“ zeigt) — oder null ohne Zusammenführung.
+ */
+export function findJoinPoint(
+  steps: Step[],
+  branches: StepBranch[],
+  decisionId: string,
+): string | null {
+  return graphOf(steps, branches).joinPoint(decisionId);
+}
+
+export function buildRenderTree(
+  steps: Step[],
+  branches: StepBranch[],
+  rootStepId: string | null,
+): RenderNode | null {
+  if (!steps.length) return null;
+
+  const { stepById, branchesByStep, joinPoint } = graphOf(steps, branches);
+
+  // Wurzel: explizit gesetzt, sonst der Schritt mit Eingangsgrad 0,
+  // sonst der erste nach position.
+  const root =
+    (rootStepId && stepById.has(rootStepId) && rootStepId) ||
+    inferRoot(steps, branches) ||
+    [...steps].sort((a, b) => a.position - b.position)[0].id;
+
+  const title = (id: string) => stepById.get(id)?.title?.trim() || "Schritt";
 
   // Rekursiver Aufbau. `stopAt` = Knoten, an dem dieser Zweig endet
   // (der gemeinsame Join wird außerhalb gerendert).

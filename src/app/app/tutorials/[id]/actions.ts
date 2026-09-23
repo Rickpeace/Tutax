@@ -43,6 +43,25 @@ import { withUserErrors, UserError } from "@/lib/action-error";
 // das Einfügen ohne Roundtrip sichtbar ist.
 
 /**
+ * „Erneut versuchen“ wiederholt eine ganze Kette (addStep → updateBranch → addBranch). Lief ein
+ * Teil beim ersten Mal schon durch, scheitert der Insert mit derselben Client-ID an 23505
+ * (doppelter Schlüssel) — und der Retry endlos. Deshalb: Duplikat = schon erledigt, ABER nur,
+ * wenn die vorhandene Zeile (RLS-sichtbar) wirklich zum selben Eltern-Datensatz gehört. Eine
+ * fremde ID führt weiterhin zum Fehler.
+ */
+async function isOwnRetryDuplicate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  error: { code?: string } | null,
+  table: "steps" | "step_branches",
+  id: string,
+  parent: { column: "tutorial_id" | "step_id"; value: string },
+): Promise<boolean> {
+  if (error?.code !== "23505") return false;
+  const { data } = await supabase.from(table).select(parent.column).eq("id", id).maybeSingle();
+  return !!data && (data as Record<string, unknown>)[parent.column] === parent.value;
+}
+
+/**
  * Neuen Schritt anlegen (Client liefert id + Verdrahtung).
  * Welle 51a „Bild in neuen Schritt übernehmen“: `opts.imageFromStepId` übernimmt Bild + Maße
  * eines Schritts DERSELBEN Anleitung (serverseitig per RLS gelesen — nie ein vom Client
@@ -83,7 +102,9 @@ export async function addStep(
     ...(image ?? {}),
     ...(highlights ? { highlights } : {}),
   });
-  if (error) throw new Error(error.message);
+  if (error && !(await isOwnRetryDuplicate(supabase, error, "steps", step.id, { column: "tutorial_id", value: tutorialId }))) {
+    throw new Error(error.message);
+  }
 
   if (setRoot) {
     await supabase
@@ -99,7 +120,9 @@ export async function addStep(
       target_step_id: step.id,
       position: 0,
     });
-    if (be) throw new Error(be.message);
+    if (be && !(await isOwnRetryDuplicate(supabase, be, "step_branches", wire.branchId, { column: "step_id", value: wire.fromStepId }))) {
+      throw new Error(be.message);
+    }
   }
   // Geteiltes Bild in einer veröffentlichten Anleitung: öffentliche Kopie mit allen
   // Verpixelungen neu erzeugen (no-op bei Entwürfen).
@@ -259,7 +282,9 @@ export async function addBranch(branch: {
   await requireStepAccess(branch.step_id);
   const supabase = await createClient();
   const { error } = await supabase.from("step_branches").insert(branch);
-  if (error) throw new Error(error.message);
+  if (error && !(await isOwnRetryDuplicate(supabase, error, "step_branches", branch.id, { column: "step_id", value: branch.step_id }))) {
+    throw new Error(error.message);
+  }
   await invalidateStepTags(branch.step_id);
   await markTranslationsStaleByStep(branch.step_id);
   if (branch.label?.trim()) after(() => translateBranchDelta(branch.id));
@@ -619,7 +644,7 @@ export async function suggestStepTextImprovements(tutorialId: string): Promise<S
 export async function applyStepTexts(
   tutorialId: string,
   patches: { stepId: string; title: string; body?: unknown }[],
-): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; count: number } | { ok: false; error: string; savedIds?: string[] }> {
   const ctx = await requireTutorialAccess(tutorialId);
   if (!canEdit(ctx.role)) return { ok: false, error: "Nur Inhaber und Bearbeiter können Texte ändern." };
   if (!Array.isArray(patches) || patches.length === 0) return { ok: true, count: 0 };
@@ -669,7 +694,13 @@ export async function applyStepTexts(
     after(() => reindexTutorialIfLive(tutorialId));
   }
   if (done.length < clean.length) {
-    return { ok: false, error: `Nur ${done.length} von ${clean.length} Schritten gespeichert. Bitte erneut versuchen.` };
+    // savedIds: diese Schritte SIND gespeichert — der Client übernimmt sie, sonst überschriebe
+    // ein späteres Speichern im Panel sie wieder mit dem alten Text.
+    return {
+      ok: false,
+      error: `Nur ${done.length} von ${clean.length} Schritten gespeichert. Bitte erneut versuchen.`,
+      savedIds: done,
+    };
   }
   return { ok: true, count: done.length };
 }
