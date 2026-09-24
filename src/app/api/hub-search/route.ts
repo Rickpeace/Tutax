@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
       admin,
       lang,
       results.map((r) => r.tutorialId).filter((x): x is string => !!x),
+      account.id,
     );
     const out: Result[] = results.map((r) => ({
       title: (r.tutorialId && titles[r.tutorialId]) || r.title,

@@ -215,6 +215,10 @@ const SENSITIVE_FIELD_WORD_RE =
 
 type ScrubbableStep = {
   label: string;
+  /** Seitentitel beim Klick (landet im Erklärtext). */
+  title?: string;
+  file_meta?: { filename?: string };
+  interaction?: { dropLabel?: string; hoverLabel?: string };
   action: string;
   rect: { x: number; y: number; w: number; h: number };
   sensitive?: { x: number; y: number; w: number; h: number }[];
@@ -240,10 +244,20 @@ export function scrubSensitiveGuideSteps(steps: ScrubbableStep[]): number {
       delete s.typed_value;
       hit = true;
     }
-    if (s.label && looksSensitiveValue(s.label)) {
-      s.label = maskSensitive(s.label);
-      hit = true;
-    }
+    // Kennungen auch TEILWEISE in Texten maskieren — Beschriftung, Seitentitel, Dateiname,
+    // Ziel-/Hover-Beschriftung (Sicherheits-Audit 24.09.: „Mandant X – Steuernummer 12/345/67890“
+    // im Seitentitel und „Steuer-ID 12345678903 X.pdf“ als Dateiname landeten im Klartext).
+    const scrubText = (v: string | undefined): string | undefined => {
+      if (!v) return v;
+      const m = maskSensitive(v);
+      if (m !== v) hit = true;
+      return m;
+    };
+    s.label = scrubText(s.label) ?? s.label;
+    if (s.title) s.title = scrubText(s.title);
+    if (s.file_meta?.filename) s.file_meta.filename = scrubText(s.file_meta.filename);
+    if (s.interaction?.dropLabel) s.interaction.dropLabel = scrubText(s.interaction.dropLabel);
+    if (s.interaction?.hoverLabel) s.interaction.hoverLabel = scrubText(s.interaction.hoverLabel);
     if (!hit) continue;
     n++;
     // Eingabe-Schritt: das Klick-Rechteck IST das Feld → als Verpixelungsvorschlag ergänzen.

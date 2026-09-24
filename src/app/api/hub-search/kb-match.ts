@@ -51,17 +51,30 @@ export async function translatedTitles(
   admin: ReturnType<typeof createAdminClient>,
   lang: HubLang,
   tutorialIds: string[],
+  /** Nur Titel von Anleitungen DIESES Kontos (veröffentlicht + öffentlich) bzw. globaler Vorlagen —
+   *  die IDs stammen aus kb_embeddings; ohne Filter verriet eine fremde ID den Titel eines fremden
+   *  Entwurfs (Sicherheits-Audit 24.09.). */
+  accountId: string,
 ): Promise<Record<string, string>> {
   const ids = [...new Set(tutorialIds.filter(Boolean))];
   if (lang === "de" || !ids.length) return {};
   try {
     const { data } = await admin
       .from("tutorial_translations")
-      .select("tutorial_id, title")
+      .select("tutorial_id, title, tutorials!inner(account_id, is_template, status, visibility)")
       .eq("lang", lang)
       .in("tutorial_id", ids);
     const out: Record<string, string> = {};
     for (const r of data ?? []) {
+      const t = (Array.isArray(r.tutorials) ? r.tutorials[0] : r.tutorials) as
+        | { account_id: string | null; is_template: boolean; status: string; visibility: string }
+        | undefined;
+      const allowed =
+        !!t &&
+        t.status === "published" &&
+        t.visibility === "public" &&
+        (t.account_id === accountId || (t.is_template && t.account_id === null));
+      if (!allowed) continue;
       const title = String(r.title ?? "").trim();
       if (title) out[r.tutorial_id as string] = title;
     }

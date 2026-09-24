@@ -134,7 +134,7 @@ async function loadTopicOverview(
     const allTuts = [...ownTitles, ...liveTpls];
     // EN/PL/TR: übersetzte Titel/Kategorienamen, damit keine deutschen Begriffe in die
     // fremdsprachige Antwort rutschen (Audit 24.09.). Fehlende Übersetzung → Deutsch.
-    const trTitles = await translatedTitles(admin, lang, allTuts.map((t) => t.id as string));
+    const trTitles = await translatedTitles(admin, lang, allTuts.map((t) => t.id as string), accountId);
     const titles = clean(allTuts.map((t) => trTitles[t.id as string] || (t.title as string))).slice(0, 60);
     const categories = clean(
       (cats.data ?? []).map((c) => categoryName(c as { name: string; name_i18n?: unknown }, lang)),
@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
       rows
         .filter((r) => r.source_type === "tutorial" && r.source_id)
         .map((r) => r.source_id as string),
+      account.id,
     );
     const titleOf = (r: KbMatch) =>
       (r.source_type === "tutorial" && r.source_id && trTitles[r.source_id]) || r.metadata.title || "";

@@ -26,6 +26,11 @@ export function sanitizeSkinCss(input: unknown, scope = ".tutax-skin"): string {
   css = css.replace(/expression\s*\(/gi, "(");
   css = css.replace(/(behavior|-moz-binding)\s*:/gi, "/* blocked */:");
   css = css.replace(/javascript:/gi, "");
+  // Bild-Funktionen, in denen auch einfache Strings Adressen sind (image-set("https://…" 1x),
+  // cross-fade, image(), src()) ganz entfernen — sonst lud jeder Besucher eine fremde Adresse
+  // (Tracking; Sicherheits-Audit 24.09.). Danach zusätzlich jeder String mit http/„//“.
+  css = css.replace(/(-webkit-)?(image-set|cross-fade|image|src)\s*\(/gi, "none(");
+  css = css.replace(/(['"])\s*(https?:)?\/\/[^'"]*\1/gi, '""');
   // url(): NUR data:image: zulassen (keine externen URLs -> kein Tracking/IP-Leak der Endkunden)
   css = css.replace(/url\(\s*(['"]?)([^'")]*)\1\s*\)/gi, (m, _q, u) => {
     const url = String(u || "").trim().toLowerCase();

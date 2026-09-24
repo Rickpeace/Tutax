@@ -206,7 +206,9 @@ export async function forkTemplate(templateId: string) {
     await supabase.from("tutorials").update({ root_step_id: idMap.get(tpl.root_step_id) }).eq("id", forkId);
   }
 
-  await supabase
+  // Mit Server-Rechten: die Verknüpfung „angepasste Kopie“ darf nur der Server setzen
+  // (Migration 0046 — sonst ließ sich die Gratis-Grenze über gefälschte Kopien umgehen).
+  await admin
     .from("account_templates")
     .upsert(
       { account_id: account.id, template_id: templateId, enabled: true, forked_tutorial_id: forkId },

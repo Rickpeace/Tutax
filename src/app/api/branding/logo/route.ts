@@ -44,10 +44,16 @@ export async function POST(req: NextRequest) {
   // ERST prüfen, dann das alte Logo entfernen — sonst war bei Fehlern das alte Logo weg.
   if (file.size > 8 * 1024 * 1024)
     return NextResponse.json({ error: "Das Logo ist zu groß (höchstens 8 MB)." }, { status: 400 });
-  const buf = Buffer.from(await file.arrayBuffer());
+  // Neu kodieren statt Original-Bytes ablegen (Sicherheits-Review 24.09.): SVG wird zu einem
+  // echten Bild (wurde als „.webp“ sonst gar nicht angezeigt), angehängte Fremddaten und
+  // EXIF/GPS fallen weg, Pixel-Obergrenze gegen Riesenbilder.
+  let buf: Buffer;
   try {
-    const meta = await sharp(buf).metadata();
-    if (!meta.width || !meta.height) throw new Error("kein Bild");
+    buf = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize({ width: 1200, height: 600, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 90 })
+      .toBuffer();
   } catch {
     return NextResponse.json({ error: "Das ist keine gültige Bilddatei. Bitte PNG, JPG, WebP oder SVG hochladen." }, { status: 400 });
   }
