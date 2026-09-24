@@ -28,7 +28,8 @@ type Bereich = "alle" | "kunden" | "intern";
 const BEREICH_LABELS: [Bereich, string][] = [
   ["alle", "Alle"],
   ["kunden", "Hilfe-Seite"],
-  ["intern", "Nur Team"],
+  // „Team“ statt „Nur Team“: auch öffentliche Anleitungen mit Team-Häkchen gehören dazu (Audit 24.09.).
+  ["intern", "Team"],
 ];
 type StatusFilter = "alle" | "live" | "entwurf";
 

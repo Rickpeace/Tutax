@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -27,6 +27,15 @@ export function ArticleEditor({ article, accountId }: { article: Article; accoun
   const [published, setPublished] = useState(article.status === "published");
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
+  // Aktueller Eingabestand für asynchrone Abschlüsse: wer WÄHREND des Speicherns weitertippt,
+  // behält „ungespeichert“ (Audit 24.09.: sonst ging das Getippte still verloren).
+  const latest = useRef({ title, body });
+  useEffect(() => {
+    latest.current = { title, body };
+  }, [title, body]);
+  const markSavedIfUnchanged = (savedTitle: string, savedBody: unknown) => {
+    if (latest.current.title === savedTitle && latest.current.body === savedBody) setDirty(false);
+  };
   // Steply-Abfrage statt grauem Browser-Dialog (wie im Editor).
   const [confirm, confirmDialog] = useConfirm();
 
@@ -68,12 +77,14 @@ export function ArticleEditor({ article, accountId }: { article: Article; accoun
     const next = !published;
     if (next) {
       // Erst speichern, damit der Chatbot-Index den aktuellen Stand bekommt.
+      const savedTitle = title;
+      const savedBody = body;
       start(async () => {
         try {
-          unwrap(await saveArticle(accountId, article.id, title, body));
+          unwrap(await saveArticle(accountId, article.id, savedTitle, savedBody));
           unwrap(await setArticlePublished(accountId, article.id, true));
           setPublished(true);
-          setDirty(false);
+          markSavedIfUnchanged(savedTitle, savedBody);
           toast.success("Im KI-Assistenten aktiv");
         } catch (e) {
           toast.error(errorText(e));

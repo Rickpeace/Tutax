@@ -21,6 +21,7 @@ export function HubBrowser({
   langQuery = "",
   labels,
   colorful = false,
+  colorKeys,
   chatAvailable = true,
 }: {
   accountSlug: string;
@@ -37,6 +38,11 @@ export function HubBrowser({
    * Kunden-CI (ai/extreme) bleibt alles monochrom in der Akzentfarbe.
    */
   colorful?: boolean;
+  /**
+   * Angezeigter (ggf. übersetzter) Kategoriename → deutscher Name. Die Farbfamilie hängt am
+   * deutschen Namen (wie in der App), damit sie nicht mit der Sprache wechselt.
+   */
+  colorKeys?: Record<string, string>;
   /** Gibt es den Hilfe-Assistenten (ab Pro)? Sonst kein „Fragen Sie den Assistenten“. */
   chatAvailable?: boolean;
 }) {
@@ -89,7 +95,8 @@ export function HubBrowser({
         const res = await fetch("/api/hub-search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountSlug, q: term }),
+          // Sprache mit: die Vorschläge kommen dann mit übersetzten Titeln (Audit 24.09.).
+          body: JSON.stringify({ accountSlug, q: term, lang }),
           signal: ctrl.signal,
         });
         const j = await res.json().catch(() => ({}));
@@ -109,15 +116,17 @@ export function HubBrowser({
       clearTimeout(t);
       ctrl.abort();
     };
-  }, [semEligible, term, accountSlug]);
+  }, [semEligible, term, accountSlug, lang]);
 
   return (
     <div data-tx="browser">
       {/* Große Such-Pille (Design 3b) — Schattenfarbe CI-neutral aus der Ink. */}
       <div
         data-tx="search"
-        className="mx-auto mb-8 flex max-w-[520px] items-center gap-2.5 rounded-full border-2 bg-white px-5 py-3 sm:py-3.5"
+        className="mx-auto mb-8 flex max-w-[520px] items-center gap-2.5 rounded-full border-2 px-5 py-3 sm:py-3.5"
         style={{
+          background: "var(--brand-paper, #fff)",
+          color: "var(--brand-ink)",
           borderColor: "color-mix(in srgb, var(--brand-ink) 10%, transparent)",
           boxShadow: "0 4px 0 color-mix(in srgb, var(--brand-ink) 8%, transparent)",
         }}
@@ -145,7 +154,12 @@ export function HubBrowser({
             </p>
             <button
               onClick={() => setQ("")}
-              className="mt-3 rounded-lg border border-black/10 bg-white px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+              className="mt-3 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors hover:border-[var(--brand-accent)]"
+              style={{
+                background: "var(--brand-paper, #fff)",
+                color: "var(--brand-ink)",
+                borderColor: "color-mix(in srgb, var(--brand-ink) 12%, transparent)",
+              }}
             >
               {L.resetSearch}
             </button>
@@ -214,7 +228,9 @@ export function HubBrowser({
         /* Kategorien-Grid (Design 3b): 2 Spalten ab md, Blöcke mit Icon-Kachel. */
         <div className="grid gap-x-7 gap-y-7 md:grid-cols-2">
           {groups.map((g) => {
-            const fam: CategoryColor | null = colorful ? categoryColor(g.name) : null;
+            const fam: CategoryColor | null = colorful
+              ? categoryColor(colorKeys?.[g.name] ?? g.name)
+              : null;
             return (
               // min-w-0: verhindert, dass eine lange, ungebrochene Kategorie/Titel-Kette
               // die Grid-Spalte aufbläht (horizontaler Overflow).
@@ -226,7 +242,7 @@ export function HubBrowser({
                     style={{
                       background: fam
                         ? fam.soft
-                        : "color-mix(in srgb, var(--brand-accent) 10%, white)",
+                        : "color-mix(in srgb, var(--brand-accent) 10%, var(--brand-paper, white))",
                     }}
                   >
                     <CategoryGlyph fam={fam} />

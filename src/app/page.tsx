@@ -46,7 +46,8 @@ export default function LandingPage() {
           <a href="#preise" className="hidden hover:text-ink sm:inline">
             Preise
           </a>
-          <Link href="/login" className="hidden hover:text-ink sm:inline">
+          {/* Auch am Handy: wiederkehrende Kunden fanden auf der Startseite sonst keinen Login. */}
+          <Link href="/login" className="hover:text-ink">
             Anmelden
           </Link>
           <Link

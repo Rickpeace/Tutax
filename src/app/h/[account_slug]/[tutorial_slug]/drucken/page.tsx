@@ -157,8 +157,10 @@ export async function generateMetadata({
   if (!probe) return { title: "Nicht gefunden" };
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
+  const baseTitle = `${data.tutorial.title} · ${labelsFor(lang).printView}`;
   return {
-    title: `${data.tutorial.title} · ${labelsFor(lang).printView}`,
+    // Pro/Business ohne „· Steply“ im Tab (Audit 24.09.).
+    title: isPro(data.account) ? { absolute: baseTitle } : baseTitle,
     robots: { index: false },
   };
 }
@@ -202,7 +204,8 @@ export default async function PrintPage({
   return (
     <main
       className="min-h-screen bg-white print:bg-white"
-      style={{ ...brandStyle(tokens), fontFamily: fonts.body, color: "var(--brand-ink)" }}
+      // Papier ist immer weiß → Textfarbe für Weiß ableiten (dunkle Designs, Audit 24.09.).
+      style={{ ...brandStyle(tokens, { onWhite: true }), fontFamily: fonts.body, color: "var(--brand-ink)" }}
     >
       {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
       <HtmlLang lang={LANG_BCP47[lang]} />
@@ -222,13 +225,17 @@ export default async function PrintPage({
               <img
                 src={logoUrl}
                 alt=""
-                className="size-11 border border-black/5 bg-white object-contain p-1"
+                className="h-11 w-auto min-w-11 max-w-[180px] shrink-0 border border-black/5 bg-white object-contain p-1"
                 style={{ borderRadius: "var(--brand-radius, 12px)" }}
               />
             ) : (
               <div
-                className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
-                style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
+                className="flex size-11 shrink-0 items-center justify-center text-lg font-extrabold"
+                style={{
+                  background: "var(--brand-accent)",
+                  color: "var(--brand-accent-fg, #fff)",
+                  borderRadius: "var(--brand-radius, 12px)",
+                }}
               >
                 {initial}
               </div>

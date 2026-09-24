@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicImageUrl } from "@/lib/public-image";
@@ -39,6 +40,18 @@ export async function POST(req: NextRequest) {
   const target = String(form.get("target") ?? "manual") === "ai" ? "ai" : "manual";
   const col = target === "ai" ? "ai_logo_path" : "logo_path";
 
+  // Echte Bilddatei? Vorher wurden beliebige Bytes als .webp öffentlich abgelegt (Audit 24.09.).
+  // ERST prüfen, dann das alte Logo entfernen — sonst war bei Fehlern das alte Logo weg.
+  if (file.size > 8 * 1024 * 1024)
+    return NextResponse.json({ error: "Das Logo ist zu groß (höchstens 8 MB)." }, { status: 400 });
+  const buf = Buffer.from(await file.arrayBuffer());
+  try {
+    const meta = await sharp(buf).metadata();
+    if (!meta.width || !meta.height) throw new Error("kein Bild");
+  } catch {
+    return NextResponse.json({ error: "Das ist keine gültige Bilddatei. Bitte PNG, JPG, WebP oder SVG hochladen." }, { status: 400 });
+  }
+
   const admin = createAdminClient();
 
   // altes Logo der jeweiligen Quelle entfernen
@@ -53,8 +66,11 @@ export async function POST(req: NextRequest) {
   const path = `${accountId}/branding/${target === "ai" ? "ai-logo" : "logo"}-${Date.now()}.webp`;
   const { error } = await admin.storage
     .from(PUBLIC_BUCKET)
-    .upload(path, file, { upsert: true, contentType: "image/webp" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    .upload(path, buf, { upsert: true, contentType: "image/webp" });
+  if (error) {
+    console.error("[branding/logo] Upload:", error.message);
+    return NextResponse.json({ error: "Das Logo konnte nicht gespeichert werden. Bitte erneut versuchen." }, { status: 500 });
+  }
 
   await supabase.from("themes").update({ [col]: path }).eq("account_id", accountId);
 

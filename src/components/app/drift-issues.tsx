@@ -9,7 +9,8 @@ import { unwrap, errorText } from "@/lib/action-error";
 
 type Issue = { step?: string; problem?: string; suggestion?: string; applied?: boolean };
 
-export function DriftIssues({ alertId, issues }: { alertId: string; issues: Issue[] }) {
+/** `canApply`: KI-Übernahme ist ab Pro — im Gratis-Tarif Hinweis statt Knopf, der erst nach dem Klick scheitert. */
+export function DriftIssues({ alertId, issues, canApply = true }: { alertId: string; issues: Issue[]; canApply?: boolean }) {
   // Positionen nach Schritt gruppieren (mehrere Korrekturen für denselben Schritt zusammen).
   const groups = useMemo(() => {
     const norm = (s: string) => s.toLowerCase().replace(/^\s*\d+[.)]\s*/, "").trim();
@@ -74,6 +75,10 @@ export function DriftIssues({ alertId, issues }: { alertId: string; issues: Issu
             {applied[g.key] ? (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-yes">
                 <Check className="size-3.5" /> Übernommen
+              </span>
+            ) : !canApply ? (
+              <span className="text-xs font-semibold text-muted-foreground">
+                Automatisch übernehmen ist ab dem Pro-Tarif enthalten – passen Sie den Schritt sonst im Editor an.
               </span>
             ) : (
               <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => apply(g)}>

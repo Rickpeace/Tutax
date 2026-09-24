@@ -595,6 +595,13 @@ svg.i.s {
   color: var(--ink);
 }
 
+/* Audit 24.09.: veröffentlichtes Ziel → „sofort sichtbar“-Zeile unter der Einfüge-Stelle. */
+.target-live {
+  display: block;
+  margin-top: 3px;
+  font-weight: 600;
+}
+
 .target .x {
   margin-left: auto;
   font-weight: 800;

@@ -304,7 +304,8 @@ export async function duplicateTutorial(id: string) {
     .insert({
       account_id: account.id,
       category_id: src.category_id,
-      title: `${src.title} (Kopie)`,
+      // Titel-Grenze einhalten (vorher konnte „ (Kopie)“ über 120 Zeichen hinausgehen).
+      title: `${src.title.slice(0, GUIDE_TITLE_MAX - 8)} (Kopie)`,
       description: src.description,
       status: "draft",
       // Sichtbarkeit mitkopieren: sonst wurde aus einer „Nur Team“-Anleitung eine öffentliche
@@ -573,6 +574,23 @@ export const publishTutorial = withUserErrors(async function publishTutorial(tut
   if ((stepCount ?? 0) === 0) {
     throw new UserError(
       "Diese Anleitung hat noch keine Schritte. Legen Sie zuerst einen Schritt an, dann können Sie veröffentlichen.",
+    );
+  }
+  // Völlig leere Schritte (kein Titel, kein Bild, kein Text) nicht veröffentlichen: sie entstehen
+  // z. B. über „+“ und danach „Verwerfen“ und standen auf der Hilfe-Seite als leere Seite mit nur
+  // „Fertig“ (Audit 24.09.).
+  const { data: stepRows } = await supabase
+    .from("steps")
+    .select("title, body, image_path")
+    .eq("tutorial_id", tutorialId);
+  const emptyCount = (stepRows ?? []).filter(
+    (s) => !(s.title ?? "").trim() && !s.image_path && !/"text":"\s*[^"\s]/.test(JSON.stringify(s.body ?? "")),
+  ).length;
+  if (emptyCount > 0) {
+    throw new UserError(
+      emptyCount === 1
+        ? "Ein Schritt ist noch leer (ohne Titel, Bild und Text). Füllen Sie ihn aus oder löschen Sie ihn, dann können Sie veröffentlichen."
+        : `${emptyCount} Schritte sind noch leer (ohne Titel, Bild und Text). Füllen Sie sie aus oder löschen Sie sie, dann können Sie veröffentlichen.`,
     );
   }
 

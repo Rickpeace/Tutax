@@ -620,7 +620,10 @@
   // zu 3 Ebenen nach oben und pruefen je Ebene die bis zu 2 unmittelbar vorangehenden
   // Geschwister. Bewusst konservativ: kurzer (<=40), code-freier Text; Geschwister, die
   // selbst Eingabefelder/Buttons enthalten (Formular-Grids), werden uebersprungen.
-  function nearbyCaptionText(control) {
+  // Audit 24.09.: Seiten-/Abschnittsueberschriften (h1/h2 bzw. role=heading Ebene 1–2) sind
+  // NIE der Name eines Feldes („Mandantenliste“ ueber dem Suchfeld „Mandant suchen“).
+  const PAGE_HEADING_SEL = "h1, h2, [role='heading'][aria-level='1'], [role='heading'][aria-level='2']";
+  function nearbyCaptionInfo(control) {
     let node = control;
     for (let depth = 0; depth < 3 && node && node !== document.body; depth++) {
       let sib = node.previousElementSibling;
@@ -639,19 +642,37 @@
               sib.querySelector && sib.querySelector("input, textarea, select, button")
             );
           }
+          if (!skip) {
+            skip = !!(
+              (sib.matches && sib.matches(PAGE_HEADING_SEL)) ||
+              (sib.querySelector && sib.querySelector(PAGE_HEADING_SEL))
+            );
+          }
         } catch (err) {
           skip = true; // im Zweifel ueberspringen
         }
         if (!skip) {
           const t = visibleText(sib);
-          if (t && t.length <= 40 && !looksLikeCode(t)) return t;
+          if (t && t.length <= 40 && !looksLikeCode(t)) return { text: t, depth };
         }
         sib = sib.previousElementSibling;
         hops++;
       }
       node = node.parentElement;
     }
-    return "";
+    return { text: "", depth: -1 };
+  }
+  function nearbyCaptionText(control) {
+    return nearbyCaptionInfo(control).text;
+  }
+
+  // Beschreibt der Platzhalter das Feld („Mandant suchen“) — oder ist er nur ein Beispielwert
+  // („+49 …“, „max@firma.de“, „TT.MM.JJJJ“)? Nur Ersteres schlaegt eine entferntere Ueberschrift.
+  function descriptivePlaceholder(ph) {
+    const t = String(ph || "").trim();
+    if (!t || t.length > 60 || looksLikeCode(t)) return false;
+    if (/[\d@/]|^(z\.\s?b\.|bsp\.|e\.g\.|beispiel)/i.test(t)) return false;
+    return /[a-zäöüß]{3,}/i.test(t) && t !== t.toUpperCase();
   }
 
   // Label fuer ein editierbares Feld. DATENSCHUTZ: Das LABEL enthaelt nie den getippten Wert
@@ -677,9 +698,12 @@
         /* egal */
       }
     }
-    const cap = nearbyCaptionText(control);
-    if (cap) return clampLabel(cap, 60);
+    const cap = nearbyCaptionInfo(control);
     const ph = control.getAttribute && control.getAttribute("placeholder");
+    // Audit 24.09.: Steht die Ueberschrift AUSSERHALB des direkten Feld-Containers (depth ≥ 1),
+    // gewinnt ein beschreibender Platzhalter — die Ueberschrift gehoert dann oft zum Abschnitt.
+    if (cap.text && cap.depth >= 1 && descriptivePlaceholder(ph)) return clampLabel(ph, 60);
+    if (cap.text) return clampLabel(cap.text, 60);
     if (ph && ph.trim() && !looksLikeCode(ph)) return clampLabel(ph, 60);
     const nm = control.getAttribute && control.getAttribute("name");
     if (nm && nm.trim()) return clampLabel(nm, 60);
@@ -1057,8 +1081,23 @@
   //   • beliebige Elemente mit [data-steply-sensitive] (Opt-in).
   // Sichtbar = im Viewport, Flaeche > 0, nicht display:none/visibility:hidden. Kappe bei 10
   // (die groessten zuerst), Werte 0..1 geklemmt (rectOf klemmt bereits).
-  const SENSITIVE_RE =
-    /(api[-_ ]?key|secret|token|geheim|passw|iban|kontonummer|kreditkarte|credit[-_ ]?card|cvv|bic)/i;
+  // Audit 24.09.: zusaetzlich die Kennungen, die in Steuer-/Personal-Formularen stehen
+  // (Steuernummer, Steuer-ID, USt-IdNr, SV-/RV-/KV-Nummer, Geburtsdatum, Ausweis/Reisepass,
+  // PIN/TAN). Kurze Woerter (PIN, TAN, IdNr …) nur als GANZES Wort (SENSITIVE_WORD_RE) —
+  // sonst schluege „Bestand“/„Spinner“ an.
+  const SENSITIVE_RE = new RegExp(
+    "(api[-_ ]?key|secret|token|geheim|passw|kennwort|iban|kontonummer|kreditkarte|credit[-_ ]?card" +
+      "|kartennummer|card[-_ ]?number|cvv|cvc|bic" +
+      "|steuer[-_ ]?(nummer|nr|id|identifikations)|steueridentifikations|identifikationsnummer" +
+      "|ust[-_ .]?id|umsatzsteuer[-_ ]?id|tax[-_ ]?(id|number)" +
+      "|sozialversicherungs|rentenversicherungs|krankenversicherungs|versicherten[-_ ]?(nummer|nr)" +
+      "|social[-_ ]?security|geburtsdatum|date[-_ ]?of[-_ ]?birth|birth[-_ ]?date" +
+      "|personalausweis|ausweis[-_ ]?(nummer|nr)|reisepass|pass[-_ ]?(nummer|nr)|passport" +
+      "|pin[-_ ]?code|tan[-_ ]?(nummer|nr|code))",
+    "i",
+  );
+  const SENSITIVE_WORD_RE =
+    /(^|[^a-z0-9äöüß])(pin|tan|puk|idnr|ssn|sv[-_ .]?(nummer|nr)|rv[-_ .]?(nummer|nr)|kv[-_ .]?(nummer|nr))(?![a-z0-9äöüß])/i;
   const MAX_SENSITIVE = 10;
 
   // Trifft die BESCHRIFTUNG (Label/aria-label/placeholder/name/id) eines Feldes einen
@@ -1073,9 +1112,99 @@
         el.id,
       ];
       const hay = parts.filter(Boolean).join(" ");
-      return !!hay && SENSITIVE_RE.test(hay);
+      return !!hay && (SENSITIVE_RE.test(hay) || SENSITIVE_WORD_RE.test(hay));
     } catch (err) {
       return false;
+    }
+  }
+
+  // ---- Sensible WERTE (Audit 24.09.) --------------------------------------------------------
+  // Auch ohne verraeterische Beschriftung („Nummer“, „Feld 3“) erkennen wir typische Kennungen
+  // am WERT selbst: IBAN (Pruefziffer mod 97), dt. Steuernummer (12/345/67890 bzw. 13 Ziffern),
+  // Steuer-ID (11 Ziffern), SV-Nummer (65 170839 J 003), KV-Nummer (A123456789) und
+  // Kreditkartennummern (Luhn). Der Wert wird dafuer NUR lokal gelesen — er verlaesst die Seite
+  // nie; ein Treffer heisst: kein typed_value + Verpixelungsvorschlag fuers Feld.
+  // Dieselben Muster prueft der Server (src/lib/recorder.ts) noch einmal als Sicherheitsnetz.
+  function ibanValid(raw) {
+    const s = raw.replace(/\s+/g, "").toUpperCase();
+    if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s)) return false;
+    const r = s.slice(4) + s.slice(0, 4);
+    let mod = 0;
+    for (const ch of r) {
+      const v = ch >= "A" && ch <= "Z" ? String(ch.charCodeAt(0) - 55) : ch;
+      for (const d of v) mod = (mod * 10 + (d.charCodeAt(0) - 48)) % 97;
+    }
+    return mod === 1;
+  }
+  function luhnValid(digits) {
+    let sum = 0;
+    let dbl = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let d = digits.charCodeAt(i) - 48;
+      if (dbl) {
+        d *= 2;
+        if (d > 9) d -= 9;
+      }
+      sum += d;
+      dbl = !dbl;
+    }
+    return sum % 10 === 0;
+  }
+  function looksSensitiveValue(value) {
+    const v = String(value || "");
+    if (!v || v.length > 2000) return false;
+    try {
+      // IBAN (auch in Vierergruppen geschrieben).
+      // Der Treffer kann ein Folgewort mitschlucken („DE89 … 00 ist“) → Praefixe 15–34 pruefen.
+      const ibans = v.match(/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}\b/gi) || [];
+      for (const cand of ibans) {
+        const s = cand.replace(/\s+/g, "");
+        for (let n = Math.min(34, s.length); n >= 15; n--) {
+          if (ibanValid(s.slice(0, n))) return true;
+        }
+      }
+      // Steuernummer im Laender-Format (12/345/67890, 143/815/08154, 9181/815/08155).
+      if (/(^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/.test(v)) return true;
+      // SV-/Rentenversicherungsnummer: 2 Ziffern + Geburtsdatum + Buchstabe + 3 Ziffern.
+      if (/(^|[^A-Z0-9])\d{2}\s?\d{6}\s?[A-Z]\s?\d{2}\s?\d(?![A-Z0-9])/i.test(v)) return true;
+      // Krankenversichertennummer: Buchstabe + 9 Ziffern.
+      if (/(^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/i.test(v)) return true;
+      // Ziffernfolgen (Leer-/Bindestriche erlaubt): 11 = Steuer-ID (erste Ziffer nie 0),
+      // 13 = Steuernummer (ELSTER-Format), 13–19 mit gueltiger Luhn-Pruefziffer = Kreditkarte.
+      const runs = v.match(/\d(?:[ -]?\d){10,18}/g) || [];
+      for (const run of runs) {
+        const d = run.replace(/[ -]/g, "");
+        if (d.length === 11 && d[0] !== "0") return true;
+        if (d.length === 13) return true;
+        if (d.length >= 13 && d.length <= 19 && luhnValid(d)) return true;
+      }
+    } catch (err) {
+      return true; // im Zweifel sensibel
+    }
+    return false;
+  }
+  // Aktueller Wert eines Feldes (nur lokal, fuer looksSensitiveValue). "" bei allem anderen.
+  function fieldValueForCheck(el) {
+    try {
+      const tag = (el.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return String(el.value || "");
+      if (tag === "select") return selectedOptionText(el);
+      if (el.isContentEditable) return String(el.innerText || el.textContent || "");
+    } catch (err) {
+      /* egal */
+    }
+    return "";
+  }
+  // Text der gewaehlten Option(en) eines <select> (Mehrfachauswahl: mit Komma verbunden).
+  function selectedOptionText(el) {
+    try {
+      const opts = Array.from(el.selectedOptions || []).filter(Boolean);
+      return opts
+        .map((o) => String(o.label || o.textContent || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join(", ");
+    } catch (err) {
+      return "";
     }
   }
 
@@ -1123,9 +1252,12 @@
       document.querySelectorAll('input[type="password"]').forEach(add);
       // 2) Opt-in per Attribut (beliebige Elemente).
       document.querySelectorAll("[data-steply-sensitive]").forEach(add);
-      // 3) Text-Eingaben mit sensibler Beschriftung.
-      document.querySelectorAll("input, textarea").forEach((el) => {
-        if (isSensitiveByMeta(el)) add(el);
+      // 3) Text-Eingaben mit sensibler Beschriftung — oder (Audit 24.09.) mit einem Wert, der
+      //    wie IBAN/Steuernummer/Steuer-ID/SV-Nummer/Kartennummer aussieht.
+      document.querySelectorAll("input, textarea, select").forEach((el) => {
+        const tag = (el.tagName || "").toLowerCase();
+        if (tag !== "select" && isSensitiveByMeta(el)) add(el);
+        else if (looksSensitiveValue(fieldValueForCheck(el))) add(el);
       });
     } catch (err) {
       /* im Zweifel lieber nichts erfassen als einen Fehler werfen */
@@ -1144,8 +1276,10 @@
   // (step.typed_value), damit Titel/Text konkret werden („„account“ in „Suche“ eingeben“).
   // AUSGENOMMEN (dann fehlt das Feld ganz): Passwortfelder, autocomplete mit cc-* / one-time-code
   // / current-password / new-password, Felder in oder mit [data-steply-sensitive], Felder, die die
-  // Auto-Verpixelung als sensibel erkennt (isSensitiveByMeta), Auswahllisten/Schieberegler (kein
-  // Getipptes) und lange Freitexte (Rich-Editor/textarea > 80 Zeichen). Sonst getrimmt, max. 80.
+  // Auto-Verpixelung als sensibel erkennt (isSensitiveByMeta bzw. — Audit 24.09. — am Wert:
+  // looksSensitiveValue), Schieberegler/Farbwaehler (kein Getipptes) und lange Freitexte (Rich-
+  // Editor/textarea > 80 Zeichen). Auswahllisten (<select>) schicken seit Audit 24.09. den Text
+  // der gewaehlten Option. Sonst getrimmt, max. 80.
   // Der Wert dient NUR Titel/Text — Automationen fuellen Felder weiterhin nie damit aus.
   const TYPED_VALUE_MAX = 80;
   const SENSITIVE_AUTOCOMPLETE_RE = /(^|\s)(cc-[\w-]+|one-time-code|current-password|new-password)(\s|$)/i;
@@ -1157,7 +1291,9 @@
       if (ac && SENSITIVE_AUTOCOMPLETE_RE.test(ac)) return true;
       if (el.hasAttribute && el.hasAttribute("data-steply-sensitive")) return true;
       if (el.closest && el.closest("[data-steply-sensitive]")) return true;
-      return isSensitiveByMeta(el);
+      if (isSensitiveByMeta(el)) return true;
+      // Audit 24.09.: auch am WERT erkennbare Kennungen (IBAN, Steuernummer …) — s. oben.
+      return looksSensitiveValue(fieldValueForCheck(el));
     } catch (err) {
       return true; // im Zweifel sensibel -> kein Wert
     }
@@ -1165,13 +1301,16 @@
   function typedValueFor(el) {
     if (!el || el.nodeType !== 1) return "";
     const info = editableInfo(el);
-    if (!info.editable || (info.kind !== "text" && info.kind !== "rich")) return "";
+    // <select> (Audit 24.09.): der Text der gewaehlten Option reist als Wert mit — der Titel
+    // sagt dann, WAS gewaehlt wird. Schieberegler/Farbwaehler bleiben ohne Wert.
+    if (!info.editable || (info.kind !== "text" && info.kind !== "rich" && info.kind !== "select")) return "";
     const control = info.control;
     if (isSensitiveField(control)) return "";
     let raw = "";
     try {
       const tag = (control.tagName || "").toLowerCase();
-      raw = tag === "input" || tag === "textarea" ? control.value : control.innerText || control.textContent;
+      if (info.kind === "select") raw = selectedOptionText(control);
+      else raw = tag === "input" || tag === "textarea" ? control.value : control.innerText || control.textContent;
     } catch (err) {
       return "";
     }
@@ -1180,6 +1319,13 @@
       .replace(/\s+/g, " ")
       .trim();
     if (!v) return "";
+    if (info.kind === "select") {
+      // Ohne eigene Beschriftung heisst das Feld schon wie die Option (labelForEditable) —
+      // dann kein doppeltes „„A“ in „A“ …“, der Titel lautet wie bisher.
+      const lbl = String(labelForEditable(control, "select") || "").trim();
+      if (lbl && (v === lbl || v.startsWith(lbl.replace(/…$/, "")))) return "";
+      return v.length > TYPED_VALUE_MAX ? v.slice(0, TYPED_VALUE_MAX - 1).trimEnd() + "…" : v;
+    }
     if (v.length > TYPED_VALUE_MAX) {
       // Lange Freitexte (Chat-Nachricht, Editor, mehrzeiliges Feld) sind kein sinnvoller Titel.
       const tag = (control.tagName || "").toLowerCase();

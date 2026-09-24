@@ -56,7 +56,10 @@ export function RichText({
         link: {
           openOnClick: false,
           autolink: true,
+          // Ohne Adresse (kaputt gespeicherter Link) NIE werfen — sonst stürzte der ganze Editor ab
+          // und der Schritt ließ sich nicht mehr öffnen (Audit 24.09.).
           isAllowedUri: (url, ctx) =>
+            typeof url === "string" &&
             ctx.defaultValidate(url) &&
             (!/^[a-z][a-z0-9+.-]*:/i.test(url.trim()) || /^https?:/i.test(url.trim())),
           HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
@@ -74,7 +77,10 @@ export function RichText({
           "min-h-[90px] px-3 py-2 text-sm leading-relaxed text-ink-2 focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-primary [&_a]:underline",
       },
     },
-    onUpdate: ({ editor }) => onChange(editor.getJSON()),
+    // Als reines JSON weitergeben: getJSON() liefert attrs-Objekte OHNE Prototyp; die überträgt
+    // eine Server-Aktion nicht (kamen leer an → Links ohne Adresse, Überschriften ohne Ebene,
+    // Audit 24.09.). Ein JSON-Rundlauf macht daraus normale Objekte.
+    onUpdate: ({ editor }) => onChange(JSON.parse(JSON.stringify(editor.getJSON()))),
   });
 
   // Link-Dialog (statt Browser-prompt): URL-Feld, Prüfung auf http/https bleibt.

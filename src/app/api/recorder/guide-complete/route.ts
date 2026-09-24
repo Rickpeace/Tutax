@@ -6,6 +6,7 @@ import {
   accountForRecorderToken,
   recorderJson,
   recorderPreflight,
+  scrubSensitiveGuideSteps,
 } from "@/lib/recorder";
 import {
   PLAN_LIMIT_CODE,
@@ -323,7 +324,13 @@ function scheduleRefine(
 }
 
 type InsertResult =
-  | { ok: true; rows: { id: string; image_path?: string | null }[]; live: boolean; publicLive: boolean }
+  | {
+      ok: true;
+      rows: { id: string; image_path?: string | null }[];
+      live: boolean;
+      publicLive: boolean;
+      title: string;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -344,7 +351,7 @@ async function insertIntoTarget(
   //    die neuen Schritte sind wie jede Bearbeitung einer veröffentlichten Anleitung sofort live.
   const { data: tut } = await admin
     .from("tutorials")
-    .select("id, account_id, status, visibility")
+    .select("id, account_id, status, visibility, title")
     .eq("id", target.tutorialId)
     .maybeSingle();
   if (!tut) return { ok: false, reason: "Die Ziel-Anleitung wurde nicht gefunden." };
@@ -500,7 +507,13 @@ async function insertIntoTarget(
   await invalidateTutorialTags(target.tutorialId);
 
   const live = tut.status === "published";
-  return { ok: true, rows, live, publicLive: live && tut.visibility === "public" };
+  return {
+    ok: true,
+    rows,
+    live,
+    publicLive: live && tut.visibility === "public",
+    title: typeof tut.title === "string" ? tut.title : "",
+  };
 }
 
 /**
@@ -586,6 +599,10 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return recorderJson({ error: e instanceof Error ? e.message : "Ungültige Schritte." }, 400);
   }
+  // Sicherheitsnetz (Audit 24.09.): IBAN/Steuernummer/Steuer-ID/SV-Nummer/Kartennummer, die eine
+  // (ältere) Erweiterung als Eingabewert oder in einer Beschriftung mitschickt, landen nie im
+  // Titel — der Wert fliegt raus, das Feld bekommt einen Verpixelungsvorschlag.
+  scrubSensitiveGuideSteps(steps);
 
   const admin = createAdminClient();
   const parsed = body?.target != null ? parseGuideTarget(body.target) : null;
@@ -634,7 +651,15 @@ export async function POST(req: NextRequest) {
           ins.rows,
           ins.live ? () => syncLiveTexts(parsed.tutorialId, ins.rows) : undefined,
         );
-        return recorderJson({ tutorialId: parsed.tutorialId, inserted: true });
+        // title/live (Audit 24.09.): die Erweiterung nennt im Abschluss die Ziel-Anleitung beim
+        // Namen und sagt, ob die neuen Schritte schon öffentlich sichtbar sind.
+        return recorderJson({
+          tutorialId: parsed.tutorialId,
+          inserted: true,
+          title: ins.title,
+          live: ins.live,
+          publicLive: ins.publicLive,
+        });
       }
       fallbackReason = ins.reason;
     }

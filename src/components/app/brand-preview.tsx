@@ -1,88 +1,121 @@
-import { brandFonts, DEFAULT_BRAND_COLORS } from "@/lib/theme";
+import { brandFonts, brandStyle } from "@/lib/theme";
 
 type Tokens = {
-  colors?: Record<string, string>;
-  typography?: { headingWeight?: number | string };
-  shape?: { radius?: number | string; buttonStyle?: string; cardStyle?: string };
-  content?: { tagline?: string };
+  shape?: { buttonStyle?: string };
 };
 
-/** Kompakte Vorschau, wie die Hilfe-Seite mit einem Design aussieht. */
+/**
+ * Kompakte Vorschau, wie die Hilfe-Seite mit einem Design aussieht.
+ *
+ * Audit 24.09.: Die Farben kommen aus DERSELBEN Ableitung wie die echte Hilfe-Seite
+ * (`brandStyle` → CSS-Variablen: Papier, Kartenfarbe, Textstufen, Text auf Akzent). Vorher
+ * rechnete die Vorschau eigene Werte (fest weiße Karten, weißer Knopftext) — dunkle
+ * Designs und helle Akzente sahen hier anders aus als live.
+ */
 export function BrandPreview({
   tokens,
   logoUrl,
   accountName,
   compact = false,
+  testId,
 }: {
   tokens: unknown;
   logoUrl: string | null;
   accountName: string;
   /** Mini-Vorschau (Auswahlkarten): nur Kopf, eine Karte, Knopf. */
   compact?: boolean;
+  /** data-testid am äußeren Rahmen (Einstellungs-Test prüft dort die Hintergrundfarbe). */
+  testId?: string;
 }) {
   const t = (tokens ?? {}) as Tokens;
-  const c = t.colors ?? {};
   const fonts = brandFonts(tokens);
-  // Fallbacks = dieselben warmen Standard-Farben wie die echte Hilfe-Seite (lib/theme.ts).
-  const bg = c.background || DEFAULT_BRAND_COLORS.background;
-  const surface = c.surface || DEFAULT_BRAND_COLORS.surface;
-  const ink = c.text || DEFAULT_BRAND_COLORS.text;
-  const accent = c.primary || DEFAULT_BRAND_COLORS.primary;
-  const border = c.border ?? "rgba(16,21,36,0.10)";
-  const rawRadius = t.shape?.radius;
-  const radius = rawRadius != null ? `${parseInt(String(rawRadius), 10) || 0}px` : "14px";
-  const pill = t.shape?.buttonStyle === "pill";
-  const cardStyle = t.shape?.cardStyle ?? "filled";
-  const outline = cardStyle === "outline";
-  const headingWeight = t.typography?.headingWeight ?? 800;
+  const outlineBtn = t.shape?.buttonStyle === "outline";
   const initial = accountName.trim().charAt(0).toUpperCase() || "?";
-
-  const cardBg = outline ? bg : "#ffffff";
-  const cardBorder = outline ? accent : border;
-  const cardBw = outline ? "1.5px" : "1px";
-  const titleColor = outline ? accent : ink;
-  const iconBg = outline ? "transparent" : surface;
-  const shadow = cardStyle === "elevated" ? "0 6px 20px rgba(16,21,36,0.08)" : "none";
-  const headingColor = outline ? accent : ink;
+  const radius = "var(--brand-radius, 14px)";
+  const cardBorder = "var(--brand-card-bw, 1px) solid var(--brand-card-border, rgba(16,21,36,0.10))";
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border" style={{ background: bg, fontFamily: fonts.body, color: ink }}>
-      <div className={compact ? "space-y-2 p-2.5" : "space-y-3 p-4"}>
-        <div className="flex items-center gap-2.5">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="size-9 rounded-lg border border-black/5 bg-white object-contain p-0.5" style={{ borderRadius: radius }} />
-          ) : (
-            <div
-              className="flex size-9 items-center justify-center text-sm font-extrabold text-white"
-              style={{ background: accent, borderRadius: radius }}
-            >
-              {initial}
-            </div>
-          )}
-          <div>
-            <div className="text-base leading-tight" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: headingColor }}>
-              {accountName || "Ihre Organisation"}
-            </div>
-            <div className="text-[10px]" style={{ opacity: 0.6 }}>Hilfe &amp; Anleitungen</div>
+    <div
+      data-testid={testId}
+      className="overflow-hidden rounded-xl border border-border"
+      style={{
+        ...brandStyle(tokens),
+        background: "var(--brand-bg)",
+        color: "var(--brand-ink)",
+        fontFamily: fonts.body,
+      }}
+    >
+      {/* Kopf wie auf der Hilfe-Seite: Leiste auf dem „Papier“. */}
+      <div
+        className={`flex items-center gap-2.5 border-b-2 ${compact ? "px-2.5 py-2" : "px-4 py-3"}`}
+        style={{
+          background: "var(--brand-paper, #fff)",
+          borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)",
+        }}
+      >
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt=""
+            className="h-9 w-auto min-w-9 max-w-[120px] shrink-0 border border-black/5 bg-white object-contain p-0.5"
+            style={{ borderRadius: radius }}
+          />
+        ) : (
+          <div
+            className="flex size-9 shrink-0 items-center justify-center text-sm font-extrabold"
+            style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)", borderRadius: radius }}
+          >
+            {initial}
+          </div>
+        )}
+        <div className="min-w-0">
+          <div
+            className="truncate text-base leading-tight"
+            style={{
+              fontFamily: fonts.heading,
+              fontWeight: "var(--brand-heading-weight, 800)",
+              color: "var(--brand-title, var(--brand-ink))",
+            }}
+          >
+            {accountName || "Ihre Organisation"}
+          </div>
+          <div className="text-[10px] font-bold" style={{ color: "var(--muted-foreground)" }}>
+            Hilfe &amp; Anleitungen
           </div>
         </div>
+      </div>
 
+      <div className={compact ? "space-y-2 p-2.5" : "space-y-3 p-4"}>
         {(compact ? ["SmartLogin einrichten"] : ["SmartLogin einrichten", "Belege hochladen"]).map((title) => (
           <div
             key={title}
             className="flex items-center gap-2.5 p-2.5"
-            style={{ background: cardBg, border: `${cardBw} solid ${cardBorder}`, borderRadius: radius, boxShadow: shadow }}
+            style={{
+              background: "var(--brand-card-bg, #fff)",
+              border: cardBorder,
+              borderRadius: radius,
+              boxShadow: "var(--brand-card-shadow, none)",
+            }}
           >
             <div
               className="size-7 shrink-0"
-              style={{ background: iconBg, border: `${cardBw} solid ${cardBorder}`, borderRadius: radius }}
+              style={{ background: "var(--brand-icon-bg, var(--brand-soft))", border: cardBorder, borderRadius: radius }}
             />
             <div className="min-w-0">
-              <div className="text-xs" style={{ fontFamily: fonts.heading, fontWeight: headingWeight, color: titleColor }}>
+              <div
+                className="text-xs"
+                style={{
+                  fontFamily: fonts.heading,
+                  fontWeight: "var(--brand-heading-weight, 800)",
+                  color: "var(--brand-title, var(--brand-ink))",
+                }}
+              >
                 {title}
               </div>
-              <div className="truncate text-[10px]" style={{ opacity: 0.6 }}>In wenigen Schritten erklärt</div>
+              <div className="truncate text-[10px] font-bold" style={{ color: "var(--muted-foreground)" }}>
+                In wenigen Schritten erklärt
+              </div>
             </div>
           </div>
         ))}
@@ -90,10 +123,10 @@ export function BrandPreview({
         <div
           className="inline-flex px-3 py-1.5 text-xs font-bold"
           style={{
-            background: t.shape?.buttonStyle === "outline" ? "transparent" : accent,
-            color: t.shape?.buttonStyle === "outline" ? accent : "#fff",
-            border: t.shape?.buttonStyle === "outline" ? `${cardBw} solid ${accent}` : "none",
-            borderRadius: pill ? "999px" : radius,
+            background: outlineBtn ? "transparent" : "var(--brand-accent)",
+            color: outlineBtn ? "var(--brand-accent-strong, var(--brand-accent))" : "var(--brand-accent-fg, #fff)",
+            border: outlineBtn ? "1.5px solid var(--brand-accent-strong, var(--brand-accent))" : "none",
+            borderRadius: "var(--brand-btn-radius, 999px)",
           }}
         >
           Weiter

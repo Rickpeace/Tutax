@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ChevronDown, ArrowRight, ArrowUp, ArrowDown, X, Check, Zap } from "lucide-react";
+import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ChevronDown, ArrowRight, ArrowUp, ArrowDown, X, Check, Zap, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,10 +138,18 @@ export function StepPanel({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  // Aktueller Eingabestand für den asynchronen Abschluss: wer WÄHREND des Speicherns weitertippt,
+  // bleibt „ungespeichert“ (Audit 24.09.: sonst stand „✓ Gespeichert“ da, das Getippte war weg).
+  const latestInput = useRef({ title, body });
+  useEffect(() => {
+    latestInput.current = { title, body };
+  }, [title, body]);
   async function save(): Promise<boolean> {
+    const sent = { title, body };
     try {
-      await onSaveStep(step.id, { title, body });
-      setDirty(false);
+      await onSaveStep(step.id, sent);
+      const cur = latestInput.current;
+      if (cur.title === sent.title && cur.body === sent.body) setDirty(false);
       toast.success("Schritt gespeichert");
       return true;
     } catch {
@@ -260,7 +268,7 @@ export function StepPanel({
           <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt" aria-label="Vorheriger Schritt">
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">
+          <span className="hidden min-w-12 text-center text-xs tabular-nums text-muted-foreground sm:inline-block">
             {index >= 0 ? `${index + 1} / ${total}` : ""}
           </span>
           <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"} aria-label={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
@@ -293,11 +301,13 @@ export function StepPanel({
         <div className="flex items-center gap-2" data-testid="step-save-state">
           {dirty ? (
             <>
-              <Button variant="ghost" size="sm" onClick={discard}>
-                Verwerfen
+              {/* Handy: nur Symbole — sonst war „Speichern“ bei 390 px abgeschnitten (Audit 24.09.). */}
+              <Button variant="ghost" size="sm" onClick={discard} title="Änderungen verwerfen" aria-label="Verwerfen">
+                <Undo2 className="size-4 sm:hidden" />
+                <span className="hidden sm:inline">Verwerfen</span>
               </Button>
-              <Button size="sm" onClick={save} title="Änderungen an Titel und Erklärtext speichern">
-                <Save className="size-4" /> Speichern
+              <Button size="sm" onClick={save} title="Änderungen an Titel und Erklärtext speichern" aria-label="Speichern">
+                <Save className="size-4" /> <span className="hidden sm:inline">Speichern</span>
               </Button>
             </>
           ) : (

@@ -64,9 +64,13 @@ export default async function TeilenPage() {
               Führt direkt zu Ihrer Hilfe-Seite – ideal für Brief, Rechnung, Aushang oder
               ein Gerät.
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Zum Ausdrucken: Rechtsklick auf den Code → „Bild speichern unter …“.
-            </p>
+            <a
+              href={qrSrc}
+              download="hilfe-seite-qr-code.png"
+              className="mt-2 inline-block text-xs font-extrabold text-primary underline underline-offset-2"
+            >
+              QR-Code herunterladen (zum Ausdrucken)
+            </a>
           </div>
         </div>
       </SettingsCard>

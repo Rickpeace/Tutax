@@ -68,6 +68,9 @@ export function LoginForm({ next, notice }: { next: string; notice?: string }) {
               autoComplete="email"
               required
               placeholder="name@firma.de"
+              // Nach einem Fehler (z. B. falsches Passwort) die Adresse behalten.
+              defaultValue={pwState.values?.email ?? ""}
+              key={pwState.values?.email ?? ""}
             />
           </div>
           <div className="space-y-1.5">

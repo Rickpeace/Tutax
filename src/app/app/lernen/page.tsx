@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { canEdit } from "@/lib/roles";
 import { GraduationCap, Check, ChevronRight, Users } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +15,9 @@ import { isPro } from "@/lib/plan";
  * wie viele im Team sie schon absolviert haben.
  */
 export default async function LernenPage() {
-  const { account, userId } = await requireAccount({ allowMember: true });
+  const { account, userId, role } = await requireAccount({ allowMember: true });
+  // Mitarbeiter haben keinen Editor — für sie ein eigener Leerzustand ohne Autoren-Anleitung.
+  const isMember = !canEdit(role);
   const supabase = await createClient();
 
   // Fürs Team freigegebene Anleitungen des aktiven Kontos: interne ODER öffentliche
@@ -34,20 +37,23 @@ export default async function LernenPage() {
   // Nachweise + Mitglieder-Gesamtzahl parallel. Server-Client: Mitarbeiter dürfen per RLS
   // nur den EIGENEN Nachweis lesen (0039) — die Team-Zählung („3 von 5") braucht alle.
   // Sicher gescopt: ids stammen ausschließlich aus Tutorials des aktiven Kontos.
-  const [{ data: completions }, { count: memberCount }] = await Promise.all([
+  const [{ data: completions }, { data: memberRows }] = await Promise.all([
     ids.length
       ? createAdminClient()
           .from("tutorial_completions")
           .select("tutorial_id, user_id, completed_at")
+          .eq("account_id", account.id)
           .in("tutorial_id", ids)
       : Promise.resolve({ data: [] as { tutorial_id: string; user_id: string; completed_at: string }[] }),
-    createAdminClient()
-      .from("account_members")
-      .select("user_id", { count: "exact", head: true })
-      .eq("account_id", account.id),
+    createAdminClient().from("account_members").select("user_id").eq("account_id", account.id),
   ]);
 
-  const rows = completions ?? [];
+  // Nur Nachweise AKTUELLER Mitglieder dieses Kontos zählen — wie der Schulungsnachweis auf der
+  // Detailseite (Audit 24.09.: Liste „1 von 3“, Detail „0 von 3“, weil Ehemalige/fremde
+  // Konten mitzählten). Die Nachweise Ehemaliger bleiben als Archiv gespeichert.
+  const current = new Set((memberRows ?? []).map((m) => m.user_id as string));
+  const rows = (completions ?? []).filter((c) => current.has(c.user_id));
+  const memberCount = current.size;
   const teamDone = new Map<string, number>();
   const mine = new Map<string, string>(); // tutorial_id -> completed_at (nur meine)
   for (const c of rows) {
@@ -70,18 +76,27 @@ export default async function LernenPage() {
             <GraduationCap className="size-6" />
           </span>
           <h2 className="mt-4 text-base font-extrabold text-ink">Noch keine Schulungen</h2>
+          {isMember ? (
+            <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-muted-foreground">
+              Sobald Ihr Team Schulungen für Sie freigibt, erscheinen sie hier. Sie können sie dann
+              durcharbeiten und als absolviert markieren.
+            </p>
+          ) : (
           <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-muted-foreground">
             Schulungen sind Anleitungen für Ihr Team. Wählen Sie im Editor einer Anleitung
             oben bei der Zielgruppe „Team“ (zusätzlich oder statt „Hilfe-Seite (für alle)“) und
             veröffentlichen Sie sie. Danach steht sie hier, und Ihr Team kann sie als absolviert
             markieren.{!isPro(account) && " Schulungen mit Nachweis sind ab dem Pro-Tarif enthalten."}
           </p>
-          <Link
-            href="/app"
-            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-extrabold text-white transition-transform hover:scale-[1.02]"
-          >
-            Zu den Anleitungen
-          </Link>
+          )}
+          {!isMember && (
+            <Link
+              href="/app"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-extrabold text-white transition-transform hover:scale-[1.02]"
+            >
+              Zu den Anleitungen
+            </Link>
+          )}
         </div>
       ) : (
         <ul className="space-y-2.5">

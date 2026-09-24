@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { Sparkles, ArrowRight, Wand2, PencilLine, Palette, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -188,12 +187,16 @@ export function OnboardingWizard({
               {!isBusiness && (
                 <p className="text-xs text-muted-foreground">
                   Mehrsprachige Hilfe-Seite gibt es im Business-Tarif.{" "}
-                  <Link
-                    href="/app/settings/tarif"
+                  {/* Öffentliche Preise in neuem Tab: /app/settings/tarif leitete während der
+                      Einrichtung zurück hierher (Kreis). */}
+                  <a
+                    href="/#preise"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="font-extrabold text-primary underline underline-offset-2"
                   >
                     Mehr erfahren
-                  </Link>
+                  </a>
                 </p>
               )}
             </div>

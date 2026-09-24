@@ -25,7 +25,7 @@ const steps = [
   {
     icon: PencilLine,
     t: "2. Anleitung erstellen",
-    d: "Klicken Sie oben rechts auf „Neue Anleitung“. Am schnellsten geht es mit der Steply-Erweiterung: einmal durchklicken, Steply macht daraus die Schritte. Alternativ aus einem Video oder von Hand – mit dem „+“ zwischen den Karten setzen Sie neue Schritte genau dort ein, wo sie hingehören.",
+    d: "Klicken Sie oben rechts auf „Neue Anleitung“ (am Handy unten auf „Neu“). Am schnellsten geht es mit der Steply-Erweiterung: einmal durchklicken, Steply macht daraus die Schritte. Alternativ aus einem Video oder von Hand – mit dem „+“ zwischen den Karten setzen Sie neue Schritte genau dort ein, wo sie hingehören.",
   },
   {
     icon: GitBranch,
@@ -40,7 +40,7 @@ const steps = [
   {
     icon: Palette,
     t: "5. Aussehen festlegen",
-    d: "Unter Einstellungen → Aussehen legen Sie Logo und Farben fest. So sieht Ihre Hilfe-Seite aus wie Ihre Organisation.",
+    d: "Unter Einstellungen → Aussehen legen Sie Logo und Farben fest (ab Pro). So sieht Ihre Hilfe-Seite aus wie Ihre Organisation.",
   },
   {
     icon: Send,

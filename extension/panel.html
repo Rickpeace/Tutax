@@ -83,7 +83,7 @@
     <!-- Aufnahme-Anker (Welle 27, Welle 50a kompakt): Ziel, in das die Aufnahme eingefügt wird. -->
     <div id="targetBanner" class="target" hidden>
       <svg class="i s"><use href="#i-target"/></svg>
-      <span class="target-text"><span id="targetPrefix">Wird eingefügt in: </span><b id="targetLabel"></b></span>
+      <span class="target-text"><span id="targetPrefix">Wird eingefügt in: </span><b id="targetLabel"></b><span id="targetLive" class="target-live" hidden></span></span>
       <button id="targetClear" class="x" type="button">Aufheben</button>
     </div>
 
@@ -123,7 +123,10 @@
       <section id="start" class="screen" hidden>
         <div class="body">
           <p id="interruptedHint" class="info warn" hidden>
-            <svg class="i s"><use href="#i-alert"/></svg>Eine unterbrochene Aufnahme wurde verworfen.
+            <svg class="i s"><use href="#i-alert"/></svg><span id="interruptedText">Eine unterbrochene Aufnahme wurde verworfen.</span>
+          </p>
+          <p id="quotaHint" class="info warn" hidden>
+            <svg class="i s"><use href="#i-alert"/></svg><span>Der kostenlose Tarif ist voll – neue Aufnahmen können nur in bestehende Anleitungen eingefügt werden.</span>
           </p>
           <div class="hero">
             <div class="recdot"><span></span></div>

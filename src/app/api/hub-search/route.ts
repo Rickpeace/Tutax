@@ -2,7 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured } from "@/lib/ai";
 import { embed } from "@/lib/openai";
-import { isPro } from "@/lib/plan";
+import { isPro, planLanguages } from "@/lib/plan";
+import { isExtraLang, resolveLang } from "@/lib/i18n-hub";
+import {
+  relevantMatches,
+  translatedTitles,
+  MIN_SIMILARITY,
+  MIN_SIMILARITY_CROSS_LANG,
+  type KbMatch,
+} from "./kb-match";
 
 export const maxDuration = 30;
 
@@ -48,13 +56,18 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: account } = await admin
     .from("accounts")
-    .select("id, plan")
+    .select("id, plan, languages")
     .eq("slug", accountSlug)
     .single();
   if (!account) return NextResponse.json({ results: [] });
   // KI-Suche kostet je Anfrage (Embedding) → erst ab Pro. Gratis: leere KI-Treffer, die
   // Hilfe-Seite sucht dann nur in Titeln/Beschreibungen (clientseitig, ohne KI).
   if (!isPro(account)) return NextResponse.json({ results: [] });
+  // Seitensprache (nur aktivierte + im Tarif enthaltene Sprachen, sonst Deutsch).
+  const lang = resolveLang(
+    body.lang,
+    planLanguages(account, ((account.languages as string[] | null) ?? []).filter(isExtraLang)),
+  );
 
   try {
     const qVec = await embed(q);
@@ -64,26 +77,35 @@ export async function POST(req: NextRequest) {
       p_count: 8,
     });
 
-    const rows = (matches ?? []) as {
-      chunk: string;
-      metadata: { title?: string; slug?: string };
-      similarity: number;
-    }[];
+    const rows = relevantMatches(
+      (matches ?? []) as KbMatch[],
+      lang === "de" ? MIN_SIMILARITY : MIN_SIMILARITY_CROSS_LANG,
+    );
 
     // Nur Treffer mit slug + title, dedupliziert (erste Reihenfolge = beste Ähnlichkeit).
     const seen = new Set<string>();
-    const results: Result[] = [];
+    const results: (Result & { tutorialId: string | null })[] = [];
     for (const r of rows) {
       const slug = r.metadata?.slug;
       const title = r.metadata?.title;
       if (slug && title && !seen.has(slug)) {
         seen.add(slug);
-        results.push({ title, slug });
+        results.push({ title, slug, tutorialId: r.source_type === "tutorial" ? (r.source_id ?? null) : null });
       }
     }
+    // Fremdsprachige Hilfe-Seite: übersetzte Titel statt der deutschen aus dem Index.
+    const titles = await translatedTitles(
+      admin,
+      lang,
+      results.map((r) => r.tutorialId).filter((x): x is string => !!x),
+    );
+    const out: Result[] = results.map((r) => ({
+      title: (r.tutorialId && titles[r.tutorialId]) || r.title,
+      slug: r.slug,
+    }));
 
     return NextResponse.json(
-      { results },
+      { results: out },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {

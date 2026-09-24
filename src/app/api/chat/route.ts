@@ -5,8 +5,14 @@ import { openai, embed } from "@/lib/openai";
 import { chatSystem } from "@/lib/ai-prompts";
 import { recordEvent } from "@/lib/events";
 import { buildEscalationBox, type EscalationSettings } from "@/lib/escalation";
-import { isExtraLang, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
+import { isExtraLang, categoryName, t as tr, LANG_TARGET, type HubLang } from "@/lib/i18n-hub";
 import { isPro } from "@/lib/plan";
+import {
+  relevantMatches,
+  translatedTitles,
+  MIN_SIMILARITY_CHAT,
+  type KbMatch,
+} from "@/app/api/hub-search/kb-match";
 
 export const maxDuration = 30;
 
@@ -77,6 +83,7 @@ function extractAnswer(raw: string): { text: string; closed: boolean } | null {
 async function loadTopicOverview(
   admin: ReturnType<typeof createAdminClient>,
   accountId: string,
+  lang: HubLang = "de",
 ): Promise<string> {
   try {
     const [tuts, cats, arts, tpls] = await Promise.all([
@@ -88,7 +95,7 @@ async function loadTopicOverview(
         .eq("visibility", "public")
         .order("updated_at", { ascending: false })
         .limit(60),
-      admin.from("categories").select("name").eq("account_id", accountId).limit(30),
+      admin.from("categories").select("name, name_i18n").eq("account_id", accountId).limit(30),
       admin
         .from("kb_articles")
         .select("title")
@@ -124,8 +131,14 @@ async function loadTopicOverview(
     const clean = (xs: (string | null | undefined)[]) =>
       [...new Set(xs.map((x) => (x ?? "").replace(/\s+/g, " ").trim().slice(0, 80)).filter(Boolean))];
     const ownTitles = (tuts.data ?? []).filter((t) => !hiddenForks.has(t.id as string));
-    const titles = clean([...ownTitles, ...liveTpls].map((t) => t.title as string)).slice(0, 60);
-    const categories = clean((cats.data ?? []).map((c) => c.name as string));
+    const allTuts = [...ownTitles, ...liveTpls];
+    // EN/PL/TR: übersetzte Titel/Kategorienamen, damit keine deutschen Begriffe in die
+    // fremdsprachige Antwort rutschen (Audit 24.09.). Fehlende Übersetzung → Deutsch.
+    const trTitles = await translatedTitles(admin, lang, allTuts.map((t) => t.id as string));
+    const titles = clean(allTuts.map((t) => trTitles[t.id as string] || (t.title as string))).slice(0, 60);
+    const categories = clean(
+      (cats.data ?? []).map((c) => categoryName(c as { name: string; name_i18n?: unknown }, lang)),
+    );
     const articles = clean((arts.data ?? []).map((a) => a.title as string));
     const parts: string[] = [];
     if (categories.length) parts.push(`Kategorien: ${categories.join(" · ")}`);
@@ -190,18 +203,26 @@ export async function POST(req: NextRequest) {
     // Folgefragen verstehen: letzte Nutzer-Nachrichten in die Suchanfrage einbeziehen.
     const priorUser = history.filter((h) => h.role === "user").map((h) => String(h.text));
     const embedInput = [...priorUser.slice(-2), question].join("\n");
-    const [qVec, topics] = await Promise.all([embed(embedInput), loadTopicOverview(admin, account.id)]);
+    const [qVec, topics] = await Promise.all([embed(embedInput), loadTopicOverview(admin, account.id, lang)]);
     const { data: matches } = await admin.rpc("match_kb", {
       p_account: account.id,
       p_embedding: JSON.stringify(qVec),
       p_count: 6,
     });
 
-    const rows = (matches ?? []) as {
-      chunk: string;
-      metadata: { title?: string; slug?: string; category?: string | null };
-      similarity: number;
-    }[];
+    // Offensichtliches Rauschen raus (match_kb liefert immer die besten n, Audit 24.09.).
+    const rows = relevantMatches((matches ?? []) as KbMatch[], MIN_SIMILARITY_CHAT);
+
+    // Fremdsprachige Seite: Quellen-Titel übersetzt (tutorial_translations), sonst Deutsch.
+    const trTitles = await translatedTitles(
+      admin,
+      lang,
+      rows
+        .filter((r) => r.source_type === "tutorial" && r.source_id)
+        .map((r) => r.source_id as string),
+    );
+    const titleOf = (r: KbMatch) =>
+      (r.source_type === "tutorial" && r.source_id && trTitles[r.source_id]) || r.metadata.title || "";
 
     // Eindeutige Anleitungen als Quellen-Kandidaten nummerieren ([1], [2], …).
     const tutList: { idx: number; title: string; slug: string }[] = [];
@@ -210,7 +231,7 @@ export async function POST(req: NextRequest) {
       if (r.metadata.slug && r.metadata.title && !tutIndex.has(r.metadata.slug)) {
         const idx = tutList.length + 1;
         tutIndex.set(r.metadata.slug, idx);
-        tutList.push({ idx, title: r.metadata.title, slug: r.metadata.slug });
+        tutList.push({ idx, title: titleOf(r), slug: r.metadata.slug });
       }
     }
 
@@ -218,7 +239,7 @@ export async function POST(req: NextRequest) {
       ? rows
           .map((r) =>
             r.metadata.slug
-              ? `[${tutIndex.get(r.metadata.slug)}] Anleitung „${r.metadata.title ?? ""}": ${r.chunk}`
+              ? `[${tutIndex.get(r.metadata.slug)}] Anleitung „${titleOf(r)}": ${r.chunk}`
               : `Info: ${r.chunk}`,
           )
           .join("\n\n")
@@ -255,7 +276,7 @@ export async function POST(req: NextRequest) {
         })),
         {
           role: "user",
-          content: `Frage des Kunden: ${question}\n\nVerfügbare Ausschnitte:\n${context}${expertsText}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Ausschnitte (und des Verlaufs).`,
+          content: `Frage des Kunden: ${question}\n\nWissensbasis (Kontext):\n${context}${expertsText}\n\nBeziehe den bisherigen Gesprächsverlauf ein. Antworte nur auf Basis der Wissensbasis (und des Verlaufs).`,
         },
       ],
     });
@@ -286,9 +307,13 @@ export async function POST(req: NextRequest) {
         let status = "answered";
         let used: number[] = [];
         let expertIdx: number | null = null;
+        // Sprachunabhängig: meldet das Modell selbst, dass die Antwort auf die Kontakt-
+        // möglichkeiten verweist? (null = Feld fehlt → Regex-Fallback unten)
+        let offerContact: boolean | null = null;
         try {
           const p = JSON.parse(raw);
           if (typeof p.status === "string") status = p.status;
+          if (typeof p.offer_contact === "boolean") offerContact = p.offer_contact;
           used = Array.isArray(p.sources)
             ? p.sources.map((s: unknown) => Number(s)).filter((n: number) => Number.isInteger(n))
             : [];
@@ -323,8 +348,11 @@ export async function POST(req: NextRequest) {
         // Kontaktbox bei echter Sackgasse — UND immer dann, wenn die Antwort selbst auf den
         // Kontakt verweist („Unten finden Sie, wie Sie uns erreichen“). Die KI schwankt bei
         // Grenzfällen zwischen no_answer und off_topic und behält den Verweis dabei manchmal;
-        // ohne Box liefe das Versprechen ins Leere (Audit 23.09.2026).
+        // ohne Box liefe das Versprechen ins Leere (Audit 23.09.2026). Primär meldet das das
+        // Modell selbst im Feld "offer_contact" (sprachunabhängig, auch PL/TR — Audit 24.09.);
+        // die DE/EN-Regex bleibt nur Sicherheitsnetz (Feld fehlt oder widerspricht dem Text).
         const mentionsContact =
+          offerContact === true ||
           /unten finden sie|direkt erreichen|below you.{0,20}(find|see)|reach us directly/i.test(emitted);
         const escalation =
           status === "no_answer" || (canEscalate && mentionsContact) ? buildEscalation(expertIdx) : null;

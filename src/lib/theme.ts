@@ -90,6 +90,28 @@ export function googleFontsHref(tokens: unknown): string | null {
   return `https://fonts.googleapis.com/css2?${params}&display=swap`;
 }
 
+/** Generische CSS-Schriftfamilien — dürfen NICHT in Anführungszeichen stehen. */
+const GENERIC_FONT_FAMILIES = new Set([
+  "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "math", "emoji",
+  "fangsong", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "-apple-system",
+  "blinkmacsystemfont", "inherit", "initial", "unset",
+]);
+
+/**
+ * Schriftliste für font-family: jeden Familiennamen in Anführungszeichen setzen (außer
+ * generischen Familien). Ohne Anführungszeichen ist „Source Sans 3“ ungültiges CSS
+ * (ein Bezeichner darf nicht mit einer Ziffer beginnen) und der Browser verwirft die
+ * GANZE Angabe — die Kundenschrift griff nie (Audit 24.09.).
+ */
+export function cssFontFamily(v: string): string {
+  return v
+    .split(",")
+    .map((p) => p.trim().replace(/["']/g, "").trim())
+    .filter(Boolean)
+    .map((p) => (GENERIC_FONT_FAMILIES.has(p.toLowerCase()) ? p : `"${p}"`))
+    .join(", ");
+}
+
 /**
  * Schrift-Familien eines Themes (für fontFamily). Gleiche Prüfung wie in brandStyle: der Wert
  * landet als Inline-Style im Server-HTML der öffentlichen Seite, und React übernimmt ihn dort
@@ -98,14 +120,17 @@ export function googleFontsHref(tokens: unknown): string | null {
  */
 export function brandFonts(tokens: unknown): { body?: string; heading?: string } {
   const ty = ((tokens ?? {}) as { typography?: Record<string, unknown> }).typography ?? {};
-  const font = (v: unknown) => (typeof v === "string" && v.trim() && isSafeCssPlain(v.trim()) ? v.trim() : undefined);
+  const font = (v: unknown) =>
+    typeof v === "string" && v.trim() && isSafeCssPlain(v.trim()) ? cssFontFamily(v.trim()) || undefined : undefined;
   return { body: font(ty.bodyFont), heading: font(ty.headingFont) };
 }
 
-/** Hex (#rgb / #rrggbb) → {r,g,b} in 0..255, oder null bei ungültigem Wert. */
+/** Hex (#rgb / #rgba / #rrggbb / #rrggbbaa) → {r,g,b} in 0..255 (Alpha ignoriert), oder null. */
 function parseHex(hex: string): { r: number; g: number; b: number } | null {
   if (typeof hex !== "string") return null;
   let h = hex.trim().replace(/^#/, "");
+  if (h.length === 4) h = h.slice(0, 3);
+  if (h.length === 8) h = h.slice(0, 6);
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
   if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
   return {
@@ -139,6 +164,89 @@ function darken(hex: string, amount: number): string | null {
   return `#${to2(rgb.r)}${to2(rgb.g)}${to2(rgb.b)}`;
 }
 
+/** Zwei Hex-Farben mischen: `t` = Anteil von `b` (0..1). null bei ungültigem Hex. */
+function mixHex(a: string, b: string, t: number): string | null {
+  const x = parseHex(a);
+  const y = parseHex(b);
+  if (!x || !y) return null;
+  const f = Math.max(0, Math.min(1, t));
+  const to2 = (u: number, v: number) => Math.round(u * (1 - f) + v * f).toString(16).padStart(2, "0");
+  return `#${to2(x.r, y.r)}${to2(x.g, y.g)}${to2(x.b, y.b)}`;
+}
+
+/** WCAG-Kontrastverhältnis (1..21) zweier Hex-Farben, null bei ungültigem Wert. */
+export function contrastRatio(a: string, b: string): number | null {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la == null || lb == null) return null;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** Mindestkontrast für Fließtext (WCAG AA). */
+export const MIN_TEXT_CONTRAST = 4.5;
+
+/**
+ * „Papier“ der Hilfe-Seite = die Fläche, auf der Kopf, Suchfeld, Karten, Wizard und Chat
+ * liegen. Bisher fest weiß — mit einem dunklen Kunden-Design (helle Textfarbe) wurde die
+ * Seite dadurch unlesbar (Audit 24.09.: hellgrauer Text auf Weiß). Regel: die erste Fläche,
+ * auf der die Textfarbe gut lesbar ist — Weiß (helle Designs bleiben unverändert), dann die
+ * Kunden-„Flächen“-Farbe, dann ein leicht aufgehellter Hintergrund, dann der Hintergrund
+ * selbst; reicht keine, die mit dem besten Kontrast.
+ * `null` = Farben nicht auswertbar (kein Hex) → bisheriges Verhalten (Weiß).
+ */
+export function brandPaper(colors: { background?: string; surface?: string; text?: string }): {
+  paper: string;
+  ink: string;
+  dark: boolean;
+} | null {
+  const ink = colors.text || DEFAULT_BRAND_COLORS.text;
+  const bg = colors.background || DEFAULT_BRAND_COLORS.background;
+  const surface = colors.surface || DEFAULT_BRAND_COLORS.surface;
+  if (relativeLuminance(ink) == null) return null;
+  const candidates = ["#ffffff", surface, mixHex(bg, "#ffffff", 0.08), bg].filter(
+    (x): x is string => typeof x === "string" && relativeLuminance(x) != null,
+  );
+  let best = "#ffffff";
+  let bestC = -1;
+  for (const cand of candidates) {
+    const cr = contrastRatio(ink, cand) ?? 0;
+    if (cr >= MIN_TEXT_CONTRAST) {
+      best = cand;
+      bestC = cr;
+      break;
+    }
+    if (cr > bestC) {
+      best = cand;
+      bestC = cr;
+    }
+  }
+  return { paper: best, ink, dark: (relativeLuminance(best) ?? 1) < 0.18 };
+}
+
+/**
+ * Kontrast-Hinweis fürs Einstellungs-Formular: Text auf Hintergrund zu schwach?
+ * Liefert das Verhältnis, wenn es unter dem Fließtext-Minimum liegt, sonst null.
+ */
+export function weakTextContrast(colors: { background?: string; text?: string }): number | null {
+  const cr = contrastRatio(
+    colors.text || DEFAULT_BRAND_COLORS.text,
+    colors.background || DEFAULT_BRAND_COLORS.background,
+  );
+  return cr != null && cr < MIN_TEXT_CONTRAST ? cr : null;
+}
+
+/**
+ * Hat das Konto eigene Farben (≠ Steply-Standard)? Nur OHNE eigene Farben zeigt die
+ * Hilfe-Seite die bunten Kategorie-Farbfamilien — sonst bliebe die Kunden-CI nicht
+ * monochrom (Audit 24.09.).
+ */
+export function hasCustomColors(tokens: unknown): boolean {
+  const c = brandColorsWithDefaults(tokens);
+  return (Object.keys(DEFAULT_BRAND_COLORS) as (keyof BrandColors)[]).some(
+    (k) => c[k].trim().toLowerCase() !== DEFAULT_BRAND_COLORS[k].toLowerCase(),
+  );
+}
+
 /**
  * Wandelt themes.tokens (§8) in CSS-Custom-Properties für den öffentlichen
  * Viewer/Hub. Nicht gesetzte Werte fallen auf die warmen Defaults (:root) zurück.
@@ -169,7 +277,12 @@ function safeTokenMap(
   return out;
 }
 
-export function brandStyle(tokens: unknown): CSSProperties {
+/**
+ * @param opts.onWhite  Fläche ist garantiert weiß (Druckansicht): Textfarbe/Papier für Weiß
+ *   ableiten — eine helle Kunden-Textfarbe (dunkles Design) wird dort durch die dunkle
+ *   Standard-Textfarbe ersetzt, sonst stünde hellgrauer Text auf dem Papier.
+ */
+export function brandStyle(tokens: unknown, opts: { onWhite?: boolean } = {}): CSSProperties {
   const t = (tokens ?? {}) as {
     colors?: Record<string, string>;
     typography?: Record<string, string | number>;
@@ -183,12 +296,18 @@ export function brandStyle(tokens: unknown): CSSProperties {
   const sh = t.shape ?? {};
   const s: Record<string, string> = {};
 
+  if (opts.onWhite) {
+    // Druck: Hintergrund = Weiß; Textfarbe nur übernehmen, wenn sie auf Weiß lesbar ist.
+    c.background = "#ffffff";
+    if (c.text && (contrastRatio(c.text, "#ffffff") ?? 0) < MIN_TEXT_CONTRAST) c.text = DEFAULT_BRAND_COLORS.text;
+  }
+
   if (c.primary) s["--brand-accent"] = c.primary;
   if (c.surface) s["--brand-soft"] = c.surface;
   if (c.background) s["--brand-bg"] = c.background;
   if (c.text) s["--brand-ink"] = c.text;
-  if (ty.bodyFont) s["--brand-font"] = String(ty.bodyFont);
-  if (ty.headingFont) s["--brand-font-heading"] = String(ty.headingFont);
+  if (ty.bodyFont) s["--brand-font"] = cssFontFamily(String(ty.bodyFont));
+  if (ty.headingFont) s["--brand-font-heading"] = cssFontFamily(String(ty.headingFont));
   if (ty.headingWeight != null) s["--brand-heading-weight"] = String(ty.headingWeight);
   if (sh.radius != null) s["--brand-radius"] = `${parseInt(String(sh.radius), 10) || 0}px`;
   const radiusPx = sh.radius != null ? `${parseInt(String(sh.radius), 10) || 0}px` : "12px";
@@ -211,16 +330,42 @@ export function brandStyle(tokens: unknown): CSSProperties {
   // Ungültiger/fehlender Hex → gleiches Fallback-Verhalten (weiß / Akzent).
   const lum = relativeLuminance(accent);
   if (lum != null && lum > 0.55) {
-    // Heller Akzent: weißer Text darauf wäre unlesbar → dunkle Ink-Farbe.
-    s["--brand-accent-fg"] = "#101524";
     // Als Text auf Weiß: umso heller, desto stärker abdunkeln (bis ~45 %).
     const amount = Math.min(0.45, (lum - 0.35) * 0.75);
     s["--brand-accent-strong"] = darken(accent, amount) ?? accent;
   } else {
     // Dunkler/mittlerer Akzent oder ungültig → bisheriges Verhalten.
-    s["--brand-accent-fg"] = "#ffffff";
     s["--brand-accent-strong"] = accent;
   }
+  // Text auf Akzent: Weiß, solange es auf dem Akzent reicht (≥ 3 : 1, fette Knopfschrift —
+  // Steply-Koralle 3,07 bleibt weiß, das Rot des Demo-Kontos auch); sonst dunkle Ink-Farbe
+  // (helles Gelb #ffe14d, aber auch Orange #ff7a00 mit nur 2,6 : 1 — Audit 24.09.).
+  // Ungültiger Hex → Weiß (bisheriges Verhalten).
+  s["--brand-accent-fg"] = (contrastRatio("#ffffff", accent) ?? 21) >= 3 ? "#ffffff" : "#101524";
+
+  // Papier (Kopf/Suche/Karten/Wizard/Chat) + abgeleitete Textstufen (Audit 24.09.):
+  // helle Designs bleiben pixelgleich (Papier = Weiß), dunkle bekommen eine dunkle Fläche.
+  const pp = brandPaper({ background: c.background, surface: c.surface, text: c.text });
+  const paper = pp?.paper ?? "#ffffff";
+  const paperDark = pp?.dark ?? false;
+  s["--brand-paper"] = paper;
+  if (paperDark) {
+    // Akzent ALS Text auf dunklem Papier: nicht abdunkeln, sondern bei Bedarf aufhellen.
+    let strong = accent;
+    for (let k = 1; k <= 7 && (contrastRatio(strong, paper) ?? 3) < 3; k++) {
+      strong = mixHex(accent, "#ffffff", k * 0.1) ?? accent;
+    }
+    s["--brand-accent-strong"] = strong;
+  }
+  // Gedämpfte Texte aus der Kunden-Textfarbe statt fest Steply-Beige (#8a7a63): halb-
+  // transparente Textfarbe liest sich auf Hintergrund UND Papier. Überschreibt die
+  // Tailwind-Tokens (text-muted-foreground/-ink/-ink-2) nur innerhalb der Hilfe-Seite.
+  if (c.text && relativeLuminance(c.text) != null) {
+    s["--ink"] = c.text;
+    s["--ink-2"] = `color-mix(in srgb, ${c.text} 82%, transparent)`;
+    s["--muted-foreground"] = `color-mix(in srgb, ${c.text} 68%, transparent)`;
+  }
+  const hairline = paperDark ? "rgba(255,255,255,0.12)" : "";
 
   if (cardStyle === "outline") {
     s["--brand-card-bg"] = bg;
@@ -230,15 +375,15 @@ export function brandStyle(tokens: unknown): CSSProperties {
     s["--brand-icon-bg"] = "transparent";
     s["--brand-card-shadow"] = "none";
   } else if (cardStyle === "elevated") {
-    s["--brand-card-bg"] = "#ffffff";
-    s["--brand-card-border"] = border || "rgba(16,21,36,0.06)";
+    s["--brand-card-bg"] = paper;
+    s["--brand-card-border"] = border || hairline || "rgba(16,21,36,0.06)";
     s["--brand-card-bw"] = "1px";
     s["--brand-title"] = ink;
     s["--brand-icon-bg"] = surface;
     s["--brand-card-shadow"] = "0 6px 20px rgba(16,21,36,0.08)";
   } else {
-    s["--brand-card-bg"] = "#ffffff";
-    s["--brand-card-border"] = border || "rgba(16,21,36,0.10)";
+    s["--brand-card-bg"] = paper;
+    s["--brand-card-border"] = border || hairline || "rgba(16,21,36,0.10)";
     s["--brand-card-bw"] = "1px";
     s["--brand-title"] = ink;
     s["--brand-icon-bg"] = surface;

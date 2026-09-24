@@ -135,6 +135,61 @@ export async function addStep(
   after(() => reindexTutorialIfLive(tutorialId)); // Chatbot kennt den neuen Schritt
 }
 
+/**
+ * Schritt IN eine bestehende Verbindung einfügen (A → Neu → bisheriges Ziel) — EIN Aufruf statt
+ * drei (Audit 24.09.: bei Abbruch/Seitenwechsel dazwischen zeigte A schon auf den neuen Schritt,
+ * der aber noch keine Weiterleitung hatte → alles danach war unerreichbar). Reihenfolge: erst
+ * Schritt + Weiterleitung auf das AKTUELLE Ziel aus der Datenbank, zuletzt die Verbindung
+ * umbiegen. Ein Abbruch hinterlässt so höchstens einen unverbundenen neuen Schritt.
+ * Wiederholbar („Erneut versuchen“): Duplikate derselben IDs gelten als erledigt.
+ */
+export async function insertStepIntoBranch(
+  tutorialId: string,
+  branchId: string,
+  step: { id: string; title: string; position: number },
+  weiterId: string,
+  opts?: { imageFromStepId?: string; highlights?: Highlight[] },
+): Promise<{ oldTarget: string | null }> {
+  await requireTutorialAccess(tutorialId);
+  const supabase = await createClient();
+  const { data: br } = await supabase
+    .from("step_branches")
+    .select("id, step_id, target_step_id")
+    .eq("id", branchId)
+    .maybeSingle();
+  if (!br) throw new Error("Die Verbindung gibt es nicht mehr – bitte Seite neu laden.");
+  const { data: from } = await supabase.from("steps").select("tutorial_id").eq("id", br.step_id).maybeSingle();
+  if (from?.tutorial_id !== tutorialId) throw new Error("Die Verbindung gehört nicht zu dieser Anleitung.");
+  // Wiederholung nach vollständigem Lauf: Verbindung zeigt schon auf den neuen Schritt.
+  const done = br.target_step_id === step.id;
+  let oldTarget = (br.target_step_id as string | null) ?? null;
+  if (done) {
+    const { data: w } = await supabase.from("step_branches").select("target_step_id").eq("id", weiterId).maybeSingle();
+    oldTarget = (w?.target_step_id as string | null) ?? null;
+    return { oldTarget };
+  }
+
+  await addStep(tutorialId, step, false, null, opts);
+  const { error: we } = await supabase.from("step_branches").insert({
+    id: weiterId,
+    step_id: step.id,
+    label: null,
+    target_step_id: oldTarget,
+    position: 0,
+  });
+  if (we && !(await isOwnRetryDuplicate(supabase, we, "step_branches", weiterId, { column: "step_id", value: step.id }))) {
+    await supabase.from("steps").delete().eq("id", step.id);
+    throw new Error(we.message);
+  }
+  const { error: ue } = await supabase.from("step_branches").update({ target_step_id: step.id }).eq("id", branchId);
+  if (ue) {
+    await supabase.from("steps").delete().eq("id", step.id); // kaskadiert die Weiterleitung
+    throw new Error(ue.message);
+  }
+  await invalidateTutorialTags(tutorialId);
+  return { oldTarget };
+}
+
 /** Titel/Text/Bild speichern (stiller Auto-Save). */
 export async function updateStep(
   stepId: string,
@@ -363,10 +418,24 @@ export async function deleteStep(
     .maybeSingle();
   if (victim?.audio_path) await removeStepAudio({ id: victim.id, audio_path: victim.audio_path });
 
-  await supabase
+  // Folgeschritt aus der DATENBANK bestimmen, nicht aus dem (evtl. veralteten) Browser-Stand:
+  // arbeiteten zwei Tabs/Personen gleichzeitig, zeigte der Client-Wert auf einen inzwischen
+  // gelöschten Schritt — die Umleitung lief ins Leere und der Rest des Asts war abgeschnitten
+  // (Audit 24.09.). Linear/Ende: der eine echte Folgeschritt. Frage: die Wahl des Clients nur,
+  // wenn sie wirklich eine der Antworten ist.
+  const { data: outs } = await supabase.from("step_branches").select("target_step_id").eq("step_id", stepId);
+  const outTargets = (outs ?? []).map((o) => o.target_step_id as string | null).filter((t): t is string => !!t && t !== stepId);
+  const target =
+    outTargets.length <= 1 ? (outTargets[0] ?? null) : nextTarget && outTargets.includes(nextTarget) ? nextTarget : null;
+  const { data: tutRow } = await supabase.from("tutorials").select("root_step_id").eq("id", tutorialId).maybeSingle();
+  wasRoot = tutRow?.root_step_id === stepId;
+  nextTarget = target;
+
+  const { error: rewireErr } = await supabase
     .from("step_branches")
     .update({ target_step_id: nextTarget })
     .eq("target_step_id", stepId);
+  if (rewireErr) throw new Error("Die Verbindungen konnten nicht angepasst werden – bitte Seite neu laden.");
 
   if (wasRoot) {
     await supabase

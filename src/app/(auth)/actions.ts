@@ -10,7 +10,11 @@ import { appBaseUrl, safeNext } from "@/lib/url";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 import { MEMBER_HOME, asRole } from "@/lib/roles";
 
-export type AuthState = { error?: string; message?: string };
+/** `values`: Eingaben zurückgeben, damit das Formular nach einem Fehler nicht leer ist (Passwort nie). */
+export type AuthState = { error?: string; message?: string; values?: { email?: string; account_name?: string } };
+
+/** Realistische Adresse (Domain mit Endung) — Browser und Supabase nehmen sogar „a@x“ an. */
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
 const appUrl = appBaseUrl;
 
@@ -23,11 +27,12 @@ export async function signInWithPassword(
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/app");
 
-  if (!email || !password) return { error: "Bitte E-Mail und Passwort eingeben." };
+  const values = { email };
+  if (!email || !password) return { error: "Bitte E-Mail und Passwort eingeben.", values };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: uebersetzeAuthFehler(error.message) };
+  if (error) return { error: uebersetzeAuthFehler(error.message), values };
 
   revalidatePath("/", "layout");
   let target = safeNext(next, "/app");
@@ -52,10 +57,13 @@ export async function signUp(
   // Länge begrenzen: der Name landet als Organisation und in der Willkommens-Mail.
   const accountName = String(formData.get("account_name") ?? "").trim().slice(0, 80);
 
+  const values = { email, account_name: accountName };
   if (!email || !password)
-    return { error: "Bitte E-Mail und Passwort eingeben." };
+    return { error: "Bitte E-Mail und Passwort eingeben.", values };
+  if (!EMAIL_OK.test(email))
+    return { error: "Bitte prüfen Sie die E-Mail-Adresse (z. B. name@firma.de).", values };
   if (password.length < 8)
-    return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
+    return { error: "Das Passwort muss mindestens 8 Zeichen haben.", values };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -66,7 +74,7 @@ export async function signUp(
       data: accountName ? { account_name: accountName } : undefined,
     },
   });
-  if (error) return { error: uebersetzeAuthFehler(error.message) };
+  if (error) return { error: uebersetzeAuthFehler(error.message), values };
 
   // E-Mail-Bestätigung ist aktuell deaktiviert -> nach Registrierung direkt eingeloggt.
   // Willkommens-Mail als Bestätigung „Konto eingerichtet“ (nach der Antwort, blockiert nicht).

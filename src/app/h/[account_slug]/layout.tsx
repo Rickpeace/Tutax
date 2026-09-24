@@ -54,6 +54,7 @@ async function Themed({
       style={{
         ...brandStyle(tokens),
         background: "var(--brand-bg, #fdf3ec)",
+        color: "var(--brand-ink)",
         fontFamily: fonts.body,
       }}
     >

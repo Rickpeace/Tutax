@@ -18,7 +18,7 @@ import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record
 import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair, swapPlan } from "@/lib/builder/rewire";
-import { unwrap } from "@/lib/action-error";
+import { unwrap, isNavigationError } from "@/lib/action-error";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 import {
@@ -27,6 +27,7 @@ import {
   setDecision,
   addBranch,
   updateBranch,
+  insertStepIntoBranch,
   deleteBranch,
   deleteStep,
   moveStep,
@@ -202,7 +203,19 @@ export function Builder({
     (fn: () => Promise<unknown>, opts?: { retry?: boolean }) => {
       pending.current += 1;
       const p = Promise.resolve().then(fn);
-      p.catch(() => reportSaveError(fn, opts?.retry !== false)).finally(() => {
+      p.catch((e) => {
+        // Weiterleitung statt Fehler = Zugriff weg (z. B. Rolle auf „Mitarbeiter“ geändert oder
+        // Organisation gewechselt). „Ihre Eingabe ist noch da, erneut versuchen“ wäre falsch —
+        // ehrlich sagen und die Seite neu laden, dann leitet der Server passend weiter (Audit 24.09.).
+        if (isNavigationError(e)) {
+          toast.error("Ihre Berechtigung hat sich geändert – diese Anleitung können Sie nicht mehr bearbeiten.", {
+            id: "builder-access-lost",
+          });
+          setTimeout(() => window.location.reload(), 1800);
+          return;
+        }
+        reportSaveError(fn, opts?.retry !== false);
+      }).finally(() => {
         pending.current -= 1;
       });
       return p; // Promise für Aufrufer, die auf den Erfolg warten wollen (saveStep)
@@ -327,17 +340,15 @@ export function Builder({
         }),
     );
     endAdd(
+      // EIN Server-Aufruf (atomar, Ziel aus der Datenbank) — vorher drei Einzelaufrufe, die bei
+      // Abbruch dazwischen alles nach der Einfügestelle unerreichbar machten (Audit 24.09.).
       persist(async () => {
-        await addStep(tutorialId, { id, title: "", position }, false, null, seed?.server);
-        await updateBranch(branchId, { target_step_id: id });
-        await addBranch({
-          id: weiterId,
-          step_id: id,
-          label: null,
-          color: null,
-          target_step_id: oldTarget,
-          position: 0,
-        });
+        const r = await insertStepIntoBranch(tutorialId, branchId, { id, title: "", position }, weiterId, seed?.server);
+        // Hatte ein anderer Tab/eine andere Person die Verbindung inzwischen geändert, gilt der
+        // Stand der Datenbank — lokal nachziehen.
+        if (r.oldTarget !== oldTarget) {
+          setBranches((prev) => prev.map((b) => (b.id === weiterId ? { ...b, target_step_id: r.oldTarget } : b)));
+        }
       }),
     );
     setSelectedId(id);
@@ -757,6 +768,45 @@ export function Builder({
     [confirm],
   );
 
+  // Browser-Zurück bei ungespeicherten Eingaben (Audit 24.09.: löste weder beforeunload noch einen
+  // Klick aus → Text weg ohne Rückfrage). Sobald etwas ungespeichert ist, ein Wächter-Eintrag im
+  // Verlauf (Next-Zustand mitkopiert, sonst lädt der Router neu); „Zurück“ landet auf demselben
+  // Seiten-Eintrag → Wächter erneuern und fragen; bei „Verwerfen“ wirklich zurück.
+  const [hasUnsaved, setHasUnsaved] = useState(false);
+  const guardPushed = useRef(false);
+  useEffect(() => {
+    if (!hasUnsaved || guardPushed.current) return;
+    try {
+      window.history.pushState({ ...(window.history.state ?? {}), steplyEditGuard: true }, "");
+      guardPushed.current = true;
+    } catch {
+      /* Komfort */
+    }
+  }, [hasUnsaved]);
+  useEffect(() => {
+    const onPop = () => {
+      if (!guardPushed.current) return;
+      if (!dirtyRef.current) {
+        guardPushed.current = false; // Wächter verbraucht, nichts zu schützen
+        return;
+      }
+      try {
+        window.history.pushState({ ...(window.history.state ?? {}), steplyEditGuard: true }, "");
+      } catch {
+        /* Komfort */
+      }
+      void confirmDiscard().then((ok) => {
+        if (!ok) return;
+        dirtyRef.current = false;
+        setHasUnsaved(false);
+        guardPushed.current = false;
+        window.history.go(-2); // Wächter + aktuelle Seite überspringen = echtes „Zurück“
+      });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [confirmDiscard]);
+
   // Links innerhalb der App (Zurück, Kopfleiste, Reiter) bei ungespeicherten Eingaben abfangen:
   // `beforeunload` greift nur beim Schließen/Neuladen, Next-Links wechselten sonst ohne Rückfrage
   // und Titel/Text waren weg (Audit 23.09.). Capture-Phase auf document = vor Nexts Link-Handler.
@@ -835,6 +885,7 @@ export function Builder({
         onSaveStep={saveStep}
         onDirtyChange={(d) => {
           dirtyRef.current = d;
+          setHasUnsaved(d);
         }}
         hasSourceVideo={hasSourceVideo}
         onSetImage={setStepImage}

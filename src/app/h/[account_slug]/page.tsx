@@ -3,7 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
 import { hubTag } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { brandStyle, resolveTheme, googleFontsHref, brandFonts } from "@/lib/theme";
+import { brandStyle, resolveTheme, googleFontsHref, brandFonts, hasCustomColors } from "@/lib/theme";
 import { sanitizeSkinCss } from "@/lib/skin-css";
 import { publicImageUrl } from "@/lib/public-image";
 import { getCatalog } from "@/lib/templates";
@@ -17,10 +17,11 @@ import {
   labelsFor,
   categoryName,
   isExtraLang,
+  t,
   LANG_BCP47,
   type HubLang,
 } from "@/lib/i18n-hub";
-import { brandedTheme, isPro, planLanguages } from "@/lib/plan";
+import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
 // Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
@@ -100,7 +101,12 @@ export async function generateMetadata({
   if (!data) return { title: "Nicht gefunden" };
   const { account, languages } = data;
   const lang = resolveLang(langParam, languages);
-  const description = `Hilfe & Anleitungen von ${account.name} – Schritt für Schritt erklärt.`;
+  // Titel/Beschreibung in der Seitensprache (Audit 24.09.) — Pro/Business ohne „· Steply“
+  // im Tab (absoluter Titel statt Root-Template), Gratis behält den Steply-Zusatz.
+  const labels = labelsFor(lang);
+  const description = t(lang, "metaHubDescription", { name: account.name });
+  const baseTitle = `${labels.helpTitle} · ${account.name}`;
+  const title = isPro(account) ? { absolute: baseTitle } : baseTitle;
   // hreflang: DE + aktivierte Sprachen (nur wenn welche aktiv sind).
   const base = `/h/${account.slug}`;
   // canonical IMMER ohne ?lang=/?preview= — sonst indexieren Suchmaschinen dieselbe
@@ -118,11 +124,11 @@ export async function generateMetadata({
   };
   const { logoPath } = resolveTheme(data.theme);
   return {
-    title: `Hilfe & Anleitungen · ${account.name}`,
+    title,
     description,
     alternates,
     openGraph: {
-      title: `Hilfe & Anleitungen · ${account.name}`,
+      title: baseTitle,
       description,
       siteName: account.name,
       locale: LANG_BCP47[lang],
@@ -152,10 +158,20 @@ export default async function HubPage({
   // Suffix, das alle internen Links die Sprache mitgeben (kein Zurückfallen auf DE).
   const langQ = lang === "de" ? "" : `lang=${lang}`;
   // Vorschau: ein Design erzwingen, OHNE es zu aktivieren (ändert themes.mode nicht).
-  const previewMode = ["manual", "ai", "extreme"].includes(preview ?? "") ? preview : null;
+  // Nur für Business (KI-Design ist Business) — sonst zeigte ?preview=ai|extreme das
+  // gespeicherte KI-Design öffentlich an brandedTheme vorbei (Audit 24.09.).
+  const previewMode =
+    isBusiness(account) && ["manual", "ai", "extreme"].includes(preview ?? "") ? preview : null;
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
   // Kategorienamen sprachbewusst (Welle 29): name_i18n[lang] mit DE-Fallback.
   const catName = new Map(categories.map((c) => [c.id, categoryName(c, lang)]));
+  // Farbfamilie je Kategorie aus dem DEUTSCHEN Namen (wie in der App) — sonst wechselte die
+  // Farbe mit der Sprache (Audit 24.09.). Schlüssel = angezeigter (übersetzter) Name.
+  const colorKeys: Record<string, string> = { [labels.otherCategory]: "Sonstiges" };
+  for (const c of categories) {
+    const shown = categoryName(c, lang);
+    if (!(shown in colorKeys)) colorKeys[shown] = c.name;
+  }
 
   const items: HubTutorial[] = catalog
     .filter((e) => e.visible && e.slug)
@@ -188,7 +204,12 @@ export default async function HubPage({
   return (
     <main
       className={`flex min-h-screen flex-col ${skinClass}`}
-      style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
+      style={{
+        ...brandStyle(tokens),
+        background: "var(--brand-bg)",
+        color: "var(--brand-ink)",
+        fontFamily: fonts.body,
+      }}
     >
       {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
       <HtmlLang lang={LANG_BCP47[lang]} />
@@ -206,26 +227,35 @@ export default async function HubPage({
       )}
       {mode === "ai" && <div className="h-1.5 w-full" style={{ background: "var(--brand-accent)" }} />}
 
-      {/* Branding-Header (Design 3b): weiße Leiste mit Kundenlogo + Name. */}
+      {/* Branding-Header (Design 3b): Leiste auf dem „Papier“ (hell: weiß, dunkles
+          Design: dunkle Fläche — lib/theme.ts brandPaper) mit Kundenlogo + Name. */}
       <header
         data-tx="header"
-        className="flex items-center gap-3 border-b-2 bg-white px-4 py-3.5 sm:px-10"
-        style={{ borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)" }}
+        className="flex items-center gap-3 border-b-2 px-4 py-3.5 sm:px-10"
+        style={{
+          background: "var(--brand-paper, #fff)",
+          borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)",
+        }}
       >
         {logoUrl ? (
+          // Breite Logos in voller Breite (feste Höhe) statt als Strich im Quadrat (Audit 24.09.).
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={logoUrl}
             alt=""
             data-tx="logo"
-            className="size-9 border border-black/5 bg-white object-contain p-1"
+            className="h-9 w-auto min-w-9 max-w-[120px] shrink-0 border border-black/5 bg-white object-contain p-1 sm:max-w-[180px]"
             style={{ borderRadius: "var(--brand-radius, 10px)" }}
           />
         ) : (
           <div
             data-tx="logo"
-            className="flex size-9 items-center justify-center text-base font-extrabold text-white"
-            style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 10px)" }}
+            className="flex size-9 shrink-0 items-center justify-center text-base font-extrabold"
+            style={{
+              background: "var(--brand-accent)",
+              color: "var(--brand-accent-fg, #fff)",
+              borderRadius: "var(--brand-radius, 10px)",
+            }}
           >
             {initial}
           </div>
@@ -297,7 +327,10 @@ export default async function HubPage({
           lang={lang}
           langQuery={langQ}
           labels={labels}
-          colorful={mode === "manual"}
+          // Bunte Kategorien nur im reinen Steply-Standard (ohne eigene Farben) — Kunden-CI
+          // bleibt monochrom in der Akzentfarbe (Audit 24.09.).
+          colorful={mode === "manual" && !hasCustomColors(tokens)}
+          colorKeys={colorKeys}
           chatAvailable={isPro(account)}
         />
       </div>

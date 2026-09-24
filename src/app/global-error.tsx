@@ -26,16 +26,18 @@ export default function GlobalError({
           gap: "1rem",
           padding: "4rem 1.25rem",
           textAlign: "center",
-          background: "#f7f8fb",
-          color: "#101524",
+          // Warmes Design-System (OVERVIEW §3): Creme-Hintergrund, Ink-Text, Koralle-Knopf.
+          // Das Root-Layout (und damit next/font) fehlt hier → Nunito nur, falls installiert.
+          background: "#fdf9f3",
+          color: "#33291f",
           fontFamily:
-            "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+            "Nunito, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
         }}
       >
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 900, margin: 0 }}>
           Da ist etwas schiefgelaufen
         </h1>
-        <p style={{ maxWidth: "28rem", margin: 0, color: "#3b4254" }}>
+        <p style={{ maxWidth: "28rem", margin: 0, color: "#6b5e4b", fontWeight: 600 }}>
           Es ist ein unerwarteter Fehler aufgetreten. Bitte versuchen Sie es erneut.
         </p>
         <button
@@ -44,11 +46,12 @@ export default function GlobalError({
             marginTop: "0.5rem",
             padding: "0.625rem 1.25rem",
             fontSize: "0.9rem",
-            fontWeight: 600,
+            fontWeight: 800,
             color: "#fff",
-            background: "#3d4ee6",
+            background: "#ef6a4e",
             border: "none",
-            borderRadius: "0.5rem",
+            borderRadius: "999px",
+            boxShadow: "0 4px 0 #d3543a",
             cursor: "pointer",
           }}
         >

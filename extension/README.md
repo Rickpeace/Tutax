@@ -1,5 +1,20 @@
 # Steply Recorder (Browser-Extension, v2.4 — Side Panel)
 
+> **v2.19.4 — Audit 24.09.2026.** Sensible Felder erkennt die Sofort-Anleitung jetzt auch an
+> Steuer-/Personal-Kennungen (Steuernummer, Steuer-ID/IdNr, USt-IdNr, SV-/RV-/KV-Nummer,
+> Geburtsdatum, Ausweis/Reisepass, PIN/TAN) **und am Wert selbst** (IBAN mit Prüfziffer,
+> Steuernummer 12/345/67890 bzw. 13 Ziffern, 11-stellige Steuer-ID, SV-Nummer, Kartennummer mit
+> Luhn) → kein `typed_value`, Verpixelungsvorschlag; `guide-complete` prüft dieselben Muster als
+> Sicherheitsnetz (`scrubSensitiveGuideSteps` in `src/lib/recorder.ts`). `<select>` schickt den
+> Optionstext als Wert; `h1`/`h2` sind nie Feldname. Downloads werden erst zugeordnet, wenn der
+> Screenshot ihres Klicks fertig ist; öffnet ein Klick einen neuen Tab, bekommt er das letzte Bild
+> seines Tabs („ggf. ungenau“ — nur im Panel, der Server kennt dafür kein Feld). „Trennen“ löscht
+> den Token auch in Steply (`POST /api/recorder/disconnect`) samt `autoValues` und
+> `steply-run:*`-Weckern. `/api/recorder/me` liefert `tutorialsLeft` (Gratis-Hinweis vor der
+> Aufnahme); Gratis sperrt „Video mit Ton“ vollständig. Seitenleiste mitten in der Aufnahme zu →
+> beim Öffnen „Eine unterbrochene Aufnahme (n Schritte) wurde verworfen“ (Merker `guideLive`).
+> Tests: `test-guide-audit-panel.mjs`, `test-guide-typed-capture.mjs`, `test-recorder-sensitive.mjs`.
+
 > **v2.4 — Auto-Schwärzung sensibler Felder.** Bei der Sofort-Anleitung sammelt das
 > Content-Script pro Schritt zusätzlich die **Rechtecke sichtbarer sensibler Felder** ein
 > (`input[type=password]` immer; Text-Felder, deren Label/`aria-label`/`placeholder`/`name`/

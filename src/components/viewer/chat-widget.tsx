@@ -17,6 +17,11 @@ import {
 import { labelsFor, t as translate, type HubLabels, type HubLang } from "@/lib/i18n-hub";
 
 type Source = { title: string; slug: string };
+
+/** Maximale Fragelänge — identisch mit der Kappung in /api/chat. */
+const CHAT_MAX = 500;
+/** Ab hier erscheint der Zeichen-Zähler. */
+const CHAT_WARN = 400;
 type EscMethod = { type: string; label: string; value: string };
 type Escalation = { message: string; methods: EscMethod[] };
 type Msg = {
@@ -234,12 +239,14 @@ export function ChatWidget({
           className={
             embedded
               ? // Im iFrame gibt das Fenster die Größe vor -> Panel füllt es komplett.
-                "fixed inset-0 z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)]"
+                "fixed inset-0 z-40 flex flex-col overflow-hidden rounded-2xl border border-black/10 shadow-[0_20px_60px_rgba(16,21,36,0.25)]"
               : // Dynamische Hoehe (REVIEW G): kurze Gespraeche zeigen weniger Leerraum
                 // (h-auto + min-h), lange werden bei max-h scrollbar. Nachrichtenliste
                 // bleibt flex-1, Input unten. Embedded-Modus (inset-0) unveraendert.
-                "fixed bottom-24 right-3 left-3 z-40 flex h-auto max-h-[min(30rem,calc(100dvh-7rem))] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
+                "fixed bottom-24 right-3 left-3 z-40 flex h-auto max-h-[min(30rem,calc(100dvh-7rem))] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-black/10 shadow-[0_20px_60px_rgba(16,21,36,0.25)] sm:left-auto sm:w-[23rem]"
           }
+          // Papier + Textfarbe aus dem Kunden-Design (dunkle Designs: dunkles Panel, Audit 24.09.).
+          style={{ background: "var(--brand-paper, #fff)", color: "var(--brand-ink)" }}
         >
           <div
             className="flex items-center gap-2 border-b border-black/5 px-4 py-3"
@@ -269,7 +276,10 @@ export function ChatWidget({
             )}
           </div>
 
-          <p className="border-b border-black/5 bg-white px-4 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          <p
+            className="border-b border-black/5 px-4 py-1.5 text-[11px] leading-snug text-muted-foreground"
+            style={{ background: "var(--brand-paper, #fff)" }}
+          >
             {L.chatDisclaimer}{" "}
             <Link
               href="/datenschutz"
@@ -300,16 +310,39 @@ export function ChatWidget({
           </p>
 
           <div className="flex gap-2 border-t border-black/5 p-2">
+            {/* Länge wie serverseitig gekappt (500) — sichtbar statt stillem Abschneiden
+                (Audit 24.09.); Zähler erscheint erst kurz vor der Grenze. */}
+            <div className="relative flex min-w-0 flex-1">
             <input
               ref={inputRef}
               value={input}
+              maxLength={CHAT_MAX}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
               }}
               placeholder={L.chatPlaceholder}
-              className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)]"
+              aria-describedby={input.length >= CHAT_WARN ? "chat-count" : undefined}
+              className={`min-w-0 flex-1 rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)] ${
+                input.length >= CHAT_WARN ? "pr-16" : ""
+              }`}
             />
+            {input.length >= CHAT_WARN && (
+              <span
+                id="chat-count"
+                aria-live="polite"
+                className="pointer-events-none absolute bottom-1 right-2 text-[10px] font-bold tabular-nums"
+                style={{
+                  color:
+                    input.length >= CHAT_MAX
+                      ? "var(--brand-accent-strong, var(--brand-accent))"
+                      : "var(--muted-foreground)",
+                }}
+              >
+                {input.length}/{CHAT_MAX}
+              </span>
+            )}
+            </div>
             <button
               onClick={send}
               disabled={busy}
@@ -381,7 +414,8 @@ function Bubble({
                 // zurück. Auf der normalen Hilfe-Seite bleibt es eine In-App-Navigation.
                 target={embedded ? "_top" : undefined}
                 rel={embedded ? "noopener" : undefined}
-                className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-semibold text-ink hover:border-[var(--brand-accent)]"
+                className="flex items-center gap-1.5 rounded-lg border border-black/10 px-2 py-1 text-xs font-semibold hover:border-[var(--brand-accent)]"
+                style={{ background: "var(--brand-paper, #fff)", color: "var(--brand-ink)" }}
               >
                 <Layers className="size-3.5" style={{ color: "var(--brand-accent-strong, var(--brand-accent))" }} />
                 <span className="truncate">{s.title}</span>
@@ -391,7 +425,10 @@ function Bubble({
           </div>
         ) : null}
         {m.escalation?.methods?.length ? (
-          <div className="mt-2 rounded-xl border border-black/10 bg-white p-2.5">
+          <div
+            className="mt-2 rounded-xl border border-black/10 p-2.5"
+            style={{ background: "var(--brand-paper, #fff)" }}
+          >
             <div className="text-xs text-ink-2">{m.escalation.message}</div>
             <div className="mt-2 space-y-1.5">
               {m.escalation.methods.map((mm, idx) => (

@@ -42,7 +42,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-line-2 py-5 text-center text-xs text-muted-foreground">
-        © {2026} Steply · DSGVO-konform, Hosting in der EU
+        © {2026} Steply
       </div>
     </footer>
   );

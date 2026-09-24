@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { after } from "next/server";
+import { headers } from "next/headers";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -20,6 +21,7 @@ import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { toPublicStep } from "@/lib/public-step";
 import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
+import { isBotUserAgent } from "@/app/h/bot-ua";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
@@ -68,13 +70,14 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
 
   // Übersetzungen laden + in Titel/Steps/Branches mergen (DE-Fallback pro Feld).
   let mergedTitle = tutorial.title;
+  let mergedDescription = tutorial.description;
   let mergedSteps = steps ?? [];
   let mergedBranches = branches ?? [];
   if (lang !== "de") {
     const [{ data: tutTr }, { data: stepTr }, { data: branchTr }] = await Promise.all([
       admin
         .from("tutorial_translations")
-        .select("title")
+        .select("title, description")
         .eq("tutorial_id", tutorial.id)
         .eq("lang", lang)
         .maybeSingle(),
@@ -95,6 +98,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     ]);
 
     if (tutTr?.title?.trim()) mergedTitle = tutTr.title;
+    if (tutTr?.description?.trim()) mergedDescription = tutTr.description;
 
     const stepTrById = new Map(
       (stepTr ?? []).map((r) => [r.step_id as string, r]),
@@ -122,7 +126,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
 
   return {
     account,
-    tutorial: { ...tutorial, title: mergedTitle },
+    tutorial: { ...tutorial, title: mergedTitle, description: mergedDescription },
     steps: mergedSteps,
     branches: mergedBranches,
     theme: brandedTheme(account, theme), // Logo/CI erst ab Pro
@@ -145,10 +149,13 @@ export async function generateMetadata({
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
   const { account, tutorial, languages } = data;
-  const title = `${tutorial.title} · ${account.name}`;
+  // Pro/Business: absoluter Tab-Titel ohne „· Steply“ (Gratis behält den Zusatz aus dem
+  // Root-Template). Beschreibung aus der Übersetzung bzw. in der Seitensprache (Audit 24.09.).
+  const baseTitle = `${tutorial.title} · ${account.name}`;
+  const title = isPro(account) ? { absolute: baseTitle } : baseTitle;
   const description =
     tutorial.description?.trim() ||
-    `Schritt-für-Schritt-Anleitung von ${account.name}: ${tutorial.title}.`;
+    t(lang, "metaTutDescription", { name: account.name, title: tutorial.title });
   const base = `/h/${account.slug}/${tutorial_slug}`;
   // canonical IMMER ohne ?lang=/?preview= — sonst indexieren Suchmaschinen dieselbe
   // Anleitung mehrfach. Die Sprachvarianten bleiben über hreflang erreichbar.
@@ -169,7 +176,7 @@ export async function generateMetadata({
     description,
     alternates,
     openGraph: {
-      title,
+      title: baseTitle,
       description,
       siteName: account.name,
       locale: LANG_BCP47[lang],
@@ -197,10 +204,16 @@ export default async function ViewerPage({
 
   // Aufruf zählen — NACH der Antwort (blockiert das Rendering nicht). Näherung:
   // Prefetch zählt kaum mit (dynamische Route ohne loading.tsx wird nicht geprefetcht).
-  after(() => recordEvent({ account_id: account.id, type: "view", tutorial_slug }));
+  // Bots/Link-Vorschauen (WhatsApp, Slack, Suchmaschinen …) zählen nicht (Audit 24.09.);
+  // den User-Agent VOR after() lesen — headers() ist im after-Callback einer Seite verboten.
+  const userAgent = (await headers()).get("user-agent") ?? "";
+  if (!isBotUserAgent(userAgent)) {
+    after(() => recordEvent({ account_id: account.id, type: "view", tutorial_slug }));
+  }
 
+  // Design-Vorschau (?preview=) nur für Business — KI-Design ist Business (Audit 24.09.).
   const previewMode =
-    preview && ["manual", "ai", "extreme"].includes(preview) ? preview : null;
+    isBusiness(account) && preview && ["manual", "ai", "extreme"].includes(preview) ? preview : null;
   const theme = previewMode ? { ...data.theme, mode: previewMode } : data.theme;
   const imageUrls: Record<string, string> = {};
   for (const s of steps) if (s.image_path) imageUrls[s.id] = publicImageUrl(s.image_path);
@@ -231,7 +244,12 @@ export default async function ViewerPage({
   return (
     <main
       className={`min-h-screen ${skinClass}`}
-      style={{ ...brandStyle(tokens), background: "var(--brand-bg)", fontFamily: fonts.body }}
+      style={{
+        ...brandStyle(tokens),
+        background: "var(--brand-bg)",
+        color: "var(--brand-ink)",
+        fontFamily: fonts.body,
+      }}
     >
       {/* Sprache der Seite melden (Screenreader-Aussprache + Suchmaschinen). */}
       <HtmlLang lang={LANG_BCP47[lang]} />
@@ -259,19 +277,24 @@ export default async function ViewerPage({
       <div className="mx-auto flex max-w-md flex-col px-4 py-6 sm:max-w-xl lg:max-w-4xl">
         <div data-tx="header" className="mb-4 flex items-center gap-3">
           {logoUrl ? (
+            // Breite Logos in voller Breite (feste Höhe) statt als Strich (Audit 24.09.).
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={logoUrl}
               alt=""
               data-tx="logo"
-              className="size-11 border border-black/5 bg-white object-contain p-1"
+              className="h-11 w-auto min-w-11 max-w-[120px] shrink-0 border border-black/5 bg-white object-contain p-1 sm:max-w-[180px]"
               style={{ borderRadius: "var(--brand-radius, 12px)" }}
             />
           ) : (
             <div
               data-tx="logo"
-              className="flex size-11 items-center justify-center text-lg font-extrabold text-white"
-              style={{ background: "var(--brand-accent)", borderRadius: "var(--brand-radius, 12px)" }}
+              className="flex size-11 shrink-0 items-center justify-center text-lg font-extrabold"
+              style={{
+                background: "var(--brand-accent)",
+                color: "var(--brand-accent-fg, #fff)",
+                borderRadius: "var(--brand-radius, 12px)",
+              }}
             >
               {initial}
             </div>

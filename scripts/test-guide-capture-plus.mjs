@@ -384,7 +384,8 @@ try {
     const typed = st.find((s) => s.action === "type" && s.label === "Kennzeichen");
     const sel = st.find((s) => s.action === "type" && s.label !== "Kennzeichen");
     ok(typed && typed.typed_value === "SchattenWert99", `Shadow: getippter Wert als typed_value (${typed && typed.typed_value})`);
-    ok(sel && !("typed_value" in sel), "Shadow: Auswahlliste -> KEIN typed_value (nichts getippt)");
+    // Audit 24.09.: die gewählte Option reist als Wert mit.
+    ok(sel && sel.typed_value === "AT", `Shadow: Auswahlliste -> Optionstext als typed_value (${sel && sel.typed_value})`);
     ok(typed && typed.selector && typed.selector.shadow && typed.selector.shadow[0] === "#shadowform" && typed.selector.css === "#sf",
       `Shadow: Eingabe-Schritt mit Label „Kennzeichen" + shadow-Selektor (${JSON.stringify(st.map((s) => [s.action, s.label, s.selector]))})`);
     ok(!!sel, `Shadow: <select>-change im Shadow-Root erzeugt Schritt (${JSON.stringify(st.map((s) => s.label))})`);

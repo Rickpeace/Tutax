@@ -72,6 +72,12 @@ export function buildEscalationBox(
   const email = safeEmail(p?.email) ?? safeEmail(esc.email);
   const phone = safePhone(p?.phone) ?? safePhone(esc.phone);
   const name = p?.name || esc.contactName || accountName;
+  // Eingetragener Name („Name oder Team“ bzw. Fachperson) auch an E-Mail/Telefon — bisher
+  // erschien er nur zusammen mit einem Termin-Link (Audit 24.09.). Der bloße Organisations-
+  // name wird dort nicht wiederholt (steht ohnehin über dem ganzen Chat), und mit Termin-Link
+  // steht der Name schon dort — nicht doppelt.
+  const who = (p?.name || esc.contactName || "").trim();
+  const withWho = (v: string) => (who && !calendarUrl ? `${who} · ${v}` : v);
   const methods: EscalationMethod[] = [];
   if (calendarUrl)
     methods.push({
@@ -79,8 +85,8 @@ export function buildEscalationBox(
       label: name ? t(lang, "escBookWith", { name }) : t(lang, "escBook"),
       value: calendarUrl,
     });
-  if (email) methods.push({ type: "email", label: email, value: `mailto:${email}` });
-  if (phone) methods.push({ type: "phone", label: phone, value: `tel:${phone}` });
+  if (email) methods.push({ type: "email", label: withWho(email), value: `mailto:${email}` });
+  if (phone) methods.push({ type: "phone", label: withWho(phone), value: `tel:${phone}` });
   if (!methods.length) return null;
   const base = esc.message || t(lang, "escDefaultMessage");
   const message = p?.name

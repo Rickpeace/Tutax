@@ -38,11 +38,40 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
   ] = await Promise.all([
     base().eq("type", "view"),
     base().eq("type", "chat"),
-    base().eq("type", "chat").eq("status", "no_answer"),
+    // Nur UNERLEDIGTE (wie „Offene Fragen“) — nach „Entwurf erstellen“ blieb die Zahl sonst stehen.
+    base().eq("type", "chat").eq("status", "no_answer").is("handled_at", null),
     base().eq("type", "feedback").eq("helpful", true),
-    base().eq("type", "feedback").eq("helpful", false),
+    // „Ich komme hier nicht weiter“ ist KEIN Urteil über die ganze Anleitung → nicht in die Quote.
+    base().eq("type", "feedback").eq("helpful", false).or("question.is.null,question.not.like.[Schritt]*"),
     loadOpenGaps(accountId, 3),
   ]);
+
+  // „Ich komme hier nicht weiter“ (Hilfe-Seite): je Anleitung + Schritt zusammengefasst — vorher
+  // sah die Organisation davon nur ein anonymes 👎 (Audit 24.09.).
+  const { data: stuckRows } = await supabase
+    .from("events")
+    .select("tutorial_slug, question")
+    .eq("account_id", accountId)
+    .eq("type", "feedback")
+    .eq("helpful", false)
+    .like("question", "[Schritt]%")
+    .gte("created_at", since)
+    .limit(500);
+  const stuckMap = new Map<string, { slug: string; step: string; count: number }>();
+  for (const r of stuckRows ?? []) {
+    const step = String(r.question ?? "").slice(9).trim() || "Schritt";
+    const slug = String(r.tutorial_slug ?? "");
+    const key = `${slug}::${step}`;
+    const cur = stuckMap.get(key) ?? { slug, step, count: 0 };
+    cur.count += 1;
+    stuckMap.set(key, cur);
+  }
+  const stuck = [...stuckMap.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  const stuckSlugs = [...new Set(stuck.map((s) => s.slug).filter(Boolean))];
+  const { data: stuckTuts } = stuckSlugs.length
+    ? await supabase.from("tutorials").select("id, title, slug").eq("account_id", accountId).in("slug", stuckSlugs)
+    : { data: [] as { id: string; title: string; slug: string }[] };
+  const tutBySlug = new Map((stuckTuts ?? []).map((t) => [t.slug as string, t]));
 
   const viewCount = views ?? 0;
   const chatCount = chats ?? 0;
@@ -52,7 +81,7 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
   const feedbackTotal = upCount + downCount;
 
   // Nichts los -> Karte gar nicht zeigen (kein leerer Platzhalter).
-  const anyEvents = viewCount + chatCount + feedbackTotal > 0;
+  const anyEvents = viewCount + chatCount + feedbackTotal + stuck.length > 0;
   if (!anyEvents) return null;
 
   const feedbackPct =
@@ -102,6 +131,37 @@ export async function InsightsCard({ accountId }: { accountId: string }) {
           icon={<MessageCircleQuestion className="size-3.5" />}
         />
       </div>
+
+      {stuck.length > 0 && (
+        <div className="mt-5 rounded-card border-2 border-line-2 bg-background/60 p-4" data-testid="insights-stuck">
+          <h3 className="text-[13px] font-extrabold text-ink">Hier kamen Besucher nicht weiter</h3>
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">
+            Klicks auf „Ich komme hier nicht weiter“ auf Ihrer Hilfe-Seite – diese Schritte lohnt es sich zu verbessern.
+          </p>
+          <ul className="space-y-2">
+            {stuck.map((s) => {
+              const tut = tutBySlug.get(s.slug);
+              return (
+                <li key={s.slug + s.step} className="flex items-start justify-between gap-3 text-sm font-semibold text-ink-2">
+                  <span className="min-w-0 flex-1">
+                    {tut ? (
+                      <Link href={`/app/tutorials/${tut.id}`} className="font-extrabold text-ink hover:text-primary">
+                        {tut.title}
+                      </Link>
+                    ) : (
+                      <span className="font-extrabold text-ink">Anleitung</span>
+                    )}
+                    {" · "}&bdquo;{s.step}&ldquo;
+                  </span>
+                  <span className="shrink-0 rounded-full bg-accent px-2 py-[2px] text-[11px] font-black text-accent-foreground tabular-nums">
+                    {s.count}×
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {topGaps.length > 0 && (
         <div className="mt-5 rounded-card border-2 border-line-2 bg-background/60 p-4">

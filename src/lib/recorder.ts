@@ -135,6 +135,139 @@ function touchRecorderToken(token: string) {
   }
 }
 
+/**
+ * „Trennen“ in der Erweiterung (Audit 24.09.): genau DIESEN Verbindungs-Token löschen. Wer den
+ * Token besitzt, darf ihn auch widerrufen — eine weitere Prüfung (Rolle/Konto) braucht es dafür
+ * nicht. Gibt true zurück, wenn ein Eintrag entfernt wurde (false: unbekannt/Müll/Fehler).
+ */
+export async function revokeRecorderToken(token: unknown): Promise<boolean> {
+  if (typeof token !== "string") return false;
+  const t = token.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return false;
+  const { data, error } = await createAdminClient()
+    .from("recorder_tokens")
+    .delete()
+    .eq("token", t)
+    .select("token");
+  lastTouch.delete(t);
+  return !error && Array.isArray(data) && data.length > 0;
+}
+
+// ── Sensible Werte in Aufnahmen (Audit 24.09.) ───────────────────────────────────────────────
+// Sicherheitsnetz zur Erkennung in der Erweiterung (content.js, looksSensitiveValue): dieselben
+// WERT-Muster — IBAN (mod 97), dt. Steuernummer (12/345/67890 bzw. 13 Ziffern), Steuer-ID
+// (11 Ziffern), SV-Nummer, Krankenversichertennummer, Kreditkarte (Luhn). Ältere Erweiterungen
+// schickten solche Werte als typed_value mit; sie landeten dann im Schritt-Titel.
+
+function ibanValid(raw: string): boolean {
+  const s = raw.replace(/\s+/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s)) return false;
+  const r = s.slice(4) + s.slice(0, 4);
+  let mod = 0;
+  for (const ch of r) {
+    const v = ch >= "A" && ch <= "Z" ? String(ch.charCodeAt(0) - 55) : ch;
+    for (const d of v) mod = (mod * 10 + (d.charCodeAt(0) - 48)) % 97;
+  }
+  return mod === 1;
+}
+
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  let dbl = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48;
+    if (dbl) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    dbl = !dbl;
+  }
+  return sum % 10 === 0;
+}
+
+/** Enthält der Text eine typische sensible Kennung (IBAN, Steuernummer, …)? */
+export function looksSensitiveValue(value: unknown): boolean {
+  if (typeof value !== "string" || !value) return false;
+  const v = value.slice(0, 2000);
+  for (const cand of v.match(/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}\b/gi) ?? []) {
+    const s = cand.replace(/\s+/g, "");
+    for (let n = Math.min(34, s.length); n >= 15; n--) if (ibanValid(s.slice(0, n))) return true;
+  }
+  if (/(^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/.test(v)) return true;
+  if (/(^|[^A-Z0-9])\d{2}\s?\d{6}\s?[A-Z]\s?\d{2}\s?\d(?![A-Z0-9])/i.test(v)) return true;
+  if (/(^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/i.test(v)) return true;
+  for (const run of v.match(/\d(?:[ -]?\d){10,18}/g) ?? []) {
+    const d = run.replace(/[ -]/g, "");
+    if (d.length === 11 && d[0] !== "0") return true;
+    if (d.length === 13) return true;
+    if (d.length >= 13 && d.length <= 19 && luhnValid(d)) return true;
+  }
+  return false;
+}
+
+// Beschriftungen, bei denen ein Eingabewert nie in Titel/Text gehört (ergänzt die Liste in
+// lib/guide.ts um Steuer-/Personal-Kennungen, Audit 24.09.).
+const SENSITIVE_FIELD_RE =
+  /(steuer[-_ ]?(nummer|nr|id|identifikations)|steueridentifikations|identifikationsnummer|ust[-_ .]?id|umsatzsteuer[-_ ]?id|tax[-_ ]?(id|number)|sozialversicherungs|rentenversicherungs|krankenversicherungs|versicherten[-_ ]?(nummer|nr)|social[-_ ]?security|geburtsdatum|date[-_ ]?of[-_ ]?birth|birth[-_ ]?date|personalausweis|ausweis[-_ ]?(nummer|nr)|reisepass|pass[-_ ]?(nummer|nr)|passport|pin[-_ ]?code|tan[-_ ]?(nummer|nr|code))/i;
+const SENSITIVE_FIELD_WORD_RE =
+  /(^|[^a-z0-9äöüß])(pin|tan|puk|idnr|ssn|sv[-_ .]?(nummer|nr)|rv[-_ .]?(nummer|nr)|kv[-_ .]?(nummer|nr))(?![a-z0-9äöüß])/i;
+
+type ScrubbableStep = {
+  label: string;
+  action: string;
+  rect: { x: number; y: number; w: number; h: number };
+  sensitive?: { x: number; y: number; w: number; h: number }[];
+  typed_value?: string;
+};
+
+/**
+ * Sicherheitsnetz vor dem Speichern (guide-complete): sensible Eingabewerte fliegen raus, statt
+ * im Titel zu landen, und das Feld bekommt — wie bei der Erkennung in der Erweiterung — einen
+ * Verpixelungsvorschlag. Kennungen in einer Beschriftung werden durch „•••“ ersetzt. Ändert die
+ * Schritte an Ort und Stelle; gibt die Zahl der bereinigten Schritte zurück.
+ */
+export function scrubSensitiveGuideSteps(steps: ScrubbableStep[]): number {
+  let n = 0;
+  for (const s of steps) {
+    let hit = false;
+    if (
+      s.typed_value &&
+      (looksSensitiveValue(s.typed_value) ||
+        SENSITIVE_FIELD_RE.test(s.label) ||
+        SENSITIVE_FIELD_WORD_RE.test(s.label))
+    ) {
+      delete s.typed_value;
+      hit = true;
+    }
+    if (s.label && looksSensitiveValue(s.label)) {
+      s.label = maskSensitive(s.label);
+      hit = true;
+    }
+    if (!hit) continue;
+    n++;
+    // Eingabe-Schritt: das Klick-Rechteck IST das Feld → als Verpixelungsvorschlag ergänzen.
+    const r = s.rect;
+    if (s.action === "type" && r && r.w > 0 && r.h > 0) {
+      const list = s.sensitive ?? [];
+      const dup = list.some((q) => Math.abs(q.x - r.x) < 0.002 && Math.abs(q.y - r.y) < 0.002);
+      if (!dup && list.length < 10) s.sensitive = [...list, { x: r.x, y: r.y, w: r.w, h: r.h }];
+    }
+  }
+  return n;
+}
+
+/** Kennungen in einem Text durch „•••“ ersetzen (jeder Kandidat einzeln geprüft). */
+function maskSensitive(text: string): string {
+  const mask = (m: string) => (looksSensitiveValue(m) ? "•••" : m);
+  return text
+    .replace(/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}\b/gi, mask)
+    .replace(/\d{2,4}\/\d{3,4}\/\d{4,5}/g, mask)
+    .replace(/\b\d{2}\s?\d{6}\s?[A-Z]\s?\d{2}\s?\d\b/gi, mask)
+    .replace(/\b[A-Z]\d{9}\b/gi, mask)
+    .replace(/\d(?:[ -]?\d){10,18}/g, mask);
+}
+
 export type RecorderConnection = {
   /** Öffentliche Kennung (null, solange Migration 0041 fehlt). Der Token selbst NIE. */
   id: string | null;

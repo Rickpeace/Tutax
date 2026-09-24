@@ -54,6 +54,10 @@ export function TeamManager({
   used: number;
 }) {
   const full = limit !== null && used >= limit;
+  // Mehr Personen als der Tarif erlaubt (nach einem Herabstufen): das bestehende Team arbeitet
+  // weiter, nur Neue kommen nicht dazu — das muss man lesen können (Audit 24.09.: „4 von 1 Platz“
+  // plus „Im kostenlosen Tarif arbeiten Sie allein“ unter 3 aktiven Mitgliedern).
+  const over = limit !== null && members.length > limit;
   const ownerCount = members.filter((m) => m.role === "owner").length;
   const [pending, start] = useTransition();
   const [result, setResult] = useState<InviteResult | null>(null);
@@ -91,16 +95,18 @@ export function TeamManager({
           aside={
             limit !== null ? (
               <span className="rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-black text-ink-2" data-testid="team-seats">
-                {used} von {limit} {limit === 1 ? "Platz" : "Plätzen"}
+                {over ? `Tarif: ${limit} ${limit === 1 ? "Platz" : "Plätze"}` : `${used} von ${limit} ${limit === 1 ? "Platz" : "Plätzen"}`}
               </span>
             ) : undefined
           }
         >
           {full && (
             <p className="rounded-xl bg-line-2 px-3 py-2 text-sm font-bold text-ink-2">
-              {limit === 1
-                ? "Im kostenlosen Tarif arbeiten Sie allein."
-                : `Ihr Tarif erlaubt ${limit} Personen im Team (inkl. offener Einladungen).`}{" "}
+              {over
+                ? `Ihr bestehendes Team arbeitet weiter. Neue Personen können Sie erst wieder einladen, wenn Ihr Tarif mehr Plätze hat (aktuell ${limit}).`
+                : limit === 1
+                  ? "Im kostenlosen Tarif arbeiten Sie allein."
+                  : `Ihr Tarif erlaubt ${limit} Personen im Team (inkl. offener Einladungen).`}{" "}
               <Link href="/app/settings/tarif" className="font-extrabold text-primary underline underline-offset-2">
                 Tarif ansehen
               </Link>
@@ -293,7 +299,8 @@ export function TeamManager({
                       <Copy className="size-4" /> Link
                     </Button>
                   )}
-                  {isOwner && (
+                  {/* Über der Tarif-Grenze kann niemand mehr beitreten — dann kein „Neu senden“. */}
+                  {isOwner && !over && (
                     <Button
                       variant="outline"
                       size="sm"

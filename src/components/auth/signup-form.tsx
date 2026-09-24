@@ -28,6 +28,9 @@ export function SignupForm() {
             name="account_name"
             type="text"
             placeholder="Muster GmbH"
+            // Nach einem Fehler Eingaben behalten (React setzt Formulare sonst zurück).
+            defaultValue={state.values?.account_name ?? ""}
+            key={`n-${state.values?.account_name ?? ""}`}
           />
         </div>
         <div className="space-y-1.5">
@@ -39,6 +42,8 @@ export function SignupForm() {
             autoComplete="email"
             required
             placeholder="name@firma.de"
+            defaultValue={state.values?.email ?? ""}
+            key={`e-${state.values?.email ?? ""}`}
           />
         </div>
         <div className="space-y-1.5">

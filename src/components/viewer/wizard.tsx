@@ -251,10 +251,11 @@ export function Wizard({
     if (accountSlug && tutorialSlug) void recordFeedback(accountSlug, tutorialSlug, helpful);
   };
 
-  const sendStuck = (stepId: string, stepTitle: string | null) => {
+  // Schritt-ID statt (ggf. übersetztem) Titel senden: der Server schlägt den deutschen
+  // Titel nach — sonst landeten EN/PL/TR-Titel in den Insights (Audit 24.09.).
+  const sendStuck = (stepId: string) => {
     setStuckSent((s) => new Set(s).add(stepId)); // optimistisch, 1×/Schritt
-    if (accountSlug && tutorialSlug)
-      void recordStepFeedback(accountSlug, tutorialSlug, stepTitle ?? "");
+    if (accountSlug && tutorialSlug) void recordStepFeedback(accountSlug, tutorialSlug, stepId);
   };
 
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -302,8 +303,17 @@ export function Wizard({
     const el = audioRef.current;
     if (!el) return;
     gestureRef.current = true; // erster Ton = Geste vorhanden
-    if (el.paused) tryPlay();
-    else el.pause();
+    if (el.paused) {
+      // ▶ bei „Ton aus“ = bewusster Wunsch nach Ton → Stummschaltung aufheben, damit der
+      // Schalter nicht „aus“ zeigt, während vorgelesen wird (Audit 24.09.).
+      if (muted) {
+        setMuted(false);
+        try {
+          localStorage.setItem(MUTE_KEY, "0");
+        } catch {}
+      }
+      tryPlay();
+    } else el.pause();
   };
 
   // Ton-Schalter umlegen. Stumm ⇒ laufende Wiedergabe stoppen + Auto-Modus aus.
@@ -493,8 +503,11 @@ export function Wizard({
   return (
     <div
       data-tx="step"
-      className={`w-full overflow-hidden border-2 bg-white ${linearPath ? "lg:flex" : ""}`}
+      className={`w-full overflow-hidden border-2 ${linearPath ? "lg:flex" : ""}`}
       style={{
+        // Papier des Kunden-Designs statt fest Weiß (dunkle Designs, Audit 24.09.).
+        background: "var(--brand-paper, #fff)",
+        color: "var(--brand-ink)",
         borderRadius: "var(--brand-radius, 16px)",
         borderColor:
           "var(--brand-card-border, color-mix(in srgb, var(--brand-ink) 9%, transparent))",
@@ -546,7 +559,7 @@ export function Wizard({
                               color: "var(--brand-accent-fg, #fff)",
                             }
                           : {
-                              background: "#fff",
+                              background: "var(--brand-paper, #fff)",
                               border:
                                 "2px solid color-mix(in srgb, var(--brand-ink) 12%, transparent)",
                               color: "var(--brand-ink)",
@@ -703,7 +716,7 @@ export function Wizard({
                     data-tx="tts"
                     onClick={toggleAudio}
                     aria-label={playing ? L.pauseAloud : L.readAloud}
-                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
                     style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
                   >
                     {playing ? <Pause className="size-4" /> : <Volume2 className="size-4" />}
@@ -737,8 +750,9 @@ export function Wizard({
                     key={b.id}
                     data-tx="btn"
                     onClick={() => go(b.target_step_id)}
-                    className="w-full break-words border-2 bg-white px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
+                    className="w-full break-words border-2 px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
                     style={{
+                      background: "var(--brand-paper, #fff)",
                       borderColor: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
                       color: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
                       borderRadius: "var(--brand-btn-radius, 999px)",
@@ -760,8 +774,9 @@ export function Wizard({
             {history.length > 0 && (
               <button
                 onClick={back}
-                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border-2 bg-white py-2.5 text-sm font-extrabold text-muted-foreground transition-transform active:translate-y-px"
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border-2 py-2.5 text-sm font-extrabold text-muted-foreground transition-transform active:translate-y-px"
                 style={{
+                  background: "var(--brand-paper, #fff)",
                   borderColor: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
                 }}
               >
@@ -770,8 +785,8 @@ export function Wizard({
             )}
 
             {/* Inline-Feedback pro Schritt (REVIEW H): dezenter Ausweg, wenn der
-                Nutzer nicht weiterkommt. Landet als negatives Feedback-Event mit
-                Schritt-Titel -> taucht als Wissenslücke in der Insights-Karte auf.
+                Nutzer nicht weiterkommt. Landet als negatives Feedback-Event mit dem
+                deutschen Schritt-Titel („[Schritt] …“, Server schlägt ihn per ID nach).
                 Intern ausgeblendet: schriebe public-Events (falsche Semantik). */}
             {!internalMode && accountSlug && tutorialSlug && (
               <div className="mt-3 text-center" data-tx="stuck">
@@ -782,7 +797,7 @@ export function Wizard({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => sendStuck(step.id, step.title)}
+                    onClick={() => sendStuck(step.id)}
                     className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-[var(--brand-ink)]"
                   >
                     {L.stuck}
@@ -851,14 +866,16 @@ export function Wizard({
                     <button
                       onClick={() => sendFeedback(true)}
                       aria-label={L.yes}
-                      className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+                      className="flex items-center gap-1.5 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--brand-accent)]"
+                      style={{ background: "var(--brand-paper, #fff)", color: "var(--brand-ink)" }}
                     >
                       <ThumbsUp className="size-4" /> {L.yes}
                     </button>
                     <button
                       onClick={() => sendFeedback(false)}
                       aria-label={L.no}
-                      className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-[var(--brand-accent)]"
+                      className="flex items-center gap-1.5 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--brand-accent)]"
+                      style={{ background: "var(--brand-paper, #fff)", color: "var(--brand-ink)" }}
                     >
                       <ThumbsDown className="size-4" /> {L.no}
                     </button>
@@ -1116,7 +1133,9 @@ function ToolButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex size-10 items-center justify-center rounded-full bg-white/90 text-ink shadow-lg transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+      // Feste Steply-Ink statt text-ink: auf /h überschreibt ein dunkles Kunden-Design --ink
+      // mit einer HELLEN Farbe — auf dem weißen Knopf wäre das Symbol dann unsichtbar.
+      className="flex size-10 items-center justify-center rounded-full bg-white/90 text-[#33291f] shadow-lg transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
     >
       {children}
     </button>
@@ -1130,7 +1149,7 @@ function StepPlaceholder({ title, label }: { title: string | null; label: string
       className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 border border-dashed text-center"
       style={{
         borderColor: "color-mix(in srgb, var(--brand-accent) 35%, transparent)",
-        background: "color-mix(in srgb, var(--brand-accent) 7%, white)",
+        background: "color-mix(in srgb, var(--brand-accent) 7%, var(--brand-paper, white))",
         borderRadius: "var(--brand-radius, 12px)",
       }}
     >

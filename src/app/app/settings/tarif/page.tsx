@@ -93,7 +93,9 @@ export default async function TarifPage({
                     Bald buchbar
                   </Button>
                 ) : (
-                  <span className="text-sm font-bold text-muted-foreground">In Ihrem Tarif enthalten</span>
+                  // Kleinere Tarife: neutral — „In Ihrem Tarif enthalten“ stand sonst unter
+                  // Einschränkungen wie „Bis zu 5 Anleitungen“ (Audit 24.09.).
+                  <span className="text-sm font-bold text-muted-foreground">Kleinerer Tarif</span>
                 )}
               </div>
             </div>
@@ -101,11 +103,12 @@ export default async function TarifPage({
         })}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Die Online-Buchung folgt in Kürze. Bis dahin schalten wir Pro oder Business gern von Hand
-        frei – antworten Sie einfach auf Ihre Willkommens-Mail oder schreiben Sie dem
-        Steply-Support.
-      </p>
+      {currentKey !== "business" && (
+        <p className="text-xs text-muted-foreground">
+          Die Online-Buchung folgt in Kürze. Bis dahin schalten wir Pro oder Business gern von Hand
+          frei.
+        </p>
+      )}
     </div>
   );
 }

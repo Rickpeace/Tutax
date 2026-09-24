@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isPro } from "@/lib/plan";
 import { AlertTriangle, ShieldCheck, PencilLine, ExternalLink } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
@@ -95,7 +96,7 @@ export default async function AlertsPage() {
                     <p className="mt-1.5 text-sm font-semibold text-ink-2">{a.summary}</p>
 
                     {a.details?.issues?.length ? (
-                      <DriftIssues alertId={a.id} issues={a.details.issues} />
+                      <DriftIssues alertId={a.id} issues={a.details.issues} canApply={isPro(account)} />
                     ) : a.details?.affected_steps?.length ? (
                       <ul className="mt-2 flex flex-wrap gap-1.5">
                         {a.details.affected_steps.map((s, i) => (

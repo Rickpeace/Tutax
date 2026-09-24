@@ -130,7 +130,10 @@ type Key =
   | "escDefaultMessage"
   | "escBook"
   | "escBookWith"
-  | "escRightPerson";
+  | "escRightPerson"
+  // Audit 24.09. — Meta-Beschreibungen (Suchmaschinen/Link-Vorschau) in der Seitensprache.
+  | "metaHubDescription"
+  | "metaTutDescription";
 
 /** {n}/{total} werden im Wizard eingesetzt (Ersatz für „Schritt X von Y“). */
 const DICT: Record<HubLang, Record<Key, string>> = {
@@ -220,6 +223,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     escBook: "Termin buchen",
     escBookWith: "Termin buchen · {name}",
     escRightPerson: "{person} ist hierfür die richtige Ansprechperson.",
+    metaHubDescription: "Hilfe & Anleitungen von {name} – Schritt für Schritt erklärt.",
+    metaTutDescription: "Schritt-für-Schritt-Anleitung von {name}: {title}.",
   },
   en: {
     next: "Next",
@@ -307,6 +312,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     escBook: "Book an appointment",
     escBookWith: "Book an appointment · {name}",
     escRightPerson: "{person} is the right contact for this.",
+    metaHubDescription: "Help & guides from {name} – explained step by step.",
+    metaTutDescription: "Step-by-step guide from {name}: {title}.",
   },
   pl: {
     next: "Dalej",
@@ -394,6 +401,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     escBook: "Umów termin",
     escBookWith: "Umów termin · {name}",
     escRightPerson: "{person} to właściwa osoba do kontaktu w tej sprawie.",
+    metaHubDescription: "Pomoc i instrukcje od {name} – wyjaśnione krok po kroku.",
+    metaTutDescription: "Instrukcja krok po kroku od {name}: {title}.",
   },
   tr: {
     next: "İleri",
@@ -481,6 +490,8 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     escBook: "Randevu al",
     escBookWith: "Randevu al · {name}",
     escRightPerson: "Bu konuda doğru kişi: {person}.",
+    metaHubDescription: "{name} yardım ve kılavuzları – adım adım açıklandı.",
+    metaTutDescription: "{name} adım adım kılavuzu: {title}.",
   },
 };
 

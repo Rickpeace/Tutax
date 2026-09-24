@@ -3,13 +3,14 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Layers, ImagePlus, Loader2, Trash2, Palette, Eye } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, Palette, Eye, TriangleAlert } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { Button } from "@/components/ui/button";
 import { saveBranding } from "@/app/app/settings/branding/actions";
 import { SaveBar } from "@/components/app/save-bar";
 import { FieldLabel, SettingsCard } from "@/components/app/settings-ui";
-import type { BrandColors } from "@/lib/theme";
+import { weakTextContrast, type BrandColors } from "@/lib/theme";
+import { BrandPreview } from "@/components/app/brand-preview";
 import { errorText } from "@/lib/action-error";
 
 type ColorKey = keyof BrandColors;
@@ -62,6 +63,8 @@ export function BrandingForm({
     [colors, saved],
   );
   const dirty = changed.length > 0;
+  // Dezenter Hinweis, wenn Text auf Hintergrund zu schwach ist (WCAG < 4,5 : 1).
+  const weak = weakTextContrast(colors);
 
   async function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -196,6 +199,17 @@ export function BrandingForm({
               </label>
             ))}
           </div>
+          {weak != null && (
+            <p
+              role="status"
+              data-testid="brand-contrast-hint"
+              className="flex items-start gap-1.5 text-xs font-bold text-ink-2"
+            >
+              <TriangleAlert className="mt-px size-3.5 shrink-0 text-[#c07d16]" />
+              Text und Hintergrund heben sich kaum voneinander ab (Kontrast {weak.toFixed(1).replace(".", ",")} : 1,
+              empfohlen mindestens 4,5 : 1) – Ihre Kunden können die Hilfe-Seite dann schlecht lesen.
+            </p>
+          )}
         </div>
       </SettingsCard>
 
@@ -204,54 +218,14 @@ export function BrandingForm({
         icon={Eye}
         description="So sieht „Steply-Standard“ mit diesen Farben für Ihre Kunden aus."
       >
-        <div
-          data-testid="brand-live-preview"
-          className="rounded-xl border-2 border-line p-4"
-          style={{ background: colors.background }}
-        >
-          <div className="flex items-center gap-2.5">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt=""
-                className="size-9 rounded-lg border border-black/5 bg-white object-contain p-0.5"
-              />
-            ) : (
-              <div
-                className="flex size-9 items-center justify-center rounded-lg font-black text-white"
-                style={{ background: colors.primary }}
-              >
-                {(name.trim()[0] ?? "?").toUpperCase()}
-              </div>
-            )}
-            <div>
-              <div className="font-black" style={{ color: colors.text }}>
-                {name || "Organisation"}
-              </div>
-              <div className="text-xs" style={{ color: colors.text, opacity: 0.6 }}>
-                Hilfe &amp; Anleitungen
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-black/10 bg-white p-3">
-            <span
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg"
-              style={{ background: colors.surface }}
-            >
-              <Layers className="size-4" style={{ color: colors.primary }} />
-            </span>
-            <span className="text-sm font-bold" style={{ color: colors.text }}>
-              SmartLogin einrichten
-            </span>
-          </div>
-          <div
-            className="mt-3 inline-flex rounded-[12px] px-3 py-1.5 text-xs font-extrabold text-white"
-            style={{ background: colors.primary }}
-          >
-            Weiter
-          </div>
-        </div>
+        {/* Dieselbe Komponente + Farb-Ableitung wie die Hilfe-Seite (lib/theme.ts brandStyle):
+            dunkle Designs, helle Akzente und breite Logos sehen hier aus wie live (Audit 24.09.). */}
+        <BrandPreview
+          tokens={{ colors }}
+          logoUrl={logoUrl}
+          accountName={name || "Organisation"}
+          testId="brand-live-preview"
+        />
       </SettingsCard>
 
       <SaveBar

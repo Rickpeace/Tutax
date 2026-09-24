@@ -77,6 +77,9 @@ const els = {
   connectVideo: document.getElementById("connectVideo"),
   start: document.getElementById("start"),
   interruptedHint: document.getElementById("interruptedHint"),
+  interruptedText: document.getElementById("interruptedText"),
+  quotaHint: document.getElementById("quotaHint"),
+  targetLive: document.getElementById("targetLive"),
   recStart: document.getElementById("recStart"),
   siteRow: document.getElementById("siteRow"),
   siteRowCount: document.getElementById("siteRowCount"),
@@ -242,6 +245,7 @@ let started = false; // Doppelstart-Schutz (Video)
 let panelWindowId = null; // Fenster-ID, an dem die Seitenleiste haengt
 let micReady = false; // Mikro-Preflight bestanden?
 let interruptedDiscarded = false; // beim Oeffnen eine klemmende Aufnahme verworfen?
+let interruptedSteps = 0; // Audit 24.09.: so viele Schritte gingen dabei verloren (0 = unbekannt)
 let recHelpReturn = ""; // Bildschirm, von dem aus „Hilfe bei Aufnahme-Problemen" geöffnet wurde
 
 // Konfiguration (Token + App-URL) aus chrome.storage.local.
@@ -317,8 +321,18 @@ function renderTargetBanner() {
       broken: !!(pendingTarget && !pendingTarget.target),
     };
   if (state.show) {
-    if (els.targetPrefix) els.targetPrefix.textContent = "Wird eingefügt in: ";
+    // Audit 24.09.: Anleitung beim Namen nennen und bei veröffentlichten Zielen VOR dem Start
+    // sagen, dass die neuen Schritte sofort live sind (der Server hängt sie dort direkt an).
+    const info = targetTutorialInfo();
+    if (els.targetPrefix) {
+      els.targetPrefix.textContent = info && info.title ? "Wird eingefügt in „" + info.title + "“, " : "Wird eingefügt in: ";
+    }
     els.targetLabel.textContent = state.label;
+    if (els.targetLive) {
+      const live = !!(info && info.status === "published");
+      els.targetLive.hidden = !live;
+      els.targetLive.textContent = live ? targetLiveText(info) : "";
+    }
     if (els.targetClear) els.targetClear.hidden = false;
     targetBannerOn = true;
   } else {
@@ -335,6 +349,27 @@ function renderTargetBanner() {
     targetBannerOn = false;
   }
   applyTargetBanner();
+}
+
+// Ziel-Anleitung des Aufnahme-Ankers in der (gecachten) Konto-Liste: { title, status,
+// visibility } oder null (Liste noch nicht da / Anleitung nicht unter den letzten 200).
+function targetTutorialInfo() {
+  const id = pendingTarget && pendingTarget.target && pendingTarget.target.tutorialId;
+  if (!id || !Array.isArray(siteTutorials)) return null;
+  const t = siteTutorials.find((x) => x && x.id === id);
+  if (!t) return null;
+  return {
+    title: typeof t.title === "string" ? t.title.trim().slice(0, 80) : "",
+    status: t.status || "draft",
+    visibility: t.visibility || "public",
+  };
+}
+
+// Interne (Schulungs-)Anleitungen erscheinen nicht auf der Hilfe-Seite, sondern fürs Team.
+function targetLiveText(info) {
+  return info && info.visibility === "internal"
+    ? "Die neuen Schritte sind sofort für Ihr Team sichtbar."
+    : "Die neuen Schritte sind sofort auf Ihrer Hilfe-Seite sichtbar.";
 }
 
 // Sichtbarkeit des Ziel-Hinweises je Bildschirm (Start + Aufnahme/Prüfen).
@@ -419,6 +454,9 @@ function tokenFp(token) {
 // Dedupe: parallele Aufrufe teilen sich EINE Anfrage (vorher kam /me beim Öffnen doppelt).
 // Darf das verbundene Konto „Video mit Ton“ (ab Pro)? null = unbekannt.
 let accountVideoAllowed = null;
+// Audit 24.09.: wie viele neue Anleitungen darf das Konto noch anlegen? null = unbegrenzt bzw.
+// unbekannt (ältere Server), 0 = Gratis-Tarif voll → Hinweis auf dem Start-Bildschirm.
+let accountTutorialsLeft = null;
 
 function fetchAccountName() {
   if (!cfg.token) {
@@ -444,6 +482,13 @@ function fetchAccountName() {
         accountName = String(body.account).slice(0, 80);
         // Ältere Server ohne Feld: unbekannt (null) → wie bisher erst beim Hochladen prüfen.
         accountVideoAllowed = typeof body.videoAllowed === "boolean" ? body.videoAllowed : null;
+        accountTutorialsLeft = typeof body.tutorialsLeft === "number" ? body.tutorialsLeft : null;
+        renderQuotaHint();
+        // Kam die Antwort erst, als „Video mit Ton“ schon offen war: Sperre jetzt anwenden.
+        if (currentSection === "videoSetup" && !started) {
+          applyVideoPlanGate();
+          if (accountVideoAllowed === false) showVideoPlanNotice();
+        }
         try {
           chrome.storage.local.set({ steplyAccountCache: { fp: tokenFp(token), name: accountName } });
         } catch (err) {
@@ -469,6 +514,13 @@ async function loadAccountCache() {
   } catch (err) {
     /* egal */
   }
+}
+
+// Gratis am Limit (Audit 24.09.): schon VOR der Aufnahme sagen, dass keine neue Anleitung mehr
+// entstehen kann — vorher kam die Tarif-Grenze erst nach der ganzen Aufnahme beim Hochladen.
+function renderQuotaHint() {
+  if (!els.quotaHint) return;
+  els.quotaHint.hidden = !(hasToken && accountTutorialsLeft === 0);
 }
 
 function updateConnectAccount() {
@@ -574,14 +626,51 @@ function busyNotice() {
 
 // „Trennen": Token entfernen (nach Rückfrage). Der storage-Listener zeigt danach den
 // „Nicht verbunden"-Bildschirm.
+// Audit 24.09.: „Trennen“ trennt jetzt AUCH in Steply — der Token wird dort gelöscht
+// (POST /api/recorder/disconnect, best effort: offline trennt es trotzdem lokal) und
+// verschwindet aus „Ihre verbundenen Browser“. Zusätzlich weg: lokal gemerkte Automations-Werte
+// (autoValues — können Kundendaten sein) und alle geplanten Läufe (steply-run:*-Wecker).
 async function disconnect() {
   const ok = confirm("Die Verbindung zu Steply in diesem Browser trennen?");
   if (!ok) return;
+  const token = cfg.token;
+  const base = appBase();
+  if (token) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      await fetch(base + "/api/recorder/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch (err) {
+      /* offline/alter Server: lokal trotzdem trennen */
+    }
+  }
   try {
-    await chrome.storage.local.remove(["badgeCache", "steplyAccountCache"]);
+    await chrome.storage.local.remove(["badgeCache", "steplyAccountCache", "autoValues"]);
+    await clearScheduledRunAlarms();
     await chrome.storage.local.set({ steplyToken: "" });
   } catch (err) {
     setStatus("Die Verbindung konnte nicht getrennt werden.", "error");
+  }
+}
+
+// Alle Zeitplan-Wecker (steply-run:<id>, s. background.js syncSchedules) entfernen.
+async function clearScheduledRunAlarms() {
+  if (!chrome.alarms || !chrome.alarms.getAll) return;
+  try {
+    const all = await chrome.alarms.getAll();
+    for (const a of all || []) {
+      if (a && typeof a.name === "string" && a.name.indexOf("steply-run:") === 0) {
+        await chrome.alarms.clear(a.name).catch(() => {});
+      }
+    }
+  } catch (err) {
+    /* egal — background.js räumt ohne Token beim nächsten Abgleich ohnehin auf */
   }
 }
 
@@ -736,6 +825,16 @@ function stopTimer() {
 
 function updateInterruptedHint() {
   els.interruptedHint.hidden = !interruptedDiscarded;
+  // Audit 24.09.: Zahl der verlorenen Schritte nennen (sonst der allgemeine Satz).
+  if (els.interruptedText) {
+    const n = interruptedSteps;
+    els.interruptedText.textContent =
+      n > 0
+        ? "Eine unterbrochene Aufnahme (" +
+          (n === 1 ? "1 Schritt" : n + " Schritte") +
+          ") wurde verworfen – die Seitenleiste wurde während der Aufnahme geschlossen."
+        : "Eine unterbrochene Aufnahme wurde verworfen.";
+  }
 }
 
 // ---- Verbinden (Bildschirm 9) ----
@@ -770,9 +869,40 @@ function setManualOpen(open) {
   els.manualToggle.textContent = open ? "Code-Eingabe schließen" : "Code manuell eingeben";
 }
 
+// App-Adresse aus dem Feld „Steply-Adresse“ normalisieren (Audit 24.09.): ohne „https://“ wurde
+// sie bisher ungeprüft gespeichert — der relative fetch lief ins Leere (404) und galt als „nicht
+// prüfbar“. Jetzt: Schema ergänzen (https://, für localhost/127.0.0.1 http://), nur http(s) mit
+// Host zulassen, abschließende Schrägstriche weg. → { url } ("" = Standard-Adresse) | { error }.
+function normalizeAppUrl(raw) {
+  let v = String(raw || "").trim();
+  if (!v) return { url: "" };
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+    const local = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$)/i.test(v);
+    v = (local ? "http://" : "https://") + v.replace(/^\/+/, "");
+  }
+  let u;
+  try {
+    u = new URL(v);
+  } catch (err) {
+    return { error: "Bitte geben Sie eine gültige Steply-Adresse ein (z. B. https://app.steply.de)." };
+  }
+  if ((u.protocol !== "https:" && u.protocol !== "http:") || !u.hostname || !/[.:]|^localhost$/i.test(u.host)) {
+    return { error: "Bitte geben Sie eine gültige Steply-Adresse ein (z. B. https://app.steply.de)." };
+  }
+  const path = u.pathname.replace(/\/+$/, "");
+  return { url: u.origin + path };
+}
+
 async function saveCfg() {
   const token = (els.token.value || "").trim();
-  const appUrl = (els.appUrl.value || "").trim().replace(/\/+$/, "");
+  const norm = normalizeAppUrl(els.appUrl.value);
+  if (norm.error) {
+    els.cfgStatus.textContent = norm.error;
+    els.cfgStatus.className = "status status-error";
+    return;
+  }
+  const appUrl = norm.url;
+  if (appUrl && els.appUrl.value.trim() !== appUrl) els.appUrl.value = appUrl; // ergänzte Form zeigen
   if (!token) {
     els.cfgStatus.textContent = "Bitte fügen Sie den Verbindungs-Code aus Steply ein.";
     els.cfgStatus.className = "status status-error";
@@ -780,7 +910,9 @@ async function saveCfg() {
   }
   // Code VOR dem Speichern prüfen (wie das Ein-Klick-Verbinden): ein Tippfehler oder ein in
   // Steply getrennter Code fiel sonst erst nach einer ganzen Aufnahme beim Hochladen auf.
-  let verified = null; // true = gültig, false = abgelehnt, null = nicht prüfbar (Netz)
+  // true = gültig, false = abgelehnt, "address" = unter der Adresse antwortet keine Steply-App,
+  // null = nicht prüfbar (nur bei echtem Netzfehler/Zeitüberschreitung oder Serverfehler 5xx).
+  let verified = null;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
@@ -789,10 +921,19 @@ async function saveCfg() {
       signal: controller.signal,
     });
     clearTimeout(timer);
-    if (res.ok) verified = true;
-    else if (res.status === 401 || res.status === 403) verified = false;
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      verified = body && typeof body.account === "string" ? true : "address";
+    } else if (res.status === 401 || res.status === 403) verified = false;
+    else if (res.status < 500) verified = "address";
   } catch (err) {
     verified = null;
+  }
+  if (verified === "address") {
+    els.cfgStatus.textContent =
+      "Unter dieser Adresse antwortet keine Steply-App. Bitte prüfen Sie die Steply-Adresse (unter „Erweitert“) – oder lassen Sie das Feld leer.";
+    els.cfgStatus.className = "status status-error";
+    return;
   }
   if (verified === false) {
     els.cfgStatus.textContent =
@@ -848,6 +989,7 @@ function showStart() {
   renderTargetBanner();
   show("start");
   updateInterruptedHint();
+  renderQuotaHint();
   // Kontoname (nach-)laden, falls verbunden aber noch nicht ermittelt (dedupliziert).
   if (!accountName) fetchAccountName();
   // Kategorien (Welle 31d) schon jetzt warm laden (kurz gecacht), damit die Auswahl beim
@@ -868,13 +1010,35 @@ function showStart() {
 // ============================================================================
 async function reconcile() {
   try {
-    const res = await chrome.storage.local.get("rec");
+    const res = await chrome.storage.local.get(["rec", "guideLive"]);
     if (res && res.rec) {
       await chrome.storage.local.remove("rec");
       interruptedDiscarded = true;
     }
+    // Audit 24.09.: Seitenleiste mitten in einer Aufnahme mit Schritten geschlossen (s.
+    // guideSyncLiveMarker) → Hinweis zeigen, samt Zahl der verlorenen Schritte.
+    const live = res && res.guideLive;
+    if (live && typeof live === "object" && !(await guideLiveElsewhere(live))) {
+      await chrome.storage.local.remove("guideLive");
+      interruptedDiscarded = true;
+      interruptedSteps = typeof live.steps === "number" && live.steps > 0 ? Math.floor(live.steps) : 0;
+    }
   } catch (err) {
     /* storage nicht verfuegbar -> es gibt eh nichts zu verwerfen */
+  }
+}
+
+// Gehört der Merker einer Aufnahme, die in einem ANDEREN Fenster noch läuft (dort ist die
+// Seitenleiste offen)? Dann nicht anfassen. Ohne runtime.getContexts (älteres Chrome): nein.
+async function guideLiveElsewhere(live) {
+  const w = live && typeof live.windowId === "number" ? live.windowId : null;
+  if (w == null || w === panelWindowId) return false;
+  try {
+    if (!chrome.runtime.getContexts) return false;
+    const ctx = await chrome.runtime.getContexts({ contextTypes: ["SIDE_PANEL"], windowIds: [w] });
+    return Array.isArray(ctx) && ctx.length > 0;
+  } catch (err) {
+    return false;
   }
 }
 
@@ -950,8 +1114,27 @@ function setMicStatus(kind, text) {
 }
 
 function updateBeginEnabled() {
+  // Gratis (Audit 24.09.): „Video mit Ton“ ist ab Pro — der Start bleibt dauerhaft aus, auch
+  // mit Haken „Ohne Ton aufnehmen“ (vorher wurde er dadurch aktiv → Sackgasse beim Hochladen).
+  if (accountVideoAllowed === false) {
+    els.begin.disabled = true;
+    return;
+  }
   // Start erst aktiv, wenn Mikro ok ODER Nutzer bewusst "ohne Ton" waehlt.
   els.begin.disabled = !(micReady || els.noAudio.checked);
+}
+
+// Tarif-Sperre im Video-Bildschirm (Audit 24.09.): Mikrofon-Zeile, „Ohne Ton“ und der Start-
+// Knopf verschwinden — sonst stand „Mikrofon wird geprüft …“ ewig da und der Knopf lockte.
+function applyVideoPlanGate() {
+  const blocked = accountVideoAllowed === false;
+  els.micStatus.hidden = blocked;
+  if (blocked) els.micRetry.hidden = true;
+  const noAudioRow = els.noAudio.closest ? els.noAudio.closest("label") : null;
+  if (noAudioRow) noAudioRow.hidden = blocked;
+  if (els.clicksTabInfo) els.clicksTabInfo.hidden = blocked;
+  els.begin.hidden = blocked;
+  updateBeginEnabled();
 }
 
 async function micPreflight() {
@@ -984,15 +1167,20 @@ function goVideoSetup() {
   els.interruptedHint.hidden = true;
   show("videoSetup");
   setStatus("");
+  applyVideoPlanGate();
   if (accountVideoAllowed === false) {
     // Gratis: nicht erst aufnehmen lassen und dann am Tarif scheitern.
-    setStatus(
-      "„Video mit Ton“ ist ab Pro enthalten – die KI baut daraus die Schritte. Im kostenlosen Tarif nutzen Sie die Sofort-Anleitung (Reiter „Aufnehmen“).",
-      "error",
-    );
+    showVideoPlanNotice();
     return;
   }
   micPreflight();
+}
+
+function showVideoPlanNotice() {
+  setStatus(
+    "„Video mit Ton“ ist ab Pro enthalten – die KI baut daraus die Schritte. Im kostenlosen Tarif nutzen Sie die Sofort-Anleitung (Reiter „Aufnehmen“).",
+    "error",
+  );
 }
 
 async function begin() {
@@ -1458,25 +1646,47 @@ function guideRemoveDownloadWatch() {
   guidePendingDownloads = [];
 }
 
-// Wartende Downloads dem jüngsten passenden Klick-Schritt (ohne file_meta) zuordnen.
+// Wartende Downloads dem passenden Klick-Schritt (ohne file_meta) zuordnen.
+// Audit 24.09.: Der Download startet meist, BEVOR der Screenshot seines Klicks fertig ist — der
+// Klick steckt dann noch in der Warteschlange, und die Zuordnung griff den VORIGEN Klick (≤ 3 s).
+// Darum erst zuordnen, wenn Warteschlange UND laufender Screenshot leer sind (drainGuideQueue
+// ruft uns danach erneut auf), und dann den Klick mit dem kleinsten Abstand VOR dl.at nehmen;
+// nur wenn es keinen gibt, einen Klick knapp danach (Uhr-Toleranz).
 function guideMatchDownloads() {
   if (!guidePendingDownloads.length) return;
+  if (guideQueue.length || guideCapturing) return;
   let changed = false;
   for (const dl of guidePendingDownloads) {
     if (dl.consumed) continue;
-    for (let i = guideSteps.length - 1; i >= 0; i--) {
-      const s = guideSteps[i];
-      if (s.fileMeta || s.action !== "click") continue;
-      const gap = dl.at - (s.ts || 0);
-      if (gap >= -GUIDE_DL_TOLERANCE && gap <= GUIDE_DL_MATCH_MS) {
-        s.fileMeta = { role: "download", filename: dl.filename, mime: dl.mime, size: dl.size };
-        dl.consumed = true;
-        changed = true;
-        break;
-      }
+    const s = guidePickDownloadStep(guideSteps, dl.at);
+    if (s) {
+      s.fileMeta = { role: "download", filename: dl.filename, mime: dl.mime, size: dl.size };
+      dl.consumed = true;
+      changed = true;
     }
   }
   if (changed) renderGuideSteps();
+}
+
+// Rein (testbar): Klick-Schritt ohne file_meta mit dem kleinsten Abstand VOR `at` (≤ 3 s);
+// sonst der nächste Klick höchstens GUIDE_DL_TOLERANCE danach. null = keiner passt.
+function guidePickDownloadStep(steps, at) {
+  let before = null;
+  let beforeGap = Infinity;
+  let after = null;
+  let afterGap = Infinity;
+  for (const s of steps) {
+    if (!s || s.fileMeta || s.action !== "click") continue;
+    const gap = at - (s.ts || 0);
+    if (gap >= 0 && gap <= GUIDE_DL_MATCH_MS && gap < beforeGap) {
+      before = s;
+      beforeGap = gap;
+    } else if (gap < 0 && gap >= -GUIDE_DL_TOLERANCE && -gap < afterGap) {
+      after = s;
+      afterGap = -gap;
+    }
+  }
+  return before || after;
 }
 
 function guideBusyHint() {
@@ -1732,6 +1942,7 @@ async function guideDiscardRecording() {
 // EINE Render-Funktion für die Sektion guideLive: Steuerleiste (Aufnahme), Prüfen-Kopf,
 // Titel/Kategorie, Hinweise und die feste Fußleiste (nur beim Prüfen).
 function renderGuidePhase() {
+  guideSyncLiveMarker(false);
   const p = guidePhase;
   const n = guideSteps.length;
   const busy = guideFinishing;
@@ -1987,6 +2198,10 @@ async function captureImage(pending) {
   let dataUrl = null;
   let lastErr = null;
   let quotaRetries = 0;
+  // Audit 24.09. (Link mit neuem Tab): Welcher Tab ist JETZT sichtbar? Parallel zum Screenshot
+  // gefragt (kostet keine Zeit) und danach noch einmal — so erkennen wir, ob das Bild den Tab
+  // des Klicks zeigt oder schon einen per target=_blank/window.open geöffneten neuen Tab.
+  const shotTabBefore = guideActiveTabId(targetWindowId);
   for (let attempt = 0; attempt < 2 && !dataUrl; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 350));
     await guideWaitCaptureSlot();
@@ -2029,14 +2244,64 @@ async function captureImage(pending) {
   // landet. Multi-Tab: gezielt an sender.tab.id des Schritts (nicht an einen fixen Tab).
   pulseTab(pending.tabId);
 
+  const before = await shotTabBefore;
+  const after = await guideActiveTabId(targetWindowId);
+
   try {
     const img = await pngDataUrlToWebp(dataUrl);
-    if (img) guideLastImage = { blob: img.blob, width: img.width, height: img.height, windowId: targetWindowId };
+    if (img) {
+      guideLastImage = { blob: img.blob, width: img.width, height: img.height, windowId: targetWindowId };
+      // Sichtbarer Tab beim Screenshot: vorher gefragt (maßgeblich); unbekannt → der danach.
+      // Wechselte er genau WÄHREND des Screenshots (vorher Klick-Tab, danach ein anderer), ist
+      // unklar, was das Bild zeigt → shotUnsure (Schritt wird als „ggf. ungenau“ markiert).
+      img.shotTabId = before != null ? before : after;
+      img.shotUnsure = before != null && after != null && before !== after;
+      if (img.shotTabId != null && !img.shotUnsure) guideRememberTabImage(img.shotTabId, img);
+    }
     return img;
   } catch (err) {
     console.warn("Steply: WebP-Konvertierung fehlgeschlagen:", err && err.message);
     return null;
   }
+}
+
+// ── Bild je Tab (Audit 24.09.) ──────────────────────────────────────────────────────────────
+// captureVisibleTab fotografiert den SICHTBAREN Tab des Fensters. Öffnet ein Klick einen neuen
+// Tab (target=_blank, window.open), ist der beim Screenshot oft schon vorn — das Bild zeigte den
+// neuen Tab, die Markierung zeigte ins Leere. Darum merken wir uns je Tab das letzte sichere
+// Bild und nehmen für so einen Klick das Bild SEINES Tabs (die Seite hat sich durch den Klick
+// nicht verändert, er öffnete ja woanders etwas). Gibt es keins, bleibt das aktuelle Bild —
+// in beiden Fällen als „Bild ggf. ungenau“ markiert (der Mensch prüft beim Durchsehen).
+const GUIDE_TAB_IMAGES_MAX = 12;
+const guideTabImages = new Map(); // tabId -> { blob, width, height }
+
+function guideRememberTabImage(tabId, img) {
+  guideTabImages.delete(tabId); // neu einsortieren (jüngste zuletzt)
+  guideTabImages.set(tabId, { blob: img.blob, width: img.width, height: img.height });
+  while (guideTabImages.size > GUIDE_TAB_IMAGES_MAX) {
+    guideTabImages.delete(guideTabImages.keys().next().value);
+  }
+}
+
+async function guideActiveTabId(windowId) {
+  try {
+    const q = windowId != null ? { active: true, windowId } : { active: true, currentWindow: true };
+    const tabs = await chrome.tabs.query(q);
+    return tabs && tabs[0] && tabs[0].id != null ? tabs[0].id : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Rein (testbar): Welches Bild bekommt ein Schritt aus Tab `tabId`, wenn der Screenshot `img`
+// entstand? → { img, imprecise }. Zeigt das Bild einen ANDEREN Tab, nehmen wir das gemerkte Bild
+// des Klick-Tabs (falls vorhanden); unsicher/fremd ist immer „ggf. ungenau“.
+function guideImageForStep(img, tabId, tabImages) {
+  if (!img || tabId == null || img.shotTabId == null) return { img, imprecise: false };
+  if (img.shotUnsure) return { img, imprecise: true };
+  if (img.shotTabId === tabId) return { img, imprecise: false };
+  const own = tabImages && tabImages.get(tabId);
+  return { img: own || img, imprecise: true };
 }
 
 // Einen erfassten Schritt (Rohdaten + fertiges Bild) in die Liste aufnehmen. Bei geteiltem
@@ -2180,11 +2445,15 @@ async function drainGuideQueue() {
       group.forEach((e, k) => {
         if (k > 0) pulseTab(e.tabId);
         const late = fallback || capturedAt - (e.at || capturedAt) > GUIDE_LATE_MS;
-        addGuideStep(e.step, img, e.tabId, late);
+        // Audit 24.09.: zeigt das Bild schon einen neuen Tab, das Bild des Klick-Tabs nehmen.
+        const pick = fallback ? { img, imprecise: false } : guideImageForStep(img, e.tabId, guideTabImages);
+        addGuideStep(e.step, pick.img, e.tabId, late || pick.imprecise);
       });
     }
   } finally {
     guideCapturing = false;
+    // Datei-Brücke (Audit 24.09.): Downloads erst zuordnen, wenn alle Klicks ihr Bild haben.
+    guideMatchDownloads();
   }
 }
 
@@ -2325,8 +2594,38 @@ function stepHost(url) {
   }
 }
 
+// ── Merker „Aufnahme läuft mit n Schritten“ (Audit 24.09.) ─────────────────────────────────
+// Wird die Seitenleiste mitten in der Aufnahme geschlossen, ist die Schrittliste weg (sie lebt
+// nur im Panel-Dokument). Vorher räumte pagehide auch das rec-Flag selbst ab — die Versöhnung
+// beim Wiederöffnen fand nichts, und die Schritte verschwanden ohne jeden Hinweis. Jetzt liegt,
+// solange eine Aufnahme mit ≥ 1 Schritt läuft (auch beim Prüfen/Hochladen), guideLive im
+// Speicher; ein normales Ende (hochgeladen, verworfen) räumt ihn weg. Findet reconcile() ihn
+// beim nächsten Öffnen, erscheint „Eine unterbrochene Aufnahme wurde verworfen“. Bewusst schon
+// während der Aufnahme geschrieben: ein Schreiben erst in pagehide kann beim Abbau verpuffen.
+let guideLiveMarkerN = -1;
+
+function guideLiveStepCount() {
+  return guidePhase !== "idle" || guideFinishing ? guideSteps.length : 0;
+}
+
+function guideSyncLiveMarker(force) {
+  const n = guideLiveStepCount();
+  if (!force && n === guideLiveMarkerN) return;
+  guideLiveMarkerN = n;
+  try {
+    const p =
+      n > 0
+        ? chrome.storage.local.set({ guideLive: { steps: n, at: Date.now(), windowId: panelWindowId } })
+        : chrome.storage.local.remove("guideLive");
+    if (p && p.catch) p.catch(() => {});
+  } catch (err) {
+    /* Speicher weg → nur der Hinweis fehlt */
+  }
+}
+
 // Schrittliste mit Thumbnail JE Schritt (nicht nur letzter) + Entfernen-Knopf.
 function renderGuideSteps() {
+  guideSyncLiveMarker(false);
   els.guideCount.textContent = String(guideSteps.length);
   els.guideList.textContent = "";
   guideSteps.forEach((s, i) => {
@@ -2508,7 +2807,14 @@ async function runGuideUpload() {
   guidePhase = "idle";
   guideFinishing = false;
   guideExtraTabs.clear();
+  guideSyncLiveMarker(false); // hochgeladen → kein „unterbrochen“-Merker mehr
   showGuideDone(result);
+  // Audit 24.09.: Die Anleitungen-Liste (und „Für diese Seite“) sofort neu holen statt bis zu
+  // 5 min die alte zu zeigen; /me neu fragen, damit die Gratis-Restzahl stimmt.
+  siteMatchFetchedAt = 0;
+  refreshLists(true);
+  accountFetch = null;
+  fetchAccountName();
   // Aufnahme-Anker (Welle 27): nach ERFOLG räumen, damit die nächste Aufnahme nicht versehentlich
   // am alten Ziel landet. (Bei Fehler bleibt er — „Erneut versuchen" soll dasselbe Ziel treffen.)
   await clearPendingTarget();
@@ -2558,9 +2864,14 @@ function showGuideDone(r) {
       "An der gewählten Stelle ging es nicht – die Aufnahme liegt deshalb als eigener Entwurf bei Ihren Anleitungen in Steply." +
       (r.fallbackReason ? " " + r.fallbackReason : "");
   } else if (r && r.inserted) {
+    // Audit 24.09.: Anleitung beim Namen nennen (vorher stand hier die Einfüge-Stelle mit
+    // verschachtelten Anführungszeichen) und sagen, ob die Schritte schon live sind.
     els.guideDoneTitle.textContent = "Schritte eingefügt";
+    const where = title ? "Die Aufnahme steht jetzt in „" + title + "“" : "Die Aufnahme steht jetzt in der Anleitung";
     els.guideDoneText.textContent =
-      "Die Aufnahme steht jetzt an der gewählten Stelle" + (r.label ? " in „" + r.label + "“" : "") + ".";
+      where +
+      " an der gewählten Stelle." +
+      (r.live ? " " + targetLiveText({ visibility: r.publicLive ? "public" : "internal" }) : "");
   } else {
     els.guideDoneTitle.textContent = "Anleitung ist fertig";
     els.guideDoneText.textContent = title
@@ -2710,6 +3021,7 @@ async function uploadGuide() {
   // Erfolg.
   setGuideProgress("", 1);
   const targetLabel = pendingTarget && pendingTarget.label ? String(pendingTarget.label) : "";
+  const targetInfo = uploadTarget ? targetTutorialInfo() : null;
   // Titel + Kategorie (Welle 31d): nach erfolgreichem Upload Felder + Session zurücksetzen,
   // damit die nächste Aufnahme frisch startet. (Bei Fehler bleiben die Werte erhalten.)
   guideMetaReset();
@@ -2720,12 +3032,21 @@ async function uploadGuide() {
   if (els.guideOpenApp) {
     els.guideOpenApp.onclick = () => chrome.tabs.create({ url: openUrl, active: true });
   }
+  const inserted = !!uploadTarget && !comp.fallback;
+  // Beim Einfügen nennt der Server (ab v2.19.4) Titel + Live-Status der Ziel-Anleitung; ältere
+  // Server nicht → aus der Konto-Liste ergänzen.
+  const serverTitle = typeof comp.title === "string" ? comp.title.trim().slice(0, 80) : "";
   return {
-    title: metaTitle || (typeof comp.title === "string" ? comp.title : ""),
+    title: metaTitle || serverTitle || (inserted && targetInfo ? targetInfo.title : ""),
     fallback: !!comp.fallback,
     fallbackReason: comp.fallbackReason ? String(comp.fallbackReason) : "",
-    inserted: !!uploadTarget && !comp.fallback,
+    inserted,
     label: targetLabel,
+    live: typeof comp.live === "boolean" ? comp.live : !!(inserted && targetInfo && targetInfo.status === "published"),
+    publicLive:
+      typeof comp.publicLive === "boolean"
+        ? comp.publicLive
+        : !!(inserted && targetInfo && targetInfo.status === "published" && targetInfo.visibility !== "internal"),
   };
 }
 
@@ -3048,6 +3369,7 @@ function refreshLists(force) {
 // Eine Liste hat sich geändert: Treffer neu berechnen und sichtbare Stellen ersetzen.
 function onListsChanged() {
   computeSiteMatches();
+  if (pendingTarget) renderTargetBanner(); // Titel/Status der Ziel-Anleitung (Audit 24.09.)
   renderSiteRow();
   if (currentSection === "guides") renderGuidesList();
   if (currentSection === "steplyLearn") renderSteplyLearn();
@@ -3847,6 +4169,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
       // Anderes Konto (oder getrennt): nichts vom alten Konto weiter anzeigen.
       accountName = "";
       accountFetch = null;
+      // Tarif-Angaben gehören zum alten Konto (Audit 24.09.) — bis /me antwortet: unbekannt.
+      accountVideoAllowed = null;
+      accountTutorialsLeft = null;
+      renderQuotaHint();
       accountListFetch = null; // laufenden Abruf des alten Kontos nicht wiederverwenden
       siteTutorials = null;
       siteTutorialsError = false;
@@ -3907,6 +4233,7 @@ function resetGuide() {
   guideUploadSession = null; // alte Upload-Sitzung gehört zur verworfenen Aufnahme
   guideQueue = [];
   guideLastImage = null;
+  guideTabImages.clear();
   guideCapturing = false;
   guideFinishing = false;
   guideActive = false;
@@ -3919,6 +4246,7 @@ function resetGuide() {
   guideHaltPromise = null;
   guideExtraTabs.clear();
   guideSetCaptureHint(false);
+  guideSyncLiveMarker(false); // Audit 24.09.: Vorgang beendet → kein „unterbrochen“-Merker
 }
 
 function resetVideo() {
@@ -7288,6 +7616,20 @@ document.addEventListener("keydown", (e) => {
 // damit die NAECHSTE Oeffnung garantiert sauber startet. pagehide feuert beim Abbau
 // des Panel-Dokuments; wir blockieren das Schliessen bewusst NICHT (kein Nag-Dialog).
 window.addEventListener("pagehide", () => {
+  // Audit 24.09.: Aufnahme mit Schritten (oder ein laufendes Video) geht beim Schließen verloren
+  // → Merker (frisch) setzen, damit das nächste Öffnen darauf hinweist (s. guideSyncLiveMarker).
+  const liveSteps = guideLiveStepCount();
+  const videoLive = !!(mediaRecorder && mediaRecorder.state !== "inactive");
+  if (liveSteps > 0 || videoLive) {
+    try {
+      const p = chrome.storage.local.set({
+        guideLive: { steps: liveSteps, at: Date.now(), windowId: panelWindowId, video: videoLive },
+      });
+      if (p && p.catch) p.catch(() => {});
+    } catch (err) {
+      /* best effort */
+    }
+  }
   cleanupStreams();
   guideActive = false;
   guideRemoveDownloadWatch();

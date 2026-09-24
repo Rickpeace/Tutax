@@ -20,7 +20,7 @@ import { loadOpenGaps } from "@/lib/gaps";
 import { relativeDe } from "@/lib/format";
 import { userDisplayName } from "@/lib/user-name";
 import { failedVideoSince, toFailedVideoJob } from "@/lib/video-failure";
-import { videoAllowed } from "@/lib/plan";
+import { isPro, videoAllowed } from "@/lib/plan";
 
 /**
  * App-Shell (Welle 50b): 60px-Kopfleiste für alle /app-Seiten; mobil übernimmt
@@ -170,7 +170,9 @@ async function BellSlot() {
       .limit(3),
     // Wie „Offene Fragen“ (bis 25) — Zähler = Anzahl dieser Liste.
     // 26 laden, 25 anzeigen: so erkennt die Glocke „mehr als 25“ (Anzeige „25+“).
-    loadOpenGaps(account.id, 26),
+    // Offene Fragen gehören zum KI-Assistenten (ab Pro): im Gratis-Tarif nicht zeigen — sonst
+    // führten die Einträge nach einem Herabstufen in eine Pro-Sperre (Audit 24.09.).
+    isPro(account) ? loadOpenGaps(account.id, 26) : Promise.resolve([] as Awaited<ReturnType<typeof loadOpenGaps>>),
     supabase
       .from("video_jobs")
       .select("id, title, error, created_at, updated_at")

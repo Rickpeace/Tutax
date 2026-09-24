@@ -222,8 +222,8 @@ try {
     await page.locator("aside:visible").first().locator("button").allInnerTexts()
   ).map((t) => t.replace(/\s*\d+\s*$/, "").trim());
   ok(
-    ["Alle", "Hilfe-Seite", "Nur Team"].every((l) => bereich.includes(l)),
-    `Bereichsfilter: „Alle · Hilfe-Seite · Nur Team“ (${bereich.slice(0, 3).join(" · ")})`,
+    ["Alle", "Hilfe-Seite", "Team"].every((l) => bereich.includes(l)),
+    `Bereichsfilter: „Alle · Hilfe-Seite · Team“ (${bereich.slice(0, 3).join(" · ")})`,
   );
   await shot(page, "01-kopfleiste.png");
 
