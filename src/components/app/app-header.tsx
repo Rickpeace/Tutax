@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -56,6 +56,34 @@ import { dismissVideoJob, useDismissedVideoJobs } from "@/lib/dismissed-video-jo
 import type { FailedVideoNotice } from "@/components/app/failed-video-notices";
 
 /**
+ * Vorladen nur mit bekannter Rolle (Handy-Audit 24.09.): Kopf- und Handy-Leiste sind statisches
+ * Gerüst und rendern zuerst ALLE Bereiche — Mitarbeiter luden so /app und /app/automationen vor,
+ * obwohl sie dort nicht hindürfen. Die Rolle kennt erst der gestreamte Avatar-Slot (UserMenu);
+ * bis dahin (und für Mitarbeiter immer) laden nur „Schulungen“ vor.
+ */
+let roleKnown = false;
+const roleListeners = new Set<() => void>();
+function subscribeRole(cb: () => void) {
+  roleListeners.add(cb);
+  return () => roleListeners.delete(cb);
+}
+function RoleKnownSync() {
+  useEffect(() => {
+    if (roleKnown) return;
+    roleKnown = true;
+    roleListeners.forEach((l) => l());
+  }, []);
+  return null;
+}
+/** prefetch-Wert für einen Navigations-Link: undefined = Next-Standard, false = nie. */
+function usePrefetchFor(href: string): false | undefined {
+  const known = useSyncExternalStore(subscribeRole, () => roleKnown, () => false);
+  const member = useMemberMode();
+  if (href === "/app/lernen") return undefined;
+  return known && !member ? undefined : false;
+}
+
+/**
  * App-Shell (Welle 50b, Entwurf „App-Makeover“ Abschnitt 1): 60px-Kopfleiste —
  * Wordmark, Pills Anleitungen · Schulungen · Automationen · KI-Assistent (aktiv =
  * Ink-Pill), rechts Suche (Strg K), „Hilfe-Seite“ (neuer Tab), Glocke als
@@ -79,11 +107,12 @@ export function AppHeader({
   // Mitarbeiter (nur Schulungen) sehen nur „Schulungen" — siehe member-mode.tsx.
   const member = useMemberMode();
   const nav = member ? MAIN_NAV.filter((i) => i.href === "/app/lernen") : MAIN_NAV;
+  const homePrefetch = usePrefetchFor("/app");
 
   return (
     <>
       <header className="sticky top-0 z-30 flex h-[60px] items-center gap-1.5 border-b-2 border-line bg-card px-4 lg:px-[18px]">
-        <Link href="/app" aria-label="Zu den Anleitungen" className="mr-3.5 shrink-0">
+        <Link href="/app" prefetch={homePrefetch} aria-label="Zu den Anleitungen" className="mr-3.5 shrink-0">
           <Wordmark />
         </Link>
 
@@ -130,9 +159,11 @@ export function AppHeader({
 }
 
 function NavPill({ item, active }: { item: NavItem; active: boolean }) {
+  const prefetch = usePrefetchFor(item.href);
   return (
     <Link
       href={item.href}
+      prefetch={prefetch}
       aria-current={active ? "page" : undefined}
       className={cn(
         "rounded-full px-[13px] py-[7px] text-[13.5px] font-extrabold transition-colors",
@@ -403,6 +434,9 @@ export function UserMenu({
   return (
     <>
       <MemberModeSync on={member} />
+      {/* Nach MemberModeSync: beide Effekte laufen in dieser Reihenfolge — die Links wissen
+          also schon, ob Mitarbeiter, wenn sie erstmals vorladen dürfen. */}
+      <RoleKnownSync />
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -525,16 +559,20 @@ export function TabBar({
   const member = useMemberMode();
   const left = member ? MOBILE_TABS_LEFT.filter((i) => i.href === "/app/lernen") : MOBILE_TABS_LEFT;
   const right = member ? [] : MOBILE_TABS_RIGHT;
+  // Spalten = tatsächliche Reiter (Audit 24.09.: Mitarbeiter hatten 2 Reiter in 5 Spalten,
+  // „Mehr“ stand links der Mitte). Mitarbeiter legen keine Anleitungen an → kein „Neu“.
+  const cols = left.length + right.length + (member ? 0 : 1) + 1;
   return (
     <nav
       aria-label="Hauptnavigation"
       data-mobile-tabbar
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t-2 border-line bg-card px-0.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 grid items-end border-t-2 border-line bg-card px-0.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 lg:hidden"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {left.map((item) => (
         <TabLink key={item.href} item={item} active={item.match(path)} />
       ))}
-      {createAction}
+      {!member && createAction}
       {right.map((item) => (
         <TabLink key={item.href} item={item} active={item.match(path)} />
       ))}
@@ -544,9 +582,11 @@ export function TabBar({
 }
 
 function TabLink({ item, active }: { item: NavItem; active: boolean }) {
+  const prefetch = usePrefetchFor(item.href);
   return (
     <Link
       href={item.href}
+      prefetch={prefetch}
       aria-current={active ? "page" : undefined}
       className={tabClass(active)}
     >

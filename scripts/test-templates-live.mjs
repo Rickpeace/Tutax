@@ -54,7 +54,10 @@ try {
   const idMap = new Map();
   for (const s of tplSteps ?? []) idMap.set(s.id, uuid());
   if (tplSteps?.length) await db.from("steps").insert(tplSteps.map((s) => ({ id: idMap.get(s.id), tutorial_id: forkId, title: s.title, body: s.body, position: s.position, is_decision: s.is_decision })));
-  await db.from("account_templates").upsert({ account_id: accountId, template_id: tpl.id, enabled: true, forked_tutorial_id: forkId }, { onConflict: "account_id,template_id" });
+  // Die Verknüpfung setzt nur der Server (forkTemplate per Admin-Client, Migration 0046).
+  const { error: linkAsUser } = await db.from("account_templates").upsert({ account_id: accountId, template_id: tpl.id, enabled: true, forked_tutorial_id: forkId }, { onConflict: "account_id,template_id" });
+  ok(!!linkAsUser, "Nutzer darf die Verknüpfung „angepasste Kopie“ nicht selbst setzen (0046)");
+  await admin.from("account_templates").upsert({ account_id: accountId, template_id: tpl.id, enabled: true, forked_tutorial_id: forkId }, { onConflict: "account_id,template_id" });
   ok((await resolve(db, accountId, tpl.slug)) === forkId, "Nach Fork → Aufлösung zeigt eigene Kopie (Angepasst)");
 
   // Zurücksetzen

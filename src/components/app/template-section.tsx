@@ -24,6 +24,8 @@ export type TemplateItem = {
   renderId: string;
   slug: string | null;
   categoryName: string;
+  /** Angepasste Kopie einer Vorlage, die Steply zurückgezogen hat (nicht auf der Hilfe-Seite). */
+  withdrawn?: boolean;
 };
 
 /**
@@ -80,7 +82,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
   const renderRow = (it: TemplateItem) => (
     <div
       key={it.templateId}
-      className="flex flex-col gap-1.5 border-t-2 border-line-2 px-4 py-2.5 transition-colors hover:bg-[#fffcf7] md:grid md:grid-cols-[minmax(0,1fr)_110px_190px_220px] md:items-center md:gap-4"
+      className="flex flex-col gap-1.5 border-t-2 border-line-2 px-4 py-2.5 transition-colors hover:bg-[#fffcf7] md:grid md:grid-cols-[minmax(0,1fr)_100px_170px_310px] md:items-center md:gap-4"
       data-testid="template-row"
     >
       {/* Mobil: Titel ganze Breite (umbrechend), darunter Schalter + Aktionen. */}
@@ -98,7 +100,13 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
       </span>
       {/* md:contents — ab md werden Schalter und Aktionen eigene Spalten des Rasters. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 md:contents">
-        <HelpToggle on={!!enabledMap[it.templateId]} onToggle={() => toggle(it.templateId)} />
+        {it.withdrawn ? (
+          <span className="text-xs font-semibold text-muted-foreground" data-testid="template-withdrawn">
+            Vorlage zurückgezogen – nicht auf der Hilfe-Seite
+          </span>
+        ) : (
+          <HelpToggle on={!!enabledMap[it.templateId]} onToggle={() => toggle(it.templateId)} />
+        )}
 
         <div className="-mr-2 flex flex-wrap items-center gap-0.5 md:mr-0 md:justify-end md:gap-1.5">
           <Button
@@ -120,6 +128,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
               >
                 <PencilLine className="size-4" /> Bearbeiten
               </Button>
+              {!it.withdrawn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -137,6 +146,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
               >
                 <Undo2 className="size-4" /> Zurücksetzen
               </Button>
+              )}
             </>
           ) : (
             <Button
@@ -167,7 +177,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         }
       />
       <div className="overflow-hidden rounded-card border-2 border-line bg-card">
-        <div className="hidden grid-cols-[minmax(0,1fr)_110px_190px_220px] gap-4 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
+        <div className="hidden grid-cols-[minmax(0,1fr)_100px_170px_310px] gap-4 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint md:grid">
           <span>Anleitung</span>
           <span>Art</span>
           <span>Hilfe-Seite</span>

@@ -10,6 +10,7 @@ import { dateDe } from "@/lib/format";
 import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
 import { backAction, nextSnapshot, type WizMove, type WizSnapshot } from "@/lib/wizard-history";
 import { resolveRoot } from "@/lib/builder/tree";
+import { TAP_AREA } from "@/lib/tap-target";
 
 /** Schlüssel, unter dem der Wizard seinen Stand im Browser-Verlaufseintrag ablegt. */
 const WIZ_STATE = "steplyWizard";
@@ -134,6 +135,9 @@ export function Wizard({
   const fwdRef = useRef(false);
   // Aktueller Stand für Rückrufe (Timer/„Ton zu Ende“), die sonst veraltete Werte sähen.
   const stateRef = useRef<{ cur: string | null; history: string[] }>({ cur: rootId, history: [] });
+  // Hat der Nutzer den Schritt gewechselt (Weiter/Zurück/Sprung/Browser-Verlauf)? Nur dann
+  // wandern Fokus/Scroll — beim ersten Laden und beim Wiederherstellen NICHT (Audit 24.09.).
+  const stepChangedRef = useRef(false);
 
   const writeHistory = useCallback(
     (prevCur: string | null, nextCur: string | null, nextHistory: string[], move: WizMove) => {
@@ -166,6 +170,7 @@ export function Wizard({
     (nextCur: string | null, nextHistory: string[], move: WizMove) => {
       const prevCur = stateRef.current.cur;
       stateRef.current = { cur: nextCur, history: nextHistory };
+      stepChangedRef.current = true;
       setCur(nextCur);
       setHistory(nextHistory);
       writeHistory(prevCur, nextCur, nextHistory, move);
@@ -186,6 +191,7 @@ export function Wizard({
       depthRef.current = typeof snap.depth === "number" ? snap.depth : 0;
       fwdRef.current = snap.fwd === true;
       stateRef.current = { cur: nc, history: nh };
+      stepChangedRef.current = true;
       setCur(nc);
       setHistory(nh);
     };
@@ -424,9 +430,22 @@ export function Wizard({
   }, [branchesByStep, navigate]);
 
   // Nach Schrittwechsel Fokus auf den Schritt-Titel (A11y: Screenreader/Tastatur).
+  // Handy-Audit 24.09.: focus() allein scrollte bis zur Überschrift (Seite öffnete bei
+  // scrollY ≈ 560, Bild oben abgeschnitten). Jetzt: erstes Laden gar nicht anfassen; beim
+  // Wechsel ohne Scroll fokussieren und nur dann an den Kartenanfang scrollen, wenn dieser
+  // oben aus dem Bild ist (neuer Schritt beginnt mit dem Bild).
+  const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (step) titleRef.current?.focus();
-  }, [cur, step]);
+    if (!stepChangedRef.current) return;
+    stepChangedRef.current = false;
+    titleRef.current?.focus({ preventScroll: true });
+    const card = cardRef.current;
+    if (!card) return;
+    if (card.getBoundingClientRect().top < scrollViewportTop(card)) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      card.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    }
+  }, [cur]);
 
   // Schrittwechsel stoppt die Wiedergabe und setzt den Play-Button zurück.
   useEffect(() => {
@@ -502,8 +521,9 @@ export function Wizard({
 
   return (
     <div
+      ref={cardRef}
       data-tx="step"
-      className={`w-full overflow-hidden border-2 ${linearPath ? "lg:flex" : ""}`}
+      className={`w-full scroll-mt-3 overflow-hidden border-2 ${linearPath ? "lg:flex" : ""}`}
       style={{
         // Papier des Kunden-Designs statt fest Weiß (dunkle Designs, Audit 24.09.).
         background: "var(--brand-paper, #fff)",
@@ -798,7 +818,7 @@ export function Wizard({
                   <button
                     type="button"
                     onClick={() => sendStuck(step.id)}
-                    className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-[var(--brand-ink)]"
+                    className={`relative text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-[var(--brand-ink)] ${TAP_AREA}`}
                   >
                     {L.stuck}
                   </button>
@@ -914,6 +934,20 @@ export function Wizard({
   );
 }
 
+/**
+ * Oberkante des sichtbaren Bereichs, in dem das Element scrollt: 0 für das Fenster, sonst die
+ * Oberkante des nächsten scrollbaren Vorfahren (z. B. der Inhaltsbereich in /app).
+ */
+function scrollViewportTop(el: HTMLElement): number {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) {
+      return Math.max(0, p.getBoundingClientRect().top);
+    }
+  }
+  return 0;
+}
+
 /** Höhe der Werkzeugleiste der Großansicht (fließt in die nutzbare Bildhöhe ein). */
 const LB_TOOLBAR = 56;
 const LB_MAX_ZOOM = 6;
@@ -950,7 +984,7 @@ type LightboxData = {
  *
  * Nutzt das GANZE Fenster (die alte Fassung ließ 5 % Rand und passte das Bild in die
  * Fensterhöhe — auf dem Handy war das Bild danach kaum größer als im Schritt) und erlaubt
- * Vergrößern/Verschieben: Knöpfe, Doppeltippen und Ziehen. Auf schmalen Fenstern startet
+ * Vergrößern/Verschieben: Knöpfe, Doppeltippen, Ziehen und Zwei-Finger-Zoom. Auf schmalen Fenstern startet
  * sie bereits vergrößert (das Bild füllt die Höhe), weil genau dort das Vergrößern zählt.
  *
  * Barrierefreiheit: Fokus wandert beim Öffnen in den Dialog, Tab bleibt darin gefangen,
@@ -979,6 +1013,17 @@ function Lightbox({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ id: number; x: number; y: number; px: number; py: number } | null>(null);
   const movedRef = useRef(false);
+  // Zwei-Finger-Zoom (Audit 24.09.): aktive Finger + Stand beim Aufsetzen des zweiten.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{
+    dist: number;
+    mid: { x: number; y: number };
+    zoom: number;
+    pan: { x: number; y: number };
+  } | null>(null);
+  // Letzter angezeigter Stand — Zeiger-Ereignisse können schneller kommen als das Rendern.
+  const viewRef = useRef({ zoom, pan: { x: 0, y: 0 } });
 
   useEffect(() => {
     const update = () => setVp(readViewport());
@@ -987,13 +1032,47 @@ function Lightbox({
   }, []);
 
   const { availW, availH, fitW, fitH } = fit;
-  const maxX = Math.max(0, (fitW * zoom - availW) / 2);
-  const maxY = Math.max(0, (fitH * zoom - availH) / 2);
-  const clampPan = (p: { x: number; y: number }) => ({
-    x: Math.min(maxX, Math.max(-maxX, p.x)),
-    y: Math.min(maxY, Math.max(-maxY, p.y)),
-  });
+  // Verschiebe-Grenzen hängen vom Zoom ab (Zwei-Finger-Zoom rechnet mit dem NEUEN Zoom).
+  const clampPanAt = (z: number, p: { x: number; y: number }) => {
+    const mx = Math.max(0, (fitW * z - availW) / 2);
+    const my = Math.max(0, (fitH * z - availH) / 2);
+    return { x: Math.min(mx, Math.max(-mx, p.x)), y: Math.min(my, Math.max(-my, p.y)) };
+  };
+  const clampPan = (p: { x: number; y: number }) => clampPanAt(zoom, p);
   const shown = clampPan(pan);
+  useEffect(() => {
+    viewRef.current = { zoom, pan: shown };
+  });
+
+  /** Fingerposition relativ zur Mitte der Bildfläche (dort liegt der Transform-Ursprung). */
+  const fromCenter = (x: number, y: number) => {
+    const r = stageRef.current?.getBoundingClientRect();
+    return r ? { x: x - (r.left + r.width / 2), y: y - (r.top + r.height / 2) } : { x, y };
+  };
+  const pinchState = () => {
+    const [a, b] = [...pointersRef.current.values()];
+    return {
+      dist: Math.hypot(a.x - b.x, a.y - b.y),
+      mid: fromCenter((a.x + b.x) / 2, (a.y + b.y) / 2),
+    };
+  };
+  /** Ein-Finger-Verschieben ab dem aktuellen Stand beginnen. */
+  const startDrag = (id: number, x: number, y: number) => {
+    const { zoom: z, pan: p } = viewRef.current;
+    dragRef.current = z > 1.001 ? { id, x, y, px: p.x, py: p.y } : null;
+  };
+  const endPointer = (id: number) => {
+    pointersRef.current.delete(id);
+    if (pinchRef.current && pointersRef.current.size < 2) {
+      pinchRef.current = null;
+      // Ein Finger bleibt liegen: nahtlos mit Verschieben weitermachen.
+      const rest = [...pointersRef.current.entries()][0];
+      if (rest) startDrag(rest[0], rest[1].x, rest[1].y);
+      else dragRef.current = null;
+      return;
+    }
+    if (dragRef.current?.id === id) dragRef.current = null;
+  };
 
   const setZoomAt = (next: number) => {
     const z = Math.min(LB_MAX_ZOOM, Math.max(1, next));
@@ -1063,15 +1142,48 @@ function Lightbox({
       </div>
 
       <div
+        ref={stageRef}
         className="relative min-h-0 flex-1 touch-none select-none overflow-hidden"
         style={{ cursor: zoom > 1.001 ? "grab" : "zoom-in" }}
         onPointerDown={(e) => {
-          movedRef.current = false;
-          if (zoom <= 1.001) return;
-          e.currentTarget.setPointerCapture?.(e.pointerId);
-          dragRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, px: shown.x, py: shown.y };
+          // Maus: nie mehrere Zeiger — ein außerhalb losgelassener Klick hinterlässt keine Reste.
+          if (e.pointerType === "mouse") pointersRef.current.clear();
+          if (pointersRef.current.size === 0) movedRef.current = false;
+          pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          // Finger sind ohnehin implizit gefangen (Ereignisse kommen hier an); explizit nur
+          // beim Verschieben einfangen wie bisher — sonst schlösse ein Tipp aufs Bild.
+          if (pointersRef.current.size === 2) {
+            // Zweiter Finger: Zwei-Finger-Zoom beginnt, Verschieben pausiert.
+            dragRef.current = null;
+            movedRef.current = true; // kein „Klick schließt“ nach dem Zoomen
+            const { zoom: z, pan: p } = viewRef.current;
+            pinchRef.current = { ...pinchState(), zoom: z, pan: p };
+            return;
+          }
+          if (pointersRef.current.size === 1) {
+            startDrag(e.pointerId, e.clientX, e.clientY);
+            if (dragRef.current) e.currentTarget.setPointerCapture?.(e.pointerId);
+          }
         }}
         onPointerMove={(e) => {
+          if (!pointersRef.current.has(e.pointerId)) return;
+          pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          const pinch = pinchRef.current;
+          if (pinch && pointersRef.current.size >= 2) {
+            const now = pinchState();
+            if (pinch.dist < 1) return;
+            // Grenzen wie die ±-Knöpfe (1 … LB_MAX_ZOOM).
+            const z = Math.min(LB_MAX_ZOOM, Math.max(1, pinch.zoom * (now.dist / pinch.dist)));
+            // Der Bildpunkt unter der Anfangs-Mitte der Finger bleibt unter der aktuellen Mitte.
+            const p = clampPanAt(z, {
+              x: now.mid.x - (z * (pinch.mid.x - pinch.pan.x)) / pinch.zoom,
+              y: now.mid.y - (z * (pinch.mid.y - pinch.pan.y)) / pinch.zoom,
+            });
+            viewRef.current = { zoom: z, pan: p };
+            setZoom(z);
+            setPan(p);
+            return;
+          }
           const d = dragRef.current;
           if (!d || d.id !== e.pointerId) return;
           const dx = e.clientX - d.x;
@@ -1079,12 +1191,8 @@ function Lightbox({
           if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
           setPan(clampPan({ x: d.px + dx, y: d.py + dy }));
         }}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
+        onPointerUp={(e) => endPointer(e.pointerId)}
+        onPointerCancel={(e) => endPointer(e.pointerId)}
         onDoubleClick={() => setZoomAt(zoom > 1.001 ? 1 : 3)}
         onClick={(e) => {
           // Klick auf die freie Fläche schließt — ein Ziehen aber nicht.

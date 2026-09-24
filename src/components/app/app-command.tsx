@@ -197,6 +197,8 @@ export function AppCommand({
         placeholder="Suchen oder Befehl eingeben …"
         value={query}
         onValueChange={setQuery}
+        // iOS zoomt bei Feldern unter 16 px in die Seite (Audit 24.09.) — auf Touch 16 px.
+        className="pointer-coarse:text-base"
       />
       <CommandList>
         {nothing && <CommandEmpty>Keine Treffer.</CommandEmpty>}

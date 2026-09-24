@@ -55,6 +55,7 @@ import {
 } from "@/app/app/actions";
 import { createAutomationFromTutorial } from "@/app/app/automationen/actions";
 import { unwrap, errorText, isNavigationError } from "@/lib/action-error";
+import { TAP_AREA } from "@/lib/tap-target";
 
 /** Serialisierbare Karten-Daten (Server → LibraryBrowser → Karte/Zeile). */
 export type LibraryTutorial = {
@@ -525,14 +526,17 @@ function TutorialMenu({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="-mr-1 -mt-0.5 shrink-0 text-muted-foreground hover:text-ink"
+            // Touch: unsichtbar 40 px Trefferfläche (Handy-Audit 24.09.: vorher 28 × 28 px).
+            className={`relative -mr-1 -mt-0.5 shrink-0 text-muted-foreground hover:text-ink ${TAP_AREA}`}
             aria-label="Aktionen"
           >
             <MoreVertical className="size-4" />
           </Button>
         }
       />
-      <DropdownMenuContent align="end">
+      {/* Eigene Breite statt Knopf-Breite (Audit 24.09.: 120 px, Einträge brachen dreizeilig);
+          die Base-UI-Positionierung hält das Menü am Bildschirmrand. */}
+      <DropdownMenuContent align="end" className="w-auto min-w-[200px] max-w-[calc(100vw-1rem)]">
         <DropdownMenuItem render={<Link href={`/app/tutorials/${tutorial.id}`} />}>
           <FileText className="size-4" /> Bearbeiten
         </DropdownMenuItem>

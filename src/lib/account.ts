@@ -162,7 +162,12 @@ export async function requireTutorialAccess(tutorialId: string): Promise<Account
     .eq("id", tutorialId)
     .maybeSingle();
   if (!data || !(await mayEditTutorialOf(data.account_id as string | null, ctx))) {
-    throw new Error("Anleitung nicht gefunden.");
+    // Gehört die Anleitung zu einer ANDEREN eigenen Organisation, wurde im anderen Tab
+    // gewechselt — das sagen statt „nicht gefunden“ (Lebenszyklus-Audit 24.09.).
+    if (data?.account_id && ctx.memberships.some((m) => m.id === data.account_id)) {
+      throw new UserError(ORG_SWITCHED);
+    }
+    throw new UserError("Anleitung nicht gefunden.");
   }
   return ctx;
 }

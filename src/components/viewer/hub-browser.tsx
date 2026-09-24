@@ -138,7 +138,8 @@ export function HubBrowser({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={L.searchPlaceholder}
-          className="w-full bg-transparent text-[15px] font-semibold outline-none placeholder:text-muted-foreground"
+          // Auf Touch 16 px: darunter zoomt iOS beim Antippen in die Seite (Audit 24.09.).
+          className="w-full bg-transparent text-[15px] font-semibold outline-none placeholder:text-muted-foreground pointer-coarse:text-base"
         />
       </div>
 

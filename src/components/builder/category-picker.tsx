@@ -30,7 +30,7 @@ export function CategoryPicker({
   const searchId = useId();
 
   const selected = cats.find((c) => c.id === selectedId) ?? null;
-  const term = query.trim().toLowerCase();
+  const term = query.replace(/\s+/g, " ").trim().toLowerCase();
   const filtered = term ? cats.filter((c) => c.name.toLowerCase().includes(term)) : cats;
   const exact = cats.some((c) => c.name.toLowerCase() === term);
 

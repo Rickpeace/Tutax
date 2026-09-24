@@ -85,6 +85,25 @@ export async function forkTemplate(templateId: string) {
     .single();
   if (!tpl) throw new Error("Template nicht gefunden");
 
+  const admin = createAdminClient();
+  // Verknüpfungs-Zeile sicherstellen (An/Aus bleibt, wie es war — neue Zeile = aus). Gibt es
+  // schon eine angepasste Kopie (anderer Tab / andere Person war schneller), diese öffnen statt
+  // eine zweite anzulegen (Grenzfall-Audit 24.09.: zwei veröffentlichte Kopien).
+  await admin
+    .from("account_templates")
+    .upsert(
+      { account_id: account.id, template_id: templateId, enabled: false },
+      { onConflict: "account_id,template_id", ignoreDuplicates: true },
+    );
+  const { data: link } = await admin
+    .from("account_templates")
+    .select("enabled, forked_tutorial_id")
+    .eq("account_id", account.id)
+    .eq("template_id", templateId)
+    .maybeSingle();
+  if (link?.forked_tutorial_id) redirect(`/app/tutorials/${link.forked_tutorial_id}`);
+  const enabled = !!link?.enabled;
+
   const { data: steps } = await supabase
     .from("steps")
     .select("*")
@@ -120,7 +139,6 @@ export async function forkTemplate(templateId: string) {
   }
 
   const forkId = crypto.randomUUID();
-  const admin = createAdminClient();
   // Fehler NICHT verschlucken: sonst sprang der Editor auf eine Kopie, die es nicht gibt
   // („Anleitung nicht gefunden“), oder eine leere Kopie ersetzte die Vorlage auf der Hilfe-Seite.
   // Mit Server-Rechten: Vorlagen-Kopien zählen nicht zur Gratis-Grenze, die DB-Regel
@@ -208,16 +226,31 @@ export async function forkTemplate(templateId: string) {
 
   // Mit Server-Rechten: die Verknüpfung „angepasste Kopie“ darf nur der Server setzen
   // (Migration 0046 — sonst ließ sich die Gratis-Grenze über gefälschte Kopien umgehen).
-  await admin
+  // „An/Aus“ bleibt, wie es war: Anpassen einer ausgeschalteten Vorlage stellte die Kopie sonst
+  // ungefragt auf die Hilfe-Seite (Lebenszyklus-Audit 24.09.). Nur verknüpfen, wenn noch keine
+  // Kopie verknüpft ist — wer zeitgleich schneller war, gewinnt; die eigene Kopie wird verworfen.
+  const { data: claimed } = await admin
     .from("account_templates")
-    .upsert(
-      { account_id: account.id, template_id: templateId, enabled: true, forked_tutorial_id: forkId },
-      { onConflict: "account_id,template_id" },
-    );
+    .update({ forked_tutorial_id: forkId })
+    .eq("account_id", account.id)
+    .eq("template_id", templateId)
+    .is("forked_tutorial_id", null)
+    .select("template_id");
+  if (!claimed?.length) {
+    await admin.from("tutorials").delete().eq("id", forkId).eq("account_id", account.id);
+    const { data: winner } = await admin
+      .from("account_templates")
+      .select("forked_tutorial_id")
+      .eq("account_id", account.id)
+      .eq("template_id", templateId)
+      .maybeSingle();
+    revalidatePath("/app");
+    redirect(winner?.forked_tutorial_id ? `/app/tutorials/${winner.forked_tutorial_id}` : "/app");
+  }
 
-  // Chatbot-Wissen: Standard-Embeddings durch die der Kopie ersetzen.
+  // Chatbot-Wissen: Standard-Embeddings durch die der Kopie ersetzen (nur, wenn sie sichtbar ist).
   await dropEmbeddings(account.id, templateId);
-  await indexTutorial(createAdminClient(), account.id, forkId).catch(() => {});
+  if (enabled) await indexTutorial(createAdminClient(), account.id, forkId).catch(() => {});
 
   invalidateHubTag(account.slug);
   revalidatePath("/app");

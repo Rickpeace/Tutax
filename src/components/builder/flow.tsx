@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { signedImageUrl } from "@/lib/upload";
+import { TAP_AREA } from "@/lib/tap-target";
 import type {
   RenderNode,
   RenderStep,
@@ -227,7 +228,7 @@ function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: 
         onClick={onInsert}
         title="Schritt hier einfügen"
         aria-label="Schritt hier einfügen"
-        className="group/ins relative flex items-center justify-center rounded-full outline-none"
+        className={`group/ins relative flex items-center justify-center rounded-full outline-none ${TAP_AREA}`}
       >
         <span className="relative flex size-6 items-center justify-center rounded-full border border-primary/40 bg-accent text-primary shadow-[0_1px_3px_color-mix(in_srgb,var(--primary)_18%,transparent)] transition-all group-hover/ins:scale-110 group-hover/ins:border-primary group-hover/ins:bg-primary group-hover/ins:text-white group-focus-visible/ins:ring-3 group-focus-visible/ins:ring-ring/50">
           <Plus className="size-4" />
@@ -242,7 +243,9 @@ function InsertPoint({ onInsert, onRecord }: { onInsert: () => void; onRecord?: 
                 onClick={onRecord}
                 aria-label="Ab hier mit der Steply-Erweiterung aufnehmen"
                 data-testid="record-here"
-                className="absolute left-[calc(50%+1.25rem)] flex size-6 items-center justify-center rounded-full border border-line bg-card text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50"
+                // Touch-Geräte ausgeblendet: die Erweiterung läuft nur am Computer (Chrome/Edge)
+                // — am Handy war das eine Sackgasse (Audit 24.09.).
+                className="absolute left-[calc(50%+1.25rem)] flex size-6 items-center justify-center rounded-full border border-line bg-card text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:hidden"
               />
             }
           >

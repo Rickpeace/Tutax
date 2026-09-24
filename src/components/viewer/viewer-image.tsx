@@ -12,6 +12,7 @@ export function ViewerImage({
   width,
   height,
   alt = "",
+  eager = false,
 }: {
   url: string;
   highlights: Highlight[];
@@ -19,6 +20,8 @@ export function ViewerImage({
   width?: number | null;
   height?: number | null;
   alt?: string;
+  /** Sofort laden (Druckansicht: „lazy“ druckte bei großen Anleitungen die meisten Bilder nicht). */
+  eager?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -100,7 +103,7 @@ export function ViewerImage({
         ref={imgRef}
         src={shown.url}
         alt={alt}
-        loading="lazy"
+        loading={eager ? "eager" : "lazy"}
         onLoad={() => setLoaded(true)}
         onError={() => setLoaded(true)}
         className="block w-full print:!opacity-100"

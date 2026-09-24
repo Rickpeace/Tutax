@@ -12,9 +12,17 @@ export async function compressAndUpload(
   tutorialId: string,
   stepId: string,
 ): Promise<{ path: string; width: number; height: number }> {
+  // Hohe Ganzseiten-Screenshots nicht über die LANGE Seite auf 1600 px drücken — ein
+  // 1400×12000-Bild wurde 186 px breit und unlesbar (Grenzfall-Audit 24.09.). Bei hohen Bildern
+  // bestimmt die Breite (max. 1600), die Höhe darf bis 4800 px gehen.
+  const orig = await readImageSize(file);
+  const tall = orig.height > orig.width;
+  const longSide = tall
+    ? Math.min(4800, Math.max(1600, Math.round(orig.height * Math.min(1, 1600 / Math.max(1, orig.width)))))
+    : 1600;
   const webp = await imageCompression(file, {
-    maxWidthOrHeight: 1600,
-    maxSizeMB: 1,
+    maxWidthOrHeight: longSide,
+    maxSizeMB: longSide > 1600 ? 2 : 1,
     fileType: "image/webp",
     useWebWorker: true,
   });

@@ -5,6 +5,7 @@ import { Plus, Trash2, GitBranch, Save, ChevronLeft, ChevronRight, ChevronDown, 
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { STEP_TITLE_MAX } from "@/lib/text-limits";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -26,6 +27,10 @@ import { RichText } from "@/components/builder/rich-text";
 import { StatusSwitch } from "@/components/app/status-switch";
 import { ImageField } from "@/components/builder/image-field";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
+import { TAP_AREA } from "@/lib/tap-target";
+
+// Handy-Audit 24.09.: Schritt-Navigation im Kopf war 28 × 28 px — auf Touch unsichtbar 40 px.
+const HEAD_TAP = `relative ${TAP_AREA}`;
 
 export function StepPanel({
   step,
@@ -75,7 +80,7 @@ export function StepPanel({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (id: string, dir: "up" | "down") => void;
-  onSaveStep: (id: string, patch: { title: string; body: unknown }) => Promise<void>;
+  onSaveStep: (id: string, patch: { title?: string; body?: unknown }) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   onSetImage: (
     id: string,
@@ -111,6 +116,8 @@ export function StepPanel({
   const [title, setTitle] = useState(step.title ?? "");
   const [body, setBody] = useState<unknown>(step.body ?? null);
   const [dirty, setDirty] = useState(false);
+  // Zuletzt gespeicherter Stand (beim Öffnen: der des Schritts) — Basis für „was hat sich geändert“.
+  const saved = useRef<{ title: string; body: unknown }>({ title: step.title ?? "", body: step.body ?? null });
   const [rtKey, setRtKey] = useState(0);
   const [pendingNav, setPendingNav] = useState<null | { run: () => void; label: string }>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -146,8 +153,17 @@ export function StepPanel({
   }, [title, body]);
   async function save(): Promise<boolean> {
     const sent = { title, body };
+    // Nur GEÄNDERTE Felder schicken: hatten zwei Personen denselben Schritt offen, überschrieb
+    // die zweite sonst still den Titel der ersten, obwohl sie nur den Text ergänzt hatte
+    // (Grenzfall-Audit 24.09.).
+    // Vergleich mit dem Stand beim Öffnen (nicht mit `step`: der kann per Neuladen schon den
+    // Stand der anderen Person tragen — dann ginge deren Änderung doch wieder verloren).
+    const patch: { title?: string; body?: unknown } = {};
+    if (title !== saved.current.title) patch.title = title;
+    if (JSON.stringify(body ?? null) !== JSON.stringify(saved.current.body ?? null)) patch.body = body;
     try {
-      await onSaveStep(step.id, sent);
+      if (Object.keys(patch).length > 0) await onSaveStep(step.id, patch);
+      saved.current = sent;
       const cur = latestInput.current;
       if (cur.title === sent.title && cur.body === sent.body) setDirty(false);
       toast.success("Schritt gespeichert");
@@ -160,6 +176,7 @@ export function StepPanel({
   function discard() {
     setTitle(step.title ?? "");
     setBody(step.body ?? null);
+    saved.current = { title: step.title ?? "", body: step.body ?? null };
     setRtKey((k) => k + 1);
     setDirty(false);
   }
@@ -259,25 +276,28 @@ export function StepPanel({
   return (
     <div className="flex flex-col gap-5">
       <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b-2 border-line-2 bg-card/95 px-4 py-2 backdrop-blur">
-        <div className="flex items-center gap-1">
+        {/* Touch: mehr Abstand, damit sich die 40-px-Trefferflächen nicht überlappen. */}
+        <div className="flex items-center gap-1 pointer-coarse:gap-2">
           {onClose && (
-            <Button variant="ghost" size="icon-sm" onClick={onClose} title="Editor schließen" aria-label="Editor schließen">
+            // Ungespeichert: dieselbe Abfrage wie bei Vor/Zurück — inkl. „Speichern & schließen“
+            // (Audit 24.09.: vorher nur „Verwerfen“ oder „Weiter bearbeiten“).
+            <Button variant="ghost" size="icon-sm" className={HEAD_TAP} onClick={() => guardedNav(onClose, "schließen")} title="Editor schließen" aria-label="Editor schließen">
               <X className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon-sm" disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt" aria-label="Vorheriger Schritt">
+          <Button variant="ghost" size="icon-sm" className={HEAD_TAP} disabled={!hasPrev} onClick={() => guardedNav(onPrev, "zurück")} title="Vorheriger Schritt" aria-label="Vorheriger Schritt">
             <ChevronLeft className="size-4" />
           </Button>
           <span className="hidden min-w-12 text-center text-xs tabular-nums text-muted-foreground sm:inline-block">
             {index >= 0 ? `${index + 1} / ${total}` : ""}
           </span>
-          <Button variant="ghost" size="icon-sm" onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"} aria-label={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
+          <Button variant="ghost" size="icon-sm" className={HEAD_TAP} onClick={() => guardedNav(onNext, "weiter")} title={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"} aria-label={hasNext ? "Nächster Schritt" : "Neuen Schritt anlegen"}>
             {hasNext ? <ChevronRight className="size-4" /> : <Plus className="size-4" />}
           </Button>
           <span className="mx-0.5 h-4 w-px bg-line-2" aria-hidden />
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-sm" className={HEAD_TAP}
             disabled={!canMoveUp}
             onClick={() => onMove(step.id, "up")}
             title={canMoveUp ? "Schritt nach oben" : "Bei Verzweigungen bitte über die Antwort-Ziele umhängen"}
@@ -287,7 +307,7 @@ export function StepPanel({
           </Button>
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-sm" className={HEAD_TAP}
             disabled={!canMoveDown}
             onClick={() => onMove(step.id, "down")}
             title={canMoveDown ? "Schritt nach unten" : "Bei Verzweigungen bitte über die Antwort-Ziele umhängen"}
@@ -326,6 +346,7 @@ export function StepPanel({
         <Input
           id="step-title"
           value={title}
+          maxLength={STEP_TITLE_MAX}
           onChange={(e) => {
             setTitle(e.target.value);
             setDirty(true);
@@ -335,7 +356,9 @@ export function StepPanel({
       </div>
 
       {/* Reihenfolge (Welle 53): Titel → Erklärtext → Screenshot → Frage → Erweitert. */}
-      <div className="space-y-1.5">
+      {/* Touch: Erklärtext in 16 px — darunter zoomt iOS beim Antippen in die Seite (Audit
+          24.09.; die Schriftgröße setzt der Editor in rich-text.tsx, hier nur überschrieben). */}
+      <div className="space-y-1.5 pointer-coarse:[&_.ProseMirror]:text-base">
         <Label id={`body-label-${step.id}`}>Erklärtext</Label>
         <RichText
           key={rtKey}
@@ -451,7 +474,15 @@ export function StepPanel({
             <Button variant="ghost" onClick={() => setPendingNav(null)}>Abbrechen</Button>
             <Button
               variant="outline"
-              onClick={() => { const p = pendingNav; setPendingNav(null); discard(); p?.run(); }}
+              onClick={() => {
+                const p = pendingNav;
+                setPendingNav(null);
+                discard();
+                // Sofort melden (nicht erst im Effekt): sonst fragte der Builder beim Schließen
+                // ein zweites Mal „Änderungen verwerfen?“.
+                onDirtyChange?.(false);
+                p?.run();
+              }}
             >
               Verwerfen &amp; {pendingNav?.label ?? "weiter"}
             </Button>
@@ -461,6 +492,7 @@ export function StepPanel({
                 // Erst speichern; nur bei Erfolg navigieren (sonst Dialog offen lassen).
                 if (await save()) {
                   setPendingNav(null);
+                  onDirtyChange?.(false); // wie oben: keine zweite Abfrage beim Schließen
                   p?.run();
                 }
               }}
@@ -757,7 +789,7 @@ function BranchRow({
       <button
         type="button"
         onClick={onGo}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50"
+        className={`relative flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 ${TAP_AREA}`}
         title={branch.target_step_id ? "Zu diesem Schritt springen" : "Schritt für diese Antwort anlegen"}
         aria-label={branch.target_step_id ? "Zum Ziel-Schritt" : "Schritt anlegen"}
       >
@@ -766,7 +798,7 @@ function BranchRow({
       <button
         type="button"
         onClick={onDelete}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-no-soft hover:text-no focus-visible:ring-3 focus-visible:ring-ring/50"
+        className={`relative flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-no-soft hover:text-no focus-visible:ring-3 focus-visible:ring-ring/50 ${TAP_AREA}`}
         aria-label="Antwort löschen"
       >
         <Trash2 className="size-4" />

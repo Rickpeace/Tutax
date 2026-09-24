@@ -121,7 +121,8 @@ export function TeamManager({
                 type="email"
                 required
                 placeholder="kollegin@firma.de"
-                className={settingsInputClass}
+                // iOS zoomt bei Feldern unter 16 px in die Seite (Audit 24.09.) — auf Touch 16 px.
+                className={`${settingsInputClass} pointer-coarse:text-base`}
               />
             </div>
             <div className="grid gap-1.5">
@@ -131,7 +132,7 @@ export function TeamManager({
                   id="invite-role"
                   name="role"
                   defaultValue="editor"
-                  className={`${settingsInputClass} cursor-pointer appearance-none pr-9`}
+                  className={`${settingsInputClass} cursor-pointer appearance-none pr-9 pointer-coarse:text-base`}
                 >
                   <option value="member">Mitarbeiter</option>
                   <option value="editor">Bearbeiter</option>

@@ -8,7 +8,8 @@ import { slugify, fallbackSlug } from "@/lib/slug";
 import { after } from "next/server";
 import { reindexAccount, reindexTemplateForAccounts, removeTutorialEmbeddings } from "@/lib/kb";
 import { invalidateTemplateHubs, invalidateHubTag } from "@/lib/cache-tags";
-import { translateTutorial } from "@/lib/translate-jobs";
+import { backfillAccountTranslations, translateTutorial } from "@/lib/translate-jobs";
+import { backfillAccountAudio } from "@/lib/tts";
 import { retireHiddenTemplateForks } from "@/lib/template-forks";
 import { withUserErrors, UserError } from "@/lib/action-error";
 import { createClient } from "@/lib/supabase/server";
@@ -185,6 +186,20 @@ export async function setAccountPlan(accountId: string, plan: "free" | "pro" | "
   // was nur OpenAI-Kosten erzeugt).
   const wasPaid = before?.plan === "pro" || before?.plan === "business";
   if (plan !== "free" && !wasPaid) after(() => reindexAccount(accountId));
+  // Wechsel AUF Business: Übersetzungen + Vorlese-Audio nachziehen — was unter Pro/Gratis
+  // geändert oder neu veröffentlicht wurde, hatte keine bzw. veraltete (Lebenszyklus-Audit
+  // 24.09.). Beides läuft über Caches (stale-Flag / Audio-Hash): Kosten nur für echte Lücken.
+  if (plan === "business" && before?.plan !== "business") {
+    after(async () => {
+      await backfillAccountTranslations(accountId).catch((e) =>
+        console.error("Upgrade-Übersetzung:", e instanceof Error ? e.message : e),
+      );
+      await backfillAccountAudio(accountId).catch((e) =>
+        console.error("Upgrade-Vorlesen:", e instanceof Error ? e.message : e),
+      );
+      if (acc?.slug) invalidateHubTag(acc.slug as string);
+    });
+  }
   revalidatePath("/admin", "layout"); // Vorlagen- UND Kunden-Seiten
 }
 

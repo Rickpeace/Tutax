@@ -112,3 +112,34 @@ export function hasInvalidBlur(highlights: unknown): boolean {
     return [x, y, w, hh].some((v) => typeof v !== "number" || !Number.isFinite(v));
   });
 }
+
+/**
+ * PRIVATE Originale entfernen, die kein Schritt und keine Automation mehr nutzt — nach dem
+ * Löschen einer Anleitung bzw. eines Schritts. Vorher blieben die Screenshots gespeichert, bis
+ * das ganze Konto gelöscht wurde (Grenzfall-Audit 24.09., Löschpflicht). Pfade können geteilt
+ * sein (Duplikate, „Bild übernehmen“, Automationen) — die bleiben. Im Zweifel (Abfrage
+ * gescheitert) wird nichts gelöscht. Nur Pfade im Ordner des Kontos. Wirft nicht.
+ */
+export async function removeUnusedOriginals(
+  paths: (string | null | undefined)[],
+  accountId: string | null | undefined,
+): Promise<void> {
+  const unique = [...new Set(paths.filter((p): p is string => isAccountStoragePath(accountId, p)))];
+  if (!unique.length) return;
+  const admin = createAdminClient();
+  try {
+    for (let i = 0; i < unique.length; i += 100) {
+      const chunk = unique.slice(i, i + 100);
+      const [{ data: s, error: e1 }, { data: a, error: e2 }] = await Promise.all([
+        admin.from("steps").select("image_path").in("image_path", chunk),
+        admin.from("automation_steps").select("image_path").in("image_path", chunk),
+      ]);
+      if (e1 || e2) continue;
+      const used = new Set([...(s ?? []), ...(a ?? [])].map((r) => r.image_path as string));
+      const remove = chunk.filter((p) => !used.has(p));
+      if (remove.length) await admin.storage.from(PRIVATE_IMAGE_BUCKET).remove(remove);
+    }
+  } catch (e) {
+    console.error("Originalbilder aufräumen fehlgeschlagen:", e instanceof Error ? e.message : e);
+  }
+}

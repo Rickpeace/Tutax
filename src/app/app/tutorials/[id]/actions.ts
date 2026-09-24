@@ -9,7 +9,7 @@ import {
   requireStepAccess,
   requireBranchAccess,
 } from "@/lib/account";
-import { hasInvalidBlur, rebuildPublicCopy, removeUnusedPublicCopies } from "@/lib/public-images";
+import { hasInvalidBlur, rebuildPublicCopy, removeUnusedOriginals, removeUnusedPublicCopies } from "@/lib/public-images";
 import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
@@ -27,8 +27,8 @@ import { reindexTutorialIfLive } from "@/lib/kb";
 import { YES } from "@/lib/builder/constants";
 import { normalizeDomain, mergeDomains } from "@/lib/site-domains";
 import { validateStepCondition } from "@/lib/guide";
-import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/lib/category-name";
-import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
+import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, categoryNameKey, cleanCategoryName } from "@/lib/category-name";
+import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX, STEP_BODY_TEXT_MAX, STEP_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder, resolveRoot } from "@/lib/builder/tree";
 import { planMove, deleteRewireTarget } from "@/lib/builder/rewire";
@@ -181,10 +181,25 @@ export async function insertStepIntoBranch(
     await supabase.from("steps").delete().eq("id", step.id);
     throw new Error(we.message);
   }
-  const { error: ue } = await supabase.from("step_branches").update({ target_step_id: step.id }).eq("id", branchId);
-  if (ue) {
-    await supabase.from("steps").delete().eq("id", step.id); // kaskadiert die Weiterleitung
-    throw new Error(ue.message);
+  // Umbiegen nur, wenn die Verbindung noch auf das gelesene Ziel zeigt (compare-and-set): fügten
+  // zwei Personen gleichzeitig an derselben Stelle ein, war sonst ein neuer Schritt unerreichbar
+  // (Grenzfall-Audit 24.09.). Hat jemand anderes schon umgebogen: an dessen Schritt anhängen.
+  for (let attempt = 0; ; attempt++) {
+    let q = supabase.from("step_branches").update({ target_step_id: step.id }).eq("id", branchId);
+    q = oldTarget ? q.eq("target_step_id", oldTarget) : q.is("target_step_id", null);
+    const { data: bent, error: ue } = await q.select("id");
+    if (ue) {
+      await supabase.from("steps").delete().eq("id", step.id); // kaskadiert die Weiterleitung
+      throw new Error(ue.message);
+    }
+    if (bent?.length) break;
+    const { data: now } = await supabase.from("step_branches").select("target_step_id").eq("id", branchId).maybeSingle();
+    if (!now || attempt >= 4) {
+      await supabase.from("steps").delete().eq("id", step.id);
+      throw new Error("Die Verbindung wurde gerade geändert – bitte Seite neu laden.");
+    }
+    oldTarget = (now.target_step_id as string | null) ?? null;
+    await supabase.from("step_branches").update({ target_step_id: oldTarget }).eq("id", weiterId);
   }
   await invalidateTutorialTags(tutorialId);
   return { oldTarget };
@@ -206,6 +221,12 @@ export async function updateStep(
   const { tutorialId } = await requireStepAccess(stepId);
   const supabase = await createClient();
   if (Object.keys(patch).length === 0) return;
+  // Längengrenzen (Grenzfall-Audit 24.09.: 10.000-Zeichen-Titel ging durch und floss in
+  // Vorlesen/Übersetzung). Titel kappen wie das Eingabefeld; überlangen Text ablehnen.
+  if (typeof patch.title === "string") patch = { ...patch, title: patch.title.slice(0, STEP_TITLE_MAX) };
+  if ("body" in patch && bodyTextLength(patch.body) > STEP_BODY_TEXT_MAX) {
+    throw new Error(`Der Erklärtext darf höchstens ${STEP_BODY_TEXT_MAX} Zeichen lang sein.`);
+  }
   if ("highlights" in patch && hasInvalidBlur(patch.highlights)) {
     throw new Error("Ungültige Verpixelung.");
   }
@@ -464,7 +485,9 @@ export async function deleteStep(
   // Öffentliche Bildkopie des gelöschten Schritts entfernen, sofern kein anderer veröffentlichter
   // Schritt sie noch nutzt (Sicherheitsprüfung Welle 51, H2/M1).
   if (victim?.image_path) {
-    await removeUnusedPublicCopies([victim.image_path as string], { accountId: await tutorialAccountId(tutorialId) });
+    const accountId = await tutorialAccountId(tutorialId);
+    await removeUnusedPublicCopies([victim.image_path as string], { accountId });
+    await removeUnusedOriginals([victim.image_path as string], accountId); // privates Original
   }
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
@@ -567,8 +590,13 @@ export const createCategory = withUserErrors(async function createCategory(name:
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("categories")
-    .select("position")
+    .select("id, name, position")
     .eq("account_id", account.id);
+  // Gibt es sie schon (Groß/Klein und Leerraum egal, wie beim Umbenennen)? Dann diese nehmen,
+  // statt eine zweite gleichnamige anzulegen (Grenzfall-Audit 24.09.).
+  const key = categoryNameKey(clean);
+  const same = (existing ?? []).find((c) => categoryNameKey(String(c.name ?? "")) === key);
+  if (same) return { id: same.id as string, name: same.name as string };
   const maxPos = (existing ?? []).reduce((m, c) => Math.max(m, Number(c.position) || 0), -1);
   const { data, error } = await supabase
     .from("categories")
@@ -718,8 +746,18 @@ export async function setTutorialCategory(
   tutorialId: string,
   categoryId: string | null,
 ) {
-  await requireTutorialAccess(tutorialId);
+  const { account } = await requireTutorialAccess(tutorialId);
   const supabase = await createClient();
+  if (categoryId) {
+    // Nur Kategorien der eigenen Organisation (auch als DB-Regel, Migration 0046).
+    const { data: cat } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", categoryId)
+      .eq("account_id", account.id)
+      .maybeSingle();
+    if (!cat) throw new Error("Diese Kategorie gibt es nicht mehr – bitte laden Sie die Seite neu.");
+  }
   const { error } = await supabase
     .from("tutorials")
     .update({ category_id: categoryId })
@@ -883,4 +921,17 @@ export async function applyStepTexts(
     };
   }
   return { ok: true, count: done.length };
+}
+
+/** Reine Textlänge eines TipTap-Dokuments (für die Längengrenze beim Speichern). */
+function bodyTextLength(doc: unknown): number {
+  let n = 0;
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const o = node as { text?: unknown; content?: unknown };
+    if (typeof o.text === "string") n += o.text.length;
+    if (Array.isArray(o.content)) o.content.forEach(walk);
+  };
+  walk(doc);
+  return n;
 }

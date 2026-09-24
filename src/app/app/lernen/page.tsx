@@ -133,8 +133,19 @@ export default async function LernenPage() {
                       </p>
                     )}
                   </div>
-                  <span className="hidden items-center gap-1 text-xs font-bold text-faint sm:flex">
-                    <Users className="size-3.5" /> {doneCount} von {members} im Team
+                  {/* Am Handy kompakt „2/5“ statt ganz ausgeblendet (Audit 24.09.); Screenreader
+                      bekommen immer den vollen Text. */}
+                  <span
+                    className="flex shrink-0 items-center gap-1 text-xs font-bold text-faint"
+                    title={`${doneCount} von ${members} im Team`}
+                  >
+                    <Users className="size-3.5" />
+                    <span aria-hidden className="tabular-nums sm:hidden">
+                      {doneCount}/{members}
+                    </span>
+                    <span className="sr-only sm:not-sr-only">
+                      {doneCount} von {members} im Team
+                    </span>
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
                 </Link>

@@ -12,6 +12,7 @@ import { ROLE_HINT, ROLE_LABEL, asRole, type Role } from "@/lib/roles";
 import { sendEmail, type SendResult } from "@/lib/email/send";
 import { inviteEmail, teamJoinedEmail } from "@/lib/email/templates";
 import { teamLimit } from "@/lib/plan";
+import { teamHasRoom } from "@/lib/team-room";
 import { INVITE_VALID_DAYS, inviteCutoffIso, isInviteExpired } from "@/lib/invitations";
 import { withUserErrors, UserError } from "@/lib/action-error";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
@@ -82,25 +83,6 @@ async function ownerOrRejection(): Promise<Awaited<ReturnType<typeof requireOwne
 /** Eingabe -> gültige Rolle (unbekannt = Bearbeiter, wie bisher der Standard). */
 function parseRole(v: unknown): Role {
   return v === "owner" || v === "member" ? v : "editor";
-}
-
-/**
- * Zweite Grenzprüfung beim ANNEHMEN (die erste läuft beim Einladen): schützt vor parallel
- * angelegten Einladungen und vor einem Tarif-Downgrade zwischen Einladen und Annehmen.
- * Wer schon Mitglied ist, zählt nicht (Annehmen ist dann ein No-op).
- */
-async function teamHasRoom(
-  admin: ReturnType<typeof createAdminClient>,
-  accountId: string,
-  userId: string,
-): Promise<boolean> {
-  const [{ data: acc }, { data: rows }] = await Promise.all([
-    admin.from("accounts").select("plan").eq("id", accountId).maybeSingle(),
-    admin.from("account_members").select("user_id").eq("account_id", accountId),
-  ]);
-  const list = rows ?? [];
-  if (list.some((m) => m.user_id === userId)) return true;
-  return list.length < teamLimit(acc ?? {});
 }
 
 const INVITE_EXPIRED = `Diese Einladung ist abgelaufen (gültig ${INVITE_VALID_DAYS} Tage). Bitten Sie den Inhaber, sie neu zu senden.`;

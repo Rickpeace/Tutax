@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type Box = { x: number; y: number; w: number; h: number };
 type Handle = "nw" | "ne" | "sw" | "se" | null;
@@ -206,6 +207,12 @@ export function CropDialog({
                         h: e.currentTarget.naturalHeight,
                       })
                     }
+                    onError={() => {
+                      // Kaputte Datei / kein Bild (z. B. umbenannte Textdatei): sagen statt eines
+                      // kaputten Bildes, bei dem „Übernehmen“ nichts tat (Grenzfall-Audit 24.09.).
+                      toast.error("Diese Datei ist kein lesbares Bild. Bitte ein PNG-, JPG- oder WebP-Bild wählen.");
+                      onCancel();
+                    }}
                   />
                   <div
                     className="absolute border-2 border-white"

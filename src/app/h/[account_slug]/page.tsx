@@ -22,6 +22,7 @@ import {
   type HubLang,
 } from "@/lib/i18n-hub";
 import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
+import { TAP_AREA } from "@/lib/tap-target";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
 // Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
@@ -353,11 +354,12 @@ export default async function HubPage({
             <span className="opacity-50">·</span>
           </>
         )}
-        <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
+        {/* Touch: unsichtbar 40 px hohe Trefferfläche (Handy-Audit 24.09.). */}
+        <a href="/impressum" target="_blank" rel="noopener noreferrer" className={`relative hover:underline ${TAP_AREA}`}>
           {labels.imprint}
         </a>
         <span className="opacity-50">·</span>
-        <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
+        <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className={`relative hover:underline ${TAP_AREA}`}>
           {labels.privacy}
         </a>
       </footer>

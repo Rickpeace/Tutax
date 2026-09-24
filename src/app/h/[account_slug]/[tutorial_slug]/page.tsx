@@ -21,6 +21,7 @@ import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { toPublicStep } from "@/lib/public-step";
 import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
+import { TAP_AREA } from "@/lib/tap-target";
 import { isBotUserAgent } from "@/app/h/bot-ua";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
@@ -326,7 +327,8 @@ export default async function ViewerPage({
         <Link
           href={`/h/${account.slug}${queryStr}`}
           data-tx="back"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
+          // Touch: unsichtbar 40 px hohe Trefferfläche (Handy-Audit 24.09.: vorher 20 px).
+          className={`relative mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)] ${TAP_AREA}`}
         >
           <ArrowLeft className="size-4" /> {labels.allTutorials}
         </Link>
@@ -372,11 +374,12 @@ export default async function ViewerPage({
         <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
           {t(lang, isPro(account) ? "providedByPlain" : "providedBy", { name: account.name })}
           <span className="mx-1.5 opacity-50">·</span>
-          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          {/* Touch: unsichtbar 40 px hohe Trefferfläche (Handy-Audit 24.09.). */}
+          <a href="/impressum" target="_blank" rel="noopener noreferrer" className={`relative hover:underline ${TAP_AREA}`}>
             {labels.imprint}
           </a>
           <span className="mx-1.5 opacity-50">·</span>
-          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className={`relative hover:underline ${TAP_AREA}`}>
             {labels.privacy}
           </a>
         </p>

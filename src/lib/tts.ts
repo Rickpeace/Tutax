@@ -7,6 +7,8 @@ import {
   ensureStepAudioCore,
   bodySpeechText,
   removeStepAudioCore,
+  speechHash,
+  stepSpeechText,
   removeTutorialAudioCore,
   type Synthesize,
 } from "@/lib/tts-core";
@@ -172,11 +174,14 @@ export async function ensureTutorialAudio(accountId: string, tutorialId: string)
   const admin = createAdminClient();
   // Vorlesen ist ein Business-Feature — leiser No-op darunter (kein Publish-Fehler).
   const { data: acc } = await admin.from("accounts").select("plan").eq("id", accountId).maybeSingle();
-  if (!isBusiness(acc ?? {})) return;
   const { data: steps } = await admin
     .from("steps")
     .select("id, title, body, audio_path, audio_hash")
     .eq("tutorial_id", tutorialId);
+  if (!isBusiness(acc ?? {})) {
+    await pruneStaleAudio(admin, steps ?? []);
+    return;
+  }
   const cfg = { ...providerCfg(), accountId, tutorialId };
   const fn = synthesize();
   for (const step of steps ?? []) {
@@ -220,7 +225,10 @@ export async function ensureStepAudio(stepId: string): Promise<void> {
   if (tut?.status !== "published" || tut?.visibility !== "public") return;
   // Vorlesen ist ein Business-Feature — leiser No-op darunter.
   const { data: acc } = await admin.from("accounts").select("plan").eq("id", tut.account_id).maybeSingle();
-  if (!isBusiness(acc ?? {})) return;
+  if (!isBusiness(acc ?? {})) {
+    await pruneStaleAudio(admin, [step]);
+    return;
+  }
 
   try {
     await ensureStepAudioCore(
@@ -261,5 +269,55 @@ export async function removeTutorialAudio(tutorialId: string): Promise<void> {
       "Vorlese-Audios (Tutorial) entfernen fehlgeschlagen:",
       e instanceof Error ? e.message : e,
     );
+  }
+}
+
+/**
+ * Unter Business (nach einem Herabstufen) wird kein Audio erzeugt — eine vorhandene MP3 zu einem
+ * inzwischen GEÄNDERTEN Text passte nach dem Wieder-Upgrade aber nicht mehr (▶ las den alten Text
+ * vor, Lebenszyklus-Audit 24.09.). Darum veraltete Aufnahmen entfernen; unveränderte bleiben
+ * liegen und gelten nach dem Wieder-Upgrade sofort wieder. Wirft nicht.
+ */
+async function pruneStaleAudio(
+  admin: ReturnType<typeof createAdminClient>,
+  steps: { id: string; title: string | null; body: unknown; audio_path: string | null; audio_hash: string | null }[],
+): Promise<void> {
+  const cfg = providerCfg();
+  for (const step of steps) {
+    if (!step.audio_path) continue;
+    const text = stepSpeechText(step);
+    if (text && speechHash(text, cfg.model, cfg.voice, cfg.provider) === step.audio_hash) continue;
+    try {
+      await removeStepAudioCore(admin, step);
+    } catch (e) {
+      console.error("Veraltetes Vorlese-Audio entfernen fehlgeschlagen:", e instanceof Error ? e.message : e);
+    }
+  }
+}
+
+const AUDIO_BACKFILL_CAP = 30;
+
+/**
+ * Wechsel auf Business (Upgrade oder Wieder-Upgrade): Vorlese-Audio aller veröffentlichten,
+ * öffentlichen Anleitungen nachziehen. Der Hash-Cache sorgt dafür, dass nur fehlende oder
+ * veraltete Aufnahmen Kosten erzeugen. Gedeckelt; der Rest entsteht beim nächsten Veröffentlichen.
+ */
+export async function backfillAccountAudio(accountId: string): Promise<void> {
+  if (!aiConfigured()) return;
+  const admin = createAdminClient();
+  const { data: tuts } = await admin
+    .from("tutorials")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("status", "published")
+    .eq("visibility", "public")
+    .order("updated_at", { ascending: false })
+    .limit(AUDIO_BACKFILL_CAP);
+  for (const t of tuts ?? []) {
+    try {
+      await ensureTutorialAudio(accountId, t.id as string);
+    } catch (e) {
+      console.error("Audio-Backfill:", e instanceof Error ? e.message : e);
+    }
   }
 }

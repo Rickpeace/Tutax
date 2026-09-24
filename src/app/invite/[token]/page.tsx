@@ -5,6 +5,7 @@ import { findAuthUserByEmail } from "@/lib/auth-admin";
 import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 import { InviteConfirm } from "@/components/auth/invite-confirm";
 import { INVITE_VALID_DAYS, isInviteExpired } from "@/lib/invitations";
+import { teamHasRoom } from "@/lib/team-room";
 
 export const metadata = { title: "Einladung", robots: { index: false } };
 
@@ -63,6 +64,16 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   const orgName = (inv.accounts as { name?: string } | null)?.name ?? "";
   const role = inv.role ?? "editor";
+
+  // Team voll (z. B. nach einem Tarif-Wechsel): gleich sagen — nicht erst nach dem Formular.
+  if (!(await teamHasRoom(admin, inv.account_id, user?.id ?? ""))) {
+    return (
+      <InviteNotice title="Team ist voll" withAppLink={!!user}>
+        Der Tarif von {orgName || "dieser Organisation"} erlaubt derzeit keine weiteren Personen. Bitte wenden Sie sich an
+        den Inhaber – sobald wieder Platz ist, funktioniert dieser Link.
+      </InviteNotice>
+    );
+  }
 
   if (user) {
     const mismatch = !!inv.email && (user.email ?? "").toLowerCase() !== inv.email.toLowerCase();

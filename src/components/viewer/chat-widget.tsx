@@ -323,7 +323,8 @@ export function ChatWidget({
               }}
               placeholder={L.chatPlaceholder}
               aria-describedby={input.length >= CHAT_WARN ? "chat-count" : undefined}
-              className={`min-w-0 flex-1 rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)] ${
+              // Auf Touch 16 px: darunter zoomt iOS beim Antippen in die Seite (Audit 24.09.).
+              className={`min-w-0 flex-1 rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--brand-accent)] pointer-coarse:text-base ${
                 input.length >= CHAT_WARN ? "pr-16" : ""
               }`}
             />

@@ -6,9 +6,9 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAccount, requireTutorialAccess } from "@/lib/account";
+import { orgSwitchedError, requireAccount, requireTutorialAccess } from "@/lib/account";
 import { slugify, fallbackSlug } from "@/lib/slug";
-import { removeUnusedPublicCopies } from "@/lib/public-images";
+import { removeUnusedOriginals, removeUnusedPublicCopies } from "@/lib/public-images";
 import { isAccountStoragePath } from "@/lib/storage-path";
 import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import { indexTutorial, reindexTutorialIfLive, removeTutorialEmbeddings } from "@/lib/kb";
@@ -38,7 +38,7 @@ import {
   audienceGateError,
   planLanguages,
 } from "@/lib/plan";
-import { TUTORIAL_QUOTA_MESSAGE, videoQuotaErrorFor } from "@/lib/tutorial-quota";
+import { videoQuotaErrorFor } from "@/lib/tutorial-quota";
 import type { Account, Step, StepBranch, Tutorial } from "@/lib/types";
 import { withUserErrors, UserError } from "@/lib/action-error";
 
@@ -79,12 +79,32 @@ export async function videoUploadQuotaError(): Promise<string | null> {
   return videoQuotaErrorFor(createAdminClient(), account.id);
 }
 
-/** Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen */
-export async function createTutorial(formData: FormData) {
+/**
+ * Neues Tutorial anlegen (optional in einer Kategorie) und in den Editor springen.
+ * Formular-Aktion (useActionState): liefert eine Meldung statt zu werfen.
+ */
+export async function createTutorial(
+  _prev: { error: string } | null,
+  formData: FormData,
+): Promise<{ error: string } | null> {
   const title = String(formData.get("title") ?? "").trim().slice(0, GUIDE_TITLE_MAX) || "Neue Anleitung";
   const categoryId = (String(formData.get("category_id") ?? "") || null) as string | null;
-  const { account } = await requireAccount();
+  const ctx = await requireAccount();
+  const { account } = ctx;
+  // Alter Tab nach Org-Wechsel: sonst entstand die Anleitung still in der anderen Organisation,
+  // samt Kategorie der vorigen (Lebenszyklus-Audit 24.09.).
+  const switched = orgSwitchedError(formData.get("account_id"), ctx);
+  if (switched) return { error: switched };
   const supabase = await createClient();
+  if (categoryId) {
+    const { data: cat } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", categoryId)
+      .eq("account_id", account.id)
+      .maybeSingle();
+    if (!cat) return { error: "Diese Kategorie gibt es nicht mehr – bitte laden Sie die Seite neu." };
+  }
 
   if (await tutorialQuotaReached(supabase, account)) {
     redirect("/app/settings/tarif?limit=tutorials");
@@ -280,6 +300,8 @@ export async function deleteTutorial(id: string) {
     (goneSteps ?? []).map((s) => s.image_path as string | null),
     { accountId: account.id, exceptTutorialId: id },
   ).catch((e) => console.error("Öffentliche Bilder nicht entfernt:", e instanceof Error ? e.message : e));
+  // Private Originale ebenfalls (sofern nicht von Duplikaten/Automationen mitgenutzt).
+  await removeUnusedOriginals((goneSteps ?? []).map((s) => s.image_path as string | null), account.id);
   revalidatePath("/app");
 }
 
@@ -460,6 +482,29 @@ async function ensureSlug(
 }
 
 /**
+ * Slug ermitteln UND sofort am Tutorial speichern — VOR dem Kopieren der Bilder. Veröffentlichten
+ * zwei gleichnamige Anleitungen gleichzeitig, scheiterte die zweite erst beim Status-Update am
+ * Unique-Index, ihre Bilder lagen dann aber schon öffentlich (Grenzfall-Audit 24.09.). Bei
+ * Kollision (23505) mit dem nächsten freien Zusatz erneut versuchen.
+ */
+async function claimSlug(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+  tutorialId: string,
+  title: string,
+  currentSlug: string | null,
+): Promise<string> {
+  let slug = await ensureSlug(supabase, accountId, tutorialId, title, currentSlug);
+  if (slug === currentSlug) return slug;
+  for (let attempt = 0; ; attempt++) {
+    const { error } = await supabase.from("tutorials").update({ slug }).eq("id", tutorialId);
+    if (!error) return slug;
+    if (error.code !== "23505" || attempt >= 4) throw new Error(error.message);
+    slug = await ensureSlug(supabase, accountId, tutorialId, title, null);
+  }
+}
+
+/**
  * Schritt-Bilder vom privaten in den öffentlichen Bucket kopieren.
  * WICHTIG: Blur-Markierungen werden dabei IN DIE PIXEL gebrannt — der Filter im
  * Viewer ist nur Optik; ohne Einbrennen läge das unredigierte Original öffentlich.
@@ -505,7 +550,9 @@ async function copyImagesToPublic(
   }
 
   const admin = createAdminClient();
-  for (const path of paths) {
+  // In kleinen Paketen parallel: streng nacheinander brauchte eine Anleitung mit 100 Bildern
+  // gut 60 s — am Zeitlimit der Funktion (Grenzfall-Audit 24.09.).
+  const copyOne = async (path: string) => {
     const { data: blob } = await admin.storage.from(PRIVATE_BUCKET).download(path);
     if (blob) {
       let buf: Buffer = Buffer.from(await blob.arrayBuffer());
@@ -524,6 +571,10 @@ async function copyImagesToPublic(
         .upload(path, buf, { upsert: true, contentType: "image/webp", cacheControl: "60" });
       if (upErr) throw new UserError("Veröffentlichen abgebrochen: Ein Bild konnte nicht hochgeladen werden.");
     }
+  };
+  const BATCH = 8;
+  for (let i = 0; i < paths.length; i += BATCH) {
+    await Promise.all(paths.slice(i, i + BATCH).map(copyOne));
   }
 }
 
@@ -622,7 +673,7 @@ export const publishTutorial = withUserErrors(async function publishTutorial(tut
     return { internal: true as const };
   }
 
-  const slug = await ensureSlug(supabase, account.id, tutorialId, tutorial.title, tutorial.slug);
+  const slug = await claimSlug(supabase, account.id, tutorialId, tutorial.title, tutorial.slug);
   await copyImagesToPublic(supabase, tutorialId);
 
   const { error: ue } = await supabase
@@ -710,7 +761,7 @@ async function applyVisibilityChange(
     // → öffentlich
     let slug = tutorial.slug;
     if (isPublished) {
-      slug = await ensureSlug(supabase, account.id, tutorial.id, tutorial.title, tutorial.slug);
+      slug = await claimSlug(supabase, account.id, tutorial.id, tutorial.title, tutorial.slug);
       await copyImagesToPublic(supabase, tutorial.id);
     }
     const { error: ue } = await supabase

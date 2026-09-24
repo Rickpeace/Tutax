@@ -296,6 +296,7 @@ export default async function PrintPage({
                       width={step.image_width}
                       height={step.image_height}
                       alt={step.title ?? ""}
+                      eager
                     />
                   </div>
                 )}

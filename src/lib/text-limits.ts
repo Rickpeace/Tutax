@@ -12,6 +12,12 @@ export const GUIDE_TITLE_MAX = 120;
 /** Kurzbeschreibung einer Anleitung (Untertitel auf der Karte). */
 export const GUIDE_DESCRIPTION_MAX = 160;
 
+/** Titel eines Schritts (gleiche Grenze wie „Texte mit KI verbessern“). */
+export const STEP_TITLE_MAX = 300;
+
+/** Reiner Text im Erklärtext eines Schritts (fließt in Vorlesen/Übersetzung → Kosten). */
+export const STEP_BODY_TEXT_MAX = 8000;
+
 /** Name einer Automation (Liste + Detailseite). */
 export const AUTOMATION_TITLE_MAX = 120;
 

@@ -123,7 +123,8 @@ export function SettingsMobileNav() {
         aria-label="Bereich der Einstellungen"
         value={current?.href ?? ""}
         onChange={(e) => router.push(e.target.value)}
-        className="absolute inset-0 size-full cursor-pointer opacity-0"
+        // Unsichtbar, aber 16 px: sonst zoomt iOS beim Antippen in die Seite (Audit 24.09.).
+        className="absolute inset-0 size-full cursor-pointer text-base opacity-0"
       >
         {!current && <option value="">Einstellungen</option>}
         {groups.map((g) => (

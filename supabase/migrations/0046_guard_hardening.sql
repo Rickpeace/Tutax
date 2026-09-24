@@ -78,3 +78,28 @@ drop policy if exists "public read published images" on storage.objects;
 drop policy if exists "read template categories" on public.categories;
 create policy "read template categories" on public.categories for select to authenticated
   using (account_id is null);
+
+-- ---------- 6) Anleitungen nur in Kategorien der eigenen Organisation ----------
+-- „Neue Anleitung“ in einem alten Tab nach Org-Wechsel legte die Anleitung in Org A mit der
+-- Kategorie von Org B an (Lebenszyklus-Audit 24.09.) — Verweis über Kontogrenzen.
+create or replace function public.guard_tutorial_category()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_user_request() or new.category_id is null then return new; end if;
+  if not exists (
+    select 1 from public.categories c
+    where c.id = new.category_id and c.account_id is not distinct from new.account_id
+  ) then
+    raise exception 'Kategorie gehört nicht zu dieser Organisation' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists tutorials_category_guard on public.tutorials;
+create trigger tutorials_category_guard
+  before insert or update of category_id, account_id on public.tutorials
+  for each row execute function public.guard_tutorial_category();

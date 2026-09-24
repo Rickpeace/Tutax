@@ -26,12 +26,12 @@ function planEffect(from: PlanKey, to: PlanKey): string {
   const rank = { free: 0, pro: 1, business: 2 } as const;
   if (rank[to] > rank[from]) {
     return to === "business"
-      ? "Freigeschaltet: alles aus Pro plus KI-Design, Mehrsprachigkeit, Vorlesen, interne Schulungen, unbegrenztes Team. Wirkt sofort."
+      ? "Freigeschaltet: alles aus Pro plus KI-Design, Mehrsprachigkeit, Vorlesen, interne Schulungen, unbegrenztes Team. Wirkt sofort; fehlende Übersetzungen und Vorlese-Aufnahmen entstehen im Hintergrund."
       : "Freigeschaltet: KI-Assistent, Wissensdatenbank, KI im Editor, Video, eigenes Logo/CI, Team bis 5. Der Chatbot-Index wird im Hintergrund aufgebaut.";
   }
   return to === "free"
     ? "Gesperrt: alle KI-Funktionen, Chat, Wissensdatenbank, Video, eigenes Logo/CI; die Hilfe-Seite zeigt wieder „Erstellt mit Steply“. Gespeicherte Daten bleiben erhalten und gelten nach einem erneuten Upgrade wieder."
-    : "Gesperrt: KI-Design, Mehrsprachigkeit, Vorlesen, interne Schulungen (Team über 5 bleibt, neue Einladungen nur bis 5). Gespeicherte Daten bleiben erhalten.";
+    : "Gesperrt: KI-Design, Mehrsprachigkeit, Vorlesen und das Anlegen neuer interner Schulungen – bestehende laufen samt Nachweis weiter (Team über 5 bleibt, neue Einladungen nur bis 5). Gespeicherte Daten bleiben erhalten.";
 }
 
 export function PlanSwitch({ accountId, plan }: { accountId: string; plan: PlanKey }) {
@@ -119,7 +119,7 @@ export function DeleteCustomer({ accountId, name, blocked }: { accountId: string
     start(async () => {
       try {
         const res = unwrap(await deleteCustomer(accountId, typed));
-        toast.success(`„${name}“ gelöscht – ${res.files} Dateien, ${res.users} Personen ohne weitere Organisation entfernt`);
+        toast.success(`„${name}“ gelöscht – ${res.files} ${res.files === 1 ? "Datei" : "Dateien"}, ${res.users} ${res.users === 1 ? "Person" : "Personen"} ohne weitere Organisation entfernt`);
         setOpen(false);
         router.push("/admin/kunden");
         router.refresh();

@@ -16,6 +16,8 @@ import {
 import type { Highlight } from "@/lib/types";
 import { DEFAULT_HIGHLIGHT_COLOR, markColor, markColorKey } from "@/lib/highlight-color";
 import { BlurFilterDef, BlurLayer, LensLayer, boxPx } from "@/components/viewer/svg-marks";
+import { TAP_AREA } from "@/lib/tap-target";
+import { COARSE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 
 type Tool = "select" | "rect" | "ellipse" | "arrow" | "blur";
 type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | "start" | "end";
@@ -34,11 +36,56 @@ const MIN = 0.01;
 // Magnetisches Einrasten (Welle 51a): Toleranz relativ zur Bildgröße.
 const SNAP = 0.015;
 const NO_GUIDES: Guides = { x: [], y: [] };
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
+
+/**
+ * Markierung sicher ins Bild legen (Handy-Audit 24.09.): Koordinaten sind relativ 0..1 —
+ * eine Box hat danach x,y ≥ 0, x+w ≤ 1, y+h ≤ 1 (negative Breite/Höhe werden gedreht),
+ * ein Pfeil hat beide Endpunkte im Bild. Vorher kamen verirrte Werte wie y = −3,1 durch.
+ */
+export function clampHighlight(h: Highlight): Highlight {
+  const inside = (v: number) => Number.isFinite(v) && v >= 0 && v <= 1;
+  // Schon im Bild: unverändert lassen (keine Rundungs-Artefakte bei jeder Speicherung).
+  if (inside(h.x) && inside(h.y) && inside(h.x + h.w) && inside(h.y + h.h)) {
+    if (h.type === "arrow" || (h.w >= 0 && h.h >= 0)) return h;
+  }
+  if (h.type === "arrow") {
+    const sx = clamp01(h.x);
+    const sy = clamp01(h.y);
+    return { ...h, x: sx, y: sy, w: clamp01(h.x + h.w) - sx, h: clamp01(h.y + h.h) - sy };
+  }
+  const x1 = clamp01(Math.min(h.x, h.x + h.w));
+  const x2 = clamp01(Math.max(h.x, h.x + h.w));
+  const y1 = clamp01(Math.min(h.y, h.y + h.h));
+  const y2 = clamp01(Math.max(h.y, h.y + h.h));
+  return { ...h, x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+
+/**
+ * Vor dem Speichern: alles ins Bild klemmen und unsichtbare Reste (Box ohne Fläche, Pfeil ohne
+ * Länge — z. B. eine komplett außerhalb liegende Form) weglassen.
+ */
+export function sanitizeHighlights(list: Highlight[]): Highlight[] {
+  return list
+    .map(clampHighlight)
+    .filter((h) => (h.type === "arrow" ? h.w !== 0 || h.h !== 0 : h.w > 0 && h.h > 0));
+}
+
+/**
+ * Ist eine frisch aufgezogene Form groß genug, um sie zu übernehmen? Boxen brauchen die
+ * Mindestgröße in BEIDEN Achsen (vorher reichte eine — ein senkrechter Wisch ergab eine
+ * 0 px breite Box), ein Pfeil eine Mindestlänge.
+ */
+export function isDrawnShapeBigEnough(h: Highlight): boolean {
+  if (h.type === "arrow") return Math.hypot(h.w, h.h) >= 2 * MIN;
+  return Math.abs(h.w) >= MIN && Math.abs(h.h) >= MIN;
+}
 
 // Werkzeug + Farbe überleben den Schrittwechsel (Modul-Gedächtnis für die Sitzung):
 // wer zehn Schritte hintereinander markiert, will nicht jedes Mal neu wählen.
-let lastTool: Tool = "rect";
+// null = noch nie gewählt → Maus startet mit „Rechteck“, Touch mit „Auswählen“ (Audit
+// 24.09.: am Handy zeichnete sonst schon das Scrollen über das Bild neue Markierungen).
+let lastTool: Tool | null = null;
 let lastColor = COLORS[0].value;
 
 // Auto-Schwärzung (Welle 28): Sobald der Autor die Markierungen eines Schritts speichert
@@ -142,7 +189,10 @@ export function HighlightEditor({
   /** Werkzeugleiste beim Scrollen oben festhalten (für den Großmodus). */
   stickyToolbar?: boolean;
 }) {
-  const [tool, setToolState] = useState<Tool>(lastTool);
+  // Hydration-sicher: der Server kennt kein Zeigegerät (→ Maus), der Browser korrigiert sofort.
+  const coarse = useMediaQuery(COARSE_QUERY);
+  const [picked, setToolState] = useState<Tool | null>(lastTool);
+  const tool: Tool = picked ?? (coarse ? "select" : "rect");
   const [color, setColorState] = useState(lastColor);
   const setTool = (t: Tool) => {
     lastTool = t;
@@ -163,7 +213,9 @@ export function HighlightEditor({
 
   // Jede gespeicherte Highlight-Liste läuft durch markReviewed: eine Änderung an den
   // Markierungen gilt als Prüfung der Auto-Schwärzungen (Welle 28).
-  const commit = (list: Highlight[]) => onChange(markReviewed(list));
+  // Zusätzlich jede Form ins Bild klemmen (Audit 24.09.) — so wird nie etwas außerhalb von
+  // 0..1 gespeichert oder veröffentlicht.
+  const commit = (list: Highlight[]) => onChange(sanitizeHighlights(markReviewed(list)));
   const inherited = highlights.filter((h) => h.suggested && h.suggestedFrom === "previous");
   const hasAutoSuggested = highlights.some((h) => h.suggested && !h.suggestedFrom);
 
@@ -254,6 +306,8 @@ export function HighlightEditor({
 
   // --- Zeichnen (Hintergrund) ---
   function onCanvasDown(e: React.PointerEvent) {
+    // Zweiter Finger (z. B. beim Zoomen) startet keine weitere Form.
+    if (!e.isPrimary) return;
     if (tool === "select") {
       setSelectedId(null);
       return;
@@ -305,7 +359,7 @@ export function HighlightEditor({
     setGuides(NO_GUIDES);
     if (draft) {
       const n = normalize(draft);
-      if (Math.abs(n.w) >= MIN || Math.abs(n.h) >= MIN) {
+      if (isDrawnShapeBigEnough(n)) {
         commit([...highlights, n]);
         setSelectedId(n.id);
       }
@@ -317,6 +371,16 @@ export function HighlightEditor({
       setLive(null);
       manip.current = null;
     }
+  }
+
+  // Der Browser hat die Geste übernommen (z. B. Scrollen am Handy): Angefangenes verwerfen,
+  // statt eine halbe Form oder Verschiebung liegen zu lassen.
+  function onCanvasCancel() {
+    setGuides(NO_GUIDES);
+    setDraft(null);
+    drawStart.current = null;
+    setLive(null);
+    manip.current = null;
   }
 
   function startManip(e: React.PointerEvent, id: string, handle: Handle | null) {
@@ -369,6 +433,10 @@ export function HighlightEditor({
   }
 
   const selected = highlights.find((h) => h.id === selectedId) ?? null;
+  // Touch (Audit 24.09.): Solange weder ein Zeichenwerkzeug aktiv noch eine Form gewählt
+  // bzw. ein Zug im Gange ist, scrollt ein senkrechter Wisch über das Bild die Seite. Zum
+  // Verschieben eine Form erst antippen (wählt sie aus), dann ziehen. Maus: ohne Wirkung.
+  const canvasTouch = tool !== "select" || selected || draft || live ? "none" : "pan-y";
   const rendered = highlights.map((h) => (live && h.id === live.id ? live : h));
   const shapes = draft ? [...rendered, draft] : rendered;
   const blurs = shapes.filter((h) => h.type === "blur");
@@ -403,13 +471,15 @@ export function HighlightEditor({
           </ToolBtn>
         </div>
         <div className="mx-1 h-5 w-px bg-line" />
-        <div className="flex gap-1">
+        {/* Touch: mehr Abstand, damit die vergrößerten Trefferflächen (TAP_AREA) nicht auf
+            das Nachbarfeld reichen (Audit 24.09.). */}
+        <div className="flex gap-1 pointer-coarse:gap-3">
           {COLORS.map((c) => (
             <button
               key={c.value}
               type="button"
               onClick={() => setColor(c.value)}
-              className={`size-5 rounded-full border-2 ${color === c.value ? "border-ink" : "border-transparent"}`}
+              className={`relative size-5 rounded-full border-2 ${TAP_AREA} ${color === c.value ? "border-ink" : "border-transparent"}`}
               style={{ background: c.value }}
               title={c.label}
               aria-label={`Farbe: ${c.label}`}
@@ -420,14 +490,14 @@ export function HighlightEditor({
         {/* Aktionen für die ausgewählte Form: IMMER gerendert (nur deaktiviert ohne Auswahl),
             damit die Leiste beim Anklicken einer Form nicht umbricht und das Bild unter dem
             Mauszeiger verrutscht (sonst springt die Form beim Ziehen). */}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1 pointer-coarse:gap-3">
           <button
             type="button"
             onClick={() => center("x")}
             disabled={!selected}
             title="Waagerecht auf die Bildmitte zentrieren"
             aria-label="Waagerecht zentrieren"
-            className="flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+            className={`relative flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35 ${TAP_AREA}`}
           >
             <AlignHorizontalJustifyCenter className="size-4" />
           </button>
@@ -437,7 +507,7 @@ export function HighlightEditor({
             disabled={!selected}
             title="Senkrecht auf die Bildmitte zentrieren"
             aria-label="Senkrecht zentrieren"
-            className="flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+            className={`relative flex items-center rounded-md p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-35 ${TAP_AREA}`}
           >
             <AlignVerticalJustifyCenter className="size-4" />
           </button>
@@ -447,7 +517,7 @@ export function HighlightEditor({
             disabled={!selected || selected.type === "arrow" || selected.type === "blur"}
             title="Diesen Bereich als Lupe vergrößert zeigen"
             aria-pressed={!!selected?.zoom}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-35 ${
+            className={`relative flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-35 ${TAP_AREA} ${
               selected?.zoom ? "bg-accent text-primary" : "text-muted-foreground hover:bg-muted"
             }`}
           >
@@ -458,7 +528,7 @@ export function HighlightEditor({
             onClick={deleteSelected}
             disabled={!selected}
             title="Ausgewählte Form löschen (Entf)"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-no hover:bg-no-soft disabled:pointer-events-none disabled:opacity-35"
+            className={`relative flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-no hover:bg-no-soft disabled:pointer-events-none disabled:opacity-35 ${TAP_AREA}`}
           >
             <Trash2 className="size-3.5" /> Löschen
           </button>
@@ -513,10 +583,11 @@ export function HighlightEditor({
         ref={wrapRef}
         data-testid="highlight-canvas"
         className="relative overflow-hidden rounded-lg ring-2 ring-line select-none"
-        style={{ touchAction: "none", cursor: tool === "select" ? "default" : "crosshair" }}
+        style={{ touchAction: canvasTouch, cursor: tool === "select" ? "default" : "crosshair" }}
         onPointerDown={onCanvasDown}
         onPointerMove={onCanvasMove}
         onPointerUp={onCanvasUp}
+        onPointerCancel={onCanvasCancel}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt="Screenshot" className="block w-full max-w-full" draggable={false} />
@@ -600,6 +671,12 @@ export function HighlightEditor({
           an den Punkten ziehen zum Größe-Ändern, als <b>Lupe</b> vergrößern.
           „Verpixeln“ macht sensible Daten unkenntlich. Formen rasten an der Bildmitte und an
           anderen Markierungen ein (mit gedrückter Alt-Taste frei ziehen).
+          {coarse && (
+            <>
+              {" "}Am Handy/Tablet scrollt Wischen über das Bild, solange „Auswählen“ aktiv
+              ist; eine Form zum Verschieben erst antippen.
+            </>
+          )}
         </p>
       )}
     </div>
@@ -629,7 +706,9 @@ function Shape({
   const stroke = markColor(h.color);
   const common = {
     onPointerDown: onDown,
-    style: { cursor: "move", pointerEvents: "all" as const, stroke },
+    // touchAction: Formen selbst sind auch am Handy direkt greifbar (wo der Browser es auf
+    // SVG unterstützt) — der Rest des Bildes scrollt (siehe canvasTouch).
+    style: { cursor: "move", pointerEvents: "all" as const, touchAction: "none" as const, stroke },
     strokeWidth: sw,
     fill: "transparent",
   };
@@ -657,7 +736,7 @@ function Shape({
           y2={py + ph}
           stroke="transparent"
           strokeWidth={16}
-          style={{ cursor: "move", pointerEvents: "all" }}
+          style={{ cursor: "move", pointerEvents: "all", touchAction: "none" }}
           onPointerDown={onDown}
         />
         {selected && (
@@ -705,7 +784,7 @@ function Shape({
           className={h.suggested ? "stroke-primary" : "stroke-ink/45"}
           strokeWidth={1}
           strokeDasharray="4 3"
-          style={{ cursor: "move", pointerEvents: "all" }}
+          style={{ cursor: "move", pointerEvents: "all", touchAction: "none" }}
           onPointerDown={onDown}
         />
         {handles}
@@ -777,7 +856,7 @@ function Dot({
   onDown: (e: React.PointerEvent) => void;
 }) {
   return (
-    <g onPointerDown={onDown} style={{ cursor, pointerEvents: "all" }}>
+    <g onPointerDown={onDown} style={{ cursor, pointerEvents: "all", touchAction: "none" }}>
       {/* große, unsichtbare Touch-Trefferfläche */}
       <rect x={cx - 13} y={cy - 13} width={26} height={26} fill="transparent" />
       <rect

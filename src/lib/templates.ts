@@ -88,7 +88,9 @@ export async function getCatalog(
         slug: fork.slug,
         status: fork.status,
         freshness: fork.freshness,
-        categoryId: t.category_id ?? row.category_id ?? fork.category_id,
+        // Die Wahl des Kunden (Kategorie der Kopie) vor Steplys Vorgabe — gleiche Regel wie in
+        // der Bibliothek (app/page.tsx); sonst stand die Kopie je Ansicht woanders (Audit 24.09.).
+        categoryId: fork.category_id ?? row.category_id ?? t.category_id,
         kind: "fork",
         enabled: !!row.enabled,
         visible: !!row.enabled && fork.status === "published" && fork.visibility === "public",
@@ -103,7 +105,7 @@ export async function getCatalog(
         slug: t.slug,
         status: "published",
         freshness: t.freshness,
-        categoryId: t.category_id ?? row?.category_id ?? null,
+        categoryId: row?.category_id ?? t.category_id ?? null,
         kind: "standard",
         enabled: !!row?.enabled,
         visible: !!row?.enabled,

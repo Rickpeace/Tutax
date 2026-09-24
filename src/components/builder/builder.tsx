@@ -19,6 +19,8 @@ import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/im
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair, swapPlan } from "@/lib/builder/rewire";
 import { unwrap, isNavigationError } from "@/lib/action-error";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { MOBILE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
 
 import {
@@ -159,20 +161,40 @@ export function Builder({
     (fn: () => Promise<unknown>, opts?: { retry?: boolean }) => Promise<unknown>
   >(() => Promise.resolve());
 
+  // Ungespeicherte Eingabe im Schritt-Panel (Titel/Text) — siehe saveStep / Wächter unten.
+  const dirtyRef = useRef(false);
+  const noExtension = useMediaQuery(MOBILE_QUERY); // Handy/Tablet: keine Browser-Erweiterung
+
   // Speichern fehlgeschlagen: ruhig und ehrlich melden. Die Eingabe bleibt stehen; wer nicht
-  // erneut versucht, bekommt nach dem Schließen der Meldung wieder den Server-Stand.
+  // erneut versucht, bekommt nach dem Schließen der Meldung wieder den Server-Stand — aber NIE,
+  // solange noch ungetippte Eingabe offen ist oder das Netz weg ist: das Nachladen leitete nach
+  // einer Abmeldung still auf /login bzw. offline auf die Fehlerseite, der Text war weg
+  // (Grenzfall-Audit 24.09.).
   const reportSaveError = useCallback(
-    (fn: () => Promise<unknown>, canRetry: boolean) => {
+    async (fn: () => Promise<unknown>, canRetry: boolean) => {
       if (canRetry) failed.current.push(fn);
       let retried = false;
       const resync = () => {
-        if (retried) return;
+        if (retried || dirtyRef.current || !navigator.onLine) return;
         failed.current = [];
         router.refresh();
       };
-      toast.error("Nicht gespeichert – Ihre Eingabe ist noch da. Bitte erneut versuchen.", {
+      // Abgemeldet (z. B. „Abmelden“ in einem anderen Tab)? Dann genau das sagen.
+      let signedOut = false;
+      try {
+        const { data } = await createBrowserClient().auth.getSession();
+        signedOut = !data.session;
+      } catch {
+        /* unklar -> allgemeine Meldung */
+      }
+      const message = signedOut
+        ? "Nicht gespeichert – Sie wurden abgemeldet. Melden Sie sich in einem neuen Tab wieder an und speichern Sie dann hier erneut; Ihre Eingabe bleibt stehen."
+        : !navigator.onLine
+          ? "Nicht gespeichert – keine Internetverbindung. Ihre Eingabe bleibt stehen; speichern Sie erneut, sobald Sie wieder online sind."
+          : "Nicht gespeichert – Ihre Eingabe ist noch da. Bitte erneut versuchen.";
+      toast.error(message, {
         id: "builder-save-error", // mehrere Fehler kurz hintereinander = EINE Meldung
-        duration: 12_000,
+        duration: signedOut ? 30_000 : 12_000,
         action:
           failed.current.length > 0
             ? {
@@ -214,7 +236,7 @@ export function Builder({
           setTimeout(() => window.location.reload(), 1800);
           return;
         }
-        reportSaveError(fn, opts?.retry !== false);
+        void reportSaveError(fn, opts?.retry !== false);
       }).finally(() => {
         pending.current -= 1;
       });
@@ -227,9 +249,8 @@ export function Builder({
   }, [persist]);
 
   // Explizites Speichern (Titel/Text) – kein Auto-Save mehr bei jedem Tastendruck.
-  const dirtyRef = useRef(false);
   const saveStep = useCallback(
-    async (id: string, patch: { title: string; body: unknown }) => {
+    async (id: string, patch: { title?: string; body?: unknown }) => {
       setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
       // await -> wirft bei Fehler, damit der Aufrufer KEINEN Erfolg meldet (Toast/Nav).
       // Kein „Erneut versuchen“ in der Meldung: der Speichern-Knopf im Panel bleibt stehen
@@ -884,6 +905,16 @@ export function Builder({
     setSelectedId(null);
   }, [confirmDiscard]);
 
+  // Schrittwechsel im Editor: Scroll-Bereich wieder an den Anfang (Handy-Audit 24.09.: die
+  // Schublade behielt die Position des vorigen Schritts — man landete mitten im neuen).
+  const sheetScrollRef = useRef<HTMLDivElement>(null);
+  const asideScrollRef = useRef<HTMLDivElement>(null);
+  const selectedStepId = selectedStep?.id ?? null;
+  useEffect(() => {
+    if (sheetScrollRef.current) sheetScrollRef.current.scrollTop = 0;
+    if (asideScrollRef.current) asideScrollRef.current.scrollTop = 0;
+  }, [selectedStepId]);
+
   const renderPanel = (withClose = false) =>
     selectedStep ? (
       <StepPanel
@@ -952,24 +983,35 @@ export function Builder({
       className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center"
       data-testid="empty-builder"
     >
+      {/* Handy/Tablet: keine Browser-Erweiterung möglich → „von Hand“ ist dort der Weg,
+          die Aufnahme nur als Hinweis (Handy-Audit 24.09.). */}
       <p className="max-w-sm text-sm text-muted-foreground">
-        Noch keine Schritte. Am schnellsten nehmen Sie den Ablauf mit der Steply-Erweiterung
-        auf – oder Sie legen die Schritte von Hand an.
+        {noExtension
+          ? "Noch keine Schritte. Legen Sie die Schritte hier von Hand an – aufnehmen können Sie am Computer mit der Steply-Erweiterung (Chrome/Edge)."
+          : "Noch keine Schritte. Am schnellsten nehmen Sie den Ablauf mit der Steply-Erweiterung auf – oder Sie legen die Schritte von Hand an."}
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <Button
-          onClick={() =>
-            setRecordTarget({
-              anchor: { afterStepId: tutorialId },
-              label: "am Anfang der Anleitung",
-            })
-          }
-        >
-          <Zap className="size-4" /> Mit der Steply-Erweiterung aufnehmen
-        </Button>
-        <Button variant="outline" onClick={handleAddStep}>
-          <Plus className="size-4" /> Schritt von Hand anlegen
-        </Button>
+        {noExtension ? (
+          <Button onClick={handleAddStep}>
+            <Plus className="size-4" /> Schritt von Hand anlegen
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={() =>
+                setRecordTarget({
+                  anchor: { afterStepId: tutorialId },
+                  label: "am Anfang der Anleitung",
+                })
+              }
+            >
+              <Zap className="size-4" /> Mit der Steply-Erweiterung aufnehmen
+            </Button>
+            <Button variant="outline" onClick={handleAddStep}>
+              <Plus className="size-4" /> Schritt von Hand anlegen
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1026,7 +1068,7 @@ export function Builder({
             data-testid="step-editor-panel"
             className="sticky top-[4.5rem] flex max-h-[calc(100vh-5.5rem)] w-[clamp(360px,44%,600px)] shrink-0 flex-col self-start overflow-hidden rounded-2xl border-2 border-line bg-card shadow-sm"
           >
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+            <div ref={asideScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
               {renderPanel(true)}
             </div>
           </aside>
@@ -1038,6 +1080,7 @@ export function Builder({
           {/* EINE Kopfzeile: die Navigationszeile des Panels (mit ✕ links wie im angedockten
               Panel) ist der Kopf; der Titel bleibt für Screenreader erhalten. */}
           <SheetContent
+            ref={sheetScrollRef}
             side={mobile ? "bottom" : "right"}
             showCloseButton={false}
             className={

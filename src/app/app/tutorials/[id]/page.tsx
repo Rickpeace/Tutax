@@ -61,6 +61,31 @@ export default async function EditorPage({
     .order("position", { ascending: true })
     .returns<Step[]>();
 
+  // Angepasste Standard-Anleitung (Kopie einer Vorlage): Ob sie auf der Hilfe-Seite steht,
+  // entscheidet der Schalter in der Bibliothek bzw. ob Steply die Vorlage noch anbietet — der
+  // Status „Veröffentlicht“ allein sagt das nicht (Lebenszyklus-Audit 24.09.).
+  const { data: forkLink } = await supabase
+    .from("account_templates")
+    .select("enabled, template_id")
+    .eq("account_id", tutorial.account_id)
+    .eq("forked_tutorial_id", id)
+    .maybeSingle();
+  let templateNote: string | null = null;
+  if (forkLink) {
+    const { data: tpl } = await supabase
+      .from("tutorials")
+      .select("status")
+      .eq("id", forkLink.template_id)
+      .maybeSingle();
+    if (tpl?.status !== "published") {
+      templateNote =
+        "Steply bietet die zugrunde liegende Standard-Anleitung nicht mehr an – Ihre angepasste Fassung erscheint deshalb nicht auf der Hilfe-Seite. Ihre Änderungen bleiben erhalten.";
+    } else if (!forkLink.enabled) {
+      templateNote =
+        "Diese angepasste Standard-Anleitung ist ausgeschaltet und erscheint nicht auf der Hilfe-Seite. Einschalten unter „Anleitungen“ → „Standard-Anleitungen von Steply“.";
+    }
+  }
+
   const stepIds = (steps ?? []).map((s) => s.id);
   const [{ data: branches }, { data: videoJob }] = await Promise.all([
     stepIds.length
@@ -99,6 +124,16 @@ export default async function EditorPage({
         slug={tutorial.slug}
         hasSteps={(steps ?? []).length > 0}
       />
+
+      {templateNote && (
+        <p
+          role="note"
+          data-testid="template-fork-note"
+          className="mb-4 rounded-card border-2 border-line bg-line-2 px-4 py-2.5 text-sm font-semibold text-ink-2"
+        >
+          {templateNote}
+        </p>
+      )}
 
       <Builder
         tutorialId={id}

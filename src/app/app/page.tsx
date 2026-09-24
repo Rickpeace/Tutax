@@ -92,12 +92,16 @@ export default async function DashboardPage() {
   const ownIds = own.map((t) => t.id);
   const stepCountById = await countTutorialSteps(createAdminClient(), ownIds);
 
-  // Standard-Anleitungen (Vorlagen)
+  // Standard-Anleitungen (Vorlagen). Kategorie wie auf der Hilfe-Seite (lib/templates.ts):
+  // die Wahl des Kunden (Kopie) vor der Vorgabe von Steply.
+  const ownCatName = new Map(cats.map((c) => [c.id, c.name]));
+  const catNameOf = (id: string | null | undefined) =>
+    (id && (ownCatName.get(id) ?? globalCatName.get(id))) || null;
   const templateItems: TemplateItem[] = templates.map((t) => {
     const row = atByTpl.get(t.id);
-    const categoryName = (t.category_id && globalCatName.get(t.category_id)) || "Sonstiges";
     if (row?.forked_tutorial_id) {
       const fork = ownById.get(row.forked_tutorial_id);
+      const categoryName = catNameOf(fork?.category_id) ?? catNameOf(t.category_id) ?? "Sonstiges";
       return {
         templateId: t.id,
         title: fork?.title ?? t.title,
@@ -115,9 +119,27 @@ export default async function DashboardPage() {
       enabled: !!row?.enabled,
       renderId: t.id,
       slug: t.slug,
-      categoryName,
+      categoryName: catNameOf(t.category_id) ?? "Sonstiges",
     };
   });
+  // Angepasste Kopien einer Vorlage, die Steply zurückgezogen hat: weiter zeigen (sonst war die
+  // eigene Arbeit aus der Bibliothek verschwunden) — mit Hinweis statt Schalter.
+  const publishedTplIds = new Set(templates.map((t) => t.id));
+  for (const a of ats) {
+    if (!a.forked_tutorial_id || publishedTplIds.has(a.template_id)) continue;
+    const fork = ownById.get(a.forked_tutorial_id);
+    if (!fork) continue;
+    templateItems.push({
+      templateId: a.template_id,
+      title: fork.title,
+      kind: "fork",
+      enabled: false,
+      renderId: fork.id,
+      slug: fork.slug,
+      categoryName: catNameOf(fork.category_id) ?? "Sonstiges",
+      withdrawn: true,
+    });
+  }
 
   const items: LibraryTutorial[] = own.map((t) => ({
     id: t.id,

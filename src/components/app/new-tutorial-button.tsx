@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import {
@@ -29,6 +29,8 @@ import { VideoUpload } from "@/components/app/video-upload";
 import { useRecorderExtension } from "@/lib/use-recorder-extension";
 import { ProPill } from "@/components/app/settings-ui";
 import { GUIDE_TITLE_MAX } from "@/lib/text-limits";
+import { MOBILE_QUERY, useMediaQuery } from "@/lib/use-media-query";
+import { TAP_AREA } from "@/lib/tap-target";
 
 /**
  * „Neues Tutorial" (Welle 20): öffnet zuerst eine Weiche mit zwei Karten —
@@ -62,6 +64,16 @@ export function NewTutorialButton({
   const [mode, setMode] = useState<"choice" | "manual">("choice");
   const [videoOpen, setVideoOpen] = useState(false);
   const { installed: extInstalled, version: extVersion } = useRecorderExtension();
+  const [createState, createAction] = useActionState(createTutorial, null);
+  const mobile = useMediaQuery(MOBILE_QUERY);
+  const sofortCard = (
+    <SofortAnleitungCard
+      installed={extInstalled}
+      version={extVersion}
+      onNavigate={() => setOpen(false)}
+      desktopOnly={mobile}
+    />
+  );
 
   const openWith = (o: boolean) => {
     setOpen(o);
@@ -106,22 +118,25 @@ export function NewTutorialButton({
               {/* STANDARD-Methode zuerst (Richard, 06.07.): Die Sofort-Anleitung ist der
                   empfohlene Normalfall — „Selbst bauen" und „Aus Video" sind die Alternativen.
                   Kein Navigations-Ziel bei installierter Extension: die Aufnahme laeuft in
-                  der Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek. */}
-              <SofortAnleitungCard
-                installed={extInstalled}
-                version={extVersion}
-                onNavigate={() => setOpen(false)}
-              />
+                  der Seitenleiste, der Entwurf erscheint automatisch in der Bibliothek.
+                  Handy/Tablet (Audit 24.09.): die Erweiterung läuft nur am Computer — dort ist
+                  „Selbst bauen“ die Empfehlung, die Sofort-Anleitung rückt nach unten. */}
+              {!mobile && sofortCard}
               <div className="mt-1 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setMode("manual")}
-                  className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40"
+                  className={`flex flex-col items-start gap-2 rounded-xl bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 ${
+                    mobile ? "border-2 border-primary/25" : "border border-border"
+                  }`}
                 >
                   <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
                     <Pencil className="size-5" />
                   </span>
-                  <span className="font-bold text-ink">Selbst bauen</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-bold text-ink">Selbst bauen</span>
+                    {mobile && <RecommendedPill />}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     Schritte von Hand anlegen — Screenshot, Markierung und Text.
                   </span>
@@ -161,6 +176,7 @@ export function NewTutorialButton({
                   </a>
                 )}
               </div>
+              {mobile && sofortCard}
             </>
           ) : (
             <>
@@ -170,15 +186,17 @@ export function NewTutorialButton({
                     type="button"
                     onClick={() => setMode("choice")}
                     aria-label="Zurück zur Auswahl"
-                    className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-ink"
+                    // Touch: unsichtbar 40 px Trefferfläche (Handy-Audit 24.09.: vorher 20 × 20 px).
+                    className={`relative rounded-md p-0.5 text-muted-foreground transition-colors hover:text-ink ${TAP_AREA}`}
                   >
                     <ChevronLeft className="size-4" />
                   </button>
                   Selbst bauen
                 </DialogTitle>
               </DialogHeader>
-              <form action={createTutorial} className="space-y-4">
+              <form action={createAction} className="space-y-4">
                 <input type="hidden" name="category_id" value={categoryId ?? ""} />
+                <input type="hidden" name="account_id" value={accountId} />
                 <div className="space-y-1.5">
                   <Label htmlFor="title">Titel</Label>
                   <Input
@@ -190,6 +208,11 @@ export function NewTutorialButton({
                     maxLength={GUIDE_TITLE_MAX}
                   />
                 </div>
+                {createState?.error && (
+                  <p role="alert" className="text-sm font-semibold text-destructive">
+                    {createState.error}
+                  </p>
+                )}
                 <DialogFooter>
                   <SubmitButton />
                 </DialogFooter>
@@ -211,6 +234,23 @@ export function NewTutorialButton({
   );
 }
 
+function RecommendedPill() {
+  return (
+    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
+      Empfohlen
+    </span>
+  );
+}
+
+/** Statt „Empfohlen“ auf Handy/Tablet: die Erweiterung gibt es nur am Computer. */
+function DesktopOnlyPill() {
+  return (
+    <span className="rounded-full bg-line-2 px-2 py-0.5 text-[10px] font-extrabold text-muted-foreground">
+      Nur am Computer (Chrome/Edge)
+    </span>
+  );
+}
+
 /**
  * Sofort-Anleitung-Karte im „Neue Anleitung"-Dialog. Installiert -> Kurzanleitung (kein
  * Navigations-Ziel: die Aufnahme laeuft in der Seitenleiste); nicht installiert -> Link
@@ -223,11 +263,15 @@ function SofortAnleitungCard({
   installed,
   version,
   onNavigate,
+  desktopOnly = false,
 }: {
   installed: boolean | null;
   version: string;
   onNavigate: () => void;
+  /** Handy/Tablet: nicht als Empfehlung zeigen, sondern „Nur am Computer“ kennzeichnen. */
+  desktopOnly?: boolean;
 }) {
+  const pill = desktopOnly ? <DesktopOnlyPill /> : <RecommendedPill />;
   // Waehrend der Erkennung (installed === null) neutral-installiert-freundlich rendern:
   // wir zeigen die Kurzanleitung erst bei bestaetigter Installation, sonst den Install-Link.
   const isInstalled = installed === true;
@@ -255,9 +299,7 @@ function SofortAnleitungCard({
             <Zap className="size-5" />
           </span>
           <span className="font-bold text-ink">Sofort-Anleitung</span>
-          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
-            Empfohlen
-          </span>
+          {pill}
           <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-bold text-ink">
             <CheckCircle2 className="size-3 text-primary" /> Installiert
             {version ? " (v" + version + ")" : ""}
@@ -287,11 +329,9 @@ function SofortAnleitungCard({
         <Zap className="size-5" />
       </span>
       <span className="flex-1">
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-bold text-ink">Sofort-Anleitung</span>
-          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
-            Empfohlen
-          </span>
+          {pill}
         </span>
         <span className="block text-xs text-muted-foreground">
           Klicken statt filmen: Steply-Erweiterung in 3 Schritten einrichten, dann entsteht
