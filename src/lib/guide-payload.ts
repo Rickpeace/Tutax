@@ -131,6 +131,8 @@ export type GuideStepRow = {
   position: number;
   // Erweiterte Interaktion (Welle 48, Migration 0036) — optional: nur die Recorder-Route liest sie.
   interaction?: unknown;
+  // „Nur wenn vorhanden“ (Welle 42) — die Führung überspringt den Schritt, fehlt das Element.
+  condition?: unknown;
 };
 
 export type GuideBranchRow = {
@@ -208,6 +210,10 @@ export function buildGuidePayload(
       interaction:
         s.interaction && typeof s.interaction === "object" && !Array.isArray(s.interaction)
           ? (s.interaction as Record<string, unknown>)
+          : null,
+      condition:
+        s.condition && typeof s.condition === "object" && !Array.isArray(s.condition)
+          ? (s.condition as Record<string, unknown>)
           : null,
       is_decision: !!s.is_decision,
       // Kein eigenes question-Feld in der DB: bei Entscheidungen ist der Schritt-Titel die

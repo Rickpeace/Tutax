@@ -2333,6 +2333,9 @@ function addGuideStep(src, img, tabId, imprecise) {
     // Vertrag s. content.js. Nur ein Objekt durchreichen; der Server validiert streng.
     interaction:
       src.interaction && typeof src.interaction === "object" ? src.interaction : null,
+    // condition (Runde 4): Cookie-Banner-Klicks kommen schon als „nur wenn vorhanden“ (content.js);
+    // der Schalter in der Liste zeigt das an und bleibt abschaltbar.
+    condition: src.condition && typeof src.condition === "object" ? src.condition : null,
     // typed_value (Welle 54): der eingetippte Wert eines Eingabe-Schritts (content.js lässt ihn
     // bei sensiblen Feldern weg). Wird in der Liste angezeigt und kann vor dem Hochladen
     // weggelassen werden; der Server validiert ihn erneut.
@@ -5149,6 +5152,13 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     // zählen auch nicht als Selektor-Fehlschlag in der Telemetrie.
     const noTarget = guideNoTargetText(step);
     const intentional = !!noTarget;
+    // „Nur wenn vorhanden“ (z. B. Cookie-Banner, der beim wiederholten Besuch schon weg ist):
+    // fehlt das Element, ist der Schritt erledigt — weiter statt „nicht zu finden“ (Runde 4).
+    if (!intentional && step && step.condition && typeof step.condition === "object" && !step.is_decision) {
+      guide.skipNote = null;
+      guideGoNext();
+      return;
+    }
     guideSetFallback(
       true,
       noTarget || "Diese Stelle ist auf der Seite gerade nicht zu finden – orientieren Sie sich am Screenshot.",

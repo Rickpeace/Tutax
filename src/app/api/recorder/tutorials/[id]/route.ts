@@ -64,7 +64,7 @@ export async function GET(
   const { data: stepsData, error: stepsErr } = await admin
     .from("steps")
     .select(
-      "id, title, body, image_path, image_width, image_height, highlights, selector, page_url, is_decision, position, interaction",
+      "id, title, body, image_path, image_width, image_height, highlights, selector, page_url, is_decision, position, interaction, condition",
     )
     .eq("tutorial_id", id)
     .order("position", { ascending: true })

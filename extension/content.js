@@ -1488,6 +1488,31 @@
   // im Bild landet. opts: { cx, cy (Fallback-Kreis), interaction, label (statt labelFor),
   // extra (zusaetzliche Schritt-Felder, z. B. fileMeta), noValue (kein typed_value, Welle 54) }. el darf null sein (Tastenkuerzel
   // ohne Fokus-Element) -> leeres Rechteck. Rueckgabe: ts des Schritts.
+  // Klick in einem Cookie-/Einwilligungs-Banner? Container (auch ueber Shadow-Hosts) mit typischem
+  // Namen UND passender Beschriftung — oder die Beschriftung nennt Cookies ausdruecklich.
+  const CONSENT_BOX_RE = /(cookie|consent|gdpr|cmp|onetrust|usercentrics|didomi|borlabs|klaro|cookiebot|einwillig|datenschutz-?banner)/i;
+  const CONSENT_TEXT_RE = /(akzeptier|zustimm|einverstanden|einwillig|zulassen|erlauben|ablehnen|nur (notwendig|erforderlich|essenziell)|accept|allow|reject|agree|consent|speichern)/i;
+  function isConsentClick(el, label) {
+    try {
+      const text = String(label || "");
+      if (/cookie/i.test(text)) return true;
+      if (!CONSENT_TEXT_RE.test(text)) return false;
+      let node = el;
+      for (let i = 0; node && i < 14; i++) {
+        if (node.nodeType === 1) {
+          const attrs = [node.id, typeof node.className === "string" ? node.className : "", node.getAttribute && node.getAttribute("aria-label"), node.tagName]
+            .filter(Boolean)
+            .join(" ");
+          if (CONSENT_BOX_RE.test(attrs)) return true;
+        }
+        node = node.parentElement || (node.getRootNode && node.getRootNode() && node.getRootNode().host) || null;
+      }
+    } catch (err) {
+      /* im Zweifel kein Banner */
+    }
+    return false;
+  }
+
   function emitStep(el, action, opts) {
     const o = opts || {};
     // Welle 55 (L5/L6): „spot" = Markierung um den KLICKPUNKT statt um ein Element. Fuer
@@ -1518,6 +1543,12 @@
       if (typed) step.typed_value = typed;
     }
     if (o.extra) Object.assign(step, o.extra);
+    // Cookie-/Einwilligungs-Banner (Runde 4, Richards Wahl): beim wiederholten Besuch ist das Banner
+    // schon weggeklickt — der Schritt gilt darum automatisch als „nur wenn vorhanden“ (Führung und
+    // Automation ueberspringen ihn dann statt haengen zu bleiben). Im Panel abschaltbar.
+    if (step.action === "click" && step.selector && el && isConsentClick(el, step.label)) {
+      step.condition = { kind: "element", selector: step.selector };
+    }
     const inter = o.interaction ? Object.assign({}, o.interaction) : {};
     let framePx = null;
     if (!IS_TOP) {

@@ -306,6 +306,22 @@ export function Wizard({
   // „Hatten wir schon eine User-Geste?“ (Start eines Tons ODER Weiter/Zurück).
   // Erst dann darf ein neuer Schritt automatisch vorgelesen werden (Autoplay-Policy).
   const gestureRef = useRef(false);
+  // Vorlesen erst, wenn der Besucher es selbst gestartet hat (▶ oder Auto) — Richards Wahl
+  // 24.09.: vorher las die Seite nach dem ersten „Weiter“ ungefragt laut vor (Büro!). Die Wahl
+  // merkt sich der Browser, damit Nutzer, die Vorlesen brauchen, es nicht jedes Mal neu starten.
+  const LISTEN_KEY = "steply-tts-listen";
+  const listenRef = useRef(false);
+  useEffect(() => {
+    try {
+      listenRef.current = localStorage.getItem(LISTEN_KEY) === "1";
+    } catch {}
+  }, []);
+  const setListen = (on: boolean) => {
+    listenRef.current = on;
+    try {
+      localStorage.setItem(LISTEN_KEY, on ? "1" : "0");
+    } catch {}
+  };
   // Timer für audiolose Schritte im Auto-Modus (4 s -> weiter).
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearAutoTimer = useCallback(() => {
@@ -328,6 +344,7 @@ export function Wizard({
     if (!el) return;
     gestureRef.current = true; // erster Ton = Geste vorhanden
     if (el.paused) {
+      setListen(true); // ab jetzt die folgenden Schritte automatisch vorlesen
       // ▶ bei „Ton aus“ = bewusster Wunsch nach Ton → Stummschaltung aufheben, damit der
       // Schalter nicht „aus“ zeigt, während vorgelesen wird (Audit 24.09.).
       if (muted) {
@@ -351,6 +368,7 @@ export function Wizard({
         audioRef.current?.pause();
         setAuto(false);
         clearAutoTimer();
+        setListen(false);
       }
       return next;
     });
@@ -362,6 +380,7 @@ export function Wizard({
       const next = !a;
       if (next) {
         gestureRef.current = true;
+        setListen(true);
         if (muted) {
           setMuted(false);
           try {
@@ -489,7 +508,8 @@ export function Wizard({
     if (!hasAudio || muted || step == null) return;
     const stepHasAudio = !!(cur && audioUrls[cur]);
     if (stepHasAudio) {
-      if (gestureRef.current || auto) tryPlay();
+      // Nur wenn der Besucher Vorlesen selbst gestartet hat (▶/Auto) — nicht schon beim „Weiter“.
+      if ((gestureRef.current && listenRef.current) || auto) tryPlay();
       // ended-Handler (im <audio>) übernimmt das Weiterschalten im Auto-Modus.
       return;
     }

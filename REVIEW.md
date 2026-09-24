@@ -133,8 +133,9 @@ Teil 5+6, `test-video-container`, `test-search-match`, `test-email-links` (Link-
   Automations-Aktionen prüfen Konto + Rolle · Läufe-Protokoll mit deutschen Gründen + „bei Schritt N“ ·
   Parameter-Nummerierung exakt · „Änderung übernehmen“ bei formatierten Schritten → Editor statt Formatverlust ·
   unlesbarer Aktualitäts-Check = Fehler (Hinweise bleiben)
-- [ ] Produktfragen: alte Testkonten in Produktion löschen? · Vorlesen startet automatisch (Ton an) · eigenes
-  Impressum für Kunden-Hilfe-Seiten · Cookie-Banner-Schritte automatisch „nur wenn vorhanden“
+- [x] Richards Entscheidungen 24.09.: 29 alte Test-Organisationen gelöscht (6 echte bleiben) · Vorlesen erst nach
+  ▶/Auto (Wahl wird im Browser gemerkt) · Cookie-Banner-Klicks automatisch „nur wenn vorhanden“ (Erweiterung 2.19.8;
+  Führung überspringt fehlende) · eigenes Impressum für Kunden: vorerst nicht (später optional 2 Link-Felder)
 - [ ] Offen/klein: SSRF-DNS-Rebinding-Rest (ssrf.ts) · KI-Kosten-Bremsen (Rate-Limits pro Konto, Chat-History) ·
   Einladungs-Mails ohne Rate-Limit · Mail-Text bei E-Mail-Wechsel (entfällt mit „Secure email change“) ·
   unsaved Farben beim Reiterwechsel · Auswahl-Angabe nicht vorbelegt · Daumen-Feedback mehrfach · og:image-Fallback ·
