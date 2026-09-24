@@ -223,6 +223,14 @@ export function looksSensitiveValue(value: unknown): boolean {
 /** Steuer-Identifikationsnummer: 11 Ziffern, erste ≠ 0, Prüfziffer nach ISO 7064 (Mod 11,10). */
 function steuerIdValid(d: string): boolean {
   if (!/^[1-9]\d{10}$/.test(d)) return false;
+  // Strukturregel der Steuer-ID (Runde 4: nur die Prüfziffer traf ~10 % harmloser Nummern):
+  // in den ersten 10 Ziffern kommt GENAU eine Ziffer doppelt oder dreifach vor, alle anderen
+  // höchstens einmal; eine dreifache Ziffer steht nie dreimal direkt hintereinander.
+  const counts = new Array(10).fill(0);
+  for (let i = 0; i < 10; i++) counts[Number(d[i])]++;
+  const multi = counts.filter((c) => c > 1);
+  if (multi.length !== 1 || multi[0] > 3) return false;
+  if (multi[0] === 3 && /(\d)\1\1/.test(d.slice(0, 10))) return false;
   let product = 10;
   for (let i = 0; i < 10; i++) {
     let sum = (Number(d[i]) + product) % 10;

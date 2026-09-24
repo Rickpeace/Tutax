@@ -113,6 +113,8 @@ export type StepInteraction = {
   dropLabel?: string;
   hover?: InteractionSelector; // vorher mit der Maus über dieses Element (Menü öffnen)
   hoverLabel?: string;
+  /** Kontrollkästchen/Schalter: Zustand NACH dem Klick (Runde 4) — Automation setzt genau ihn. */
+  checked?: boolean;
   frame?: { url: string; nth?: number }; // Schritt liegt in einem iframe (origin+pathname; nth = Position unter gleichartigen Geschwistern)
 };
 

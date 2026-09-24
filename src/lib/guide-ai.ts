@@ -49,6 +49,7 @@ export type RefineStep = {
   password?: boolean; // Passwortfeld: nie ein Wert, Titel „Passwort eingeben“
   fieldKind?: string | null; // „Suchfeld“, „Textfeld“ … (nur Eingaben)
   element?: string | null; // Art des geklickten Elements („Link“, „Kontrollkästchen“ …)
+  valueHidden?: boolean; // Eingabe mit Wert, der bewusst NICHT mitkam (sensibel/zu lang) — nie erfinden
   page?: string | null; // Seitentitel beim Klick
   bodyLocked?: boolean; // formatierter Text (Liste, Fett …) → nur der Titel wird verbessert
   extraSources?: string[]; // weitere wörtlich zitierbare Angaben (z. B. Dateiname)
@@ -111,6 +112,9 @@ export function refineStepFromGuide(steps: GuideStepInput[], i: number): RefineS
             ? "Auswahlfeld"
             : "Textfeld",
     element: s.action === "click" ? elementKindWord(role) : null,
+    // Eingabe ohne mitgeschickten Wert = verborgen (IBAN, Steuer-ID … oder zu lang). Ohne diesen
+    // Hinweis erfand die KI einen Wert („Geben Sie „Dropdown“ in das Feld „Dropdown“ ein“, Runde 4).
+    valueHidden: s.action === "type" && !s.typed_value && !password,
     page: s.title || null,
     extraSources: s.file_meta?.filename ? [s.file_meta.filename] : [],
     requireLabel: !!s.label,
@@ -352,6 +356,7 @@ export function buildRefineRequest(
       ...(s.quote && m.label ? { zitat: masker.mask(oneLine(s.quote)) } : {}),
       ...(feld ? { feld } : {}),
       ...(s.element && s.action === "click" ? { element: s.element } : {}),
+      ...(s.valueHidden ? { wert_verborgen: true as const } : {}),
       ...(interaktion ? { interaktion: masker.mask(interaktion) } : {}),
       ...(m.required.length && !s.password ? { wert: m.required.join(", ") } : {}),
       ...(m.page ? { seite: m.page } : {}),
@@ -420,6 +425,8 @@ export function keepsInteraction(text: string, it: StepInteraction | null | unde
   const mods = modifierKeysDe(it);
   if (mods && !mods.split("+").every((k) => text.toLowerCase().includes(k.toLowerCase()))) return false;
   if (it.hover && !/maus|fahren|zeige|hover|beweg/i.test(text)) return false;
+  // Abwählen darf nie als „aktivieren/anhaken“ erscheinen (Runde 4).
+  if (it.checked === false && /(?<!de)aktivier|anhak|ankreuz/i.test(text)) return false;
   return true;
 }
 
@@ -582,7 +589,7 @@ export async function refineGuideSteps(
 
 const DEFAULT_GUIDE_TITLE_RE = /^Anleitung vom /;
 const GUIDE_TITLE_SYS =
-  'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Titel für eine Klick-Anleitung auf Deutsch: das Ziel der ganzen Anleitung, höchstens 6 Wörter, handlungsorientiert (z. B. „Rechnung als PDF exportieren“), ohne Anführungszeichen, ohne Datum. Erfinde nichts, was nicht aus den Schritten hervorgeht. Platzhalter wie {{WERT}} nie in den Titel übernehmen.';
+  'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Titel für eine Klick-Anleitung auf Deutsch: das Ziel der GANZEN Anleitung (alle Schritte zusammengefasst — nie einfach den Titel eines einzelnen Schritts übernehmen), höchstens 6 Wörter, handlungsorientiert (z. B. „Rechnung als PDF exportieren“), ohne Anführungszeichen, ohne Datum. Erfinde nichts, was nicht aus den Schritten hervorgeht. Platzhalter wie {{WERT}} nie in den Titel übernehmen.';
 
 /** Titel-Vorschlag aus den (maskierten) Schritt-Titeln — eingetippte Werte erreichen die KI nie. */
 async function suggestGuideTitle(ctx: RefineContext, steps: RefineStep[], titles: string[]): Promise<string | null> {
@@ -608,5 +615,7 @@ async function suggestGuideTitle(ctx: RefineContext, steps: RefineStep[], titles
   const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as { title?: unknown };
   const t = typeof raw.title === "string" ? oneLine(raw.title).replace(/^[„"“]+|[“"”]+$/g, "").trim() : "";
   if (!t || t.length > 80 || /\{\{|WERT/.test(t) || DEFAULT_GUIDE_TITLE_RE.test(t)) return null;
+  // Bei mehreren Schritten nicht einfach den Titel EINES Schritts nehmen (irreführend, Runde 4).
+  if (list.length > 2 && list.some((x) => x.toLowerCase() === t.toLowerCase())) return null;
   return t;
 }

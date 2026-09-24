@@ -356,7 +356,10 @@ export async function convertTutorialToAutomation(
     // fill/select brauchen einen Wert → Parameter. toggle wird nur „angehakt“ (kein Param).
     // upload zieht seinen Wert aus der getragenen Datei (source), nicht aus einem Parameter.
     if (action === "fill" || action === "select") {
-      const label = (s.selector?.text || s.title || "Eingabe").trim();
+      // Auswahlliste: selector.text ist die aufgenommene OPTION, kein Feldname — als Angabe hieß
+      // sie sonst z. B. „Option 1“ (Runde 4). Dann neutral nach dem Schritt benennen.
+      const label =
+        action === "select" ? `Auswahl in Schritt ${i + 1}` : (s.selector?.text || s.title || "Eingabe").trim();
       let base = slugKey(label);
       if (!base) base = `k${++emptyCounter}`;
       let key = base;

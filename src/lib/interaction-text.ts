@@ -153,6 +153,8 @@ export function describeInteractionForAi(i: StepInteraction | null | undefined):
   const mods = modifierKeysDe(i);
   if (mods) parts.push(`dabei ${modifierPhraseDe(i)} gedrückt halten (${mods}+Klick)`);
   if (i.enter) parts.push("Eingabe mit ENTER bestätigen");
+  if (i.checked === false) parts.push("Kontrollkästchen wird ABGEWÄHLT (Haken entfernen) — nicht „aktivieren“");
+  else if (i.checked === true) parts.push("Kontrollkästchen wird angehakt/aktiviert");
   if (i.frame) parts.push("liegt in einem eingebetteten Bereich der Seite");
   return parts.length ? parts.join("; ") : null;
 }

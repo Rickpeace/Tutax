@@ -305,6 +305,7 @@ export type GuideRefinePromptStep = {
   zitat?: string; // empfohlener kennzeichnender Teil der Beschriftung (bei Anhängseln)
   feld?: string; // Art des Eingabefelds (Suchfeld, Textfeld, Passwortfeld, Auswahlliste)
   element?: string; // Art des geklickten Elements (Link, Schaltfläche, Kontrollkästchen …)
+  wert_verborgen?: true; // es wurde etwas eingegeben, der Wert ist aber bewusst verborgen
   interaktion?: string; // Rechtsklick, Enter, … (MUSS erhalten bleiben)
   wert?: string; // Platzhalter des eingegebenen Werts ({{WERT}}), nie der Wert selbst
   seite?: string; // Seitentitel beim Klick (nur wenn er sich zum vorigen Schritt ändert)
@@ -335,6 +336,7 @@ NICHTS ERFINDEN:
 - Platzhalter wie {{WERT}} stehen für eingegebene Werte: exakt so übernehmen, nie auflösen, nie erfinden. Hat ein Schritt „wert“, MUSS dieser Platzhalter in Titel oder Text vorkommen.
 - „element“ sagt, WAS angeklickt wird: Kontrollkästchen/Schalter/Optionsfeld → „… aktivieren“, „… abhaken“ oder „… auswählen“ (nie „öffnen“); Link/Menüeintrag → das Ziel öffnen bzw. anzeigen. „Suchen“ nur bei einem Suchfeld — ein Link oder Knopf mit einem Wort wie „filter()“ ist keine Suche. Beschriftungen mit Sonderzeichen (z. B. „filter()“) exakt so zitieren.
 - Auswahllisten („feld“: Auswahlliste): „„{{WERT}}“ auswählen“ statt „eingeben“; Text z. B. „Wählen Sie in der Liste „{{WERT}}“ aus.“
+- „wert_verborgen“: true → es wurde etwas eingegeben, der Wert ist aus Datenschutzgründen verborgen. Nenne NIE einen Wert und zitiere nichts als Eingabe; schreibe z. B. „Geben Sie Ihre Steuer-ID in das Feld „Steuer-ID“ ein.“ (nur die echte Beschriftung zitieren).
 - Passwortfelder („feld“: Passwortfeld): nie einen Wert nennen, Titel „Passwort eingeben“, Text z. B. „Geben Sie Ihr Passwort in das Feld „Password“ ein.“ (mit der echten Beschriftung).
 - Hat ein Schritt eine „interaktion“ (Rechtsklick, Doppelklick, Ziehen, Tastenkürzel, Enter, vorher mit der Maus über ein Menü fahren), MUSS diese Bedienung im Text erhalten bleiben — mach daraus nie einen einfachen Klick. Tastenkürzel in deutscher Schreibweise (Strg statt Ctrl), Enter als „Enter“.
 - „text_fest“: true → der bisherige Text bleibt; gib „body“ als "" zurück und formuliere nur den Titel.

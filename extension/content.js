@@ -1166,6 +1166,14 @@
   // Steuer-ID: 11 Ziffern, erste nicht 0, Pruefziffer nach ISO 7064 (Mod 11,10).
   function steuerIdValid(d) {
     if (!/^[1-9]\d{10}$/.test(d)) return false;
+    // Strukturregel der Steuer-ID (Runde 4: nur die Prüfziffer traf ~10 % harmloser Nummern):
+    // in den ersten 10 Ziffern kommt GENAU eine Ziffer doppelt oder dreifach vor, alle anderen
+    // höchstens einmal; eine dreifache Ziffer steht nie dreimal direkt hintereinander.
+    const counts = new Array(10).fill(0);
+    for (let i = 0; i < 10; i++) counts[Number(d[i])]++;
+    const multi = counts.filter((c) => c > 1);
+    if (multi.length !== 1 || multi[0] > 3) return false;
+    if (multi[0] === 3 && /(\d)\1\1/.test(d.slice(0, 10))) return false;
     let product = 10;
     for (let i = 0; i < 10; i++) {
       let sum = (Number(d[i]) + product) % 10;
@@ -1937,6 +1945,15 @@
       opts.interaction.modifiers = mods.slice();
     }
     const ts = emitStep(el, "click", opts);
+    // Kontrollkaestchen/Schalter: den Zustand NACH dem Klick nachreichen (Runde 4) — Automationen
+    // setzen dann genau diesen Zustand statt blind umzuschalten, Texte sagen „abwaehlen“.
+    const toggleEl = checkableFor(el);
+    if (toggleEl) {
+      setTimeout(() => {
+        const st = checkedStateOf(toggleEl);
+        if (typeof st === "boolean") sendPatch(ts, { checked: st });
+      }, 80);
+    }
     lastClickStep = { el, ts, at: Date.now(), doubled: false };
     recentClicks.push({ el, at: lastClickStep.at });
     if (recentClicks.length > 12) recentClicks.shift();
@@ -2799,6 +2816,7 @@
   // zehn Schritte erzeugt (der Screenshot zeigt dann die letzte erfasste Position).
   // Shadow DOM: change ist nicht composed -> watchShadowRoots haengt denselben Listener an
   // jeden beruehrten Root (event.target ist dort das echte Element).
+  let lastSelectStep = { el: null, t: 0, ts: 0 };
   let lastRangeStep = { el: null, t: 0 };
   function onChange(event) {
     if (!recording || mode !== "guide") return;
@@ -2824,7 +2842,19 @@
       }
       lastRangeStep = { el, t: now };
     }
-    emitStep(el, "type");
+    // Auswahlliste per Tastatur (Pfeiltasten/Tippen): jede Zwischen-Option feuert change. Folgt
+    // die naechste Aenderung am SELBEN <select> kurz darauf, den vorigen Schritt zuruecknehmen —
+    // der letzte Wert gewinnt (Runde 4: sonst „Option 1 auswaehlen“ + „Option 2 auswaehlen“).
+    if (isSelect) {
+      const now = Date.now();
+      if (lastSelectStep.el === el && now - lastSelectStep.t < 1500 && lastSelectStep.ts) {
+        sendRetract(lastSelectStep.ts);
+      }
+      const ts = emitStep(el, "type");
+      lastSelectStep = { el, t: now, ts };
+    } else {
+      emitStep(el, "type");
+    }
     // Feld abrechnen, damit das folgende blur keinen Doppel-Schritt erzeugt.
     if (isSelect && focusedEditable && focusedEditable.el === el) {
       focusedEditable.startValue = fieldSnapshot(el, "select");
@@ -3345,6 +3375,25 @@
     return "click";
   }
 
+  // Auswahlliste: passt die gewaehlte Option zum Schritt? (Runde 4: jede Auswahl schaltete weiter,
+  // auch die falsche.) Aufgenommen ist die gewaehlte Option als selector.text; ist dieser Text
+  // gar keine Option der Liste (z. B. echte Beschriftung), laesst sich nichts pruefen -> ok.
+  function guideSelectMatches(el) {
+    try {
+      const want = normSel(guideCurrentStep && guideCurrentStep.selector && guideCurrentStep.selector.text);
+      if (!want || !el || !el.options) return true;
+      const opts = Array.prototype.slice.call(el.options);
+      if (!opts.some((o) => normSel(o.text || o.textContent) === want)) return true;
+      const cur = el.selectedIndex >= 0 ? opts[el.selectedIndex] : null;
+      return !!cur && normSel(cur.text || cur.textContent) === want;
+    } catch (err) {
+      return true;
+    }
+  }
+  function normSel(t) {
+    return String(t || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
   // Hat ein Textfeld einen NICHT-leeren Wert? (contenteditable ueber textContent.)
   function guideFieldHasValue(el) {
     try {
@@ -3360,7 +3409,7 @@
     guideFieldListeners = null;
     if (mode === "click") return;
     const onChange = () => {
-      if (mode === "toggle" || mode === "select") {
+      if (mode === "toggle" || (mode === "select" && guideSelectMatches(el))) {
         guideAdvance();
       } else if (mode === "text" && guideFieldHasValue(el)) {
         guideAdvance();
@@ -3371,6 +3420,7 @@
     };
     const onKeydown = (e) => {
       if ((mode === "text" || mode === "select") && (e.key === "Enter" || e.keyCode === 13)) {
+        if (mode === "select" && !guideSelectMatches(el)) return;
         guideAdvance();
       }
     };
@@ -3386,7 +3436,7 @@
       lastDownAt = Date.now();
     };
     const onClick = () => {
-      if (mode === "select" && Date.now() - lastDownAt > 150) guideAdvance();
+      if (mode === "select" && Date.now() - lastDownAt > 150 && guideSelectMatches(el)) guideAdvance();
     };
     try {
       el.addEventListener("change", onChange, true);
@@ -4506,14 +4556,45 @@
     }
   }
 
-  function execToggle(el) {
+  function execToggle(el, want) {
     try {
+      // Zielzustand bekannt (Runde 4): steht er schon, NICHT klicken — sonst entfernte ein zweiter
+      // Lauf den Haken wieder und meldete trotzdem „vollstaendig durchgelaufen“.
+      const target = checkableFor(el) || el;
+      if (typeof want === "boolean" && checkedStateOf(target) === want) return { ok: true };
       execPointerGesture(el);
       el.click();
       return { ok: true };
     } catch (err) {
       return { ok: false, reason: "toggle-error" };
     }
+  }
+
+  // Kontrollkaestchen/Optionsfeld/Schalter zum Element (auch ueber ein <label>), sonst null.
+  function checkableFor(el) {
+    if (!el || el.nodeType !== 1) return null;
+    try {
+      const tag = (el.tagName || "").toLowerCase();
+      const type = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+      if (tag === "input" && (type === "checkbox" || type === "radio")) return el;
+      const role = ((el.getAttribute && el.getAttribute("role")) || "").toLowerCase();
+      if (/^(checkbox|switch|radio|menuitemcheckbox)$/.test(role)) return el;
+      if (tag === "label" && el.control) return checkableFor(el.control);
+    } catch (err) {
+      /* egal */
+    }
+    return null;
+  }
+  function checkedStateOf(el) {
+    try {
+      if ((el.tagName || "").toLowerCase() === "input") return !!el.checked;
+      const a = el.getAttribute && el.getAttribute("aria-checked");
+      if (a === "true") return true;
+      if (a === "false") return false;
+    } catch (err) {
+      /* egal */
+    }
+    return null;
   }
 
   // React-sicheres Befüllen: nativen value-Setter nutzen (React hört auf den echten Setter),
@@ -4984,7 +5065,7 @@
     const it = interactionOf(step) || {};
     if (action === "fill") return execFill(el, step.value, it.enter === true);
     if (action === "select") return execSelect(el, step.value);
-    if (action === "toggle") return execToggle(el);
+    if (action === "toggle") return execToggle(el, it.checked);
     // Klick-Varianten (Welle 48). Ziehen laeuft asynchron in execPerform (Maus reist mit).
     const mods = Array.isArray(it.modifiers) && it.modifiers.length ? it.modifiers : null;
     if (it.variant === "right") return execContextClick(el);

@@ -2816,6 +2816,12 @@ async function runGuideUpload() {
   // 5 min die alte zu zeigen; /me neu fragen, damit die Gratis-Restzahl stimmt.
   siteMatchFetchedAt = 0;
   refreshLists(true);
+  // KI-Titel + Feinschliff laufen danach noch im Hintergrund (Pro) — nach ~25 s noch einmal
+  // holen, sonst stand bis zu 5 min „Anleitung vom …“ in der Liste (Runde 4).
+  setTimeout(() => {
+    siteMatchFetchedAt = 0;
+    refreshLists(true);
+  }, 25_000);
   accountFetch = null;
   fetchAccountName();
   // Aufnahme-Anker (Welle 27): nach ERFOLG räumen, damit die nächste Aufnahme nicht versehentlich
@@ -3982,7 +3988,7 @@ function guideCleanGeo(msg) {
 
 // PUR: interaction-Nachtrag in einen Schritt mergen — nur bekannte Schlüssel (der Server
 // validiert ohnehin streng). frame kommt NIE per patch (nur mit dem Schritt selbst).
-const GUIDE_PATCH_KEYS = ["enter", "variant", "key", "drop", "dropLabel", "hover", "hoverLabel"];
+const GUIDE_PATCH_KEYS = ["enter", "variant", "key", "drop", "dropLabel", "hover", "hoverLabel", "checked"];
 function guideMergeInteraction(step, patch) {
   if (!step || !patch || typeof patch !== "object" || Array.isArray(patch)) return false;
   let changed = false;
@@ -5237,19 +5243,19 @@ function guideEnterWaitLogin() {
   guideSaveSession();
 }
 
-async function guideHandleNav() {
+async function guideHandleNav(loadedTabId) {
   if (guide.navBusy) return; // Re-Entrance-Schutz (rasche Doppel-„complete" → kein Doppel-Vorspulen)
   const step = guide.curId != null ? guide.stepById.get(guide.curId) : null;
   if (!step || step.is_decision) return; // Entscheidungen: kein Vorspulen; Wache greift hier nicht
   guide.navBusy = true;
   try {
-    await guideHandleNavInner(step);
+    await guideHandleNavInner(step, loadedTabId);
   } finally {
     guide.navBusy = false;
   }
 }
 
-async function guideHandleNavInner(step) {
+async function guideHandleNavInner(step, loadedTabId) {
   // Tab-/Fenster-Folgen (Welle 43): folgt die manuelle Navigation in ein neues Fenster / OAuth-
   // Popup, das zum aktuellen Schritt passt, die Führung dorthin umbinden (curUrl bezieht sich
   // danach auf den neuen Tab) — so überstehen auch geführte Touren „Über Google anmelden".
@@ -5270,7 +5276,9 @@ async function guideHandleNavInner(step) {
         // des Wechsels — ist sie erreicht, ist der Schritt erledigt. Vorher blieb die Führung hier
         // stehen, bis man den nächsten Link klickte (Erweiterungs-Audit 24.09.).
         const it = step.interaction && typeof step.interaction === "object" ? step.interaction : null;
-        if (it && it.variant === "nav" && !guide.waitingLogin) {
+        // Nur ein Ladevorgang des GEFÜHRTEN Tabs zählt (Runde 4: sonst übersprang das Neuladen
+        // eines anderen Tabs den Schritt „Seite neu laden“ — dessen Adresse passt ja immer).
+        if (it && it.variant === "nav" && !guide.waitingLogin && loadedTabId === guide.tabId) {
           guideGoNext();
           return;
         }
@@ -5306,7 +5314,7 @@ async function guideHandleNavInner(step) {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!guideRunActive()) return;
   if (changeInfo.status !== "complete") return;
-  guideHandleNav();
+  guideHandleNav(tabId);
 });
 
 // Welle 31c ruft dies aus ihrer Sektion „Für diese Seite" auf.

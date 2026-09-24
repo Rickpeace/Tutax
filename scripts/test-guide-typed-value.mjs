@@ -97,6 +97,12 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Speichern", action
   eq(templateTitle(choice, 0), "„Option 2“ auswählen", "Titel: Auswahlliste");
   const combo = step({ action: "type", label: "Stadt", typed_value: "Berlin", selector: { css: "#city", role: "combobox" } });
   eq(templateTitle(combo, 0), "„Berlin“ in „Stadt“ eingeben", "Titel: Such-Combobox bleibt Eingabe");
+  // Kontrollkästchen abwählen (Runde 4): Zustand nach dem Klick steht in interaction.checked.
+  const uncheck = step({ action: "click", label: "checkbox 2", interaction: { checked: false } });
+  eq(templateTitle(uncheck, 0), "„checkbox 2“ abwählen", "Titel: Kontrollkästchen abwählen");
+  const { validateInteraction } = await import("../src/lib/guide.ts");
+  eq(JSON.stringify(validateInteraction({ checked: false }, "click")), '{"checked":false}', "Validierung: checked bleibt erhalten");
+  eq(validateInteraction({ checked: "ja" }, "click"), undefined, "Validierung: checked nur als true/false");
   const noValue = step({ action: "type", label: "Search query" });
   eq(templateTitle(noValue, 0), "Feld „Search query“ ausfüllen", "Titel: ohne Wert");
   const ctx = step({ action: "type", label: "Search query", typed_value: "account" });

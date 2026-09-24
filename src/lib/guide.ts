@@ -250,6 +250,8 @@ export function validateInteraction(raw: unknown, action: GuideAction): StepInte
     const mods = INTERACTION_MODIFIERS.filter((m) => seen.has(m));
     if (mods.length) out.modifiers = [...mods];
   }
+  // Zustand eines Kontrollkästchens nach dem Klick (Runde 4) — nur beim schlichten Klick.
+  if (action === "click" && !out.variant && typeof r.checked === "boolean") out.checked = r.checked;
   const hover = validateSelector(r.hover);
   if (hover) {
     out.hover = hover;
@@ -622,6 +624,10 @@ export function templateTitle(step: GuideStepInput, index: number): string {
       [(l) => `Klicken Sie mit der rechten Maustaste auf „${l}“`, (l) => `Rechtsklick auf „${l}“`],
       label,
     );
+  }
+  // Kontrollkästchen abwählen (Runde 4): sonst hieß es „aktivieren“, obwohl der Haken wegging.
+  if (step.action === "click" && it?.checked === false && !it?.variant) {
+    return wrapOne([(l) => `„${l}“ abwählen`], label);
   }
   if (step.action === "click" && it?.variant === "double") {
     return wrapOne([(l) => `Doppelklicken Sie auf „${l}“`], label);
