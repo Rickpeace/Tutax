@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { TutorialMissing } from "@/components/viewer/tutorial-missing";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -177,7 +177,7 @@ export default async function PrintPage({
   const { account_slug, tutorial_slug } = await params;
   const { lang: langParam } = await searchParams;
   const probe = await load(account_slug, tutorial_slug, "de");
-  if (!probe) notFound();
+  if (!probe) return <TutorialMissing accountSlug={account_slug} />;
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
 

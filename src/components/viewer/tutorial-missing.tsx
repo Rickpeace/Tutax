@@ -1,18 +1,14 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { SearchX } from "lucide-react";
 
 /**
  * Anleitung gibt es (nicht mehr) — aber die Hilfe-Seite der Kanzlei schon (Runde 5, Mandanten-Test):
  * vorher landeten alte/falsche Links auf der Steply-404 mit Knöpfen zum Steply-Login. Diese Seite
  * rendert INNERHALB des /h-Layouts (Kanzlei-Farben) und führt zurück zu „Alle Anleitungen“.
- * Client-Komponente, weil not-found keine params bekommt — der Konto-Slug kommt aus dem Pfad.
+ * Wird direkt von der Anleitungs-/Druckseite gerendert (statt notFound()): ein not-found.tsx im
+ * Segment griff unter PPR nicht, live erschien weiter die Steply-404.
  */
-export default function TutorialNotFound() {
-  const pathname = usePathname() ?? "";
-  const accountSlug = pathname.split("/")[2] ?? "";
+export function TutorialMissing({ accountSlug }: { accountSlug: string }) {
   const hubHref = accountSlug ? `/h/${accountSlug}` : "/";
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col items-center justify-center px-5 py-12 text-center">

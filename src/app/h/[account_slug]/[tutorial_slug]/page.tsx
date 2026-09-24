@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { TutorialMissing } from "@/components/viewer/tutorial-missing";
 import { after } from "next/server";
 import { headers } from "next/headers";
 import { cacheLife, cacheTag } from "next/cache";
@@ -198,7 +198,7 @@ export default async function ViewerPage({
   const { account_slug, tutorial_slug } = await params;
   const { preview, lang: langParam } = await searchParams;
   const probe = await load(account_slug, tutorial_slug, "de");
-  if (!probe) notFound();
+  if (!probe) return <TutorialMissing accountSlug={account_slug} />;
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
 
