@@ -416,9 +416,10 @@ try {
 
   const activateMode = async (label) => {
     await bp.goto(`${BASE}/app/settings/aussehen`, { waitUntil: "networkidle", timeout: 120_000 });
-    const card = bp.locator(`[data-mode]`).filter({ hasText: label }).first();
-    await card.getByRole("button", { name: "Verwenden" }).click();
-    return !!(await toastText(bp, new RegExp(`„${label}“ ist jetzt aktiv`)));
+    // Neuaufbau 24.09. („Entwurf A“): Grundlage links wählen, dann im Balken „Auf Hilfe-Seite verwenden“.
+    await bp.locator(`[data-mode]`).filter({ hasText: label }).first().click();
+    await bp.getByRole("button", { name: "Auf Hilfe-Seite verwenden" }).click();
+    return !!(await toastText(bp, new RegExp(`„${label}“ ist jetzt auf Ihrer Hilfe-Seite aktiv`)));
   };
   const accentOf = (html) => (html.toLowerCase().match(/--brand-accent:\s*(#[0-9a-f]{3,8})/) ?? [])[1] ?? null;
   ok(await activateMode("Von Ihrer Website"), "Aussehen: „Von Ihrer Website“ aktiviert");
