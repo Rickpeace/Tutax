@@ -129,6 +129,10 @@ Teil 5+6, `test-video-container`, `test-search-match`, `test-email-links` (Link-
   Neu-laden-Schritt nur durch den geführten Tab · Führung prüft gewählte Option · Auswahlliste per Tastatur = ein
   Schritt · Steuer-ID-Strukturregel · KI erfindet keine verborgenen Werte · Anleitungstitel über alle Schritte ·
   Liste nach Feinschliff aktualisiert · Automations-Angabe „Auswahl in Schritt N“
+- [x] KI/Automationen (00d80c3): Assistent-Seiten gaten selbst (Gratis-Payload enthielt Entwürfe/Fragen) ·
+  Automations-Aktionen prüfen Konto + Rolle · Läufe-Protokoll mit deutschen Gründen + „bei Schritt N“ ·
+  Parameter-Nummerierung exakt · „Änderung übernehmen“ bei formatierten Schritten → Editor statt Formatverlust ·
+  unlesbarer Aktualitäts-Check = Fehler (Hinweise bleiben)
 - [ ] Produktfragen: alte Testkonten in Produktion löschen? · Vorlesen startet automatisch (Ton an) · eigenes
   Impressum für Kunden-Hilfe-Seiten · Cookie-Banner-Schritte automatisch „nur wenn vorhanden“
 - [ ] Offen/klein: SSRF-DNS-Rebinding-Rest (ssrf.ts) · KI-Kosten-Bremsen (Rate-Limits pro Konto, Chat-History) ·
