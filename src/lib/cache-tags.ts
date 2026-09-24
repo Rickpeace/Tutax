@@ -38,7 +38,13 @@ export function invalidateHubTag(accountSlug: string | null | undefined): void {
  */
 export async function invalidateTutorialTags(
   tutorialId: string,
-  opts?: { force?: boolean },
+  /**
+   * hub: false = nur die Seite DIESER Anleitung (Schritte, Bilder, Antworten). Der Hub-Tag hängt an
+   * ALLEN Seiten des Kontos — ihn bei jeder Schritt-Änderung zu verwerfen, ließ jede Seite beim
+   * nächsten Besuch neu rendern und in den Cache schreiben (Vercel-ISR-Writes, 24.09.2026).
+   * Titel/Beschreibung/Kategorie/Sichtbarkeit stehen im Hub → dort Standard (true).
+   */
+  opts?: { force?: boolean; hub?: boolean },
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -60,7 +66,7 @@ export async function invalidateTutorialTags(
     const acc = Array.isArray(data.accounts) ? data.accounts[0] : data.accounts;
     const accountSlug = (acc as { slug?: string } | null)?.slug;
     if (!accountSlug) return;
-    expireTag(hubTag(accountSlug));
+    if (opts?.hub !== false || !data.slug) expireTag(hubTag(accountSlug));
     if (data.slug) expireTag(tutTag(accountSlug, data.slug));
   } catch (e) {
     console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
@@ -101,7 +107,7 @@ export async function invalidateStepTags(stepId: string): Promise<void> {
       .select("tutorial_id")
       .eq("id", stepId)
       .maybeSingle();
-    if (data?.tutorial_id) await invalidateTutorialTags(data.tutorial_id);
+    if (data?.tutorial_id) await invalidateTutorialTags(data.tutorial_id, { hub: false });
   } catch (e) {
     console.error("cache-tag invalidation:", e instanceof Error ? e.message : e);
   }

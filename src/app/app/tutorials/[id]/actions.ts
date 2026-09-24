@@ -131,7 +131,7 @@ export async function addStep(
   // Geteiltes Bild in einer veröffentlichten Anleitung: öffentliche Kopie mit allen
   // Verpixelungen neu erzeugen (no-op bei Entwürfen).
   if (image) await refreshPublicImage(step.id); // wirft sichtbar; Kopie ist dann entfernt
-  await invalidateTutorialTags(tutorialId); // nur wirksam, wenn veröffentlicht
+  await invalidateTutorialTags(tutorialId, { hub: false }); // nur wirksam, wenn veröffentlicht
   await markTranslationsStale(tutorialId); // neuer Schritt -> Übersetzungen unvollständig
   after(() => reindexTutorialIfLive(tutorialId)); // Chatbot kennt den neuen Schritt
 }
@@ -202,7 +202,7 @@ export async function insertStepIntoBranch(
     oldTarget = (now.target_step_id as string | null) ?? null;
     await supabase.from("step_branches").update({ target_step_id: oldTarget }).eq("id", weiterId);
   }
-  await invalidateTutorialTags(tutorialId);
+  await invalidateTutorialTags(tutorialId, { hub: false });
   return { oldTarget };
 }
 
@@ -518,7 +518,7 @@ export async function deleteStep(
       await removeUnusedOriginals([path], accountId);
     });
   }
-  await invalidateTutorialTags(tutorialId);
+  await invalidateTutorialTags(tutorialId, { hub: false });
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
   after(() => reindexTutorialIfLive(tutorialId)); // Chatbot vergisst den Schritt
 }
@@ -572,7 +572,7 @@ export const moveStep = withUserErrors(async function moveStep(
     if (decision.newRoot) {
       const { error } = await supabase.from("tutorials").update({ root_step_id: decision.newRoot }).eq("id", tutorialId);
       if (error) throw new Error(error.message);
-      await invalidateTutorialTags(tutorialId);
+      await invalidateTutorialTags(tutorialId, { hub: false });
     }
     return;
   }
@@ -594,7 +594,7 @@ export const moveStep = withUserErrors(async function moveStep(
     const { error } = await supabase.from("tutorials").update({ root_step_id: plan.newRoot }).eq("id", tutorialId);
     if (error) throw new Error(error.message);
   }
-  await invalidateTutorialTags(tutorialId);
+  await invalidateTutorialTags(tutorialId, { hub: false });
 });
 
 export async function setRootStep(tutorialId: string, stepId: string) {
@@ -606,7 +606,7 @@ export async function setRootStep(tutorialId: string, stepId: string) {
     .update({ root_step_id: stepId })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
-  await invalidateTutorialTags(tutorialId);
+  await invalidateTutorialTags(tutorialId, { hub: false });
 }
 
 /** Kategorie anlegen (§7.3, „on the fly" aus der Combobox). */
@@ -766,7 +766,7 @@ export async function setTutorialSiteDomains(tutorialId: string, domains: string
     .update({ site_domains: clean })
     .eq("id", tutorialId);
   if (error) throw new Error(error.message);
-  await invalidateTutorialTags(tutorialId);
+  await invalidateTutorialTags(tutorialId, { hub: false });
   return clean; // normalisierte Endliste → Client kann seinen optimistischen State abgleichen
 }
 
@@ -930,7 +930,7 @@ export async function applyStepTexts(
     done.push(c.id);
   }
   if (done.length) {
-    await invalidateTutorialTags(tutorialId);
+    await invalidateTutorialTags(tutorialId, { hub: false });
     await markTranslationsStale(tutorialId);
     after(async () => {
       for (const id of done) {

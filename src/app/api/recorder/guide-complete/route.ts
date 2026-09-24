@@ -505,7 +505,7 @@ async function insertIntoTarget(
 
   // root_step_id wird beim Einfügen sonst NIE angefasst. Cache: Draft-Edits schonen den Kunden-
   // Cache (invalidateTutorialTags kehrt für Entwürfe früh zurück, wie die Nachbar-Mutationen).
-  await invalidateTutorialTags(target.tutorialId);
+  await invalidateTutorialTags(target.tutorialId, { hub: false }); // nur Schritte dazu → nur diese Seite
 
   const live = tut.status === "published";
   return {
