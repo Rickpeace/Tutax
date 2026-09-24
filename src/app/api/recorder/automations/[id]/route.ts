@@ -6,6 +6,7 @@ import {
 } from "@/lib/recorder";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSchedule } from "@/lib/automations";
+import { isSafeStorageKey } from "@/lib/storage-path";
 
 // Automationen-Ausführung (Welle 36), Kontrakt 2: GET /api/recorder/automations/[id].
 //
@@ -98,7 +99,7 @@ export async function GET(
   const steps = stepsData ?? [];
 
   // Referenz-Screenshots liegen im PRIVATEN Bucket → signierte URLs (1 h), parallel.
-  const withImage = steps.filter((s) => s.image_path);
+  const withImage = steps.filter((s) => s.image_path && isSafeStorageKey(s.image_path as string));
   const signed = await Promise.all(
     withImage.map((s) =>
       admin.storage.from(IMAGE_BUCKET).createSignedUrl(s.image_path as string, SIGNED_URL_TTL),

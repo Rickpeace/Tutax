@@ -15,17 +15,22 @@ export async function recordFeedback(
   helpful: boolean,
 ): Promise<void> {
   const slug = String(accountSlug ?? "").slice(0, 100);
-  if (!slug) return;
-  const { data: account } = await createAdminClient()
+  const tSlug = String(tutorialSlug ?? "").slice(0, 200);
+  if (!slug || !tSlug) return;
+  const admin = createAdminClient();
+  const { data: account } = await admin
     .from("accounts")
     .select("id")
     .eq("slug", slug)
     .maybeSingle();
   if (!account) return;
+  // Nur für Anleitungen, die dieses Konto öffentlich zeigt — sonst ließen sich Insights mit
+  // erfundenen Slugs fluten (Sicherheitsprüfung Runde 4).
+  if (!(await resolveCustomerTutorial(admin, account.id, tSlug))) return;
   await recordEvent({
     account_id: account.id,
     type: "feedback",
-    tutorial_slug: String(tutorialSlug ?? ""),
+    tutorial_slug: tSlug,
     helpful: !!helpful,
   });
 }

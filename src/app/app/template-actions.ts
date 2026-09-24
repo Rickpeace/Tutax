@@ -11,6 +11,7 @@ import { invalidateHubTag } from "@/lib/cache-tags";
 import { removeTutorialAudio } from "@/lib/tts";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
 import type { Step, StepBranch } from "@/lib/types";
+import { isSafeStorageKey } from "@/lib/storage-path";
 
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
@@ -167,6 +168,7 @@ export async function forkTemplate(templateId: string) {
   // Der Fork ist direkt "published", braucht die Bilder also auch im public Bucket.
   const cloneImage = async (oldPath: string, newStepId: string, highlights: unknown): Promise<string | null> => {
     const newPath = `${account.id}/${forkId}/${newStepId}.webp`;
+    if (!isSafeStorageKey(oldPath)) return null; // kein Pfad-Trick (Runde 4)
     let blob = (await admin.storage.from(PRIVATE_BUCKET).download(oldPath)).data;
     if (!blob) blob = (await admin.storage.from(PUBLIC_BUCKET).download(oldPath)).data;
     if (!blob) return null;

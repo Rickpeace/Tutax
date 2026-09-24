@@ -111,6 +111,24 @@ try {
   const { data: catB } = await admin.from("categories").insert({ account_id: B.acc, name: `Kat B ${stamp}`, position: 0 }).select("id").single();
   r = await B.c.from("tutorials").update({ category_id: catB.id }).eq("id", ownB.id).select();
   ok(!r.error && (r.data ?? []).length === 1, `Eigene Kategorie erlaubt${r.error ? " — " + r.error.message : ""}`);
+
+  console.log("5. Speicherpfade (0047)");
+  r = await A.c.from("steps").insert({ tutorial_id: pubA.id, title: "Trav", position: 90, image_path: `${A.acc}/%2e%2e/${B.acc}/${ownB.id}/x.webp` });
+  ok(denied(r), "Prozent-kodiertes ../ im Bildpfad abgewiesen (fremde private Bilder)");
+  r = await A.c.from("steps").insert({ tutorial_id: pubA.id, title: "Dot", position: 91, image_path: `${A.acc}/./x.webp` });
+  ok(denied(r), "Punkt-Abschnitt im Bildpfad abgewiesen");
+  r = await A.c.from("steps").insert({ tutorial_id: pubA.id, title: "Ok", position: 92, image_path: `${A.acc}/${pubA.id}/ok-1a2b.webp` }).select("id").single();
+  ok(!r.error, `Normaler eigener Bildpfad erlaubt${r.error ? " — " + r.error.message : ""}`);
+
+  console.log("6. Tarif fremder Konten (0048)");
+  r = await B.c.rpc("account_is_business", { aid: A.acc });
+  ok(r.data !== true, "Fremdes Business-Konto per RPC nicht erkennbar");
+  r = await A.c.rpc("account_is_business", { aid: A.acc });
+  ok(r.data === true, "Eigenes Business-Konto weiterhin erkannt");
+  r = await A.c.from("tutorials").update({ visibility: "internal" }).eq("id", pubA.id).select();
+  ok(!r.error && (r.data ?? []).length === 1, `Business: „Nur Team“ weiterhin erlaubt${r.error ? " — " + r.error.message : ""}`);
+  r = await B.c.from("tutorials").update({ visibility: "internal" }).eq("id", ownB.id).select();
+  ok(denied(r) || !(r.data ?? []).length, "Gratis: „Nur Team“ weiterhin gesperrt");
 } finally {
   for (const acc of accounts) await admin.from("accounts").delete().eq("id", acc);
   for (const uid of users) await admin.auth.admin.deleteUser(uid).catch(() => {});

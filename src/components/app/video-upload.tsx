@@ -150,7 +150,8 @@ export function VideoUpload({
     }
   }
 
-  const extOf = (name: string) => (name.split(".").pop() || "mp4").toLowerCase();
+  // Nur Buchstaben/Ziffern — die Endung wird Teil des Speicherpfads (Pfad-Regel 0047).
+  const extOf = (name: string) => (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "mp4";
   const baseName = (name: string) => name.replace(/\.[^.]+$/, "");
 
   // Bulk-Flow: mehrere Dateien nacheinander hochladen + je einen Job einreihen.

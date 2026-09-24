@@ -11,6 +11,7 @@ import {
   type GuideBranchRow,
 } from "@/lib/guide-payload";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isSafeStorageKey } from "@/lib/storage-path";
 
 // Live-Führung (Welle 31), Schritt 1b: GET /api/recorder/tutorials/[id].
 //
@@ -89,7 +90,7 @@ export async function GET(
   const branches = branchesData ?? [];
 
   // Screenshots liegen im PRIVATEN Bucket -> signierte URLs (1 h), parallel (kein Wasserfall).
-  const withImage = steps.filter((s) => s.image_path);
+  const withImage = steps.filter((s) => s.image_path && isSafeStorageKey(s.image_path as string));
   const signed = await Promise.all(
     withImage.map((s) =>
       admin.storage.from(IMAGE_BUCKET).createSignedUrl(s.image_path as string, SIGNED_URL_TTL),

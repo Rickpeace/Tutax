@@ -9,6 +9,7 @@ import { publicImageUrl } from "@/lib/public-image";
 import { brandedTheme } from "@/lib/plan";
 import { Wizard } from "@/components/viewer/wizard";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
+import { isSafeStorageKey } from "@/lib/storage-path";
 
 export const metadata: Metadata = { title: "Vorschau · Steply", robots: { index: false } };
 
@@ -47,7 +48,7 @@ async function load(id: string) {
   // Bilder über signierte URLs aus dem privaten Bucket -> funktioniert in JEDEM Status.
   // Parallel signieren (Promise.all) statt sequenziell -> kein Wasserfall bei vielen Schritten.
   const imageUrls: Record<string, string> = {};
-  const withImage = (steps ?? []).filter((s) => s.image_path);
+  const withImage = (steps ?? []).filter((s) => s.image_path && isSafeStorageKey(s.image_path as string));
   const signed = await Promise.all(
     withImage.map((s) =>
       admin.storage.from("tutorial-images").createSignedUrl(s.image_path!, 3600),

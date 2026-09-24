@@ -22,9 +22,20 @@ export function isDefaultHighlightColor(color: string | null | undefined): boole
   return DEFAULT_SET.has(color.trim().toLowerCase());
 }
 
+/**
+ * Nur echte Hex-Farben (#rgb … #rrggbbaa) — sonst null. Farben kommen aus der DB (per REST
+ * beschreibbar) und landen in style=… der öffentlichen Seite; „red;background:url(…)“ wäre dort
+ * eine CSS-Einschleusung (Sicherheitsprüfung Runde 4).
+ */
+export function safeHexColor(color: string | null | undefined): string | null {
+  const c = typeof color === "string" ? color.trim() : "";
+  return /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : null;
+}
+
 /** CSS-Farbe für Strich/Pfeilspitze: Standard ⇒ Kunden-Akzent (Fallback Koralle). */
 export function markColor(color: string | null | undefined): string {
-  return isDefaultHighlightColor(color) ? `var(--brand-accent, ${DEFAULT_HIGHLIGHT_COLOR})` : color!;
+  const safe = safeHexColor(color);
+  return isDefaultHighlightColor(color) || !safe ? `var(--brand-accent, ${DEFAULT_HIGHLIGHT_COLOR})` : safe;
 }
 
 /** Stabiler Schlüssel je Farbe für SVG-Marker-IDs (Pfeilspitzen). */

@@ -191,7 +191,12 @@ export default async function HubPage({
     ...categories.filter((c) => c.account_id),
     ...categories.filter((c) => !c.account_id),
   ];
-  const order = [...new Set([...ordered.map((c) => categoryName(c, lang)), labels.otherCategory])];
+  // Nur Kategorien mit sichtbaren Anleitungen an die Seite geben — Namen von Kategorien, die nur
+  // Entwürfe/„Nur Team“ enthalten, standen sonst im Seiten-Payload (Sicherheitsprüfung Runde 4).
+  const shown = new Set(items.map((i) => i.category));
+  const order = [...new Set([...ordered.map((c) => categoryName(c, lang)), labels.otherCategory])].filter((n) =>
+    shown.has(n),
+  );
   const initial = account.name.trim().charAt(0).toUpperCase() || "?";
   const { mode, tokens, logoPath, skinCss, layout } = resolveTheme(theme);
   const fonts = brandFonts(tokens);

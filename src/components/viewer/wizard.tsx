@@ -11,6 +11,7 @@ import { labelsFor, type HubLabels } from "@/lib/i18n-hub";
 import { backAction, nextSnapshot, type WizMove, type WizSnapshot } from "@/lib/wizard-history";
 import { resolveRoot } from "@/lib/builder/tree";
 import { TAP_AREA } from "@/lib/tap-target";
+import { safeHexColor } from "@/lib/highlight-color";
 
 /** Schlüssel, unter dem der Wizard seinen Stand im Browser-Verlaufseintrag ablegt. */
 const WIZ_STATE = "steplyWizard";
@@ -773,8 +774,8 @@ export function Wizard({
                     className="w-full break-words border-2 px-4 py-3 text-base font-extrabold transition-transform active:translate-y-px"
                     style={{
                       background: "var(--brand-paper, #fff)",
-                      borderColor: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
-                      color: b.color ?? "var(--brand-accent-strong, var(--brand-accent))",
+                      borderColor: safeHexColor(b.color) ?? "var(--brand-accent-strong, var(--brand-accent))",
+                      color: safeHexColor(b.color) ?? "var(--brand-accent-strong, var(--brand-accent))",
                       borderRadius: "var(--brand-btn-radius, 999px)",
                     }}
                   >

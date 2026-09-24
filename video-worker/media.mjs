@@ -72,3 +72,27 @@ export function normalizeVideo(raw, dir) {
   } catch { /* Original */ }
   return { path: raw, method: "original", error: encodeError };
 }
+
+/**
+ * Ist die Datei ein echtes Video-Container-Format? Prüft die ersten Bytes (Magic Numbers) OHNE
+ * ffmpeg: MP4/MOV (…ftyp/moov/mdat/free/wide/skip), WebM/MKV (EBML 1A 45 DF A3), AVI (RIFF…AVI).
+ * Sicherheitsprüfung Runde 4: ffmpeg errät das Format selbst — eine hochgeladene HLS-Playlist
+ * oder concat-Liste ließe es LOKALE Dateien des Servers (z. B. Umgebungsvariablen) lesen und
+ * ins Video schreiben. Solche Dateien werden vor jedem ffmpeg-Aufruf abgelehnt.
+ */
+export function looksLikeVideoContainer(file) {
+  let head;
+  try {
+    const fd = fs.openSync(file, "r");
+    head = Buffer.alloc(16);
+    fs.readSync(fd, head, 0, 16, 0);
+    fs.closeSync(fd);
+  } catch {
+    return false;
+  }
+  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return true; // WebM/MKV
+  const box = head.toString("latin1", 4, 8);
+  if (["ftyp", "moov", "mdat", "free", "wide", "skip", "pnot"].includes(box)) return true; // MP4/MOV
+  if (head.toString("latin1", 0, 4) === "RIFF" && head.toString("latin1", 8, 12) === "AVI ") return true;
+  return false;
+}

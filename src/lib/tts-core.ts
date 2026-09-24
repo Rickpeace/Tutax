@@ -231,7 +231,10 @@ async function tutorialAudioPrefix(admin: DbClient, tutorialId: string): Promise
  */
 export function isOwnAudioPath(prefix: string | null, path: string | null | undefined): boolean {
   if (!prefix || typeof path !== "string") return false;
-  if (path.includes("..") || path.includes("\\") || path.includes("//")) return false;
+  // Gleiche Zeichen-Regel wie lib/storage-path.ts isSafeStorageKey (hier dupliziert: tts-core
+  // bleibt ein import-freies Leaf-Modul). Prozent-Kodierung (%2e%2e) → abgelehnt (Runde 4).
+  if (!/^[A-Za-z0-9._/-]+$/.test(path)) return false;
+  if (path.split("/").some((seg) => seg === "" || seg === "." || seg === "..")) return false;
   return path.startsWith(prefix) && path.length > prefix.length;
 }
 

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { burnBlur, hasBlur } from "@/lib/redact";
 import type { Highlight } from "@/lib/types";
+import { isSafeStorageKey } from "@/lib/storage-path";
 
 /**
  * Bilder für Schulungen (/app/lernen): „verpixelt bleibt verpixelt".
@@ -63,7 +64,8 @@ async function ensureRedacted(accountId: string, step: StepImage): Promise<strin
 /** stepId -> signierte Bild-URL. Mit Verpixelung: eingebrannte Kopie; ohne: das Bild selbst. */
 export async function trainingImageUrls(accountId: string, steps: StepImage[]): Promise<Record<string, string>> {
   const admin = createAdminClient();
-  const withImage = steps.filter((s) => s.image_path);
+  // Nur harmlose Speicherpfade lesen (Prozent-Kodierung o. ä. — Sicherheitsprüfung Runde 4).
+  const withImage = steps.filter((s) => s.image_path && isSafeStorageKey(s.image_path));
   const urls = await Promise.all(
     withImage.map(async (s) => {
       if (hasBlur(s.highlights)) return ensureRedacted(accountId, s);

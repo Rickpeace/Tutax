@@ -10,6 +10,7 @@ import {
   requireBranchAccess,
 } from "@/lib/account";
 import { hasInvalidBlur, rebuildPublicCopy, removeUnusedOriginals, removeUnusedPublicCopies } from "@/lib/public-images";
+import { safeHexColor } from "@/lib/highlight-color";
 import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
 import {
@@ -220,6 +221,10 @@ export async function updateStep(
 ) {
   const { tutorialId } = await requireStepAccess(stepId);
   const supabase = await createClient();
+  // Nur bekannte Spalten übernehmen (Mass-Assignment, Sicherheitsprüfung Runde 4): sonst ließe
+  // sich z. B. tutorial_id mitschicken und ein Schritt an der Konto-Prüfung vorbei verschieben.
+  const ALLOWED = ["title", "body", "image_path", "image_width", "image_height", "highlights", "video_time"] as const;
+  patch = Object.fromEntries(Object.entries(patch).filter(([k]) => (ALLOWED as readonly string[]).includes(k)));
   if (Object.keys(patch).length === 0) return;
   // Längengrenzen (Grenzfall-Audit 24.09.: 10.000-Zeichen-Titel ging durch und floss in
   // Vorlesen/Übersetzung). Titel kappen wie das Eingabefeld; überlangen Text ablehnen.
@@ -370,7 +375,17 @@ export async function addBranch(branch: {
 }) {
   await requireStepAccess(branch.step_id);
   const supabase = await createClient();
-  const { error } = await supabase.from("step_branches").insert(branch);
+  // Nur bekannte Spalten, Farbe nur als Hex (Sicherheitsprüfung Runde 4: Mass-Assignment +
+  // CSS-Einschleusung über die Farbe auf der öffentlichen Seite).
+  const row = {
+    id: branch.id,
+    step_id: branch.step_id,
+    label: branch.label,
+    color: safeHexColor(branch.color),
+    target_step_id: branch.target_step_id,
+    position: branch.position,
+  };
+  const { error } = await supabase.from("step_branches").insert(row);
   if (error && !(await isOwnRetryDuplicate(supabase, error, "step_branches", branch.id, { column: "step_id", value: branch.step_id }))) {
     throw new Error(error.message);
   }
@@ -385,9 +400,13 @@ export async function updateBranch(
 ) {
   await requireBranchAccess(branchId);
   const supabase = await createClient();
+  const clean: { label?: string; target_step_id?: string | null; color?: string | null } = {};
+  if ("label" in patch) clean.label = patch.label;
+  if ("target_step_id" in patch) clean.target_step_id = patch.target_step_id;
+  if ("color" in patch) clean.color = safeHexColor(patch.color);
   const { error } = await supabase
     .from("step_branches")
-    .update(patch)
+    .update(clean)
     .eq("id", branchId);
   if (error) throw new Error(error.message);
   await invalidateBranchTags(branchId);

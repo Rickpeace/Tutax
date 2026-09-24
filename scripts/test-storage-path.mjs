@@ -33,6 +33,13 @@ const cases = [
   ["eigenes Bild statt Audio", isOwnAudioPath(`${A}/${T}/audio/`, `${A}/${T}/s1.webp`), false],
   ["Audio ohne ermittelbares Konto", isOwnAudioPath(null, `${A}/${T}/audio/s1.mp3`), false],
   ["Audio mit ../", isOwnAudioPath(`${A}/${T}/audio/`, `${A}/${T}/audio/../../../${B}/x.mp3`), false],
+  // Sicherheitsprüfung Runde 4: Storage dekodiert %2e%2e beim Download → Prozent-Kodierung ablehnen
+  ["Prozent-kodiertes ../ (%2e%2e)", isAccountStoragePath(A, `${A}/%2e%2e/${B}/${T}/s.webp`), false],
+  ["Prozent-kodiertes ../ (%2E%2E%2F)", isAccountStoragePath(A, `${A}/%2E%2E%2F${B}/s.webp`), false],
+  ["einzelner Punkt-Abschnitt", isAccountStoragePath(A, `${A}/./${T}/s.webp`), false],
+  ["Leerzeichen/Sonderzeichen", isAccountStoragePath(A, `${A}/${T}/s 1.webp`), false],
+  ["Zeitstempel + Bindestrich erlaubt", isAccountStoragePath(A, `${A}/${T}/s-1a2b3c4d.webp`), true],
+  ["Audio mit %2e%2e", isOwnAudioPath(`${A}/${T}/audio/`, `${A}/${T}/audio/%2e%2e/%2e%2e/${B}/x.mp3`), false],
 ];
 
 let bad = 0;

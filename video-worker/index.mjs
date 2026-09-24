@@ -12,7 +12,7 @@ import { analyzeStructure, planWiring } from "./structure.mjs";
 // Welle 18: Video-Export (Tutorial -> MP4). Reine Render-Bausteine + Orchestrierung.
 import { renderVideo } from "./render.mjs";
 // Welle 51: testbare ffmpeg-Bausteine (Audiospur-Erkennung, Dauer-Fallback, robuste Normalisierung).
-import { hasAudioStream, probeDuration as probeVideoDuration, normalizeVideo } from "./media.mjs";
+import { looksLikeVideoContainer, hasAudioStream, probeDuration as probeVideoDuration, normalizeVideo } from "./media.mjs";
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -782,7 +782,8 @@ async function processJob(job) {
   await assertTutorialQuota(job.account_id, job.id);
   // Nur Videos aus dem eigenen Konto-Ordner (Audit 23.09.: gefaelschter video_path).
   const vp = String(job.video_path || "");
-  if (!vp.startsWith(`${job.account_id}/`) || vp.includes("..") || vp.includes("//"))
+  // Runde 4: nur harmlose Zeichen (Storage dekodiert %2e%2e beim Download).
+  if (!vp.startsWith(`${job.account_id}/`) || !/^[A-Za-z0-9._/-]+$/.test(vp) || vp.split("/").some((x) => x === "" || x === "." || x === ".."))
     throw new Error("Video liegt nicht im Ordner dieses Kontos.");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vid-"));
   try {
@@ -790,6 +791,8 @@ async function processJob(job) {
     const { data, error } = await sb.storage.from("tutorial-videos").download(job.video_path);
     if (error) throw new Error("Download: " + error.message);
     fs.writeFileSync(raw, Buffer.from(await data.arrayBuffer()));
+    // Nur echte Video-Container an ffmpeg geben (keine Playlists/Listen, die lokale Dateien lesen).
+    if (!looksLikeVideoContainer(raw)) throw new Error("Datei ist kein unterstütztes Video (MP4, MOV, WebM, MKV oder AVI).");
     // Auf MP4/H.264 normalisieren (webm-Aufnahmen, krumme Codecs -> zuverlässiges Seeking/ffprobe).
     // Welle 51: gerade Maße erzwingen (Fenster-Aufnahmen mit ungerader Breite ließen libx264
     // scheitern), genpts; Fallback verlustfreies Umpacken nach MKV, zuletzt das Original.

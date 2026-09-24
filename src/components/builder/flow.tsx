@@ -17,6 +17,7 @@ import type {
   RenderStep,
   RenderBranch,
 } from "@/lib/builder/tree";
+import { safeHexColor } from "@/lib/highlight-color";
 
 type FlowHandlers = {
   selectedId?: string | null;
@@ -264,7 +265,8 @@ function Branch({
   ...h
 }: { branch: RenderBranch; depth: number } & FlowHandlers) {
   const [open, setOpen] = useState(depth < 3);
-  const color = branch.color || "var(--muted-foreground)";
+  const hex = safeHexColor(branch.color);
+  const color = hex || "var(--muted-foreground)";
   const count = countSteps(branch.child);
 
   return (
@@ -272,8 +274,8 @@ function Branch({
       className="ml-1.5 rounded-xl pl-3"
       style={{
         borderLeft: `3px solid ${color}`,
-        background: branch.color
-          ? `linear-gradient(90deg, ${branch.color}14, transparent 60%)`
+        background: hex
+          ? `linear-gradient(90deg, ${hex}14, transparent 60%)`
           : undefined,
       }}
     >
