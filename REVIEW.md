@@ -102,6 +102,40 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Bugsuche Runde 4 — 24.09.2026 nachmittags (6 Prüfer: Nebenwirkungen, Hilfe-Seite, Konto, KI/Automationen, Sicherheit, Erweiterung 2.19.6)
+
+Live seit a15c205 (+ Migrationen 0047, 0048). Regression: `test-storage-path` (Prozent-Kodierung), `test-rest-guards`
+Teil 5+6, `test-video-container`, `test-search-match`, `test-email-links` (Link-Scanner), `test-recorder-sensitive`
+(Steuer-ID-Struktur), `test-guide-typed-value` (abwählen/checked), `test-theme-tokens`.
+
+- [x] 🔴 Sicherheit: `<konto>/%2e%2e/<fremd>/…` als Bildpfad → Veröffentlichen kopierte fremde private (unverpixelte)
+  Bilder öffentlich. Jetzt nur `[A-Za-z0-9._/-]` ohne `.`/`..`-Abschnitte (App, DB 0047, Worker, alle Admin-Lesestellen);
+  keine Spuren früherer Ausnutzung in Live-Daten
+- [x] Tarif fremder Konten nicht mehr per RPC abfragbar (0048) · Farben nur Hex (CSS-Einschleusung) · Feld-Freigabe
+  beim Speichern · Hilfe-Seite zeigt keine Kategorien nur interner Anleitungen · Feedback nur für echte Anleitungen ·
+  Video-Worker nimmt nur echte Video-Container (deploy.sh nötig)
+- [x] Mail-Links überstehen Link-Scanner (Outlook/Defender): Zwischenseite `/link` mit Knopf
+- [x] Sitemap nur Hilfe-Seiten mit Inhalt, leere Seiten noindex, nie E-Mail als Organisationsname
+- [x] Hilfe-Seite: Suche mit Umlauten/Wortreihenfolge · „Fertig“ nicht wieder öffnen · Großansicht schließt bei
+  Klick daneben + Browser-Zurück · Fokus (Fertig, Status, Suche, Chat-Esc) · Kontrast (grauer Text #76674f,
+  Akzent-Schrift ≥ 4,5:1, Antworttext) · Tippflächen · Chat verdeckt Fußzeile nicht
+- [x] Konto: Aussehen bleibt nach „Analysieren“ · Passwort nur aus Leerzeichen abgelehnt · E-Mail-Format bei
+  Anmelde-Link/Passwort vergessen · Dialog „Neue Anleitung“ behält Titel · Datenschutz-Link bei Registrierung ·
+  kaputtes Logo klare Meldung
+- [x] Editor: echte Speicher-Gründe (Text zu lang, Org gewechselt) · Duplizieren von Schulungen unter Pro ·
+  „Anpassen“ ohne NEXT_REDIRECT-Toast + zwei Tabs landen in derselben Kopie · Originalbild-Löschen mit 30 s Karenz
+  (Rückgängig) · Hochkant-Pfad erst ab 2:1 · schmales Desktop-Fenster gilt nicht als Handy
+- [x] Erweiterung 2.19.7: Kontrollkästchen mit Zielzustand (Automation schaltet nicht blind um, „abwählen“) ·
+  Neu-laden-Schritt nur durch den geführten Tab · Führung prüft gewählte Option · Auswahlliste per Tastatur = ein
+  Schritt · Steuer-ID-Strukturregel · KI erfindet keine verborgenen Werte · Anleitungstitel über alle Schritte ·
+  Liste nach Feinschliff aktualisiert · Automations-Angabe „Auswahl in Schritt N“
+- [ ] Produktfragen: alte Testkonten in Produktion löschen? · Vorlesen startet automatisch (Ton an) · eigenes
+  Impressum für Kunden-Hilfe-Seiten · Cookie-Banner-Schritte automatisch „nur wenn vorhanden“
+- [ ] Offen/klein: SSRF-DNS-Rebinding-Rest (ssrf.ts) · KI-Kosten-Bremsen (Rate-Limits pro Konto, Chat-History) ·
+  Einladungs-Mails ohne Rate-Limit · Mail-Text bei E-Mail-Wechsel (entfällt mit „Secure email change“) ·
+  unsaved Farben beim Reiterwechsel · Auswahl-Angabe nicht vorbelegt · Daumen-Feedback mehrfach · og:image-Fallback ·
+  Groß/Klein in Hilfe-Adressen · Druck: Steply-Beschreibung/EN-Anführungszeichen
+
 ## Bugsuche Runde 3 — 24.09.2026 (6 Prüfer: Handy, Grenzfälle, Nebenwirkungen, Erweiterung auf echten Websites + Video, Konto-Lebenszyklus, Sicherheit)
 
 Live seit 06c509d (+ Migration 0046). Regression: `test-delete-question`, `test-rest-guards` (Teil 4 = 0046),
