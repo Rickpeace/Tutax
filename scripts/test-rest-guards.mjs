@@ -91,6 +91,26 @@ try {
   ok(denied(r), `6. Anleitung abgewiesen${r.error ? ` („${r.error.message}“)` : ""}`);
   r = await A.c.from("tutorials").insert({ account_id: A.acc, title: "A ohne Grenze", status: "draft" });
   ok(!r.error, "Business: keine Grenze");
+
+  console.log("4. Härtung 0046");
+  if (tpl) {
+    r = await B.c.from("account_templates").update({ forked_tutorial_id: ownB.id }).eq("account_id", B.acc).eq("template_id", tpl.id).select();
+    ok(denied(r) || !(r.data ?? []).length, "Eigene Anleitung als „angepasste Kopie“ verknüpfen abgewiesen (Gratis-Grenze)");
+  }
+  r = await B.c.from("tutorials").update({ in_lernen: true }).eq("id", ownB.id).select();
+  ok(denied(r) || !(r.data ?? []).length, "Schulung mit Nachweis im Gratis-Tarif abgewiesen");
+  r = await A.c.from("tutorials").update({ in_lernen: true }).eq("id", pubA.id).select();
+  ok(!r.error && (r.data ?? []).length === 1, `Business: Schulung mit Nachweis erlaubt${r.error ? " — " + r.error.message : ""}`);
+  r = await A.c.from("kb_embeddings").insert({ account_id: A.acc, source_type: "tutorial", source_id: draftA.id, chunk: "x", embedding: JSON.stringify(Array(1536).fill(0)), metadata: {} });
+  ok(denied(r), "KI-Index per Nutzer-Login schreiben abgewiesen");
+  const listed = await B.c.storage.from("tutorial-images-public").list(A.acc);
+  ok(!(listed.data ?? []).length, "Öffentlicher Bild-Ordner fremder Konten nicht auflistbar");
+  const { data: catA } = await admin.from("categories").insert({ account_id: A.acc, name: `Kat A ${stamp}`, position: 0 }).select("id").single();
+  r = await B.c.from("tutorials").update({ category_id: catA.id }).eq("id", ownB.id).select();
+  ok(denied(r) || !(r.data ?? []).length, "Kategorie einer fremden Organisation abgewiesen");
+  const { data: catB } = await admin.from("categories").insert({ account_id: B.acc, name: `Kat B ${stamp}`, position: 0 }).select("id").single();
+  r = await B.c.from("tutorials").update({ category_id: catB.id }).eq("id", ownB.id).select();
+  ok(!r.error && (r.data ?? []).length === 1, `Eigene Kategorie erlaubt${r.error ? " — " + r.error.message : ""}`);
 } finally {
   for (const acc of accounts) await admin.from("accounts").delete().eq("id", acc);
   for (const uid of users) await admin.auth.admin.deleteUser(uid).catch(() => {});

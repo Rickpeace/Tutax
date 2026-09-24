@@ -316,6 +316,7 @@ function scheduleRefine(
         admin,
         refineContextFromGuide((tut?.title as string | null) ?? null, steps),
         refineInput(steps, rows),
+        { tutorialId, currentTitle: (tut?.title as string | null) ?? null },
       );
     } catch (e) {
       console.error("[guide-complete] Feinschliff:", e instanceof Error ? e.message : e);

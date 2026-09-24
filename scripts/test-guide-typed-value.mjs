@@ -92,6 +92,11 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Speichern", action
   eq(templateBodyText(enter, enter), "Geben Sie „account“ ein und bestätigen Sie mit Enter.", "Text: Wert + Enter");
   const noLabel = step({ action: "type", label: "", typed_value: "account" });
   eq(templateTitle(noLabel, 2), "„account“ eingeben", "Titel: Wert ohne Label");
+  // Auswahlliste (Erweiterungs-Audit 24.09.): gewählte Option = Beschriftung = Wert.
+  const choice = step({ action: "type", label: "Option 2", typed_value: "Option 2", selector: { css: "#dropdown", role: "combobox", text: "Option 2" } });
+  eq(templateTitle(choice, 0), "„Option 2“ auswählen", "Titel: Auswahlliste");
+  const combo = step({ action: "type", label: "Stadt", typed_value: "Berlin", selector: { css: "#city", role: "combobox" } });
+  eq(templateTitle(combo, 0), "„Berlin“ in „Stadt“ eingeben", "Titel: Such-Combobox bleibt Eingabe");
   const noValue = step({ action: "type", label: "Search query" });
   eq(templateTitle(noValue, 0), "Feld „Search query“ ausfüllen", "Titel: ohne Wert");
   const ctx = step({ action: "type", label: "Search query", typed_value: "account" });

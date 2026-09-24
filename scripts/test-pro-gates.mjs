@@ -126,8 +126,13 @@ try {
   await app.getByText("Der KI-Assistent ist Teil von Pro").waitFor({ timeout: 30_000 }).catch(() => {});
   ok(await app.getByText("Der KI-Assistent ist Teil von Pro").isVisible().catch(() => false), "Gratis-App: Offene Fragen zeigen den Pro-Hinweis");
   await app.goto(`${BASE}/app/settings/aussehen`, { waitUntil: "domcontentloaded" });
-  await app.getByText("Eigenes Logo und Farben gibt es ab Pro").waitFor({ timeout: 30_000 }).catch(() => {});
-  ok(await app.getByText("Eigenes Logo und Farben gibt es ab Pro").isVisible().catch(() => false), "Gratis-App: „Aussehen“ zeigt den Pro-Hinweis statt Logo/Farben");
+  // Neue Aussehen-Seite (Entwurf A, 24.09.): Hinweis statt Logo-Upload und Farbfeldern.
+  const freeHint = app.getByText("Im kostenlosen Tarif zeigt Ihre Hilfe-Seite die Steply-Standardgestaltung");
+  await freeHint.waitFor({ timeout: 30_000 }).catch(() => {});
+  ok(
+    (await freeHint.isVisible().catch(() => false)) && (await app.locator('input[name^="color-"]').count()) === 0,
+    "Gratis-App: „Aussehen“ zeigt den Pro-Hinweis statt Logo/Farben",
+  );
   await app.goto(`${BASE}/app/settings/chat`, { waitUntil: "domcontentloaded" });
   await app.getByText("Die Chat-Blase ist Teil von Pro").waitFor({ timeout: 30_000 }).catch(() => {});
   ok(await app.getByText("Die Chat-Blase ist Teil von Pro").isVisible().catch(() => false), "Gratis-App: „Chat auf Ihrer Website“ zeigt den Pro-Hinweis");

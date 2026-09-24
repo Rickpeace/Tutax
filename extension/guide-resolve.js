@@ -144,6 +144,17 @@
   // Knoten ersetzt, Shadow-Roots betreten. innerText/textContent eines Buttons IM Shadow-Root
   // (<button><slot></slot></button>) sind sonst LEER, obwohl sichtbar „Speichern" dasteht.
   // Spiegelt content.js flatText (Aufnahme). Nur bei Slot/Shadow-Root (Stub-Elemente: nie).
+  function selectHasOption(sel, want) {
+    try {
+      var opts = sel.options || [];
+      for (var i = 0; i < opts.length; i++) {
+        if (norm(opts[i].text || opts[i].textContent || "") === want) return true;
+      }
+    } catch (err) {
+      /* kein Treffer */
+    }
+    return false;
+  }
   function hasSlotOrShadow(el) {
     try {
       if (el.shadowRoot) return true;
@@ -398,6 +409,12 @@
         // den sichtbaren Zwilling wählen. Nur bei injiziertem isVisible; ohne bleibt alles alt.
         if (!(hasVis && !isVisibleEl(hit))) {
           if (containsEither(textOf(hit, scope), wantText)) {
+            return { el: hit, confidence: "exact", reason: null };
+          }
+          // Auswahlliste: aufgenommen wird die GEWAEHLTE Option als Text — die steht nicht im
+          // Text des ganzen <select>, sondern ist eine seiner Optionen (Erweiterungs-Audit 24.09.:
+          // Fuehrung/Automation fanden das Feld nie).
+          if (tagOf(hit) === "select" && selectHasOption(hit, wantText)) {
             return { el: hit, confidence: "exact", reason: null };
           }
           // css traf, aber die strikte Text-Gegenprobe scheiterte. Bevor wir durchfallen:

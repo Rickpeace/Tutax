@@ -2168,7 +2168,10 @@ function captureViaBackground(windowId) {
 function pulseTab(tabId) {
   if (tabId == null) return;
   try {
-    chrome.tabs.sendMessage(tabId, { type: "steply-guide-captured" });
+    // MV3 liefert ein Promise — ohne catch landete „Receiving end does not exist“ (Seite hat
+    // gerade gewechselt) als unbehandelter Fehler in der Seitenleiste (Erweiterungs-Audit 24.09.).
+    const p = chrome.tabs.sendMessage(tabId, { type: "steply-guide-captured" });
+    if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (err) {
     /* Puls ist optional */
   }
@@ -5263,6 +5266,14 @@ async function guideHandleNavInner(step) {
         return;
       }
       if (t === 0) {
+        // Seitenwechsel-Schritt („Zurück zur vorigen Seite“, Neu laden): seine Seite IST das Ziel
+        // des Wechsels — ist sie erreicht, ist der Schritt erledigt. Vorher blieb die Führung hier
+        // stehen, bis man den nächsten Link klickte (Erweiterungs-Audit 24.09.).
+        const it = step.interaction && typeof step.interaction === "object" ? step.interaction : null;
+        if (it && it.variant === "nav" && !guide.waitingLogin) {
+          guideGoNext();
+          return;
+        }
         // Aktuelle Seite passt zum aktuellen Schritt.
         if (guide.waitingLogin) {
           guide.waitingLogin = false;
@@ -6807,7 +6818,9 @@ async function execPostStart() {
 async function execPostFinish(status, detail, keepalive) {
   if (!cfg.token || !exec.runId) return;
   const body = { token: cfg.token, runId: exec.runId, event: "finish", status: status };
-  body.currentStep = exec.index + 1;
+  // Nach einem erfolgreichen Lauf steht index schon HINTER dem letzten Schritt — auf die
+  // Schrittzahl deckeln (sonst „Schritt 8 von 7“, Erweiterungs-Audit 24.09.).
+  body.currentStep = Math.min(exec.index + 1, Math.max(1, exec.plan.length));
   // detail NIE mit Parameter-Werten — zusätzlich durch redactDetail als Sicherheitsnetz.
   if (detail && typeof SteplyExecPlan !== "undefined") {
     const red = SteplyExecPlan.redactDetail(detail);

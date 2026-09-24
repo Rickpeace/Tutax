@@ -445,6 +445,9 @@ try {
   const pex = await pp.request.post(`${BASE}/api/theme/extreme`, { data: { url: THEME_SITE } });
   ok(pex.status() === 403, `Pro: /api/theme/extreme → ${pex.status()}`);
   await visit(pp, `${BASE}/app/settings/aussehen`, "Pro: Aussehen");
+  // Neue Aussehen-Seite (Entwurf A): der Hinweis steht bei der gewählten KI-Grundlage.
+  await pp.locator('[data-mode="ai"]').first().click().catch(() => {});
+  await pp.getByText("Im Business-Tarif erstellt die KI").waitFor({ timeout: 10_000 }).catch(() => {});
   ok(await pp.getByText("Im Business-Tarif erstellt die KI").isVisible().catch(() => false), "Pro: Aussehen zeigt den Business-Hinweis");
   await visit(pp, `${BASE}/app/settings/sprachen`, "Pro: Sprachen");
   ok(await pp.getByText("Mehrsprachige Hilfe-Seite gibt es im Business-Tarif").isVisible().catch(() => false), "Pro: Sprachen zeigt den Business-Hinweis");
@@ -630,7 +633,9 @@ try {
   const { data: s3After } = await admin.from("step_translations").select("title").eq("step_id", main.stepIds[2]).eq("lang", "en").single();
   const { data: s3Hash2 } = await admin.from("steps").select("audio_hash").eq("id", main.stepIds[2]).single();
   ok(s3After.title === s3Before.title, "Pro: keine Delta-Übersetzung mehr (KI-Kosten nur für Business)");
-  ok(s3Hash2.audio_hash === s3Hash.audio_hash, "Pro: kein neues Vorlese-Audio");
+  // Kein NEUES Audio (Kosten) — die veraltete Aufnahme des geänderten Schritts wird aber entfernt,
+  // sonst läse ▶ nach einem Wieder-Upgrade den alten Text vor (Lebenszyklus-Audit 24.09.).
+  ok(!!s3Hash.audio_hash && s3Hash2.audio_hash === null, "Pro: kein neues Vorlese-Audio, veraltetes entfernt");
 
   await admin.from("accounts").update({ plan: "free" }).eq("id", B.accountId);
   ok(await touchOrgName(bp, "Biz Probe GmbH (Gratis)"), "Tarif auf Gratis gesetzt");
@@ -649,7 +654,7 @@ try {
   const { data: lastAudio } = await admin.from("steps").select("audio_path").eq("tutorial_id", main.id);
   const mp3s = lastAudio.map((s) => s.audio_path).filter(Boolean);
   mp3s.forEach((p) => extraPaths.add(p));
-  ok(mp3s.length === 3 && (await storageExists(mp3s[0])), `Vor dem Löschen: ${mp3s.length} MP3s im öffentlichen Bucket`);
+  ok(mp3s.length === 2 && (await storageExists(mp3s[0])), `Vor dem Löschen: ${mp3s.length} MP3s im öffentlichen Bucket (Schritt 3 veraltet entfernt)`);
   await cardAction(bp, "Beleg hochladen", /Löschen/);
   await bp.getByRole("button", { name: "Endgültig löschen" }).click();
   const deleted = await waitFor(async () => {

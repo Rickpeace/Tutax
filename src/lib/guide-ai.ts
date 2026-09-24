@@ -48,6 +48,7 @@ export type RefineStep = {
   values?: string[]; // eingetippte Werte — werden maskiert, nie gesendet
   password?: boolean; // Passwortfeld: nie ein Wert, Titel „Passwort eingeben“
   fieldKind?: string | null; // „Suchfeld“, „Textfeld“ … (nur Eingaben)
+  element?: string | null; // Art des geklickten Elements („Link“, „Kontrollkästchen“ …)
   page?: string | null; // Seitentitel beim Klick
   bodyLocked?: boolean; // formatierter Text (Liste, Fett …) → nur der Titel wird verbessert
   extraSources?: string[]; // weitere wörtlich zitierbare Angaben (z. B. Dateiname)
@@ -56,6 +57,37 @@ export type RefineStep = {
 };
 
 export type RefineContext = { guideTitle?: string | null; domains?: string[] };
+
+/**
+ * Art des geklickten Elements für die KI (Erweiterungs-Audit 24.09.: ohne diese Angabe erfand
+ * sie Handlungen — Link „filter()“ → „Nach Filter suchen“, Häkchen → „Aufgabe öffnen“).
+ */
+const ELEMENT_KIND: Record<string, string> = {
+  link: "Link",
+  button: "Schaltfläche",
+  checkbox: "Kontrollkästchen",
+  radio: "Optionsfeld",
+  switch: "Schalter",
+  tab: "Reiter",
+  menuitem: "Menüeintrag",
+  menuitemcheckbox: "Menüeintrag zum Ankreuzen",
+  option: "Listeneintrag",
+  treeitem: "Eintrag in einer Baumansicht",
+};
+export function elementKindWord(role: string | null | undefined): string | null {
+  return ELEMENT_KIND[(role ?? "").toLowerCase()] ?? null;
+}
+
+/** Auswahlliste (<select>): die Aufnahme nimmt die gewählte Option als Beschriftung UND Wert. */
+export function isChoiceStep(s: GuideStepInput): boolean {
+  const role = s.selector?.role ?? "";
+  return (
+    s.action === "type" &&
+    (role === "combobox" || role === "listbox") &&
+    !!s.typed_value &&
+    labelHead(s.typed_value) === labelHead(s.label ?? "")
+  );
+}
 
 /** Eingabe-Schritt einer frischen Aufnahme (Vorlagen-Texte) → Feinschliff-Eingabe. */
 export function refineStepFromGuide(steps: GuideStepInput[], i: number): RefineStep {
@@ -71,7 +103,14 @@ export function refineStepFromGuide(steps: GuideStepInput[], i: number): RefineS
     values: s.typed_value && !password ? [s.typed_value] : [],
     password,
     fieldKind:
-      role === "searchbox" || /such|search/i.test(s.label) ? "Suchfeld" : role === "combobox" ? "Auswahlfeld" : "Textfeld",
+      role === "searchbox" || /such|search/i.test(s.label)
+        ? "Suchfeld"
+        : isChoiceStep(s)
+          ? "Auswahlliste"
+          : role === "combobox"
+            ? "Auswahlfeld"
+            : "Textfeld",
+    element: s.action === "click" ? elementKindWord(role) : null,
     page: s.title || null,
     extraSources: s.file_meta?.filename ? [s.file_meta.filename] : [],
     requireLabel: !!s.label,
@@ -312,6 +351,7 @@ export function buildRefineRequest(
       label: m.label || null,
       ...(s.quote && m.label ? { zitat: masker.mask(oneLine(s.quote)) } : {}),
       ...(feld ? { feld } : {}),
+      ...(s.element && s.action === "click" ? { element: s.element } : {}),
       ...(interaktion ? { interaktion: masker.mask(interaktion) } : {}),
       ...(m.required.length && !s.password ? { wert: m.required.join(", ") } : {}),
       ...(m.page ? { seite: m.page } : {}),
@@ -505,6 +545,7 @@ export async function refineGuideSteps(
   admin: SupabaseClient,
   ctx: RefineContext,
   steps: (RefineStep & { id: string })[],
+  guide?: { tutorialId: string; currentTitle: string | null },
 ): Promise<void> {
   if (!aiConfigured() || steps.length === 0) return;
   const { results } = await suggestStepTexts(ctx, steps);
@@ -519,4 +560,53 @@ export async function refineGuideSteps(
   ).catch((e) => {
     console.error("[guide-ai] Feinschliff-Update-Fehler:", e instanceof Error ? e.message : e);
   });
+  // Anleitungstitel: steht noch der Datums-Standardtitel, einen passenden vorschlagen (Erweiterungs-
+  // Audit 24.09.: acht Aufnahmen = acht Karten „Anleitung vom 24.09.2026“). Nur solange niemand
+  // den Titel inzwischen geändert hat (Update nur bei unverändertem Titel).
+  if (guide?.currentTitle && DEFAULT_GUIDE_TITLE_RE.test(guide.currentTitle)) {
+    const titles = steps.map((s, i) => results[i]?.title ?? s.title);
+    const title = await suggestGuideTitle(ctx, steps, titles).catch(() => null);
+    if (title) {
+      await admin
+        .from("tutorials")
+        .update({ title })
+        .eq("id", guide.tutorialId)
+        .eq("title", guide.currentTitle)
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+    }
+  }
+}
+
+const DEFAULT_GUIDE_TITLE_RE = /^Anleitung vom /;
+const GUIDE_TITLE_SYS =
+  'Gib NUR JSON {"title":"..."}. Kurzer, prägnanter Titel für eine Klick-Anleitung auf Deutsch: das Ziel der ganzen Anleitung, höchstens 6 Wörter, handlungsorientiert (z. B. „Rechnung als PDF exportieren“), ohne Anführungszeichen, ohne Datum. Erfinde nichts, was nicht aus den Schritten hervorgeht. Platzhalter wie {{WERT}} nie in den Titel übernehmen.';
+
+/** Titel-Vorschlag aus den (maskierten) Schritt-Titeln — eingetippte Werte erreichen die KI nie. */
+async function suggestGuideTitle(ctx: RefineContext, steps: RefineStep[], titles: string[]): Promise<string | null> {
+  const masker = makeMasker(steps);
+  const list = titles.map((t) => masker.mask(oneLine(t))).filter(Boolean).slice(0, 25);
+  if (!list.length) return null;
+  const user = [
+    ctx.domains?.length ? `Website: ${ctx.domains.slice(0, 3).join(", ")}` : "",
+    `Schritte:\n${list.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (masker.values.some((v) => v && user.includes(v))) return null; // Datenschutz-Riegel
+  const completion = await openai().chat.completions.create({
+    model: AI.models.chat,
+    messages: [
+      { role: "system", content: GUIDE_TITLE_SYS },
+      { role: "user", content: user },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 200,
+  });
+  const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as { title?: unknown };
+  const t = typeof raw.title === "string" ? oneLine(raw.title).replace(/^[„"“]+|[“"”]+$/g, "").trim() : "";
+  if (!t || t.length > 80 || /\{\{|WERT/.test(t) || DEFAULT_GUIDE_TITLE_RE.test(t)) return null;
+  return t;
 }

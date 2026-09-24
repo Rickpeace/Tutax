@@ -598,6 +598,12 @@ export function templateTitle(step: GuideStepInput, index: number): string {
     if (isPasswordField(step.label, step.selector?.css)) return "Passwort eingeben";
     const value = step.typed_value;
     const field = step.label ? labelHead(step.label) : "";
+    // Auswahlliste (<select>): Beschriftung = gewählte Option → „„X“ auswählen“ (Erweiterungs-
+    // Audit 24.09.: vorher „Geben Sie den Wert in das Feld „Option 2“ ein“).
+    const role = step.selector?.role ?? "";
+    if (value && (role === "combobox" || role === "listbox") && labelHead(value) === field) {
+      return wrapOne([(v) => `„${v}“ auswählen`], value);
+    }
     if (value && field) return wrapTwo((a, b) => `„${a}“ in „${b}“ eingeben`, value, field);
     if (value) return wrapOne([(v) => `„${v}“ eingeben`], value);
     if (field) return wrapOne([(l) => `Feld „${l}“ ausfüllen`], field);

@@ -754,6 +754,12 @@
     if (assoc && !looksLikeCode(assoc)) return clampLabel(assoc, 60);
     const alt = el.getAttribute && (el.getAttribute("alt") || el.getAttribute("title"));
     if (alt && alt.trim() && !looksLikeCode(alt)) return clampLabel(alt, 60);
+    // Kontrollkaestchen/Radio: der Text DAHINTER gehoert zum Feld — vor der Ueberschrift davor
+    // pruefen (Erweiterungs-Audit 24.09.: „checkbox 1“ hiess sonst wie die h3 „Checkboxes“).
+    if (/^(checkbox|radio|switch)$/.test(roleFor(el))) {
+      const after = followingCaptionText(el);
+      if (after) return clampLabel(after, 60);
+    }
     const cap = nearbyCaptionText(el);
     if (cap) return clampLabel(cap, 60);
     const tag = (el.tagName || "").toLowerCase();
@@ -779,6 +785,13 @@
   // nearbyCaptionText). Bewusst konservativ: kurz (<=40), kein Code, keine Geschwister, die
   // selbst Bedienelemente enthalten.
   function followingCaptionText(el) {
+    // Nackter Textknoten direkt dahinter (<input type=checkbox> checkbox 1<br>) zuerst.
+    let n = el.nextSibling;
+    while (n && n.nodeType === 3 && !String(n.nodeValue || "").trim()) n = n.nextSibling;
+    if (n && n.nodeType === 3) {
+      const t = String(n.nodeValue || "").replace(/\s+/g, " ").trim();
+      if (t && t.length <= 40 && !looksLikeCode(t)) return t;
+    }
     let sib = el.nextElementSibling;
     let hops = 0;
     while (sib && hops < 2) {
@@ -3318,6 +3331,10 @@
     if (tag === "select") return "select";
     if (tag === "textarea") return "text";
     if (tag === "input") {
+      // Checkbox mit role=button (Wikipedia-Sprachmenue & Co.): die Seite verhindert das
+      // Umschalten, es kommt nie ein change — wie ein Knopf behandeln (Erweiterungs-Audit 24.09.).
+      const r = ((el.getAttribute && el.getAttribute("role")) || "").toLowerCase();
+      if (/^(checkbox|radio)$/.test(type) && r === "button") return "click";
       if (/^(checkbox|radio)$/.test(type)) return "toggle";
       if (/^(button|submit|reset|image|file|range|color)$/.test(type)) return "click";
       return "text"; // text/email/search/password/number/tel/url/date/...
@@ -3483,10 +3500,7 @@
     // Welle 48: im Hover-Schritt schaltet der Ausloeser NIE weiter; Varianten (Rechtsklick,
     // Doppelklick, Ziehen, Kuerzel) haben eigene Listener (guideAttachVariantListeners).
     if (!guideTargetEl || guideAdvanceModeCur !== "click" || guideHoverPhase) return;
-    const t = event.target;
-    if (t === guideTargetEl || (guideTargetEl.contains && guideTargetEl.contains(t))) {
-      guideAdvance();
-    }
+    if (guideEventInside(guideTargetEl, event)) guideAdvance();
   }
 
   // Rahmen + Badge zeigen/verstecken (Welle 33, Fix 2c): verschwindet das Ziel, darf das
@@ -3724,6 +3738,20 @@
     return !!(root && node && (root === node || (root.contains && root.contains(node))));
   }
 
+  // Liegt das Ereignis-Ziel in `root`? Ueber composedPath — am document ist ein Ereignis aus
+  // einem Shadow DOM schon auf den Host umgelenkt (event.target), dann schaltete die Fuehrung
+  // bei Cookie-Bannern/Web-Components nie weiter (Erweiterungs-Audit 24.09.).
+  function guideEventInside(root, event) {
+    if (!root || !event) return false;
+    try {
+      const path = event.composedPath ? event.composedPath() : null;
+      if (path && path.length && path.indexOf(root) !== -1) return true;
+    } catch (err) {
+      /* Fallback unten */
+    }
+    return guideInside(root, event.target);
+  }
+
   // „weiter" genau beim passenden Ereignis: contextmenu (Rechtsklick), dblclick (Doppelklick),
   // drop auf das Ablage-Ziel bzw. Zeiger-Ziehen dorthin (Ziehen), keydown mit der Kombination
   // (Kuerzel). Capture-Phase auf document — feuert auch, wenn die Seite stopPropagation nutzt.
@@ -3732,13 +3760,13 @@
     const it = interactionOf(step) || {};
     if (variantMode === "right") {
       guideOnDoc("contextmenu", (e) => {
-        if (guideInside(guideTargetEl, e.target)) guideAdvance();
+        if (guideEventInside(guideTargetEl, e)) guideAdvance();
       });
       return;
     }
     if (variantMode === "double") {
       guideOnDoc("dblclick", (e) => {
-        if (guideInside(guideTargetEl, e.target)) guideAdvance();
+        if (guideEventInside(guideTargetEl, e)) guideAdvance();
       });
       return;
     }
@@ -3763,17 +3791,17 @@
       let started = false;
       let downAt = null;
       guideOnDoc("dragstart", (e) => {
-        if (guideInside(guideTargetEl, e.target)) started = true;
+        if (guideEventInside(guideTargetEl, e)) started = true;
       });
       guideOnDoc("drop", (e) => {
         if (!started) return;
         const d = dropEl();
-        if (!d || guideInside(d, e.target)) guideAdvance();
+        if (!d || guideEventInside(d, e)) guideAdvance();
       });
       // Zeiger-basiertes Ziehen (Bibliotheken ohne HTML5-DnD): gedrueckt auf dem Element,
       // losgelassen deutlich entfernt UEBER dem Ablage-Ziel.
       guideOnDoc("pointerdown", (e) => {
-        downAt = guideInside(guideTargetEl, e.target) ? { x: e.clientX, y: e.clientY } : null;
+        downAt = guideEventInside(guideTargetEl, e) ? { x: e.clientX, y: e.clientY } : null;
       });
       guideOnDoc("pointerup", (e) => {
         if (!downAt) return;

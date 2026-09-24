@@ -500,10 +500,12 @@ async function buildTutorial(job, videoPath, dir) {
         uploaded.push(ipath);
         // Klick-Modus hat VORRANG: existieren Klick-Koordinaten, das highlight-Feld der
         // Vision-KI IGNORIEREN und die feste Box aus dem echten Klick verwenden.
+        // Farbe = Standard (#ef6a4e, lib/highlight-color.ts) → erscheint in der Firmenfarbe des
+        // Kunden; das frühere feste Blau galt als bewusst gewählt (Erweiterungs-Audit 24.09.).
         const hl = a.clickHl
-          ? [{ id: uuid(), type: "rect", x: a.clickHl.x, y: a.clickHl.y, w: a.clickHl.w, h: a.clickHl.h, color: "#3d4ee6", rounded: true }]
+          ? [{ id: uuid(), type: "rect", x: a.clickHl.x, y: a.clickHl.y, w: a.clickHl.w, h: a.clickHl.h, color: "#ef6a4e", rounded: true }]
           : a.p.highlight && [a.p.highlight.x, a.p.highlight.y, a.p.highlight.w, a.p.highlight.h].every((n) => typeof n === "number" && n >= 0 && n <= 1)
-          ? [{ id: uuid(), type: "rect", x: a.p.highlight.x, y: a.p.highlight.y, w: a.p.highlight.w, h: a.p.highlight.h, color: "#3d4ee6", rounded: true }] : [];
+          ? [{ id: uuid(), type: "rect", x: a.p.highlight.x, y: a.p.highlight.y, w: a.p.highlight.w, h: a.p.highlight.h, color: "#ef6a4e", rounded: true }] : [];
         const row = { id, tutorial_id: tutId, title: a.p.title || `Schritt ${rows.length + 1}`, body: mkBody(a.p.body || ""), position: rows.length + 1, is_decision: false, image_path: ipath, image_width: vdim[0] || null, image_height: vdim[1] || null, highlights: hl, video_time: a.videoTime };
         const { error: sErr } = await sb.from("steps").insert(row);
         if (sErr) throw new Error("Schritt anlegen: " + sErr.message);

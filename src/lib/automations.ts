@@ -366,9 +366,12 @@ export async function convertTutorialToAutomation(
       paramKey = key;
 
       const secretHay = `${label} ${s.title ?? ""}`;
+      // Gleich beschriftete Felder unterscheidbar machen („New Todo Input“ zweimal → „… (2)“),
+      // sonst wusste man im Start-Dialog nicht, welches Feld welches ist (Erweiterungs-Audit 24.09.).
+      const sameLabel = params.filter((p) => p.label === label || p.label.startsWith(`${label} (`)).length;
       params.push({
         key,
-        label,
+        label: sameLabel ? `${label} (${sameLabel + 1})` : label,
         type: SECRET_RE.test(secretHay) ? "secret" : "text",
         required: true,
         source: "manual",

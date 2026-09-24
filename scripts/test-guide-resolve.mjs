@@ -70,6 +70,17 @@ function makeRoot(elements) {
   };
 }
 
+// ── Auswahlliste (Erweiterungs-Audit 24.09.): Text = gewählte Option ─────────────
+{
+  const sel = elem({ tag: "select", attrs: { id: "dropdown" }, text: "Please select an option Option 1 Option 2", css: "#dropdown" });
+  sel.options = [{ text: "Please select an option" }, { text: "Option 1" }, { text: "Option 2" }];
+  const root = makeRoot([sel]);
+  const r = resolveSelector(root, { css: "#dropdown", text: "Option 2", role: "combobox" });
+  ok(r.el === sel && r.confidence === "exact", "Auswahlliste: gewählte Option als Text findet das <select> (exact)");
+  const miss = resolveSelector(root, { css: "#dropdown", text: "Option 9", role: "combobox" });
+  ok(miss.el !== sel || miss.confidence !== "exact", "Auswahlliste: unbekannte Option gilt nicht als exakter Treffer");
+}
+
 // ── Stufe 1: css exakt ──────────────────────────────────────────────────────
 {
   const btn = elem({ tag: "button", text: "Speichern", css: "#save" });
