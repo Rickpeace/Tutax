@@ -273,7 +273,16 @@ export async function deleteTutorial(id: string) {
   await requireTutorialAccess(id);
   const { account } = await requireAccount();
   const supabase = await createClient();
-  await removeTutorialEmbeddings(supabase, id).catch(() => {});
+  // Nur EIGENE Anleitungen (siehe Schutzriegel unten) — vor dem Aufräumen mit Server-Rechten
+  // prüfen, sonst träfe es z. B. den Index einer globalen Vorlage bei allen Kunden.
+  const { data: own } = await supabase
+    .from("tutorials")
+    .select("id")
+    .eq("id", id)
+    .eq("account_id", account.id)
+    .maybeSingle();
+  if (!own) throw new Error("Anleitung nicht gefunden.");
+  await removeTutorialEmbeddings(createAdminClient(), id).catch(() => {});
   await invalidateTutorialTags(id); // VOR dem Delete (danach ist der Slug-Lookup weg)
   // Bildpfade VOR dem Delete merken: danach die öffentlichen Kopien entfernen, die keine andere
   // veröffentlichte Anleitung mehr nutzt (Sicherheitsprüfung Welle 51, H2).
@@ -683,7 +692,8 @@ export const publishTutorial = withUserErrors(async function publishTutorial(tut
   if (ue) throw new Error(ue.message);
 
   // Für den Chatbot indizieren (no-op ohne OPENAI_API_KEY)
-  await indexTutorial(supabase, account.id, tutorialId).catch(() => {});
+  // KI-Index schreibt nur der Server (Migration 0046: kb_embeddings für Nutzer nur lesbar).
+  await indexTutorial(createAdminClient(), account.id, tutorialId).catch(() => {});
 
   await invalidateTutorialTags(tutorialId); // öffentliche /h-Caches sofort aktualisieren
 
@@ -754,7 +764,7 @@ async function applyVisibilityChange(
       );
       // Vorlesen: public Bucket darf keine Audios interner Tutorials behalten.
       await removeTutorialAudio(tutorial.id);
-      await removeTutorialEmbeddings(supabase, tutorial.id).catch(() => {});
+      await removeTutorialEmbeddings(createAdminClient(), tutorial.id).catch(() => {});
       await invalidateTutorialTags(tutorial.id, { force: true });
     }
   } else {
@@ -770,7 +780,7 @@ async function applyVisibilityChange(
       .eq("id", tutorial.id);
     if (ue) throw new Error(ue.message);
     if (isPublished) {
-      await indexTutorial(supabase, account.id, tutorial.id).catch(() => {});
+      await indexTutorial(createAdminClient(), account.id, tutorial.id).catch(() => {});
       await invalidateTutorialTags(tutorial.id);
       // Wird jetzt öffentlich sichtbar -> ggf. übersetzen (wie beim Publish).
       const { data: acc } = await supabase
@@ -895,7 +905,7 @@ export async function unpublishTutorial(tutorialId: string) {
 
   // Vorlesen: zurückgezogenes Tutorial darf keine Audios im public Bucket behalten.
   await removeTutorialAudio(tutorialId);
-  await removeTutorialEmbeddings(supabase, tutorialId).catch(() => {});
+  await removeTutorialEmbeddings(createAdminClient(), tutorialId).catch(() => {});
 
   // force: Status ist gerade eben draft geworden — Cache trotzdem sofort räumen.
   await invalidateTutorialTags(tutorialId, { force: true });
