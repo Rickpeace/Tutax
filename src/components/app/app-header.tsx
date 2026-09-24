@@ -54,6 +54,7 @@ import { signOut } from "@/app/(auth)/actions";
 import type { Membership } from "@/lib/account";
 import { dismissVideoJob, useDismissedVideoJobs } from "@/lib/dismissed-video-jobs";
 import type { FailedVideoNotice } from "@/components/app/failed-video-notices";
+import { ROLE_LABEL, asRole } from "@/lib/roles";
 
 /**
  * Vorladen nur mit bekannter Rolle (Handy-Audit 24.09.): Kopf- und Handy-Leiste sind statisches
@@ -437,6 +438,16 @@ export function UserMenu({
       {/* Nach MemberModeSync: beide Effekte laufen in dieser Reihenfolge — die Links wissen
           also schon, ob Mitarbeiter, wenn sie erstmals vorladen dürfen. */}
       <RoleKnownSync />
+      {/* Mehrere Organisationen: die aktive sichtbar zeigen — sonst legte man leicht Inhalte in der
+          falschen Kanzlei an (Runde 5). */}
+      {memberships.length > 1 && (
+        <span
+          className="hidden max-w-[180px] truncate rounded-full bg-line-2 px-2.5 py-1 text-xs font-extrabold text-ink-2 sm:inline-block"
+          title={`Aktive Organisation: ${accountName}`}
+        >
+          {accountName}
+        </span>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -496,6 +507,9 @@ export function UserMenu({
                       )}
                     />
                     <span className="truncate">{m.name}</span>
+                    <span className="ml-auto shrink-0 pl-2 text-[11px] font-bold text-faint">
+                      {ROLE_LABEL[asRole(m.role)]}
+                    </span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuSubContent>

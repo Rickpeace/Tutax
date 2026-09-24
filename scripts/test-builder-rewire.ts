@@ -3,7 +3,7 @@
 // Simuliert die optimistischen Schritte aus builder.tsx mit den reinen Regeln aus
 // lib/builder/rewire.ts und prüft, was Flow/Player (erster Branch) danach zeigen.
 import assert from "node:assert/strict";
-import { buildRenderTree, flattenFlow } from "../src/lib/builder/tree.ts";
+import { buildRenderTree, findJoinPoint, flattenFlow } from "../src/lib/builder/tree.ts";
 import { appendAnchor, deleteRewireTarget, planMove, swapPair, swapPlan } from "../src/lib/builder/rewire.ts";
 import type { Step, StepBranch } from "../src/lib/types.ts";
 
@@ -201,6 +201,17 @@ check("5c: zwei Klicks nacheinander (je eigener Plan) tauschen zweimal; fremder 
   assert.deepEqual(flow(steps, db.branches, db.root), ["A", "N", "Z", "M"]);
   // Editor erwartet einen Tausch, den es im DB-Stand weder gibt noch schon gab.
   assert.equal(serverMove(steps, db, "N", "down", "x", { a: "A", b: "M" }).kind, "stale");
+});
+
+check("6: Schleifen-Ast (zurück vor die Frage) erzeugt keinen falschen Join (Runde 5)", () => {
+  // P → Q(Frage): Ja → A → E, Nein → P (Schleife). Kein gemeinsamer Folgeschritt.
+  const steps = [S("P"), S("Q", true), S("A"), S("E")];
+  const branches = [B("P", "Q"), B("Q", "A", "Ja"), B("Q", "P", "Nein"), B("A", "E")];
+  assert.equal(findJoinPoint(steps, branches, "Q"), null);
+  // Zwei echte Äste, die wieder zusammenlaufen: Join bleibt erkannt.
+  const steps2 = [S("Q2", true), S("X"), S("Y"), S("J")];
+  const branches2 = [B("Q2", "X", "Ja"), B("Q2", "Y", "Nein"), B("X", "J"), B("Y", "J")];
+  assert.equal(findJoinPoint(steps2, branches2, "Q2"), "J");
 });
 
 console.log(`\n${ok} Prüfungen grün`);

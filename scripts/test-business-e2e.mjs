@@ -50,7 +50,7 @@ const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const admin = createClient(SB_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const PUBLIC_BUCKET = "tutorial-images-public";
 const publicUrl = (p) => `${SB_URL}/storage/v1/object/public/${PUBLIC_BUCKET}/${p}`;
-const BUSINESS_REQUIRED = "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
+const BUSINESS_REQUIRED = "Diese Funktion gehört zum Business-Tarif. Den Tarif sehen Sie unter Einstellungen → Tarif.";
 const THEME_SITE = process.env.THEME_SITE || "https://example.com";
 
 let failed = 0;

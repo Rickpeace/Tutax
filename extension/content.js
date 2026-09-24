@@ -422,7 +422,11 @@
   // Whitespace kollabieren und an einer Wortgrenze auf max Zeichen kappen (60 fuer Labels).
   function clampLabel(text, max) {
     if (!text) return "";
-    const clean = String(text).replace(/\s+/g, " ").trim();
+    // Piktogramme/Emoji raus (Runde 5: „📃 Documentation“ — der KI-Feinschliff verwirft jede Antwort
+    // mit Emoji, musste das Label aber zitieren; es blieb beim rohen Vorlagentitel). Besteht der
+    // Text NUR aus Emoji, bleibt er, wie er ist.
+    const noPict = String(text).replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "");
+    const clean = (noPict.trim() ? noPict : String(text)).replace(/\s+/g, " ").trim();
     if (clean.length <= max) return clean;
     let cut = clean.slice(0, max - 1);
     const sp = cut.lastIndexOf(" ");
@@ -539,12 +543,26 @@
 
   // Text des zugehoerigen <label> (el.labels deckt for=id UND umschliessend ab; plus
   // Fallbacks fuer Elemente ohne .labels wie contenteditable).
+  // Text eines <label> OHNE darin steckende Felder: umschliesst das Label ein <select>, stand
+  // sonst jede Option mit im Namen („Dropdown (select) Open this select menu One Two Three“, Runde 5).
+  function labelOwnText(l) {
+    try {
+      if (!l.querySelector || !l.querySelector("select, textarea, input, button, datalist")) return visibleText(l);
+      const c = l.cloneNode(true);
+      c.querySelectorAll("select, option, textarea, input, button, datalist").forEach((n) => n.remove());
+      const t = String(c.textContent || "").replace(/\s+/g, " ").trim();
+      return t || visibleText(l);
+    } catch (err) {
+      return visibleText(l);
+    }
+  }
+
   function associatedLabelText(el) {
     if (!el) return "";
     try {
       if (el.labels && el.labels.length) {
         for (const l of el.labels) {
-          const t = visibleText(l);
+          const t = labelOwnText(l);
           if (t) return t;
         }
       }
@@ -555,7 +573,7 @@
       try {
         const lbls = scopeOf(el).querySelectorAll('label[for="' + cssEscapeAttr(el.id) + '"]');
         for (const l of lbls) {
-          const t = visibleText(l);
+          const t = labelOwnText(l);
           if (t) return t;
         }
       } catch (err) {
@@ -564,7 +582,7 @@
     }
     const wrap = el.closest ? el.closest("label") : null;
     if (wrap) {
-      const t = visibleText(wrap);
+      const t = labelOwnText(wrap);
       if (t) return t;
     }
     return "";
@@ -1100,7 +1118,7 @@
   // sonst schluege „Bestand“/„Spinner“ an.
   const SENSITIVE_RE = new RegExp(
     "(api[-_ ]?key|secret|token|geheim|passw|kennwort|iban|kontonummer|kreditkarte|credit[-_ ]?card" +
-      "|kartennummer|card[-_ ]?number|cvv|cvc|bic" +
+      "|kartennummer|card[-_ ]?number|cvv|cvc" +
       "|steuer[-_ ]?(nummer|nr|id|identifikations)|steueridentifikations|identifikationsnummer" +
       "|ust[-_ .]?id|umsatzsteuer[-_ ]?id|tax[-_ ]?(id|number)" +
       "|sozialversicherungs|rentenversicherungs|krankenversicherungs|versicherten[-_ ]?(nummer|nr)" +
@@ -1110,7 +1128,7 @@
     "i",
   );
   const SENSITIVE_WORD_RE =
-    /(^|[^a-z0-9äöüß])(pin|tan|puk|idnr|ssn|sv[-_ .]?(nummer|nr)|rv[-_ .]?(nummer|nr)|kv[-_ .]?(nummer|nr))(?![a-z0-9äöüß])/i;
+    /(^|[^a-z0-9äöüß])(pin|tan|puk|bic|swift|idnr|ssn|sv[-_ .]?(nummer|nr)|rv[-_ .]?(nummer|nr)|kv[-_ .]?(nummer|nr))(?![a-z0-9äöüß])/i;
   const MAX_SENSITIVE = 10;
 
   // Trifft die BESCHRIFTUNG (Label/aria-label/placeholder/name/id) eines Feldes einen
@@ -1312,6 +1330,10 @@
       //    wie IBAN/Steuernummer/Steuer-ID/SV-Nummer/Kartennummer aussieht.
       document.querySelectorAll("input, textarea, select").forEach((el) => {
         const tag = (el.tagName || "").toLowerCase();
+        // Ankreuz-/Knopf-Felder tragen keinen Wert zum Verpixeln (Runde 5: Sprach-Kästchen
+        // „Arabic“ wurde wegen „bic“ verpixelt und sperrte das Veröffentlichen).
+        const ty = ((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+        if (tag === "input" && /^(checkbox|radio|button|submit|reset|image|hidden|range|color|file)$/.test(ty)) return;
         if (tag !== "select" && isSensitiveByMeta(el)) add(el);
         else if (looksSensitiveValue(fieldValueForCheck(el))) add(el);
       });
@@ -1594,7 +1616,8 @@
     };
     if (fold !== false) extra.foldPrevClick = true;
     return emitStep(inputEl, "click", {
-      label: file && file.name ? clampLabel(file.name, 60) : "Datei",
+      // Kein echter Dateiname als Beschriftung (er stand sonst öffentlich im Schritt, Runde 5).
+      label: "Datei",
       extra,
     });
   }

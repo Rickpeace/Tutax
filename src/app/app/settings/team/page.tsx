@@ -54,7 +54,7 @@ export default async function TeamPage() {
       <SettingsHeader
         group="Arbeitsbereich"
         title="Team"
-        lead="Laden Sie Mitarbeitende ein, die gemeinsam mit Ihnen an Anleitungen arbeiten."
+        lead="Laden Sie Ihr Team ein: Bearbeiter arbeiten mit Ihnen an Anleitungen, Mitarbeiter sehen nur die Schulungen."
       />
       {/* Einladungen (inkl. Token = Beitritts-Link) NUR an Inhaber geben – ein Editor
           könnte sonst aus dem Client-Payload einen offenen Owner-Invite-Token abgreifen. */}

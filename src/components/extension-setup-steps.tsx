@@ -149,7 +149,8 @@ const BROWSER: Record<
     name: "Google Chrome",
     address: "chrome://extensions",
     devMode: "oben rechts",
-    loadLabel: "Entpackt laden",
+    // So heißt der Knopf im deutschen Chrome (Runde 5; vorher „Entpackt laden“).
+    loadLabel: "Entpackte Erweiterung laden",
   },
   edge: {
     name: "Microsoft Edge",
@@ -201,7 +202,9 @@ function BrowserSteps({ kind }: { kind: BrowserKind }) {
       </li>
       <li>
         <b className="text-ink">„{b.loadLabel}“</b> klicken und den entpackten Ordner wählen.
-        Fertig – das Steply-Symbol erscheint in der Symbolleiste.
+        Fertig! Steply finden Sie jetzt über das Puzzle-Symbol oben rechts in der Browser-Leiste.
+        Tipp: Dort bei Steply auf die Stecknadel klicken – dann steht das Steply-Symbol immer
+        sichtbar in der Leiste, und ein Klick darauf öffnet die Seitenleiste zum Aufnehmen.
       </li>
     </ol>
   );

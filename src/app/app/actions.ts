@@ -310,8 +310,14 @@ export async function deleteTutorial(id: string) {
     (goneSteps ?? []).map((s) => s.image_path as string | null),
     { accountId: account.id, exceptTutorialId: id },
   ).catch((e) => console.error("Öffentliche Bilder nicht entfernt:", e instanceof Error ? e.message : e));
-  // Private Originale ebenfalls (sofern nicht von Duplikaten/Automationen mitgenutzt).
-  await removeUnusedOriginals((goneSteps ?? []).map((s) => s.image_path as string | null), account.id);
+  // Private Originale ebenfalls (sofern nicht von Duplikaten/Automationen mitgenutzt) — der GANZE
+  // Bilderordner der Anleitung, damit auch Bilder früher gelöschter Schritte mit wegkommen.
+  const { data: folder } = await createAdminClient().storage.from("tutorial-images").list(`${account.id}/${id}`, { limit: 1000 });
+  const folderPaths = (folder ?? []).filter((f) => f.id).map((f) => `${account.id}/${id}/${f.name}`);
+  await removeUnusedOriginals(
+    [...(goneSteps ?? []).map((s) => s.image_path as string | null), ...folderPaths],
+    account.id,
+  );
   revalidatePath("/app");
 }
 

@@ -83,13 +83,18 @@ export function ViewerImage({
   }, [url, highlights, width, height, shown]);
 
   const ready = loaded && size.w > 0;
+  // Neues Bild lädt noch: altes abgeblendet zeigen — sonst stand bei langsamem Netz der neue Text
+  // neben dem alten Screenshot samt alter Markierung (Runde 5, Mandanten-Test).
+  const switching = url !== shown.url;
 
   return (
     <div
       ref={wrapRef}
-      className={`relative overflow-hidden border border-black/5 ${ready ? "" : "animate-pulse"}`}
+      className={`relative overflow-hidden border border-black/5 transition-opacity duration-200 ${ready && !switching ? "" : "animate-pulse"}`}
+      aria-busy={switching || undefined}
       style={{
         borderRadius: "var(--brand-radius, 12px)",
+        ...(switching ? { opacity: 0.25 } : {}),
         ...(shown.width && shown.height ? { aspectRatio: `${shown.width} / ${shown.height}` } : {}),
         // Lade-Platzhalter folgt dem Kunden-CI (dezente Tönung aus der Brand-Tinte) —
         // ein neutralgrauer Block wirkt in fremden Designs wie ein Fremdkörper.

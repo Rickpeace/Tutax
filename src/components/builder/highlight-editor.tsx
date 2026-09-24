@@ -102,6 +102,21 @@ function markReviewed(list: Highlight[]): Highlight[] {
   });
 }
 
+/**
+ * Nur die Vorschläge als geprüft markieren, die der Autor wirklich angefasst hat (verschoben/
+ * geändert). Vorher galt JEDE Änderung — auch ein neu gezeichnetes Rechteck — als Prüfung aller
+ * übernommenen Verpixelungen; sie fielen still aus der Warnung vor dem Veröffentlichen (Runde 5).
+ */
+function reviewTouched(prev: Highlight[], next: Highlight[]): Highlight[] {
+  const before = new Map(prev.map((h) => [h.id, h]));
+  return next.map((h) => {
+    if (!h.suggested && !h.suggestedFrom) return h;
+    const p = before.get(h.id);
+    if (p && p.x === h.x && p.y === h.y && p.w === h.w && p.h === h.h && p.type === h.type) return h;
+    return markReviewed([h])[0];
+  });
+}
+
 /** Kanten + Mitte einer Markierung (für das Einrasten an anderen Markierungen). */
 function anchorsOf(h: Highlight): { x: number[]; y: number[] } {
   const x1 = Math.min(h.x, h.x + h.w);
@@ -211,11 +226,13 @@ export function HighlightEditor({
   // Eindeutige SVG-IDs: kleiner Editor und Großansicht dürfen sich nie IDs teilen.
   const uid = `he${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
-  // Jede gespeicherte Highlight-Liste läuft durch markReviewed: eine Änderung an den
-  // Markierungen gilt als Prüfung der Auto-Schwärzungen (Welle 28).
+  // Jede gespeicherte Highlight-Liste läuft durch reviewTouched: nur angefasste Vorschläge gelten
+  // als geprüft (Welle 28, Runde 5).
   // Zusätzlich jede Form ins Bild klemmen (Audit 24.09.) — so wird nie etwas außerhalb von
   // 0..1 gespeichert oder veröffentlicht.
-  const commit = (list: Highlight[]) => onChange(sanitizeHighlights(markReviewed(list)));
+  const commit = (list: Highlight[]) => onChange(sanitizeHighlights(reviewTouched(highlights, list)));
+  // „Passt“: alle übernommenen/vorgeschlagenen Verpixelungen bewusst als geprüft bestätigen.
+  const commitReviewed = (list: Highlight[]) => onChange(sanitizeHighlights(markReviewed(list)));
   const inherited = highlights.filter((h) => h.suggested && h.suggestedFrom === "previous");
   const hasAutoSuggested = highlights.some((h) => h.suggested && !h.suggestedFrom);
 
@@ -536,15 +553,23 @@ export function HighlightEditor({
       </div>
 
       {/* Auto-Schwärzung (Welle 28): dezenter Hinweis, solange vorgeschlagene Blurs
-          ungeprüft sind. Verschwindet, sobald der Autor die Markierungen speichert. */}
+          ungeprüft sind. Geprüft gilt eine Verpixelung, sobald sie angefasst oder mit „Passt“
+          bestätigt wurde (Runde 5: vorher zählte jede Änderung, auch ein neues Rechteck). */}
       {hasAutoSuggested && (
         <div className="flex items-start gap-2 rounded-lg border-2 border-primary/30 bg-accent px-3 py-2 text-xs text-ink">
           <EyeOff className="mt-0.5 size-3.5 shrink-0 text-primary" />
           <span>
             <b>Automatisch verpixelt — bitte prüfen.</b> Sensible Felder wurden erkannt und
             unkenntlich gemacht. Verschieben, anpassen oder löschen Sie die Markierungen bei
-            Bedarf; jede Änderung bestätigt die Prüfung.
+            Bedarf – oder bestätigen Sie mit „Passt“.
           </span>
+          <button
+            type="button"
+            onClick={() => commitReviewed(highlights)}
+            className="ml-auto flex shrink-0 items-center gap-1 rounded-md bg-card px-2 py-1 font-bold text-ink hover:bg-muted"
+          >
+            <Check className="size-3.5" /> Passt
+          </button>
         </div>
       )}
 
@@ -561,7 +586,7 @@ export function HighlightEditor({
           </span>
           <button
             type="button"
-            onClick={() => commit(highlights)}
+            onClick={() => commitReviewed(highlights)}
             className="flex items-center gap-1 rounded-md bg-card px-2 py-1 font-bold text-ink hover:bg-muted"
           >
             <Check className="size-3.5" /> Passt

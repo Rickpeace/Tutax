@@ -84,6 +84,7 @@ export function Wizard({
     alt: string;
   } | null>(null);
   const [feedback, setFeedback] = useState<"sent" | null>(null);
+  const [feedbackNo, setFeedbackNo] = useState(false);
   // Schritt-IDs, für die schon „komme nicht weiter" gemeldet wurde (1×/Schritt).
   const [stuckSent, setStuckSent] = useState<Set<string>>(() => new Set());
 
@@ -271,6 +272,7 @@ export function Wizard({
 
   const sendFeedback = (helpful: boolean) => {
     setFeedback("sent"); // optimistisch — Tracking darf den Endkunden nie blockieren
+    setFeedbackNo(!helpful);
     if (accountSlug && tutorialSlug) void recordFeedback(accountSlug, tutorialSlug, helpful);
   };
 
@@ -486,6 +488,19 @@ export function Wizard({
     }
   }, [cur]);
 
+  // Bilder der möglichen NÄCHSTEN Schritte vorladen — bei langsamem Netz ist das neue Bild dann
+  // meist schon da, wenn der Mandant auf „Weiter“ tippt (Runde 5).
+  useEffect(() => {
+    if (!cur) return;
+    for (const b of branchesByStep.get(cur) ?? []) {
+      const u = b.target_step_id ? imageUrls[b.target_step_id] : undefined;
+      if (u) {
+        const img = new Image();
+        img.src = u;
+      }
+    }
+  }, [cur, branchesByStep, imageUrls]);
+
   // Schrittwechsel stoppt die Wiedergabe und setzt den Play-Button zurück.
   useEffect(() => {
     const el = audioRef.current;
@@ -650,7 +665,7 @@ export function Wizard({
                     }`}
                     style={{
                       color: "var(--brand-ink)",
-                      opacity: state === "open" ? 0.6 : 1,
+                      opacity: state === "open" ? 0.78 : 1, // ≥ 4,5 : 1 Kontrast (Runde 5, vorher 0,6)
                       textDecoration: state === "done" ? "line-through" : undefined,
                       textDecorationColor:
                         state === "done"
@@ -743,8 +758,13 @@ export function Wizard({
                 })
               }
               aria-label={L.enlargeImage}
-              className="mb-4 block w-full cursor-zoom-in overflow-hidden rounded-2xl border-2"
+              className="mx-auto mb-4 block w-full cursor-zoom-in overflow-hidden rounded-2xl border-2"
               style={{
+                // Hochkant-Screenshots höchstens ~60 % der Bildschirmhöhe — sonst lag „Weiter“ am
+                // Handy bei jedem Schritt unterhalb des sichtbaren Bereichs (Runde 5). Details: Großansicht.
+                ...(step.image_width && step.image_height && step.image_height > step.image_width
+                  ? { maxWidth: `calc(60svh * ${step.image_width} / ${step.image_height})` }
+                  : {}),
                 borderColor: "color-mix(in srgb, var(--brand-ink) 9%, transparent)",
                 boxShadow:
                   "0 5px 0 color-mix(in srgb, var(--brand-ink) 7%, transparent)",
@@ -868,7 +888,9 @@ export function Wizard({
               <div className="mt-3 text-center" data-tx="stuck">
                 {stuckSent.has(step.id) ? (
                   <FocusStatus className="text-xs text-muted-foreground">
-                    {chatAvailable ? L.stuckThanks : L.stuckThanks.split(/(?<=[.!?])\s/)[0]}
+                    {/* Ohne Pro sieht die Organisation diese Meldung nie (Insights ab Pro) — dort kein
+                        „wir schauen uns das an“, sondern ein schlichtes Danke (Runde 5). */}
+                    {chatAvailable ? L.stuckThanks : L.feedbackThanks}
                   </FocusStatus>
                 ) : (
                   <button
@@ -895,7 +917,9 @@ export function Wizard({
             {L.finished}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {L.finishedSub}
+            {internalMode && !done
+              ? "Ende erreicht – bestätigen Sie unten „Als absolviert markieren“, damit es im Schulungsnachweis erscheint."
+              : L.finishedSub}
           </p>
 
           {/* Interner Schulungsnachweis statt öffentlichem Feedback. */}
@@ -934,7 +958,24 @@ export function Wizard({
           {!internalMode && accountSlug && tutorialSlug && (
             <div className="mt-4">
               {feedback === "sent" ? (
-                <FocusStatus className="text-sm font-medium text-muted-foreground">{L.feedbackThanks}</FocusStatus>
+                <>
+                  <FocusStatus className="text-sm font-medium text-muted-foreground">{L.feedbackThanks}</FocusStatus>
+                  {/* „Nicht hilfreich“ ohne Ausweg war eine Sackgasse (Runde 5): Chat anbieten. */}
+                  {feedbackNo && chatAvailable && (
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent("steply-open-chat"))}
+                      className="mt-2 rounded-full border-2 px-4 py-2 text-sm font-bold"
+                      style={{
+                        background: "var(--brand-paper, #fff)",
+                        color: "var(--brand-ink)",
+                        borderColor: "color-mix(in srgb, var(--brand-ink) 14%, transparent)",
+                      }}
+                    >
+                      {L.feedbackAsk}
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="flex flex-col items-center gap-2">
                   <p className="text-sm text-muted-foreground">{L.helpful}</p>

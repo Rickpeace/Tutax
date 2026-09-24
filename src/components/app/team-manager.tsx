@@ -326,7 +326,7 @@ export function TeamManager({
                       onClick={() =>
                         start(async () => {
                           try {
-                            unwrap(await revokeInvitation(inv.id));
+                            unwrap(await revokeInvitation(accountId, inv.id));
                             toast.success("Einladung zurückgezogen");
                           } catch (e) {
                             toast.error(errorText(e, "Zurückziehen fehlgeschlagen"));

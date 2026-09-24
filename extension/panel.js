@@ -4671,6 +4671,23 @@ function guideRenderStep() {
     guideRenderDone();
     return;
   }
+  // Seitenwechsel-Schritt (Zurück/Neu laden): lädt der Tab GERADE noch die Seite, die der vorige
+  // Schritt (z. B. ein Link) geöffnet hat, zählt dieses Laden NICHT als Erledigung — sonst wurde
+  // „Seite neu laden“ übersprungen (Runde 5).
+  guide.navIgnoreNext = false;
+  const navIt = step.interaction && typeof step.interaction === "object" ? step.interaction : null;
+  if (navIt && navIt.variant === "nav" && guide.tabId != null) {
+    try {
+      chrome.tabs.get(guide.tabId).then(
+        (t) => {
+          if (t && t.status === "loading") guide.navIgnoreNext = true;
+        },
+        () => {},
+      );
+    } catch (err) {
+      /* egal */
+    }
+  }
   els.runDone.hidden = true;
   guideSetFallback(false, "");
   // Zustands-Intelligenz (Welle 40): einen Schritt zu rendern heißt, wir warten nicht (mehr).
@@ -5288,6 +5305,11 @@ async function guideHandleNavInner(step, loadedTabId) {
         const it = step.interaction && typeof step.interaction === "object" ? step.interaction : null;
         // Nur ein Ladevorgang des GEFÜHRTEN Tabs zählt (Runde 4: sonst übersprang das Neuladen
         // eines anderen Tabs den Schritt „Seite neu laden“ — dessen Adresse passt ja immer).
+        if (it && it.variant === "nav" && guide.navIgnoreNext && loadedTabId === guide.tabId) {
+          guide.navIgnoreNext = false; // Laden des VORIGEN Schritts — nicht weiterschalten
+          guideResendOverlay(step);
+          return;
+        }
         if (it && it.variant === "nav" && !guide.waitingLogin && loadedTabId === guide.tabId) {
           guideGoNext();
           return;

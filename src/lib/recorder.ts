@@ -273,7 +273,31 @@ type ScrubbableStep = {
   rect: { x: number; y: number; w: number; h: number };
   sensitive?: { x: number; y: number; w: number; h: number }[];
   typed_value?: string;
+  /** Adresse der Seite (landet in steps.page_url). */
+  url?: string;
 };
+
+// Abfrage-Parameter mit sensiblen Namen (Runde 5: GET-Formular speicherte „my-password=…“ in page_url).
+const SENSITIVE_PARAM_RE = /(pass|pwd|kennwort|token|secret|auth|session|sid|key|code|pin|tan|iban|card|cvv|cvc|otp)/i;
+
+/**
+ * Seitenadresse ohne sensible Abfrage-Werte: Parameter mit sensiblem Namen oder sensibel aussehendem
+ * Wert fallen weg, ebenso ein Fragment mit Tokens (#access_token=…). Der Rest (Pfad, harmlose
+ * Parameter) bleibt — Live-Führung und Automationen brauchen ihn zum Wiedererkennen der Seite.
+ */
+export function scrubPageUrl(raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  try {
+    const u = new URL(raw);
+    for (const [k, v] of [...u.searchParams.entries()]) {
+      if (SENSITIVE_PARAM_RE.test(k) || looksSensitiveValue(v)) u.searchParams.delete(k);
+    }
+    if (u.hash && /(token|code|key|secret|session)=/i.test(u.hash)) u.hash = "";
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
 
 /**
  * Sicherheitsnetz vor dem Speichern (guide-complete): sensible Eingabewerte fliegen raus, statt
@@ -304,6 +328,10 @@ export function scrubSensitiveGuideSteps(steps: ScrubbableStep[]): number {
       return m;
     };
     s.label = scrubText(s.label) ?? s.label;
+    if (s.url) {
+      const cleaned = scrubPageUrl(s.url);
+      if (cleaned !== s.url) s.url = cleaned;
+    }
     if (s.title) s.title = scrubText(s.title);
     if (s.file_meta?.filename) s.file_meta.filename = scrubText(s.file_meta.filename);
     if (s.interaction?.dropLabel) s.interaction.dropLabel = scrubText(s.interaction.dropLabel);

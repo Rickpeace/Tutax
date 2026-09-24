@@ -102,6 +102,34 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Kunden-Runde 5 — 24.09.2026 (6 Prüfer als echte Nutzer; lokal gegen `next start`, Kontingente schonen)
+
+Regression: `test-merge-branch`, `test-cache-step-edit`, `test-consent-capture`, `test-exec-plan` (checked),
+`test-recorder-sensitive` (page_url), `test-builder-rewire` (Schleifen-Join), `test-search-match` (Synonyme).
+
+- [x] Editor: „Danach weiter mit“ für normale Schritte (Antwort-Wege zusammenführen) · Diagramm bei Schleifen ·
+  KI-Texte lassen Fragen/leere Texte in Ruhe · gleichzeitiges Anhängen in 2 Tabs · Link-Text wird nicht
+  überschrieben · erster Schritt verliert Text nicht · übernommene/auto Verpixelung: „Passt“ + nur Angefasstes zählt ·
+  „Ansehen“ nach Veröffentlichen · ⌘K umlaut-tolerant · Hub-Adresse aus Kanzleiname statt E-Mail (Einrichtung)
+- [x] Hilfe-Seite: eigene „Anleitung nicht gefunden“-Seite im Kanzlei-Design · Chat springt nicht mehr von selbst auf ·
+  keine leeren Bild-Platzhalter · Vorladen/Abblenden bei langsamem Netz · Druck am Handy · hohe Bilder ≤ 60 % ·
+  Kopf am Handy · sichtbarer Fokus · nach „Nein, nicht hilfreich“ Chat anbieten · Suche mit Synonymen
+- [x] Team: Einladung zurückziehen im alten Tab · Kontakt-Seite am Handy · „absolviert“ mit Fehlermeldung ·
+  Kontaktwunsch im Chat ≠ „Offene Frage“ · alter Einladungslink erklärt · aktive Organisation in der Kopfzeile ·
+  Schulungsnachweis auch für Bearbeiter
+- [x] Erweiterung 2.19.9: Automation setzt Kontrollkästchen-Zielzustand · BIC nur als Wort, keine Checkbox-Verpixelung ·
+  Emoji-freie Beschriftungen · Auswahlliste ohne Optionen im Namen · Neu-laden-Schritt nicht durch vorigen Link ·
+  kein Dateiname in Upload-Schritten · sensible Abfrage-Parameter aus page_url · Name „Steply-Erweiterung“
+- [x] Texte: Startseite/Tarife ehrlich (kein „leitet weiter“, Tarif-Angaben, Video-Export, Automationen),
+  Anmelde-Link statt Magic Link, englische Fehlermeldung übersetzt, § 5 DDG, Aktualität je Tarif, u. v. m.
+- [x] Vercel: keine 30-s-Wartezeit mehr beim Schritt-Löschen (Originale beim Anleitungs-Löschen aufgeräumt)
+- [ ] Offen: Automation trifft in Listen evtl. falsche Zeile (Checkbox-Selektor ohne Text) · Datei-Upload in
+  Automationen (Datei-Angabe) · Schritt verschieben nicht atomar · Cookie-Überspringen erst nach 5 s ·
+  Tab-Wechsel ohne Schritt · „Link teilen“ mit Schritt · Fortschritt bei Verzweigungen · Chat-Quelle manchmal unpassend
+- [ ] Richard: „Made in Germany“ · Datenschutzerklärung (Chat-Fragen, Fonts, Schulungsnachweis, Erweiterung) ·
+  DATEV-Vorlagen vs. generische Positionierung · Supabase „Leaked password protection“ · Schulungsnachweis nur
+  Mitarbeiter zählen?
+
 ## Bugsuche Runde 4 — 24.09.2026 nachmittags (6 Prüfer: Nebenwirkungen, Hilfe-Seite, Konto, KI/Automationen, Sicherheit, Erweiterung 2.19.6)
 
 Live seit a15c205 (+ Migrationen 0047, 0048). Regression: `test-storage-path` (Prozent-Kodierung), `test-rest-guards`

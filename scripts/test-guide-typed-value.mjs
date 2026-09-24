@@ -38,7 +38,9 @@ const step = (over) => validateGuideSteps([{ ...base, label: "Speichern", action
   const dl = step({ file_meta: { role: "download", filename: "a.pdf" } });
   eq(templateBodyText(dl, dl), "Klicken Sie auf „Speichern“ — dabei wird eine Datei heruntergeladen.", "Download: Hinweis");
   const up = step({ file_meta: { role: "upload", filename: "a.pdf" } });
-  eq(templateBodyText(up, up), "Legen Sie die Datei „a.pdf“ in dieses Feld.", "Upload: Hinweis");
+  // Runde 5: kein echter Dateiname öffentlich (Mandantennamen in Dateinamen).
+  eq(templateBodyText(up, up), "Wählen Sie hier Ihre Datei aus – oder ziehen Sie sie in dieses Feld.", "Upload: Hinweis ohne Dateiname");
+  eq(templateTitle(up, 0), "Datei hochladen", "Upload: Titel ohne Dateiname");
   const right = step({ interaction: { variant: "right" } });
   eq(templateBodyText(right, right), "Klicken Sie mit der rechten Maustaste auf „Speichern“.", "Rechtsklick: Text bleibt");
   const hov = step({ interaction: { hover: { text: "Datei" }, hoverLabel: "Datei" } });

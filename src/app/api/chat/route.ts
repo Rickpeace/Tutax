@@ -333,7 +333,9 @@ export async function POST(req: NextRequest) {
                 ? tr(lang, "chatClarify")
                 : status === "no_answer"
                   ? tr(lang, "chatNoAnswer")
-                  : tr(lang, "chatErrorRetry");
+                  : status === "contact"
+                    ? tr(lang, "chatNoAnswer")
+                    : tr(lang, "chatErrorRetry");
           send({ delta: fb });
         }
 
@@ -356,7 +358,11 @@ export async function POST(req: NextRequest) {
           offerContact === true ||
           /unten finden sie|direkt erreichen|below you.{0,20}(find|see)|reach us directly/i.test(emitted);
         const escalation =
-          status === "no_answer" || (canEscalate && mentionsContact) ? buildEscalation(expertIdx) : null;
+          // Kontaktwunsch (Runde 5): Kontaktbox zeigen, aber NICHT als „Offene Frage“ zählen (status bleibt
+          // „contact“; Offene Fragen/Insights filtern auf „no_answer“).
+          status === "no_answer" || status === "contact" || (canEscalate && mentionsContact)
+            ? buildEscalation(expertIdx)
+            : null;
 
         send({ meta: { status, sources: sources.slice(0, 3), escalation, weak: status === "no_answer" } });
 

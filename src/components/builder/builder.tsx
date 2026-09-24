@@ -131,6 +131,10 @@ export function Builder({
   // Zahl der noch nicht bestätigten Schreibvorgänge. Verhindert, dass ein FREMDER
   // Server-Reload (z. B. DriftCheck-Button) laufende optimistische Änderungen zurücksetzt.
   const pending = useRef(0);
+  // Zeitpunkt des letzten abgeschlossenen Schreibvorgangs: Server-Stand, der kurz davor angefragt
+  // wurde (z. B. router.refresh() nach dem ersten Schritt), kann ÄLTER sein als die eben
+  // gespeicherte Eingabe — dann nicht darüberbügeln (Runde 5: Titel/Text verschwanden kurz).
+  const lastWriteDoneAt = useRef(0);
 
   // Tab schließen/neu laden, während noch gespeichert wird: Browser fragt nach (sonst gingen
   // gerade abgeschickte Änderungen verloren). Ein Listener für die ganze Sitzung — er fragt
@@ -150,6 +154,7 @@ export function Builder({
   // echte Reload wieder den Server-Stand.
   useEffect(() => {
     if (pending.current > 0) return;
+    if (Date.now() - lastWriteDoneAt.current < 2500) return;
     setSteps(initialSteps);
     setBranches(initialBranches);
     setRootId(initialRoot);
@@ -245,6 +250,7 @@ export function Builder({
         void reportSaveError(fn, opts?.retry !== false, e);
       }).finally(() => {
         pending.current -= 1;
+        lastWriteDoneAt.current = Date.now();
       });
       return p; // Promise für Aufrufer, die auf den Erfolg warten wollen (saveStep)
     },
@@ -501,6 +507,28 @@ export function Builder({
       persist(() => updateBranch(branchId, patch));
     },
     [persist],
+  );
+
+  // „Danach weiter mit“ eines normalen Schritts (Runde 5): nach einer Frage ließ sich ein Ast sonst
+  // nicht mit dem Hauptweg zusammenführen — der Weg endete nach dem letzten Ast-Schritt.
+  const handleSetNext = useCallback(
+    (stepId: string, target: string | null) => {
+      const own = branches.filter((b) => b.step_id === stepId).sort((a, b) => a.position - b.position)[0];
+      if (own) {
+        if (own.target_step_id === target) return;
+        setBranches((prev) => prev.map((b) => (b.id === own.id ? { ...b, target_step_id: target } : b)));
+        persist(() => updateBranch(own.id, { target_step_id: target }));
+        return;
+      }
+      if (!target) return;
+      const id = crypto.randomUUID();
+      setBranches((prev) => [
+        ...prev,
+        { id, step_id: stepId, label: null, color: null, target_step_id: target, position: 0, created_at: "" },
+      ]);
+      persist(() => addBranch({ id, step_id: stepId, label: null, color: null, target_step_id: target, position: 0 }));
+    },
+    [branches, persist],
   );
 
   const handleDeleteBranch = useCallback(
@@ -950,6 +978,7 @@ export function Builder({
         onSetDecision={handleSetDecision}
         onSetCondition={handleSetCondition}
         onAddBranch={handleAddBranch}
+        onSetNext={handleSetNext}
         onUpdateBranch={handleUpdateBranch}
         onDeleteBranch={handleDeleteBranch}
         onDeleteStep={handleDeleteStep}

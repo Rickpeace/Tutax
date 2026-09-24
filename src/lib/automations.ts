@@ -25,7 +25,7 @@ export type StepFileLink =
   | { role: "upload"; source: string; filename?: string };
 
 export const AUTOMATION_ERR_UPLOAD_NO_DOWNLOAD =
-  "Der Ablauf lädt eine Datei hoch, aber vorher wird keine heruntergeladen.";
+  "Der Ablauf lädt eine Datei hoch, die Automation kann aber keine Datei von Ihrem Computer auswählen – nur eine, die sie vorher selbst heruntergeladen hat. Löschen Sie den Upload-Schritt im Editor (oder in einer Kopie der Anleitung) und nutzen Sie dann „Als Automation nutzen“.";
 
 // ── Zeitplan (Welle 41) ───────────────────────────────────────────────────────
 // Ein Ablauf kann sich wiederholen („jeden Montag 08:00", „am 3. des Monats"). Der Zeitplan

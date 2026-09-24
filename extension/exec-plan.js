@@ -163,6 +163,9 @@
         out.variant = raw.variant;
       }
     }
+    // Kontrollkästchen: Zielzustand (Runde 5) — ohne ihn schaltete die Automation blind um, ein
+    // zweiter Lauf entfernte gesetzte Haken und meldete trotzdem „vollständig durchgelaufen“.
+    if (typeof raw.checked === "boolean" && (action === "toggle" || isClick)) out.checked = raw.checked;
     var hover = parseSel(raw.hover);
     if (hover) {
       out.hover = hover;

@@ -367,6 +367,9 @@ export function brandStyle(tokens: unknown, opts: { onWhite?: boolean } = {}): C
     }
     s["--brand-accent-strong"] = strong;
   }
+  // Fokus-Ring der Hilfe-Seite in der (kontraststarken) Kundenfarbe statt blasser Steply-Koralle
+  // (Runde 5, Tastatur-Test); die volle Deckkraft setzt globals.css für [data-hub-brand].
+  s["--ring"] = String(s["--brand-accent-strong"] ?? accent);
   // Gedämpfte Texte aus der Kunden-Textfarbe statt fest Steply-Beige (#8a7a63): halb-
   // transparente Textfarbe liest sich auf Hintergrund UND Papier. Überschreibt die
   // Tailwind-Tokens (text-muted-foreground/-ink/-ink-2) nur innerhalb der Hilfe-Seite.

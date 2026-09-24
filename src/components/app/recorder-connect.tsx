@@ -375,7 +375,7 @@ export function RecorderConnect({
               <span className="text-[12.5px] font-extrabold text-ink-2">Verbindungs-Code</span>
               <CopyField value={token} />
               <p className="text-xs text-muted-foreground">
-                In der Erweiterung unter „Verbindungs-Token“ einfügen. Bewahren Sie den Code
+                In der Erweiterung unter „Verbindungs-Code“ einfügen. Bewahren Sie den Code
                 wie ein Passwort auf.
               </p>
             </div>
@@ -383,7 +383,7 @@ export function RecorderConnect({
               <span className="text-[12.5px] font-extrabold text-ink-2">Steply-Adresse</span>
               <CopyField value={appUrl} />
               <p className="text-xs text-muted-foreground">
-                In der Erweiterung unter „Steply-App-URL“ eintragen.
+                In der Erweiterung unter „Steply-Adresse“ eintragen.
               </p>
             </div>
             <div>

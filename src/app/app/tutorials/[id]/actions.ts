@@ -9,7 +9,7 @@ import {
   requireStepAccess,
   requireBranchAccess,
 } from "@/lib/account";
-import { hasInvalidBlur, rebuildPublicCopy, removeUnusedOriginals, removeUnusedPublicCopies } from "@/lib/public-images";
+import { hasInvalidBlur, rebuildPublicCopy, removeUnusedPublicCopies } from "@/lib/public-images";
 import { safeHexColor } from "@/lib/highlight-color";
 import { takeHourlyAiRun } from "@/lib/ai-rate-limit";
 import { invalidateTutorialTags, invalidateStepTags, invalidateBranchTags } from "@/lib/cache-tags";
@@ -117,15 +117,41 @@ export async function addStep(
       .eq("id", tutorialId);
   }
   if (wire) {
-    const { error: be } = await supabase.from("step_branches").insert({
-      id: wire.branchId,
-      step_id: wire.fromStepId,
-      label: null,
-      target_step_id: step.id,
-      position: 0,
-    });
-    if (be && !(await isOwnRetryDuplicate(supabase, be, "step_branches", wire.branchId, { column: "step_id", value: wire.fromStepId }))) {
-      throw new Error(be.message);
+    // Hat der Vorgänger inzwischen schon eine Weiter-Verbindung (zweiter Tab / zweite Person hat
+    // gleichzeitig angehängt), NICHT eine zweite anlegen — die wäre unsichtbar (Runde 5). Stattdessen
+    // den neuen Schritt dazwischen setzen: Vorgänger → neu → bisheriges Ziel.
+    const [{ data: fromStep }, { data: existing }] = await Promise.all([
+      supabase.from("steps").select("is_decision").eq("id", wire.fromStepId).maybeSingle(),
+      supabase.from("step_branches").select("id, target_step_id").eq("step_id", wire.fromStepId),
+    ]);
+    const other = (existing ?? []).find((b) => b.id !== wire.branchId);
+    if (other && !fromStep?.is_decision && other.target_step_id !== step.id) {
+      const oldTarget = (other.target_step_id as string | null) ?? null;
+      const { error: ne } = await supabase.from("step_branches").insert({
+        id: wire.branchId,
+        step_id: step.id,
+        label: null,
+        target_step_id: oldTarget,
+        position: 0,
+      });
+      if (ne && !(await isOwnRetryDuplicate(supabase, ne, "step_branches", wire.branchId, { column: "step_id", value: step.id }))) {
+        throw new Error(ne.message);
+      }
+      let q = supabase.from("step_branches").update({ target_step_id: step.id }).eq("id", other.id);
+      q = oldTarget ? q.eq("target_step_id", oldTarget) : q.is("target_step_id", null);
+      const { error: ue } = await q;
+      if (ue) throw new Error(ue.message);
+    } else if (!other || fromStep?.is_decision) {
+      const { error: be } = await supabase.from("step_branches").insert({
+        id: wire.branchId,
+        step_id: wire.fromStepId,
+        label: null,
+        target_step_id: step.id,
+        position: 0,
+      });
+      if (be && !(await isOwnRetryDuplicate(supabase, be, "step_branches", wire.branchId, { column: "step_id", value: wire.fromStepId }))) {
+        throw new Error(be.message);
+      }
     }
   }
   // Geteiltes Bild in einer veröffentlichten Anleitung: öffentliche Kopie mit allen
@@ -507,16 +533,11 @@ export async function deleteStep(
   // Öffentliche Bildkopie des gelöschten Schritts entfernen, sofern kein anderer veröffentlichter
   // Schritt sie noch nutzt (Sicherheitsprüfung Welle 51, H2/M1).
   if (victim?.image_path) {
-    const accountId = await tutorialAccountId(tutorialId);
-    await removeUnusedPublicCopies([victim.image_path as string], { accountId });
-    // Privates Original erst nach einer Karenzzeit löschen und dann erneut prüfen: ein offenes
-    // „Rückgängig“ (Bild entfernen) in einem anderen Schritt mit demselben Bild stellte sonst
-    // einen Pfad auf eine schon gelöschte Datei wieder her (Runde 4).
-    const path = victim.image_path as string;
-    after(async () => {
-      await new Promise((r) => setTimeout(r, 30_000));
-      await removeUnusedOriginals([path], accountId);
-    });
+    await removeUnusedPublicCopies([victim.image_path as string], { accountId: await tutorialAccountId(tutorialId) });
+    // Das PRIVATE Original bleibt hier bewusst liegen: ein offenes „Rückgängig“ (Bild entfernen) in
+    // einem anderen Schritt mit demselben Bild bräuchte es noch, und eine Wartezeit kostete
+    // Vercel-Funktionszeit. Aufgeräumt wird beim Löschen der Anleitung (ganzer Bilderordner,
+    // nur ungenutzte Dateien) bzw. des Kontos.
   }
   await invalidateTutorialTags(tutorialId, { hub: false });
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet
@@ -848,6 +869,9 @@ export async function suggestStepTextImprovements(tutorialId: string): Promise<S
 
   const inputs: { step: Step; input: RefineStep }[] = [];
   for (const s of chosen) {
+    // Fragen bleiben Fragen: die KI machte aus „Ist der Beleg gut lesbar?“ ein „Beleg prüfen“,
+    // und die Antwortknöpfe standen dann unter einer Anweisung (Runde 5).
+    if (s.is_decision) continue;
     const input = refineStepFromSaved(s);
     if (input) inputs.push({ step: s, input });
   }
@@ -876,7 +900,8 @@ export async function suggestStepTextImprovements(tutorialId: string): Promise<S
       oldTitle: input.title,
       oldBody: input.bodyText,
       newTitle: r.title,
-      newBody: r.body,
+      // Leerer Erklärtext bleibt leer — kein erfundener Text (Runde 5).
+      newBody: input.bodyText.trim() ? r.body : null,
     });
   });
   return { ok: true, items, total: inputs.length, capped };

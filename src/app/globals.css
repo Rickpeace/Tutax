@@ -309,3 +309,10 @@
     --toast-offset-bottom-mobile: calc(5.25rem + env(safe-area-inset-bottom));
   }
 }
+
+/* Hilfe-Seite: sichtbarer Tastatur-Fokus (2 px, volle Deckkraft, Kundenfarbe über --ring aus
+   brandStyle) — vorher 1 px halbtransparente Koralle, kaum zu sehen (Runde 5). */
+[data-hub-brand] :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

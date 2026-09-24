@@ -64,6 +64,7 @@ type Key =
   | "yes"
   | "no"
   | "feedbackThanks"
+  | "feedbackAsk"
   | "print"
   | "allTutorials"
   | "noneYet"
@@ -156,6 +157,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     yes: "Ja",
     no: "Nein",
     feedbackThanks: "Danke für Ihr Feedback!",
+    feedbackAsk: "Noch Fragen? Fragen Sie den Hilfe-Assistenten",
     print: "Zum Ausdrucken",
     allTutorials: "Alle Anleitungen",
     noneYet: "Noch keine veröffentlichten Anleitungen.",
@@ -212,7 +214,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     chatErrorRetry: "Es ist gerade ein Fehler aufgetreten – bitte später erneut versuchen.",
     chatRateLimit: "Zu viele Anfragen – bitte einen Moment warten und erneut versuchen.",
     chatNotConfigured:
-      "Der Hilfe-Assistent ist noch nicht aktiviert. Bitte schauen Sie sich solange die Anleitungen oben an.",
+      "Der Hilfe-Assistent ist noch nicht aktiviert. Bitte schauen Sie sich in der Zwischenzeit die Anleitungen oben an.",
     chatOffTopic:
       "Ich bin der Hilfe-Assistent von {name} und kann Ihnen nur bei Fragen rund um die Organisation und ihre Anleitungen weiterhelfen.",
     chatClarify: "Können Sie Ihr Anliegen bitte etwas genauer beschreiben?",
@@ -245,6 +247,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     yes: "Yes",
     no: "No",
     feedbackThanks: "Thanks for your feedback!",
+    feedbackAsk: "Still have questions? Ask the help assistant",
     print: "Print version",
     allTutorials: "All guides",
     noneYet: "No published guides yet.",
@@ -334,6 +337,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     yes: "Tak",
     no: "Nie",
     feedbackThanks: "Dziękujemy za opinię!",
+    feedbackAsk: "Masz jeszcze pytania? Zapytaj asystenta",
     print: "Wersja do druku",
     allTutorials: "Wszystkie instrukcje",
     noneYet: "Brak opublikowanych instrukcji.",
@@ -423,6 +427,7 @@ const DICT: Record<HubLang, Record<Key, string>> = {
     yes: "Evet",
     no: "Hayır",
     feedbackThanks: "Geri bildiriminiz için teşekkürler!",
+    feedbackAsk: "Başka sorunuz mu var? Yardım asistanına sorun",
     print: "Yazdırma sürümü",
     allTutorials: "Tüm kılavuzlar",
     noneYet: "Henüz yayınlanmış kılavuz yok.",

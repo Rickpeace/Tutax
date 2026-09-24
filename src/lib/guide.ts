@@ -554,10 +554,9 @@ export function templateTitle(step: GuideStepInput, index: number): string {
   const n = index + 1;
   // Datei-Brücke (Welle 39): Upload-Schritte tragen einen eigenen, sprechenden Titel — der
   // davor erfasste „Datei auswählen"-Klick wurde bereits in der Extension hineingefaltet.
-  if (step.file_meta?.role === "upload") {
-    const name = step.file_meta.filename;
-    return name ? `Datei hochladen: „${name.slice(0, TITLE_MAX - 18)}“` : "Datei hochladen";
-  }
+  // Kein Dateiname im Titel/Text: der echte Name („Müller_Lohn_03.pdf“) stand sonst öffentlich
+  // auf der Hilfe-Seite — und jeder Leser lädt ohnehin SEINE Datei hoch (Runde 5).
+  if (step.file_meta?.role === "upload") return "Datei hochladen";
   const it = step.interaction;
   // Tastenkürzel (Welle 48): braucht kein Label — die Kombination IST der Inhalt.
   if (step.action === "click" && it?.variant === "key" && it.key) {
@@ -815,8 +814,7 @@ export function templateBodyText(
   const context = changedPage ? `Auf der Seite „${step.title}“: ` : "";
   // Datei-Brücke (Welle 39): Upload-/Download-Schritte bekommen einen passenden Hinweistext.
   if (step.file_meta?.role === "upload") {
-    const name = step.file_meta.filename;
-    return `${context}Legen Sie die Datei${name ? ` „${name}“` : ""} in dieses Feld.`;
+    return `${context}Wählen Sie hier Ihre Datei aus – oder ziehen Sie sie in dieses Feld.`;
   }
   // Hover-Menü (Welle 48): erst mit der Maus über den Auslöser, dann die eigentliche Aktion.
   const hover = hoverLabelOf(step.interaction);

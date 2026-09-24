@@ -304,7 +304,7 @@ export function HubBrowser({
                         {t.description && (
                           <div
                             data-tx="card-desc"
-                            className="truncate text-[11.5px] font-bold text-muted-foreground"
+                            className="line-clamp-2 text-[11.5px] font-bold text-muted-foreground"
                           >
                             {t.description}
                           </div>

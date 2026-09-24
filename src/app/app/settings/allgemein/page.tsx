@@ -41,7 +41,7 @@ export default async function AllgemeinPage() {
       <SettingsCard
         title="Einrichtung"
         icon={RotateCcw}
-        description="Den Einrichtungs-Assistenten (Organisation, Design, Sprachen) noch einmal durchlaufen."
+        description="Den Einrichtungs-Assistenten (Organisation, Website, Sprachen) noch einmal durchlaufen."
       >
         <form action={reopenOnboarding}>
           <Button type="submit" variant="outline" size="sm">

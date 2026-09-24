@@ -75,19 +75,18 @@ export function ChatWidget({
   // Rendern und erneut, wenn die Sprache wechselt (die Komponente bleibt dabei gemountet).
   useEffect(() => {
     let restored: Msg[] | null = null;
-    let savedOpen: boolean | null = null;
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
         if (Array.isArray(saved?.msgs) && saved.msgs.length) restored = saved.msgs;
-        if (typeof saved?.open === "boolean") savedOpen = saved.open;
       }
     } catch {}
     // eslint-disable-next-line react-hooks/set-state-in-effect -- bewusst: Gesprächs-Wiederherstellung aus localStorage nach Mount/Sprachwechsel (hydration-sicher), kein Cascade
     setMsgs(restored ?? [{ role: "bot", text: translate(lang, "chatGreeting", { name: accountName }) }]);
-    // Offen/zu nur beim ersten Laden übernehmen — ein Sprachwechsel klappt den Chat nicht zu.
-    if (firstLoadRef.current && savedOpen !== null) setOpen(savedOpen);
+    // Offen/zu wird bewusst NICHT wiederhergestellt (Runde 5): der Chat sprang sonst auf jeder
+    // neuen Seite (auch auf der Kanzlei-Website per embed.js) von selbst auf und verdeckte am
+    // Handy Bild und „Weiter“. Nur das Gespräch bleibt erhalten.
     firstLoadRef.current = false;
     setLoadedKey(storageKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Schlüssel-(=Sprach-)Wechsel
@@ -97,13 +96,20 @@ export function ChatWidget({
   useEffect(() => {
     if (loadedKey !== storageKey) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ msgs: msgs.slice(-60), open }));
+      localStorage.setItem(storageKey, JSON.stringify({ msgs: msgs.slice(-60) }));
     } catch {}
-  }, [msgs, open, loadedKey, storageKey]);
+  }, [msgs, loadedKey, storageKey]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs, busy]);
+
+  // Andere Teile der Hilfe-Seite können den Chat öffnen (z. B. nach „Nicht hilfreich“, Runde 5).
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("steply-open-chat", onOpen);
+    return () => window.removeEventListener("steply-open-chat", onOpen);
+  }, []);
 
   // Beim Öffnen: Autofokus ins Eingabefeld. Esc schließt das Panel.
   useEffect(() => {

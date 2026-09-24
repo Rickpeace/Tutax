@@ -326,15 +326,23 @@ export async function joinInvite(token: string): Promise<{ ok: boolean; message?
   return { ok: true };
 }
 
-export const revokeInvitation = withUserErrors(async function revokeInvitation(id: string): Promise<void> {
-  const { account } = await requireOwner();
+export const revokeInvitation = withUserErrors(async function revokeInvitation(
+  expectedAccountId: string,
+  id: string,
+): Promise<void> {
+  const { account, ctx } = await requireOwner();
+  // Org-Wechsel in einem anderen Tab: sonst traf das Update still 0 Zeilen und meldete trotzdem
+  // „zurückgezogen“ — der Einladungslink galt weiter (Runde 5).
+  assertActiveAccount(expectedAccountId, ctx);
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data, error } = await admin
     .from("invitations")
     .update({ status: "revoked" })
     .eq("id", id)
-    .eq("account_id", account.id);
+    .eq("account_id", account.id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data?.length) throw new UserError("Diese Einladung gibt es nicht mehr – bitte laden Sie die Seite neu.");
   revalidatePath("/app/settings/team");
 });
 

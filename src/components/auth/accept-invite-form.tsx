@@ -59,7 +59,7 @@ export function AcceptInviteForm({
           </div>
           {error && <p className="rounded-lg bg-no-soft px-3 py-2 text-sm text-no">{error}</p>}
           <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Trete bei …" : hasAccount ? "Anmelden & beitreten" : "Passwort setzen & beitreten"}
+            {pending ? "Beitritt läuft …" : hasAccount ? "Anmelden & beitreten" : "Passwort setzen & beitreten"}
           </Button>
         </form>
       </div>

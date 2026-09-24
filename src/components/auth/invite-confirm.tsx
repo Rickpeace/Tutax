@@ -49,7 +49,7 @@ export function InviteConfirm({
 
         <div className="mt-6 space-y-2">
           <Button className="w-full" onClick={join} disabled={pending}>
-            {pending ? "Trete bei …" : `${orgName || "Organisation"} beitreten`}
+            {pending ? "Beitritt läuft …" : `${orgName || "Organisation"} beitreten`}
           </Button>
           <a
             href="/app"

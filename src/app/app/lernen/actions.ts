@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
+import { UserError, withUserErrors } from "@/lib/action-error";
 
 /**
  * Schulungsnachweis: Haken setzen. RLS-Client — die insert-Policy autorisiert
  * (user_id = auth.uid() UND Mitglied des Kontos). account_id = aktives Konto.
  * upsert(onConflict tutorial_id,user_id): Doppelklick bleibt idempotent.
  */
-export async function markCompleted(tutorialId: string) {
+export const markCompleted = withUserErrors(async function markCompleted(tutorialId: string) {
   const { account, userId } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
   // Integrität: Nachweis nur für Schulungen des AKTIVEN Kontos (intern ODER öffentlich mit
@@ -23,7 +24,8 @@ export async function markCompleted(tutorialId: string) {
     .eq("status", "published")
     .or("visibility.eq.internal,in_lernen.eq.true")
     .maybeSingle();
-  if (!tut) throw new Error("Anleitung nicht gefunden");
+  // Klartext statt stummem Fehlschlag (Runde 5: Schulung inzwischen zurückgezogen).
+  if (!tut) throw new UserError("Diese Schulung wurde inzwischen zurückgezogen oder geändert – bitte laden Sie die Seite neu.");
   const { error } = await supabase.from("tutorial_completions").upsert(
     { tutorial_id: tutorialId, user_id: userId, account_id: account.id },
     { onConflict: "tutorial_id,user_id", ignoreDuplicates: true },
@@ -31,7 +33,7 @@ export async function markCompleted(tutorialId: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/app/lernen");
   revalidatePath(`/app/lernen/${tutorialId}`);
-}
+});
 
 /** Eigenen Haken zurücknehmen. delete-Policy: nur user_id = auth.uid(). */
 export async function unmarkCompleted(tutorialId: string) {

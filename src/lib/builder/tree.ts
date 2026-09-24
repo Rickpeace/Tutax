@@ -77,7 +77,10 @@ function graphOf(steps: Step[], branches: StepBranch[]) {
 
   // Join-Punkt einer Entscheidung: frühester gemeinsamer Knoten aller Äste.
   const joinPoint = (decisionId: string): string | null => {
-    const targets = [...new Set(forwardTargets(decisionId))];
+    // Schleifen-Äste (führen zurück zur Frage, z. B. „Nein, nur Papier“ → „Beleg fotografieren“)
+    // zählen nicht mit: über die Schleife ist ALLES nach der Frage erreichbar, der Flow zeigte
+    // sonst Folgeschritte des „Ja“-Asts fälschlich unter allen Ästen (Runde 5).
+    const targets = [...new Set(forwardTargets(decisionId))].filter((t) => !reachable(t).has(decisionId));
     if (targets.length < 2) return null;
     const sets = targets.map(reachable);
     let common = [...sets[0]];

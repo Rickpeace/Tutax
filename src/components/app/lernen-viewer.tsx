@@ -2,7 +2,9 @@
 
 import type { Step, StepBranch } from "@/lib/types";
 import { Wizard } from "@/components/viewer/wizard";
+import { toast } from "sonner";
 import { markCompleted, unmarkCompleted } from "@/app/app/lernen/actions";
+import { errorText, unwrap } from "@/lib/action-error";
 
 /**
  * Client-Wrapper: bindet die Schulungsnachweis-Actions an die konkrete Tutorial-ID
@@ -31,8 +33,23 @@ export function LernenViewer({
       imageUrls={imageUrls}
       internalMode
       completion={completion}
-      onComplete={() => markCompleted(tutorialId)}
-      onUncomplete={() => unmarkCompleted(tutorialId)}
+      onComplete={async () => {
+        try {
+          unwrap(await markCompleted(tutorialId));
+        } catch (e) {
+          // Vorher sprang der Haken stumm zurück (Runde 5) — jetzt mit Grund.
+          toast.error(errorText(e, "Nicht gespeichert – bitte versuchen Sie es erneut."));
+          throw e;
+        }
+      }}
+      onUncomplete={async () => {
+        try {
+          await unmarkCompleted(tutorialId);
+        } catch (e) {
+          toast.error(errorText(e, "Nicht gespeichert – bitte versuchen Sie es erneut."));
+          throw e;
+        }
+      }}
     />
   );
 }

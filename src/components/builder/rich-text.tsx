@@ -114,6 +114,10 @@ export function RichText({
       return;
     }
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    // Cursor ans Link-Ende und den Link NICHT weiterführen: sonst blieb der Linktext markiert und
+    // das Weitertippen überschrieb ihn (Runde 5, „Hilfe von DATEV“ → „Punkt eins“).
+    const end = editor.state.selection.to;
+    editor.chain().setTextSelection(end).unsetMark("link").run();
     setLinkOpen(false);
   }
 

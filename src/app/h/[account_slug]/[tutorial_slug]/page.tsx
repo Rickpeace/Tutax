@@ -148,7 +148,7 @@ export async function generateMetadata({
   const { lang: langParam } = await searchParams;
   // Erst DE laden (Sprachen/Existenz), dann ggf. in Zielsprache für den Titel.
   const probe = await load(account_slug, tutorial_slug, "de");
-  if (!probe) return { title: "Nicht gefunden" };
+  if (!probe) return { title: "Nicht gefunden", robots: { index: false } };
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
   const { account, tutorial, languages } = data;
@@ -305,7 +305,9 @@ export default async function ViewerPage({
           <div className="min-w-0 flex-1">
             <div
               data-tx="title"
-              className="break-words text-xl font-extrabold"
+              // Am Handy kleiner + höchstens 2 Zeilen mit Silbentrennung: lange Kanzleinamen füllten
+              // sonst den ersten Bildschirm (Runde 5); der Anleitungstitel ist das Wichtigere.
+              className="line-clamp-2 break-words text-base font-extrabold [hyphens:auto] sm:text-xl"
               style={{
                 fontFamily: fonts.heading,
                 fontWeight: "var(--brand-heading-weight, 800)",
@@ -337,7 +339,7 @@ export default async function ViewerPage({
 
         <h1
           data-tx="tut-title"
-          className="mb-3 break-words text-base font-semibold"
+          className="mb-3 break-words text-lg font-bold [hyphens:auto] sm:text-xl"
           style={{
             color: "var(--brand-title, var(--brand-ink))",
             fontFamily: fonts.heading,
@@ -353,7 +355,9 @@ export default async function ViewerPage({
           branches={branches}
           imageUrls={imageUrls}
           audioUrls={audioUrls}
-          placeholders={tutorial.is_template}
+          // Öffentlich KEINE Bild-Platzhalter: Standard-Vorlagen ohne Screenshots wirkten für
+          // Mandanten unfertig/kaputt (Runde 5) — dort einfach reine Textschritte.
+          placeholders={false}
           accountSlug={account.slug}
           tutorialSlug={tutorial_slug}
           labels={labels}

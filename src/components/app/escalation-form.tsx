@@ -179,7 +179,7 @@ export function EscalationForm({
         </p>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           {/* Schalter + Status */}
           <section className="space-y-3 rounded-card border-2 border-line bg-card p-5">
@@ -522,11 +522,11 @@ function ChatPreview({ settings, accountName }: { settings: EscalationSettings; 
           {hubText("de", "chatTitle")}{" "}
           <span className="truncate pl-2 text-xs font-semibold text-[#d9ccb8]">{accountName}</span>
         </div>
-        <div className="grid min-h-64 content-start gap-2.5 bg-background p-3.5">
+        <div className="grid min-h-64 grid-cols-[minmax(0,1fr)] content-start gap-2.5 bg-background p-3.5">
           <div className="max-w-[88%] justify-self-end rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-[13px] text-white">
             {ex.q}
           </div>
-          <div className="max-w-[92%] rounded-2xl rounded-bl-sm border-2 border-line bg-white px-3 py-2 text-[13px] text-ink">
+          <div className="min-w-0 max-w-[92%] break-words rounded-2xl rounded-bl-sm border-2 border-line bg-white px-3 py-2 text-[13px] text-ink">
             {box
               ? "Dazu habe ich leider keine passende Anleitung. Unten finden Sie, wie Sie uns direkt erreichen."
               : `Dazu liegen mir keine Informationen vor. Bitte wenden Sie sich direkt an „${accountName}“.`}
@@ -534,7 +534,7 @@ function ChatPreview({ settings, accountName }: { settings: EscalationSettings; 
               <div className="mt-2 space-y-1.5 rounded-xl border-2 border-line bg-background p-2.5" data-testid="preview-box">
                 <p className="text-xs text-ink-2">{box.message}</p>
                 {box.methods.map((m) => (
-                  <div key={m.type} className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-extrabold text-white">
+                  <div key={m.type} className="flex min-w-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-extrabold text-white">
                     {m.type === "email" ? <Mail className="size-3.5" /> : m.type === "phone" ? <Phone className="size-3.5" /> : <CalendarClock className="size-3.5" />}
                     <span className="truncate">{m.label}</span>
                   </div>

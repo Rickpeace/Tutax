@@ -4,7 +4,7 @@ import { GraduationCap, Check, ChevronRight, Users } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { dateLongDe } from "@/lib/format";
+import { dateDe, dateLongDe } from "@/lib/format";
 import type { Tutorial } from "@/lib/types";
 import { PageHeader } from "@/components/app/page-header";
 import { isPro } from "@/lib/plan";
@@ -119,7 +119,7 @@ export default async function LernenPage() {
                       </h2>
                       {myAt ? (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-teal-soft px-2.5 py-[3px] text-[11px] font-black text-teal-text">
-                          <Check className="size-3" /> Absolviert am {dateLongDe(myAt)}
+                          <Check className="size-3" /> Absolviert am <span className="sm:hidden">{dateDe(myAt)}</span><span className="hidden sm:inline">{dateLongDe(myAt)}</span>
                         </span>
                       ) : (
                         <span className="inline-flex shrink-0 items-center rounded-full bg-amber-soft px-2.5 py-[3px] text-[11px] font-black text-amber-text">

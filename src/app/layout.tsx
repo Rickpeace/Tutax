@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     template: "%s · Steply",
   },
   description:
-    "Erstellen Sie per Drag & Drop klickbare Schritt-für-Schritt-Anleitungen mit Screenshots, Highlights und Verzweigungen – gehostet im CI Ihrer Organisation.",
+    "Klickbare Schritt-für-Schritt-Anleitungen mit Screenshots, Markierungen und Verzweigungen – auf einer Hilfe-Seite im Design Ihrer Organisation.",
 };
 
 export default function RootLayout({

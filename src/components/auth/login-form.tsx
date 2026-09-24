@@ -17,7 +17,7 @@ const EMPTY: AuthState = {};
 /** Hinweise, mit denen andere Stellen auf die Anmeldung schicken (?error=…). */
 const NOTICES: Record<string, string> = {
   invite:
-    "Diese Einladung ist nicht mehr gültig – sie wurde schon angenommen oder zurückgezogen. Bitten Sie bei Bedarf um eine neue Einladung.",
+    "Dieser Einladungslink gilt nicht mehr – er wurde schon angenommen, neu gesendet oder zurückgezogen. Schon beigetreten? Dann melden Sie sich einfach hier an. Sonst nutzen Sie den Link aus der neuesten Einladungs-E-Mail.",
   verlassen: "Sie haben die Organisation verlassen. Wenn Sie wieder dazugehören möchten, bitten Sie den Inhaber um eine neue Einladung.",
   "invite-abgelaufen":
     "Diese Einladung ist abgelaufen (gültig 14 Tage). Bitten Sie den Inhaber, sie neu zu senden.",
@@ -102,7 +102,7 @@ export function LoginForm({ next, notice }: { next: string; notice?: string }) {
           </div>
           <FormFeedback state={state} />
           <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Link wird gesendet …" : "Magic Link senden"}
+            {pending ? "Link wird gesendet …" : "Anmelde-Link senden"}
           </Button>
         </form>
       )}
@@ -114,7 +114,7 @@ export function LoginForm({ next, notice }: { next: string; notice?: string }) {
           className="text-sm font-medium text-primary hover:underline"
         >
           {mode === "password"
-            ? "Stattdessen mit Magic Link anmelden"
+            ? "Stattdessen per Anmelde-Link anmelden"
             : "Stattdessen mit Passwort anmelden"}
         </button>
         <Link href="/forgot" className="text-sm text-muted-foreground hover:text-ink">

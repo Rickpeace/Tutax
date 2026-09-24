@@ -35,11 +35,11 @@ export function isBusiness(account: { plan?: string | null }): boolean {
 
 /** Einheitliche Fehlermeldung für Business-Features. */
 export const BUSINESS_REQUIRED =
-  "Dieses Feature ist im Business-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
+  "Diese Funktion gehört zum Business-Tarif. Den Tarif sehen Sie unter Einstellungen → Tarif.";
 
 /** Einheitliche Fehlermeldung für Pro-Features (z. B. Schulungen mit Schulungsnachweis). */
 export const PRO_REQUIRED =
-  "Dieses Feature ist ab dem Pro-Tarif enthalten. Upgrade unter Einstellungen → Tarif.";
+  "Diese Funktion gehört zum Pro-Tarif. Den Tarif sehen Sie unter Einstellungen → Tarif.";
 
 /**
  * Pro-Funktionen laut Tarifseite (lib/pricing.ts), serverseitig durchgesetzt (Produktentscheid

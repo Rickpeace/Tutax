@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Steply Recorder",
-  "version": "2.19.8",
+  "name": "Steply-Erweiterung",
+  "version": "2.19.9",
   "description": "Seitenleiste zum Aufnehmen: Sofort-Anleitung (Screenshot je Klick, ohne Video) oder Video mit KI-Texten. Direkt-Upload zu Steply - auch gezielt in bestehende Anleitungen.",
   "permissions": [
     "activeTab",
@@ -34,7 +34,7 @@
     }
   ],
   "action": {
-    "default_title": "Steply Recorder (Seitenleiste oeffnen)",
+    "default_title": "Steply-Erweiterung (Seitenleiste öffnen)",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

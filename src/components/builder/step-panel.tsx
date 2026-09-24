@@ -55,6 +55,7 @@ export function StepPanel({
   onSetDecision,
   onSetCondition,
   onAddBranch,
+  onSetNext,
   onUpdateBranch,
   onDeleteBranch,
   onDeleteStep,
@@ -95,6 +96,8 @@ export function StepPanel({
   onSetDecision: (id: string, isDecision: boolean) => void;
   onSetCondition: (id: string, condition: StepCondition | null) => void;
   onAddBranch: (stepId: string) => void;
+  /** Normaler Schritt: wohin es danach geht (null = Ende). */
+  onSetNext?: (stepId: string, target: string | null) => void;
   onUpdateBranch: (
     branchId: string,
     patch: { label?: string; target_step_id?: string | null },
@@ -444,6 +447,37 @@ export function StepPanel({
           <Button variant="outline" size="sm" onClick={() => onAddBranch(step.id)}>
             <Plus className="size-4" /> Antwort-Option
           </Button>
+        </div>
+      )}
+
+      {/* „Danach weiter mit“ (Runde 5): z. B. den „Nein“-Ast nach einer Frage wieder auf den Hauptweg
+          führen. Standard ist der nächste Schritt; hier lässt er sich frei wählen oder auf Ende setzen. */}
+      {!step.is_decision && onSetNext && (
+        <div className="space-y-1.5">
+          <Label>Danach weiter mit</Label>
+          <Select
+            value={branches[0]?.target_step_id ?? END}
+            items={[
+              { value: END, label: "→ Ende der Anleitung" },
+              ...targetOptions.map((s) => ({ value: s.id, label: `→ ${stepLabel(s)}` })),
+            ]}
+            onValueChange={(v) => onSetNext(step.id, !v || v === END ? null : String(v))}
+          >
+            <SelectTrigger aria-label="Danach weiter mit" className="w-full min-w-0">
+              <SelectValue className="min-w-0 truncate" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={END}>→ Ende der Anleitung</SelectItem>
+              {targetOptions.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  → {stepLabel(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Nach einer Frage können Sie hier einen Antwort-Weg wieder mit dem Hauptweg zusammenführen.
+          </p>
         </div>
       )}
 

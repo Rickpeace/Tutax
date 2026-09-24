@@ -687,5 +687,19 @@ ok(buildRunPlan({ id: "a" }, [{ id: "s", position: 0, action: "click" }], {}).le
   ok(!("interaction" in plan[4]), "buildRunPlan: ohne interaction kein Feld (Bestand unveraendert)");
 }
 
+// ══════════ Runde 5: Kontrollkästchen-Zielzustand reist bis in den Plan ══════════
+{
+  const pi = parseInteraction({ checked: false }, "toggle");
+  ok(pi && pi.checked === false, "parseInteraction: checked:false bleibt bei toggle erhalten");
+  ok(parseInteraction({ checked: "ja" }, "toggle") === null, "parseInteraction: checked nur als true/false");
+  const plan = buildRunPlan(
+    { id: "a1", params: [] },
+    [{ id: "s1", position: 1, action: "toggle", selector: { css: "#cb" }, page_url: "https://x.de/", interaction: { checked: true } }],
+    {},
+  );
+  const step = Array.isArray(plan) ? plan[0] : plan?.plan?.[0];
+  ok(step?.interaction?.checked === true, "buildRunPlan: Zielzustand „angehakt“ kommt beim Ausführen an");
+}
+
 console.log(failed ? "\n✗ exec-plan Tests fehlgeschlagen." : "\n✓ exec-plan: buildRunPlan/needsNavigation/redactDetail/submitOutcome/linkFileSteps/planFileChunks/fileCapDecision/resyncTarget/looksLikeLoginUrl/skipCrossesNeededDownload/skipCrossesLogin/nextFireTime/parseCondition/evalUrlCondition/shouldRunStep/pickTabForStep/parseJump/jumpTargetIndex/parseInteraction verifiziert.");
 process.exitCode = failed ? 1 : 0;

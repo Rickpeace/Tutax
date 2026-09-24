@@ -20,7 +20,7 @@ const steps = [
   {
     icon: UserPlus,
     t: "1. Konto erstellen",
-    d: "Registrieren Sie sich mit E-Mail. Beim ersten Login richten wir gemeinsam Ihre Hilfe-Seite ein (Name & Adresse).",
+    d: "Registrieren Sie sich mit E-Mail. Beim ersten Login richten wir gemeinsam Ihre Hilfe-Seite ein (Name, Website, Sprachen). Die Adresse Ihrer Hilfe-Seite ändern Sie jederzeit unter Einstellungen → Adresse & Teilen.",
   },
   {
     icon: PencilLine,

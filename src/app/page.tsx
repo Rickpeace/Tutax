@@ -272,8 +272,8 @@ export default function LandingPage() {
               Belege hochladen — Anleitung öffnen →
             </div>
             <div className="mt-4 border-t-2 border-line-2 pt-3 text-[11.5px] font-bold text-faint">
-              Antwortet ausschließlich aus Ihren Inhalten — sonst sagt er es ehrlich
-              und leitet an Sie weiter.
+              Antwortet aus Ihren Inhalten — weiß er etwas nicht, sagt er es ehrlich
+              und zeigt Ihre Kontaktdaten.
             </div>
           </div>
 
@@ -288,7 +288,7 @@ export default function LandingPage() {
             <ul className="mt-5 space-y-2.5">
               {[
                 "Wissensdatenbank füllt sich per Import aus Ihrer Website oder aus PDFs.",
-                "Keine erfundenen Antworten: Was Steply nicht weiß, wird an Sie eskaliert.",
+                "Was der Assistent nicht weiß, sagt er ehrlich – und zeigt auf Wunsch Ihre Kontaktdaten.",
                 "Unbeantwortete Fragen werden sichtbar — ein Klick macht daraus den Entwurf der fehlenden Anleitung.",
               ].map((t) => (
                 <li
@@ -350,14 +350,14 @@ export default function LandingPage() {
         </h2>
         <div className="mx-auto mt-4 grid max-w-[1000px] grid-cols-1 gap-3 sm:mt-[34px] sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Languages, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Mehrsprachig", body: "EN, PL, TR — Übersetzungen bleiben automatisch synchron." },
-            { icon: Volume2, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "Vorlesen", body: "Jeder Schritt als natürliche KI-Stimme." },
-            { icon: Film, soft: "var(--accent)", text: "var(--coral-text)", title: "Video-Export", body: "Aus jeder Anleitung ein fertiges MP4 — die Umkehrung." },
-            { icon: GitBranch, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Verzweigungen", body: "„Haben Sie schon ein Konto?“ — ein Guide, beide Wege." },
+            { icon: Languages, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Mehrsprachig", body: "EN, PL, TR — Übersetzungen bleiben automatisch synchron. (Business)" },
+            { icon: Volume2, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "Vorlesen", body: "Jeder Schritt als natürliche KI-Stimme. (Business)" },
+            { icon: Film, soft: "var(--accent)", text: "var(--coral-text)", title: "Video-Export", body: "Aus jeder Anleitung ein fertiges MP4 — die Umkehrung. (Business)" },
+            { icon: GitBranch, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Verzweigungen", body: "„Haben Sie schon ein Konto?“ — eine Anleitung, beide Wege." },
             { icon: QrCode, soft: "var(--accent)", text: "var(--coral-text)", title: "QR, Druck & Bubble", body: "Teilen, ausdrucken oder als Chat-Bubble einbetten." },
-            { icon: RefreshCw, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Aktualitäts-Check", body: "Die KI meldet, wenn eine Anleitung veraltet wirkt." },
-            { icon: Palette, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "KI-Design", body: "Ihr CI, automatisch aus Ihrer Website abgeleitet." },
-            { icon: GraduationCap, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Schulungsnachweis", body: "Wer im Team hat welche Schulung absolviert?" },
+            { icon: RefreshCw, soft: "var(--teal-soft)", text: "var(--teal-text)", title: "Aktualitäts-Check", body: "Die KI meldet, wenn eine Anleitung veraltet wirkt. (ab Pro)" },
+            { icon: Palette, soft: "var(--violet-soft)", text: "var(--violet-text)", title: "KI-Design", body: "Ihr CI, automatisch aus Ihrer Website abgeleitet. (Business)" },
+            { icon: GraduationCap, soft: "var(--amber-soft)", text: "var(--amber-text)", title: "Schulungsnachweis", body: "Wer im Team hat welche Schulung absolviert? (ab Pro)" },
           ].map((f) => (
             <div
               key={f.title}
@@ -450,11 +450,11 @@ export default function LandingPage() {
             },
             {
               q: "Kann der KI-Assistent Dinge erfinden?",
-              a: "Der KI-Assistent antwortet ausschließlich aus Ihren Anleitungen und Ihrer Wissensdatenbank. Kennt er die Antwort nicht, sagt er das ehrlich und leitet die Frage an Sie weiter — Sie sehen alle offenen Fragen im Überblick.",
+              a: "Der KI-Assistent (ab Pro) antwortet aus Ihren Anleitungen und Ihrer Wissensdatenbank. Kennt er die Antwort nicht, sagt er das ehrlich und zeigt Ihren Kunden auf Wunsch Ihre Kontaktdaten — die Frage sehen Sie unter „Offene Fragen“.",
             },
             {
               q: "Passt das zu unserem Erscheinungsbild?",
-              a: "Ja — Logo und Farben stellen Sie selbst ein, oder die KI leitet Ihr Design automatisch von Ihrer Website ab. Die Hilfe-Seite wirkt wie Ihre eigene Seite, nicht wie ein Fremd-Tool.",
+              a: "Ja — ab Pro stellen Sie Logo und Farben selbst ein, im Business-Tarif leitet die KI Ihr Design auch automatisch von Ihrer Website ab. Die Hilfe-Seite wirkt wie Ihre eigene Seite, nicht wie ein Fremd-Tool.",
             },
             {
               q: "Was kostet Steply?",

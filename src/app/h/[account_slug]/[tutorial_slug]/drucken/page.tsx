@@ -156,7 +156,7 @@ export async function generateMetadata({
   const { account_slug, tutorial_slug } = await params;
   const { lang: langParam } = await searchParams;
   const probe = await load(account_slug, tutorial_slug, "de");
-  if (!probe) return { title: "Nicht gefunden" };
+  if (!probe) return { title: "Nicht gefunden", robots: { index: false } };
   const lang = resolveLang(langParam, probe.languages);
   const data = lang === "de" ? probe : ((await load(account_slug, tutorial_slug, lang)) ?? probe);
   const baseTitle = `${data.tutorial.title} · ${labelsFor(lang).printView}`;
@@ -220,14 +220,15 @@ export default async function PrintPage({
       )}
       <div className="mx-auto max-w-3xl px-6 py-8 print:max-w-none print:px-0 print:py-0">
         {/* Kopf: Logo/Kanzleiname + Drucken-Button (Button im Druck ausgeblendet). */}
-        <div className="mb-6 flex items-center justify-between gap-3 border-b border-black/10 pb-4">
-          <div className="flex items-center gap-3">
+        {/* flex-wrap + min-w-0: am Handy lief der Kopf mit breitem Logo seitlich hinaus (Runde 5). */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
                 alt=""
-                className="h-11 w-auto min-w-11 max-w-[180px] shrink-0 border border-black/5 bg-white object-contain p-1"
+                className="h-11 w-auto min-w-11 max-w-[140px] shrink-0 border sm:max-w-[180px] border-black/5 bg-white object-contain p-1"
                 style={{ borderRadius: "var(--brand-radius, 12px)" }}
               />
             ) : (
@@ -252,7 +253,7 @@ export default async function PrintPage({
               <div className="break-words text-sm text-muted-foreground">{tutorial.title}</div>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2 print:hidden">
+          <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
             <PrintButton label={labels.printNow} />
             <Link
               href={`/h/${account.slug}/${tutorial_slug}${langQuery}`}

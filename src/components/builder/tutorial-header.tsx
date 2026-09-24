@@ -141,7 +141,7 @@ export function TutorialHeader({
     if (!slug) return;
     const url = hubTutorialUrl(accountSlug, slug);
     if (await copyText(url)) toast.success("Link kopiert", { description: url });
-    else toast.error("Kopieren nicht möglich – bitte den Link über „Öffnen“ aufrufen.");
+    else toast.error("Kopieren nicht möglich – bitte den Link über „Auf der Hilfe-Seite öffnen“ aufrufen.");
   }
 
   async function translate() {
@@ -196,9 +196,13 @@ export function TutorialHeader({
   async function doPublish(next: boolean) {
     setBusy(true);
     try {
+      let liveSlug: string | null = slug;
       if (next) {
         const res = unwrap(await publishTutorial(tutorialId));
-        if ("slug" in res && res.slug) setSlug(res.slug);
+        if ("slug" in res && res.slug) {
+          setSlug(res.slug);
+          liveSlug = res.slug;
+        }
       } else await unpublishTutorial(tutorialId);
       setPublished(next);
       const liveMsg = !publicOn
@@ -206,7 +210,13 @@ export function TutorialHeader({
         : teamOn
           ? "Veröffentlicht – auf der Hilfe-Seite und in den Schulungen Ihres Teams"
           : "Anleitung ist jetzt veröffentlicht";
-      toast.success(next ? liveMsg : "Auf Entwurf gesetzt");
+      // Direkt ansehen statt den Link zu suchen (Runde 5, Neukunden-Test).
+      const hubUrl = next && publicOn && liveSlug ? `/h/${accountSlug}/${liveSlug}` : null;
+      toast.success(next ? liveMsg : "Auf Entwurf gesetzt", {
+        ...(hubUrl
+          ? { action: { label: "Ansehen", onClick: () => window.open(hubUrl, "_blank", "noopener") }, duration: 8000 }
+          : {}),
+      });
     } catch (e) {
       toast.error(errorText(e, "Status konnte nicht geändert werden"));
     } finally {
@@ -420,7 +430,9 @@ export function TutorialHeader({
               helpLocked
                 ? "Anleitungen nur für Ihr Team sind im Business-Tarif enthalten."
                 : publicOn && !teamOn
-                ? "Mindestens eine Zielgruppe bleibt aktiv – schalten Sie zuerst „Team“ ein."
+                ? isPro
+                  ? "Mindestens eine Zielgruppe bleibt aktiv – schalten Sie zuerst „Team“ ein."
+                  : "Erscheint auf Ihrer Hilfe-Seite – für alle sichtbar."
                 : publicOn
                   ? "Erscheint auf Ihrer Hilfe-Seite – für alle sichtbar. Antippen, um sie nur für Ihr Team zu zeigen."
                   : "Zusätzlich auf Ihrer Hilfe-Seite zeigen – für alle sichtbar."
@@ -651,13 +663,13 @@ export function TutorialHeader({
       <Dialog open={blurGate !== null} onOpenChange={(o) => { if (!o) setBlurGate(null); }}>
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Ungeprüfte automatische Verpixelungen</DialogTitle>
+            <DialogTitle>Ungeprüfte Verpixelungen</DialogTitle>
             <DialogDescription>
               {blurGate?.length === 1
-                ? "1 Schritt enthält eine ungeprüfte automatische Verpixelung."
-                : `${blurGate?.length ?? 0} Schritte enthalten ungeprüfte automatische Verpixelungen.`}{" "}
-              Bitte prüfen Sie die markierten Stellen im Editor (verschieben, anpassen oder
-              löschen), bevor Sie veröffentlichen — oder veröffentlichen Sie trotzdem. Die
+                ? "1 Schritt enthält eine Verpixelung, die Steply vorgeschlagen oder vom vorigen Schritt übernommen hat."
+                : `${blurGate?.length ?? 0} Schritte enthalten Verpixelungen, die Steply vorgeschlagen oder vom vorigen Schritt übernommen hat.`}{" "}
+              Bitte prüfen Sie die Stellen im Editor (verschieben, anpassen, löschen oder mit „Passt“
+              bestätigen), bevor Sie veröffentlichen — oder veröffentlichen Sie trotzdem. Die
               Verpixelungen werden in jedem Fall in die veröffentlichten Bilder eingebrannt.
             </DialogDescription>
           </DialogHeader>

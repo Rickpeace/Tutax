@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isPro } from "@/lib/plan";
+import { isBusiness, isPro } from "@/lib/plan";
 import { AlertTriangle, ShieldCheck, PencilLine, ExternalLink } from "lucide-react";
 import { requireAccount } from "@/lib/account";
 import { createClient } from "@/lib/supabase/server";
@@ -51,7 +51,11 @@ export default async function AlertsPage() {
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8">
       <PageHeader
         title="Aktualität prüfen"
-        description="Stellen in Ihren Anleitungen, die vermutlich nicht mehr zur Website passen – gefunden bei der automatischen Prüfung."
+        description={
+          isBusiness(account)
+            ? "Stellen in Ihren Anleitungen, die vermutlich nicht mehr zur Website passen – gefunden bei der Prüfung (automatisch oder von Ihnen gestartet)."
+            : "Stellen in Ihren Anleitungen, die vermutlich nicht mehr zur Website passen – gefunden, wenn Sie im Editor „Aktualität prüfen“ starten."
+        }
         meta={alerts.length ? `${alerts.length} offen` : undefined}
       />
 
@@ -62,8 +66,9 @@ export default async function AlertsPage() {
           </div>
           <h2 className="mt-4 text-base font-extrabold text-ink">Alles aktuell</h2>
           <p className="mt-1 max-w-sm text-sm font-semibold text-muted-foreground">
-            Keine offenen Hinweise. Im Editor einer Anleitung können Sie die Aktualität
-            jederzeit selbst prüfen lassen.
+            {isPro(account)
+              ? "Keine offenen Hinweise. Im Editor einer Anleitung können Sie die Aktualität jederzeit selbst prüfen lassen."
+              : "Keine offenen Hinweise. Die Aktualitätsprüfung gehört zum Pro-Tarif."}
           </p>
         </div>
       ) : (

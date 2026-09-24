@@ -9,7 +9,7 @@ const srcBase = JSON.stringify(new URL("../src/", import.meta.url).href);
 const loader = `export async function resolve(s,c,n){if(s==='server-only'||s==='client-only'){return {url:'data:text/javascript,',shortCircuit:true};}if(s.startsWith('@/')){return n(new URL(s.slice(2)+'.ts',${srcBase}).href,c);}if(s==='next/server'){return n('next/server.js',c);}return n(s,c);}`;
 register("data:text/javascript," + encodeURIComponent(loader), import.meta.url);
 
-const { looksSensitiveValue, scrubSensitiveGuideSteps } = await import("../src/lib/recorder.ts");
+const { looksSensitiveValue, scrubSensitiveGuideSteps, scrubPageUrl } = await import("../src/lib/recorder.ts");
 
 let failed = false;
 const ok = (c, m) => {
@@ -60,6 +60,17 @@ for (const v of ["account", "0170 1234567", "+49 89 123456789", "0049 151 234567
   ok(steps[4].typed_value === "42", "Beschriftung „Bestand“ (enthält „tan“): Wert bleibt");
   ok(steps[5].label === "Konto ••• öffnen" && !steps[5].sensitive, `IBAN in Beschriftung maskiert, Klick ohne Vorschlag (${steps[5].label})`);
   ok(steps[6].sensitive.length === 1, "vorhandener Vorschlag wird nicht verdoppelt");
+}
+
+// ── Runde 5: Seitenadresse ohne sensible Abfrage-Werte ────────────────────────
+{
+  const u = scrubPageUrl("https://www.selenium.dev/selenium/web/submitted-form.html?my-text=Hallo&my-password=Geheim123&my-select=2");
+  ok(!u.includes("Geheim123") && !u.includes("my-password") && u.includes("my-text=Hallo"), "page_url: Passwort-Parameter entfernt, harmlose bleiben");
+  const v = scrubPageUrl("https://x.de/a?ref=DE89370400440532013000");
+  ok(!v.includes("DE89"), "page_url: IBAN als Wert entfernt");
+  const w = scrubPageUrl("https://x.de/cb#access_token=abc&x=1");
+  ok(!w.includes("access_token"), "page_url: Token-Fragment entfernt");
+  ok(scrubPageUrl("https://x.de/app/belege?seite=2") === "https://x.de/app/belege?seite=2", "page_url: normale Adresse unverändert");
 }
 
 console.log(failed ? "\n✗ Fehlgeschlagen." : "\n✓ Sensible Werte: Server-Sicherheitsnetz verifiziert.");

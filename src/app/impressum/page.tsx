@@ -13,7 +13,7 @@ export default function ImpressumPage() {
 
         <div className="prose mt-8 max-w-none space-y-6 text-ink-2">
           <section>
-            <h2 className="font-bold text-ink">Angaben gemäß § 5 TMG</h2>
+            <h2 className="font-bold text-ink">Angaben gemäß § 5 DDG</h2>
             <p>
               [ANGABE FOLGT — Betreiber: Firmenname / Organisationsname]<br />
               [ANGABE FOLGT — Betreiber: Straße und Hausnummer]<br />
