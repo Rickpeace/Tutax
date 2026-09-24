@@ -246,10 +246,9 @@ try {
   const valueCases = [
     ["143/815/08154", "Steuernummer mit Schrägstrichen"],
     ["12/345/67890", "Steuernummer 2/3/5"],
-    ["2181081508155", "Steuernummer 13 Ziffern"],
-    ["12345678901", "Steuer-ID 11 Ziffern"],
+    ["86095742719", "Steuer-ID 11 Ziffern (gültige Prüfziffer)"],
     ["65 170839 J 003", "SV-Nummer"],
-    ["A123456789", "Krankenversichertennummer"],
+    ["A123456780", "Krankenversichertennummer (gültige Prüfziffer)"],
     ["DE89 3704 0044 0532 0130 00", "IBAN in Gruppen"],
     ["4111 1111 1111 1111", "Kreditkarte (Luhn)"],
   ];

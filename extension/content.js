@@ -1150,6 +1150,32 @@
     }
     return sum % 10 === 0;
   }
+  // Steuer-ID: 11 Ziffern, erste nicht 0, Pruefziffer nach ISO 7064 (Mod 11,10).
+  function steuerIdValid(d) {
+    if (!/^[1-9]\d{10}$/.test(d)) return false;
+    let product = 10;
+    for (let i = 0; i < 10; i++) {
+      let sum = (Number(d[i]) + product) % 10;
+      if (sum === 0) sum = 10;
+      product = (sum * 2) % 11;
+    }
+    let check = 11 - product;
+    if (check === 10) check = 0;
+    return check === Number(d[10]);
+  }
+  // Krankenversichertennummer: Buchstabe (A=01) + 8 Ziffern + Pruefziffer, Gewichte 1-2.
+  function kvnrValid(s) {
+    if (!/^[A-Z]\d{9}$/i.test(s)) return false;
+    const pos = s.toUpperCase().charCodeAt(0) - 64;
+    const digits = String(pos).padStart(2, "0") + s.slice(1, 9);
+    let sum = 0;
+    for (let i = 0; i < digits.length; i++) {
+      let p = Number(digits[i]) * (i % 2 === 0 ? 1 : 2);
+      if (p > 9) p -= 9;
+      sum += p;
+    }
+    return sum % 10 === Number(s[9]);
+  }
   function looksSensitiveValue(value) {
     const v = String(value || "");
     if (!v || v.length > 2000) return false;
@@ -1164,19 +1190,28 @@
         }
       }
       // Steuernummer im Laender-Format (12/345/67890, 143/815/08154, 9181/815/08155).
-      if (/(^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/.test(v)) return true;
+      // Nur mit 10–12 Ziffern insgesamt (Aktenzeichen wie 2024/0815/12345 bleiben stehen).
+      const stnr = v.match(/(?:^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/g) || [];
+      for (const m of stnr) {
+        const n = m.replace(/\D/g, "").length;
+        if (n >= 10 && n <= 12) return true;
+      }
       // SV-/Rentenversicherungsnummer: 2 Ziffern + Geburtsdatum + Buchstabe + 3 Ziffern.
       if (/(^|[^A-Z0-9])\d{2}\s?\d{6}\s?[A-Z]\s?\d{2}\s?\d(?![A-Z0-9])/i.test(v)) return true;
-      // Krankenversichertennummer: Buchstabe + 9 Ziffern.
-      if (/(^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/i.test(v)) return true;
-      // Ziffernfolgen (Leer-/Bindestriche erlaubt): 11 = Steuer-ID (erste Ziffer nie 0),
-      // 13 = Steuernummer (ELSTER-Format), 13–19 mit gueltiger Luhn-Pruefziffer = Kreditkarte.
-      const runs = v.match(/\d(?:[ -]?\d){10,18}/g) || [];
-      for (const run of runs) {
-        const d = run.replace(/[ -]/g, "");
-        if (d.length === 11 && d[0] !== "0") return true;
-        if (d.length === 13) return true;
-        if (d.length >= 13 && d.length <= 19 && luhnValid(d)) return true;
+      // Krankenversichertennummer: Buchstabe + 9 Ziffern, nur mit gueltiger Pruefziffer
+      // (Artikel-/Kundennummern wie K123456789 bleiben stehen).
+      const kvs = v.match(/(?:^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/gi) || [];
+      for (const m of kvs) if (kvnrValid(m.replace(/[^A-Z0-9]/gi, ""))) return true;
+      // Ziffernfolgen: Telefonnummern (+49 …, 0049 …) auslassen; 11 = Steuer-ID nur mit gueltiger
+      // Pruefziffer, 14–19 mit Luhn = Kreditkarte. 13 Ziffern (EAN/ELSTER) nur ueber die Feld-
+      // Beschriftung — sonst fielen Artikelnummern mit raus (Regressions-Audit 24.09.).
+      const re = /\d(?:[ -]?\d){10,18}/g;
+      for (let m = re.exec(v); m; m = re.exec(v)) {
+        const d = m[0].replace(/[ -]/g, "");
+        const before = v.slice(Math.max(0, m.index - 1), m.index);
+        if (before === "+" || d.startsWith("00")) continue;
+        if (d.length === 11 && steuerIdValid(d)) return true;
+        if (d.length >= 14 && d.length <= 19 && luhnValid(d)) return true;
       }
     } catch (err) {
       return true; // im Zweifel sensibel

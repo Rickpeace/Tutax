@@ -774,7 +774,16 @@ export function Builder({
   // Seiten-Eintrag → Wächter erneuern und fragen; bei „Verwerfen“ wirklich zurück.
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const guardPushed = useRef(false);
+  const guardPopping = useRef(false);
   useEffect(() => {
+    // Gespeichert/verworfen: den Wächter-Eintrag wieder abbauen — sonst brauchte „Zurück“ danach
+    // einen Klick zu viel (Regressions-Audit 24.09.).
+    if (!hasUnsaved && guardPushed.current) {
+      guardPushed.current = false;
+      guardPopping.current = true;
+      window.history.back();
+      return;
+    }
     if (!hasUnsaved || guardPushed.current) return;
     try {
       window.history.pushState({ ...(window.history.state ?? {}), steplyEditGuard: true }, "");
@@ -785,6 +794,10 @@ export function Builder({
   }, [hasUnsaved]);
   useEffect(() => {
     const onPop = () => {
+      if (guardPopping.current) {
+        guardPopping.current = false; // eigener Abbau des Wächters, keine Navigation
+        return;
+      }
       if (!guardPushed.current) return;
       if (!dirtyRef.current) {
         guardPushed.current = false; // Wächter verbraucht, nichts zu schützen
@@ -824,7 +837,13 @@ export function Builder({
       void confirmDiscard().then((ok) => {
         if (!ok) return;
         dirtyRef.current = false;
-        router.push(url.pathname + url.search + url.hash);
+        const dest = url.pathname + url.search + url.hash;
+        // Liegt ein Wächter-Eintrag im Verlauf, ihn durch das Ziel ERSETZEN (sonst zeigte
+        // „Zurück“ auf der Zielseite erst wieder den Editor-Wächter).
+        if (guardPushed.current) {
+          guardPushed.current = false;
+          router.replace(dest);
+        } else router.push(dest);
       });
     };
     document.addEventListener("click", onClick, true);

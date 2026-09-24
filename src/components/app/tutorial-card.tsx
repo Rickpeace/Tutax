@@ -256,7 +256,7 @@ export function TutorialCard({
       internal={internal}
       onExport={exportAllowed ? () => setExportOpen(true) : undefined}
       onRename={() => setRenameOpen(true)}
-      onDuplicate={() => run(() => duplicateTutorial(tutorial.id), "Dupliziert")}
+      onDuplicate={() => run(async () => { unwrap(await duplicateTutorial(tutorial.id)); }, "Dupliziert")}
       onAutomation={convertToAutomation}
       onDelete={() => setDeleteOpen(true)}
     />

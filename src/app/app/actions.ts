@@ -1,5 +1,6 @@
 "use server";
 
+import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -283,7 +284,7 @@ export async function deleteTutorial(id: string) {
 }
 
 /** Tiefkopie: Tutorial + Schritte + Branches (mit ID-Remapping) */
-export async function duplicateTutorial(id: string) {
+export const duplicateTutorial = withUserErrors(async function duplicateTutorial(id: string) {
   await requireTutorialAccess(id);
   const { account } = await requireAccount();
   const supabase = await createClient();
@@ -298,6 +299,13 @@ export async function duplicateTutorial(id: string) {
     .eq("id", id)
     .single<Tutorial>();
   if (e1 || !src) throw new Error(e1?.message ?? "Anleitung nicht gefunden");
+  // „Nur Team“ gibt es nur im Business-Tarif (auch als DB-Regel). Nach einem Herabstufen lässt
+  // sich eine interne Anleitung daher nicht als „Nur Team“ kopieren — und still öffentlich
+  // kopieren wäre gefährlich (Regressions-Audit 24.09.).
+  if (src.visibility === "internal" && !isBusiness(account))
+    throw new UserError(
+      "„Nur Team“-Anleitungen lassen sich nur im Business-Tarif duplizieren. Die Anleitung selbst bleibt unverändert erhalten.",
+    );
 
   const { data: copy, error: e2 } = await supabase
     .from("tutorials")
@@ -328,7 +336,7 @@ export async function duplicateTutorial(id: string) {
   }
 
   revalidatePath("/app");
-}
+});
 
 // Schritt-Spalten, die eine Kopie mitnimmt: Inhalt UND Live-Führungs-/Automations-Daten
 // (Selektor, Seiten-URL, Bedingung, Sprung, Bedienart, Datei-Brücke, Video-Zeitpunkt).
@@ -579,11 +587,20 @@ export const publishTutorial = withUserErrors(async function publishTutorial(tut
   // Völlig leere Schritte (kein Titel, kein Bild, kein Text) nicht veröffentlichen: sie entstehen
   // z. B. über „+“ und danach „Verwerfen“ und standen auf der Hilfe-Seite als leere Seite mit nur
   // „Fertig“ (Audit 24.09.).
-  const { data: stepRows } = await supabase
-    .from("steps")
-    .select("title, body, image_path")
-    .eq("tutorial_id", tutorialId);
-  const emptyCount = (stepRows ?? []).filter(
+  // NUR Schritte, die im Ablauf erreichbar sind — ein unverbundener leerer Schritt (z. B. nach
+  // „Frage löschen“) ist im Editor unsichtbar und blockierte sonst das Veröffentlichen
+  // (Regressions-Audit 24.09.); auf der Hilfe-Seite erscheint er ohnehin nie.
+  const [{ data: stepRows }, { data: rootRow }] = await Promise.all([
+    supabase.from("steps").select("*").eq("tutorial_id", tutorialId),
+    supabase.from("tutorials").select("root_step_id").eq("id", tutorialId).maybeSingle(),
+  ]);
+  const ids = (stepRows ?? []).map((x) => x.id as string);
+  const { data: branchRows } = ids.length
+    ? await supabase.from("step_branches").select("*").in("step_id", ids)
+    : { data: [] as StepBranch[] };
+  const tree = buildRenderTree((stepRows ?? []) as Step[], (branchRows ?? []) as StepBranch[], rootRow?.root_step_id ?? null);
+  const reachable = new Set(tree ? flattenFlow(tree) : []);
+  const emptyCount = (stepRows ?? []).filter((s) => reachable.has(s.id as string)).filter(
     (s) => !(s.title ?? "").trim() && !s.image_path && !/"text":"\s*[^"\s]/.test(JSON.stringify(s.body ?? "")),
   ).length;
   if (emptyCount > 0) {

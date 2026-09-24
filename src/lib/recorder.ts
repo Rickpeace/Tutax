@@ -194,16 +194,58 @@ export function looksSensitiveValue(value: unknown): boolean {
     const s = cand.replace(/\s+/g, "");
     for (let n = Math.min(34, s.length); n >= 15; n--) if (ibanValid(s.slice(0, n))) return true;
   }
-  if (/(^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/.test(v)) return true;
+  // Steuernummer im Länder-Format — nur mit 10–12 Ziffern insgesamt (Aktenzeichen wie
+  // „2024/0815/12345“ haben 13 und bleiben stehen; Regressions-Audit 24.09.).
+  for (const m of v.match(/(?:^|[^\d/])\d{2,4}\/\d{3,4}\/\d{4,5}(?![\d/])/g) ?? []) {
+    const n = m.replace(/\D/g, "").length;
+    if (n >= 10 && n <= 12) return true;
+  }
   if (/(^|[^A-Z0-9])\d{2}\s?\d{6}\s?[A-Z]\s?\d{2}\s?\d(?![A-Z0-9])/i.test(v)) return true;
-  if (/(^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/i.test(v)) return true;
-  for (const run of v.match(/\d(?:[ -]?\d){10,18}/g) ?? []) {
-    const d = run.replace(/[ -]/g, "");
-    if (d.length === 11 && d[0] !== "0") return true;
-    if (d.length === 13) return true;
-    if (d.length >= 13 && d.length <= 19 && luhnValid(d)) return true;
+  // Krankenversichertennummer: Buchstabe + 9 Ziffern — nur mit gültiger Prüfziffer
+  // (Artikel-/Kundennummern wie „K123456789“ bleiben stehen).
+  for (const m of v.match(/(?:^|[^A-Z0-9])[A-Z]\d{9}(?![A-Z0-9])/gi) ?? []) {
+    if (kvnrValid(m.replace(/[^A-Z0-9]/gi, ""))) return true;
+  }
+  // Ziffernfolgen: Telefonnummern (+49 …, 0049 …) auslassen; 11 Ziffern nur als gültige
+  // Steuer-ID (Prüfziffer), 14–19 mit Luhn = Kartennummer. 13 Ziffern (EAN/ELSTER) nur über
+  // die Feld-Beschriftung (SENSITIVE_FIELD_RE), sonst fielen Artikelnummern mit raus.
+  const re = /\d(?:[ -]?\d){10,18}/g;
+  for (let m = re.exec(v); m; m = re.exec(v)) {
+    const d = m[0].replace(/[ -]/g, "");
+    const before = v.slice(Math.max(0, m.index - 1), m.index);
+    if (before === "+" || d.startsWith("00")) continue;
+    if (d.length === 11 && steuerIdValid(d)) return true;
+    if (d.length >= 14 && d.length <= 19 && luhnValid(d)) return true;
   }
   return false;
+}
+
+/** Steuer-Identifikationsnummer: 11 Ziffern, erste ≠ 0, Prüfziffer nach ISO 7064 (Mod 11,10). */
+function steuerIdValid(d: string): boolean {
+  if (!/^[1-9]\d{10}$/.test(d)) return false;
+  let product = 10;
+  for (let i = 0; i < 10; i++) {
+    let sum = (Number(d[i]) + product) % 10;
+    if (sum === 0) sum = 10;
+    product = (sum * 2) % 11;
+  }
+  let check = 11 - product;
+  if (check === 10) check = 0;
+  return check === Number(d[10]);
+}
+
+/** Krankenversichertennummer (Buchstabe + 8 Ziffern + Prüfziffer), Gewichte 1-2 im Wechsel. */
+function kvnrValid(s: string): boolean {
+  if (!/^[A-Z]\d{9}$/i.test(s)) return false;
+  const pos = s.toUpperCase().charCodeAt(0) - 64;
+  const digits = String(pos).padStart(2, "0") + s.slice(1, 9);
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let p = Number(digits[i]) * (i % 2 === 0 ? 1 : 2);
+    if (p > 9) p -= 9;
+    sum += p;
+  }
+  return sum % 10 === Number(s[9]);
 }
 
 // Beschriftungen, bei denen ein Eingabewert nie in Titel/Text gehört (ergänzt die Liste in

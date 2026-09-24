@@ -71,3 +71,10 @@ create policy "members read kb_embeddings" on public.kb_embeddings for select to
 
 -- ---------- 4) Öffentlicher Bucket nicht auflistbar ----------
 drop policy if exists "public read published images" on storage.objects;
+
+-- ---------- 5) Standard-Kategorien (für Vorlagen) für angemeldete Nutzer lesbar ----------
+-- 0044 hatte „public read categories“ entfernt — daran hing auch das Lesen der globalen
+-- Standard-Kategorien (account_id NULL) in der Bibliothek (Regressions-Audit 24.09.).
+drop policy if exists "read template categories" on public.categories;
+create policy "read template categories" on public.categories for select to authenticated
+  using (account_id is null);

@@ -31,7 +31,7 @@ import { CATEGORY_NAME_MAX, CATEGORY_NAME_TOO_LONG, cleanCategoryName } from "@/
 import { GUIDE_DESCRIPTION_MAX, GUIDE_TITLE_MAX } from "@/lib/text-limits";
 import type { Highlight, Step, StepBranch } from "@/lib/types";
 import { flowOrder, resolveRoot } from "@/lib/builder/tree";
-import { planMove } from "@/lib/builder/rewire";
+import { planMove, deleteRewireTarget } from "@/lib/builder/rewire";
 import { canEdit } from "@/lib/roles";
 import { isAccountStoragePath } from "@/lib/storage-path";
 import { aiConfigured } from "@/lib/ai";
@@ -420,13 +420,17 @@ export async function deleteStep(
 
   // Folgeschritt aus der DATENBANK bestimmen, nicht aus dem (evtl. veralteten) Browser-Stand:
   // arbeiteten zwei Tabs/Personen gleichzeitig, zeigte der Client-Wert auf einen inzwischen
-  // gelöschten Schritt — die Umleitung lief ins Leere und der Rest des Asts war abgeschnitten
-  // (Audit 24.09.). Linear/Ende: der eine echte Folgeschritt. Frage: die Wahl des Clients nur,
-  // wenn sie wirklich eine der Antworten ist.
-  const { data: outs } = await supabase.from("step_branches").select("target_step_id").eq("step_id", stepId);
-  const outTargets = (outs ?? []).map((o) => o.target_step_id as string | null).filter((t): t is string => !!t && t !== stepId);
-  const target =
-    outTargets.length <= 1 ? (outTargets[0] ?? null) : nextTarget && outTargets.includes(nextTarget) ? nextTarget : null;
+  // gelöschten Schritt — die Umleitung lief ins Leere (Audit 24.09.). Dieselbe Regel wie der
+  // Editor (deleteRewireTarget): linear = der Folgeschritt, Frage = die Zusammenführung der Äste
+  // (sonst das Ziel der ersten Antwort). Regressions-Audit: vorher nahm der Server bei einer
+  // Frage nur direkte Antwort-Ziele an — die Zusammenführung ist nie eines → Rest abgeschnitten.
+  const { data: allSteps } = await supabase.from("steps").select("*").eq("tutorial_id", tutorialId);
+  const stepIdList = (allSteps ?? []).map((x) => x.id as string);
+  const { data: allBranches } = stepIdList.length
+    ? await supabase.from("step_branches").select("*").in("step_id", stepIdList)
+    : { data: [] as StepBranch[] };
+  const target = deleteRewireTarget((allSteps ?? []) as Step[], (allBranches ?? []) as StepBranch[], stepId);
+  void nextTarget; // Client-Wert nur noch Hinweis; maßgeblich ist die Datenbank.
   const { data: tutRow } = await supabase.from("tutorials").select("root_step_id").eq("id", tutorialId).maybeSingle();
   wasRoot = tutRow?.root_step_id === stepId;
   nextTarget = target;

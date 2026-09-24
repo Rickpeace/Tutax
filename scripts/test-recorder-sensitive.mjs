@@ -22,11 +22,10 @@ for (const v of [
   "143/815/08154",
   "12/345/67890",
   "9181/815/08155",
-  "2181081508155",
-  "12345678901",
-  "12 345 678 901",
+  "86095742719",
+  "86 095 742 719",
   "65 170839 J 003",
-  "A123456789",
+  "A123456780",
   "DE89 3704 0044 0532 0130 00",
   "DE89370400440532013000",
   "4111 1111 1111 1111",
@@ -34,7 +33,7 @@ for (const v of [
 ]) {
   ok(looksSensitiveValue(v) === true, `sensibel: ${v}`);
 }
-for (const v of ["account", "0170 1234567", "24.09.2026", "4711", "123456789012", "DE89 3704 0044 0532 0130 01", "Mandant Müller", ""]) {
+for (const v of ["account", "0170 1234567", "+49 89 123456789", "0049 151 23456789", "K123456789", "A123456789", "2024/0815/12345", "4006381333931", "12345678901", "24.09.2026", "4711", "123456789012", "DE89 3704 0044 0532 0130 01", "Mandant Müller", ""]) {
   ok(looksSensitiveValue(v) === false, `harmlos: ${JSON.stringify(v)}`);
 }
 
@@ -48,7 +47,7 @@ for (const v of ["account", "0170 1234567", "24.09.2026", "4711", "123456789012"
     { label: "PIN", action: "type", rect, typed_value: "1234" },
     { label: "Bestand", action: "type", rect, typed_value: "42" },
     { label: "Konto DE89 3704 0044 0532 0130 00 öffnen", action: "click", rect },
-    { label: "Nummer", action: "type", rect, typed_value: "12345678901", sensitive: [{ ...rect }] },
+    { label: "Nummer", action: "type", rect, typed_value: "86095742719", sensitive: [{ ...rect }] },
   ];
   const n = scrubSensitiveGuideSteps(steps);
   ok(n === 5, `5 Schritte bereinigt (${n})`);
