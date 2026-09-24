@@ -102,6 +102,40 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Bugsuche Runde 3 — 24.09.2026 (6 Prüfer: Handy, Grenzfälle, Nebenwirkungen, Erweiterung auf echten Websites + Video, Konto-Lebenszyklus, Sicherheit)
+
+Live seit 06c509d (+ Migration 0046). Regression: `test-delete-question`, `test-rest-guards` (Teil 4 = 0046),
+`test-guide-resolve` (Auswahlliste), `test-guide-typed-value` (Auswahlliste), `test-pro-gates`/`test-business-e2e`
+(neue Aussehen-Seite, veraltetes Audio wird entfernt).
+
+- [x] Aussehen-Seite neu (Entwurf A): Grundlage links, feste Vorschau rechts, Balken für Speichern/Verwenden
+- [x] Sicherheit (0046): Kopie-Verknüpfung nur Server · Schulung mit Nachweis ab Pro · KI-Index nur Server ·
+  öffentlicher Bucket nicht auflistbar · Kategorien nur der eigenen Org · KI-Suche filtert fremde Titel ·
+  Logo wird neu kodiert · Skin-CSS lädt keine fremden Adressen · Aufnahme maskiert Titel/Dateinamen
+- [x] Frage löschen hängt den Rest nicht mehr ab · unsichtbarer leerer Schritt blockiert Veröffentlichen nicht ·
+  Zurück-Wächter · Duplizieren „Nur Team“ ohne Business mit klarer Meldung
+- [x] Handy: Zeichnen startet mit „Auswählen“, Wischen scrollt, Pinch-Zoom in der Großansicht, Tippflächen ≥ 40 px,
+  16-px-Eingaben (kein iOS-Zoom), Anleitung öffnet ohne Sprung, leerer Editor empfiehlt „von Hand“
+- [x] Lebenszyklus: Wieder-Upgrade auf Business zieht Übersetzungen + Vorlesen nach; veraltete MP3s werden
+  unter Business entfernt · „Anpassen“ behält An/Aus · zurückgezogene Vorlagen-Kopien bleiben in der Bibliothek
+  (+ Hinweis im Editor) · Kategorie der Kopie gilt überall · „Neue Anleitung“ im alten Tab nach Org-Wechsel
+  abgefangen · Org-Wechsel-Meldung statt „Status konnte nicht geändert werden“ · Einladung bei vollem Team
+  sagt es sofort · Admin-Texte (Einzahl/Mehrzahl, Schulungen laufen weiter)
+- [x] Grenzfälle: nur geänderte Felder speichern (zwei Personen) · nach Abmeldung/offline kein Textverlust +
+  klare Meldung · Druck lädt alle Bilder · „Anpassen“ in zwei Tabs = eine Kopie · gleichzeitiges Einfügen
+  (compare-and-set) · Slug vor Bild-Kopie reserviert · Bilder parallel kopiert · private Originale beim Löschen
+  entfernt · hohe Screenshots lesbar · Kategorie-Duplikate · Längengrenzen Schritt-Titel/Text · kaputte Bilddatei
+- [x] Erweiterung 2.19.6: Führung über Shadow DOM (Cookie-Banner) · Checkbox-Knöpfe · Auswahllisten
+  (Auflösung + „„X“ auswählen“) · Zurück-/Neu-laden-Schritte schalten weiter · Checkbox-Namen aus Text dahinter ·
+  KI kennt die Elementart · KI schlägt Titel statt „Anleitung vom …“ vor · eindeutige Automations-Parameter ·
+  Schrittzähler von Läufen · kein unbehandelter Fehler in der Seitenleiste
+- [ ] Video-Worker: Markierungen in Firmenfarbe — wirkt erst nach `deploy.sh`
+- [ ] Video: eingegebenes Thema wird vom KI-Titel überschrieben (Worker kann Thema und Dateiname nicht unterscheiden)
+- [ ] Offen/klein: „Bild ggf. ungenau“ auf schweren Seiten · langsamer Führungs-Start auf MDN · aria-label statt
+  sichtbarem Text („Hilfe und Kontakt“) · Neuladen mitten im Veröffentlichen zeigt wieder „Veröffentlichen“ ·
+  Schublade am Handy fragt beim Wischen nur „Verwerfen?“ (ohne „Speichern“)
+- [ ] Supabase: „Secure password change“ + „Secure email change“ einschalten · `CRON_SECRET` in Vercel setzen
+
 ## Kunden-Audit 24.09.2026 (6 Prüfer aus Kundensicht, live; Erweiterung in echtem Chrome)
 
 Bereiche: Neukunde (Start → erste Anleitung) · Editor im Alltag · Hilfe-Seite für Endkunden ·
