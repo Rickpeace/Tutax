@@ -145,11 +145,14 @@ export function AppearanceEditor({
     }
     setLogoBusy(true);
     try {
+      // Kaputte/umbenannte Datei: klare Meldung statt „konnte nicht gespeichert werden“ (Runde 4).
       const webp = await imageCompression(file, {
         maxWidthOrHeight: 480,
         maxSizeMB: 0.3,
         fileType: "image/webp",
         useWebWorker: true,
+      }).catch(() => {
+        throw new Error("Das ist keine gültige Bilddatei. Bitte ein PNG-, JPG-, WebP- oder SVG-Logo wählen.");
       });
       const fd = new FormData();
       fd.append("file", webp, "logo.webp");
@@ -377,6 +380,9 @@ export function AppearanceEditor({
                     base === "extreme" ? "Adresse Ihrer Website für den Nachbau" : "Adresse Ihrer Website für das KI-Design"
                   }
                   successMsg={`„${NAMES[base]}“ erstellt – rechts in der Vorschau.`}
+                  // Kein Neuladen: sonst sprang die Auswahl auf die aktive Grundlage zurück und das
+                  // neue Design war nicht zu sehen (Runde 4). refresh() liefert die neuen Tokens.
+                  onDone={() => router.refresh()}
                 />
                 <p className="text-xs font-semibold text-muted-foreground">
                   {base === "extreme"

@@ -183,7 +183,9 @@ export async function requireStepAccess(stepId: string): Promise<AccountContext 
     ? await admin.from("tutorials").select("account_id").eq("id", step.tutorial_id).maybeSingle()
     : { data: null };
   if (!step || !tut || !(await mayEditTutorialOf((tut.account_id as string | null) ?? null, ctx))) {
-    throw new Error("Schritt nicht gefunden.");
+    // Schritt einer ANDEREN eigenen Organisation: im anderen Tab gewechselt (Runde 4).
+    if (tut?.account_id && ctx.memberships.some((m) => m.id === tut.account_id)) throw new UserError(ORG_SWITCHED);
+    throw new UserError("Diesen Schritt gibt es nicht mehr – bitte laden Sie die Seite neu.");
   }
   return { ...ctx, tutorialId: step.tutorial_id as string };
 }

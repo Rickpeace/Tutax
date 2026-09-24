@@ -14,7 +14,7 @@ import {
   forkTemplate,
   resetTemplate,
 } from "@/app/app/template-actions";
-import { errorText } from "@/lib/action-error";
+import { errorText, isNavigationError, unwrap } from "@/lib/action-error";
 
 export type TemplateItem = {
   templateId: string;
@@ -54,6 +54,8 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
         await fn();
         if (msg) toast.success(msg);
       } catch (e) {
+        // „Anpassen“ leitet per redirect() in die Kopie — das ist kein Fehler (Runde 4).
+        if (isNavigationError(e)) return;
         toast.error(errorText(e));
       }
     });
@@ -153,7 +155,7 @@ export function TemplateSection({ items }: { items: TemplateItem[] }) {
               variant="ghost"
               size="sm"
               disabled={pending}
-              onClick={() => run(() => forkTemplate(it.templateId))}
+              onClick={() => run(async () => unwrap(await forkTemplate(it.templateId)))}
             >
               <PencilLine className="size-4" /> Anpassen
             </Button>

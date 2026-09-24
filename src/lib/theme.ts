@@ -356,6 +356,16 @@ export function brandStyle(tokens: unknown, opts: { onWhite?: boolean } = {}): C
       strong = mixHex(accent, "#ffffff", k * 0.1) ?? accent;
     }
     s["--brand-accent-strong"] = strong;
+  } else {
+    // Akzent ALS Text auf hellem Papier: bis WCAG AA (4,5 : 1) abdunkeln — Steply-Koralle hatte
+    // als Schrift nur 3,07 : 1 (Antwortknöpfe, Schrittnummern im Druck; Runde 4). Akzente, die
+    // schon reichen, bleiben unverändert.
+    const start = String(s["--brand-accent-strong"] ?? accent);
+    let strong = start;
+    for (let k = 1; k <= 8 && (contrastRatio(strong, paper) ?? 4.5) < 4.5; k++) {
+      strong = darken(start, k * 0.06) ?? strong;
+    }
+    s["--brand-accent-strong"] = strong;
   }
   // Gedämpfte Texte aus der Kunden-Textfarbe statt fest Steply-Beige (#8a7a63): halb-
   // transparente Textfarbe liest sich auf Hintergrund UND Papier. Überschreibt die

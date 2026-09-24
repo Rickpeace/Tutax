@@ -139,6 +139,10 @@ export function Wizard({
   // Hat der Nutzer den Schritt gewechselt (Weiter/Zurück/Sprung/Browser-Verlauf)? Nur dann
   // wandern Fokus/Scroll — beim ersten Laden und beim Wiederherstellen NICHT (Audit 24.09.).
   const stepChangedRef = useRef(false);
+  // Großansicht als eigener Verlaufseintrag: Browser-/Android-Zurück schließt sie, statt darunter
+  // einen Schritt zurückzugehen (Runde 4). lbPushed = Eintrag liegt; lbClosing = wir bauen ihn ab.
+  const lbPushed = useRef(false);
+  const lbClosing = useRef(false);
 
   const writeHistory = useCallback(
     (prevCur: string | null, nextCur: string | null, nextHistory: string[], move: WizMove) => {
@@ -181,6 +185,15 @@ export function Wizard({
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
+      if (lbClosing.current) {
+        lbClosing.current = false; // eigener Abbau des Großansicht-Eintrags
+        return;
+      }
+      if (lbPushed.current) {
+        lbPushed.current = false; // Zurück bei offener Großansicht: nur schließen
+        setLightbox(null);
+        return;
+      }
       const snap = (e.state as Record<string, unknown> | null)?.[WIZ_STATE] as
         | WizSnapshot
         | undefined;
@@ -227,8 +240,11 @@ export function Wizard({
         // steht NICHT im Browser-Verlauf -> „Zurück“ geht den Weg ohne history.back().
         const raw = sessionStorage.getItem(storKey);
         const s = raw ? (JSON.parse(raw) as { cur?: string | null; history?: string[] }) : null;
-        if (s && valid(s.cur ?? null, s.history)) {
-          initCur = s.cur ?? null;
+        // Fertig (cur null) NICHT aus dem Tab-Speicher: wer eine abgeschlossene Anleitung erneut
+        // öffnet, will von vorn beginnen, nicht auf „Fertig!“ landen (Runde 4). Neuladen stellt
+        // den Endzustand weiter über den Browser-Verlauf (oben) her.
+        if (s && s.cur && valid(s.cur, s.history)) {
+          initCur = s.cur;
           initHistory = s.history;
         }
       }
@@ -266,6 +282,7 @@ export function Wizard({
   };
 
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const doneRef = useRef<HTMLHeadingElement>(null);
 
   // Vorlesen (Welle 14): ein einziges <audio>-Element, per Ref gesteuert. Beim
   // Schrittwechsel stoppt die Wiedergabe (siehe Effekt weiter unten).
@@ -439,7 +456,9 @@ export function Wizard({
   useEffect(() => {
     if (!stepChangedRef.current) return;
     stepChangedRef.current = false;
-    titleRef.current?.focus({ preventScroll: true });
+    // Ohne Titel bzw. am Fertig-Bildschirm: Überschrift „Fertig“ bzw. die Karte selbst fokussieren —
+    // sonst blieb der Fokus auf „Weiter“ / fiel auf <body> (Screenreader, Runde 4).
+    (titleRef.current ?? doneRef.current ?? cardRef.current)?.focus({ preventScroll: true });
     const card = cardRef.current;
     if (!card) return;
     if (card.getBoundingClientRect().top < scrollViewportTop(card)) {
@@ -518,13 +537,28 @@ export function Wizard({
   const closeLightbox = useCallback(() => {
     setLightbox(null);
     zoomTriggerRef.current?.focus();
+    if (lbPushed.current) {
+      lbPushed.current = false;
+      lbClosing.current = true;
+      window.history.back();
+    }
+  }, []);
+  const openLightbox = useCallback((data: NonNullable<typeof lightbox>) => {
+    setLightbox(data);
+    try {
+      window.history.pushState({ ...(window.history.state ?? {}), steplyLightbox: true }, "");
+      lbPushed.current = true;
+    } catch {
+      /* Komfort */
+    }
   }, []);
 
   return (
     <div
       ref={cardRef}
+      tabIndex={-1}
       data-tx="step"
-      className={`w-full scroll-mt-3 overflow-hidden border-2 ${linearPath ? "lg:flex" : ""}`}
+      className={`w-full scroll-mt-3 overflow-hidden outline-none border-2 ${linearPath ? "lg:flex" : ""}`}
       style={{
         // Papier des Kunden-Designs statt fest Weiß (dunkle Designs, Audit 24.09.).
         background: "var(--brand-paper, #fff)",
@@ -625,7 +659,7 @@ export function Wizard({
             aria-pressed={auto}
             aria-label={auto ? L.autoOff : L.autoOn}
             title={auto ? L.autoOff : L.autoOn}
-            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors"
+            className={`relative flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${TAP_AREA}`}
             style={
               auto
                 ? { background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }
@@ -642,7 +676,7 @@ export function Wizard({
             aria-pressed={muted}
             aria-label={muted ? L.soundOff : L.soundOn}
             title={muted ? L.soundOff : L.soundOn}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors"
+            className={`relative flex size-7 shrink-0 items-center justify-center rounded-full transition-colors ${TAP_AREA}`}
             style={{ background: "var(--brand-soft, #f1f2f6)", color: "var(--brand-ink, #3b4254)" }}
           >
             {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
@@ -680,7 +714,7 @@ export function Wizard({
               type="button"
               ref={zoomTriggerRef}
               onClick={() =>
-                setLightbox({
+                openLightbox({
                   url: imageUrls[step.id],
                   highlights: step.highlights ?? [],
                   image_width: step.image_width,
@@ -737,7 +771,7 @@ export function Wizard({
                     data-tx="tts"
                     onClick={toggleAudio}
                     aria-label={playing ? L.pauseAloud : L.readAloud}
-                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
+                    className={`relative mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95 ${TAP_AREA}`}
                     style={{ background: "var(--brand-accent)", color: "var(--brand-accent-fg, #fff)" }}
                   >
                     {playing ? <Pause className="size-4" /> : <Volume2 className="size-4" />}
@@ -775,7 +809,8 @@ export function Wizard({
                     style={{
                       background: "var(--brand-paper, #fff)",
                       borderColor: safeHexColor(b.color) ?? "var(--brand-accent-strong, var(--brand-accent))",
-                      color: safeHexColor(b.color) ?? "var(--brand-accent-strong, var(--brand-accent))",
+                      // Ast-Farbe nur als Rahmen: als Schrift hatte das Standard-Ja-Teal 2,9 : 1 (Runde 4).
+                      color: safeHexColor(b.color) ? "var(--brand-ink)" : "var(--brand-accent-strong, var(--brand-accent))",
                       borderRadius: "var(--brand-btn-radius, 999px)",
                     }}
                   >
@@ -812,9 +847,9 @@ export function Wizard({
             {!internalMode && accountSlug && tutorialSlug && (
               <div className="mt-3 text-center" data-tx="stuck">
                 {stuckSent.has(step.id) ? (
-                  <p className="text-xs text-muted-foreground" role="status">
+                  <FocusStatus className="text-xs text-muted-foreground">
                     {chatAvailable ? L.stuckThanks : L.stuckThanks.split(/(?<=[.!?])\s/)[0]}
-                  </p>
+                  </FocusStatus>
                 ) : (
                   <button
                     type="button"
@@ -836,7 +871,9 @@ export function Wizard({
           >
             <Check className="size-7" />
           </div>
-          <h2 className="mt-4 text-lg font-bold text-[var(--brand-ink)]">{L.finished}</h2>
+          <h2 ref={doneRef} tabIndex={-1} className="mt-4 text-lg font-bold text-[var(--brand-ink)] outline-none">
+            {L.finished}
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {L.finishedSub}
           </p>
@@ -877,9 +914,7 @@ export function Wizard({
           {!internalMode && accountSlug && tutorialSlug && (
             <div className="mt-4">
               {feedback === "sent" ? (
-                <p className="text-sm font-medium text-muted-foreground" role="status">
-                  {L.feedbackThanks}
-                </p>
+                <FocusStatus className="text-sm font-medium text-muted-foreground">{L.feedbackThanks}</FocusStatus>
               ) : (
                 <div className="flex flex-col items-center gap-2">
                   <p className="text-sm text-muted-foreground">{L.helpful}</p>
@@ -932,6 +967,22 @@ export function Wizard({
       {lightbox && <Lightbox data={lightbox} labels={L} onClose={closeLightbox} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * Statusmeldung, die den Knopf ersetzt, der gerade gedrückt wurde: bekommt den Fokus, sonst fiel
+ * er auf <body> und Tastatur-/Screenreader-Nutzer verloren ihre Position (Runde 4).
+ */
+function FocusStatus({ className, children }: { className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+  }, []);
+  return (
+    <p ref={ref} tabIndex={-1} role="status" className={`outline-none ${className ?? ""}`}>
+      {children}
+    </p>
   );
 }
 
@@ -1016,6 +1067,7 @@ function Lightbox({
   const movedRef = useRef(false);
   // Zwei-Finger-Zoom (Audit 24.09.): aktive Finger + Stand beim Aufsetzen des zweiten.
   const stageRef = useRef<HTMLDivElement>(null);
+  const imgWrapRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{
     dist: number;
@@ -1198,7 +1250,9 @@ function Lightbox({
         onClick={(e) => {
           // Klick auf die freie Fläche schließt — ein Ziehen aber nicht.
           if (movedRef.current) return;
-          if (e.target === e.currentTarget) onClose();
+          // Die Transform-Ebene bedeckt die ganze Fläche — darum „außerhalb des Bildes“ prüfen
+          // statt target === currentTarget (sonst schloss ein Klick daneben nie, Runde 4).
+          if (!imgWrapRef.current?.contains(e.target as Node)) onClose();
         }}
       >
         <div
@@ -1206,7 +1260,7 @@ function Lightbox({
           style={{ transform: `translate(${shown.x}px, ${shown.y}px) scale(${zoom})` }}
         >
           {/* Gleiche Darstellung wie im Schritt — inkl. Markierungen und Verpixelung. */}
-          <div style={{ width: fitW || undefined }}>
+          <div ref={imgWrapRef} style={{ width: fitW || undefined }}>
             <ViewerImage
               url={data.url}
               highlights={data.highlights}

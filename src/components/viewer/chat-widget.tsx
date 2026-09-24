@@ -69,6 +69,7 @@ export function ChatWidget({
   const [status, setStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
 
   // Gespräch aus localStorage wiederherstellen (übersteht Navigieren/Reload) — beim ersten
   // Rendern und erneut, wenn die Sprache wechselt (die Komponente bleibt dabei gemountet).
@@ -109,7 +110,11 @@ export function ChatWidget({
     if (!open) return;
     inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        // Fokus zurück auf den Chat-Knopf (sonst fiel er auf <body>, Runde 4).
+        requestAnimationFrame(() => launcherRef.current?.focus());
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -216,6 +221,7 @@ export function ChatWidget({
           füllt dann das ganze iFrame und hat einen eigenen Schließen-Knopf im Kopf). */}
       {!(embedded && open) && (
         <button
+          ref={launcherRef}
           onClick={() => setOpen((o) => !o)}
           aria-label={L.chatLauncher}
           aria-expanded={open}

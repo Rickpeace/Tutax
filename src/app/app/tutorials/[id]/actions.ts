@@ -206,8 +206,11 @@ export async function insertStepIntoBranch(
   return { oldTarget };
 }
 
-/** Titel/Text/Bild speichern (stiller Auto-Save). */
-export async function updateStep(
+/**
+ * Titel/Text/Bild speichern (stiller Auto-Save). Mit `withUserErrors`: Ablehnungen (zu langer
+ * Text, Org-Wechsel) kommen als deutscher Text an statt „Bitte erneut versuchen“ (Runde 4).
+ */
+export const updateStep = withUserErrors(async function updateStep(
   stepId: string,
   patch: {
     title?: string;
@@ -230,7 +233,7 @@ export async function updateStep(
   // Vorlesen/Übersetzung). Titel kappen wie das Eingabefeld; überlangen Text ablehnen.
   if (typeof patch.title === "string") patch = { ...patch, title: patch.title.slice(0, STEP_TITLE_MAX) };
   if ("body" in patch && bodyTextLength(patch.body) > STEP_BODY_TEXT_MAX) {
-    throw new Error(`Der Erklärtext darf höchstens ${STEP_BODY_TEXT_MAX} Zeichen lang sein.`);
+    throw new UserError(`Der Erklärtext darf höchstens ${STEP_BODY_TEXT_MAX} Zeichen lang sein – bitte kürzen.`);
   }
   if ("highlights" in patch && hasInvalidBlur(patch.highlights)) {
     throw new Error("Ungültige Verpixelung.");
@@ -281,7 +284,7 @@ export async function updateStep(
     // Chatbot-Index: bei veröffentlichten Anleitungen den neuen Text sofort nachziehen.
     after(() => reindexTutorialIfLive(tutorialId));
   }
-}
+});
 
 /** Konto der Anleitung aus der DB (nie aus einem Pfad) — für Admin-Storage-Aufräumarbeiten. */
 async function tutorialAccountId(tutorialId: string): Promise<string | null> {
@@ -506,7 +509,14 @@ export async function deleteStep(
   if (victim?.image_path) {
     const accountId = await tutorialAccountId(tutorialId);
     await removeUnusedPublicCopies([victim.image_path as string], { accountId });
-    await removeUnusedOriginals([victim.image_path as string], accountId); // privates Original
+    // Privates Original erst nach einer Karenzzeit löschen und dann erneut prüfen: ein offenes
+    // „Rückgängig“ (Bild entfernen) in einem anderen Schritt mit demselben Bild stellte sonst
+    // einen Pfad auf eine schon gelöschte Datei wieder her (Runde 4).
+    const path = victim.image_path as string;
+    after(async () => {
+      await new Promise((r) => setTimeout(r, 30_000));
+      await removeUnusedOriginals([path], accountId);
+    });
   }
   await invalidateTutorialTags(tutorialId);
   await markTranslationsStale(tutorialId); // Schritt entfernt -> Übersetzungen veraltet

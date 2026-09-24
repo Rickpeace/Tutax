@@ -23,6 +23,7 @@ import {
 } from "@/lib/i18n-hub";
 import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
 import { TAP_AREA } from "@/lib/tap-target";
+import { publicAccountName } from "@/lib/public-name";
 
 // Cache Components: Hub-Daten sind für ALLE Besucher gleich -> 'use cache' mit Tag pro
 // Konto. WICHTIG: `lang` ist Teil des Cache-Keys (Funktionsargument), damit DE/EN/PL/TR
@@ -39,6 +40,7 @@ async function load(accountSlug: string, lang: HubLang) {
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
+  account.name = publicAccountName(account.name as string | null); // nie eine E-Mail öffentlich
 
   const [catalog, { data: categories }, { data: theme }] = await Promise.all([
     getCatalog(admin, account.id),
@@ -124,10 +126,13 @@ export async function generateMetadata({
       : {}),
   };
   const { logoPath } = resolveTheme(data.theme);
+  // Leere Hilfe-Seite (noch keine sichtbare Anleitung) nicht indexieren (Runde 4).
+  const empty = !data.catalog.some((e) => e.visible && e.slug);
   return {
     title,
     description,
     alternates,
+    ...(empty ? { robots: { index: false, follow: false } } : {}),
     openGraph: {
       title: baseTitle,
       description,
@@ -343,7 +348,7 @@ export default async function HubPage({
 
       <footer
         data-tx="footer"
-        className="flex items-center justify-center gap-2 border-t-2 px-4 py-4 text-xs font-bold text-muted-foreground"
+        className={`flex items-center justify-center gap-2 border-t-2 px-4 py-4 text-xs font-bold text-muted-foreground ${isPro(account) ? "pb-24 sm:pb-4" : ""}`}
         style={{ borderColor: "color-mix(in srgb, var(--brand-ink) 8%, transparent)" }}
       >
         {/* „Erstellt mit Steply“ nur im Gratis-Tarif (Pro: ohne Hinweis, lib/pricing.ts). */}

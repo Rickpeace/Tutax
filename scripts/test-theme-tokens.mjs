@@ -29,7 +29,8 @@ ok(s["--brand-ink"] === "oklch(0.3 0.02 60)", "oklch(…) bleibt");
 ok(s["--brand-font"] === '"Inter", system-ui, sans-serif', "Schrift-Stapel mit Anführungszeichen bleibt");
 ok(s["--brand-heading-weight"] === "800", "Schriftstärke (Zahl) bleibt");
 const f = brandFonts(legit);
-ok(f.body === '"Inter", system-ui, sans-serif' && f.heading === "'Playfair Display', serif", "brandFonts: legitime Schriften bleiben");
+// cssFontFamily vereinheitlicht die Anführungszeichen (Audit 24.09.) — inhaltlich unverändert.
+ok(f.body === '"Inter", system-ui, sans-serif' && f.heading === '"Playfair Display", serif', "brandFonts: legitime Schriften bleiben");
 
 // Angriffe: url()/Semikolon in Farben und Schriften.
 const evil = {

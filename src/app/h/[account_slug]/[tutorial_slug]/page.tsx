@@ -23,6 +23,7 @@ import { toPublicStep } from "@/lib/public-step";
 import { brandedTheme, isBusiness, isPro, planLanguages } from "@/lib/plan";
 import { TAP_AREA } from "@/lib/tap-target";
 import { isBotUserAgent } from "@/app/h/bot-ua";
+import { publicAccountName } from "@/lib/public-name";
 
 // Öffentliche Seite: serverseitige, kontrollierte Reads (nur published).
 // Cache Components: für alle Besucher gleich -> 'use cache' + Tags (Hub + Tutorial);
@@ -39,6 +40,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
+  account.name = publicAccountName(account.name as string | null); // nie eine E-Mail öffentlich
 
   const tutorialId = await resolveCustomerTutorial(admin, account.id, tutorialSlug);
   if (!tutorialId) return null;
@@ -365,13 +367,14 @@ export default async function ViewerPage({
             target="_blank"
             rel="noopener noreferrer"
             data-tx="print-link"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)]"
+            className={`relative inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--brand-ink)] ${TAP_AREA}`}
           >
             <Printer className="size-4" /> {labels.print}
           </Link>
         </div>
 
-        <p data-tx="footer" className="mt-6 text-center text-xs text-muted-foreground">
+        {/* Mit Chat-Blase (ab Pro) unten Platz lassen — sonst verdeckte sie am Handy „Datenschutz“ (Runde 4). */}
+        <p data-tx="footer" className={`mt-6 text-center text-xs text-muted-foreground ${isPro(account) ? "pb-20 sm:pb-0" : ""}`}>
           {t(lang, isPro(account) ? "providedByPlain" : "providedBy", { name: account.name })}
           <span className="mx-1.5 opacity-50">·</span>
           {/* Touch: unsichtbar 40 px hohe Trefferfläche (Handy-Audit 24.09.). */}

@@ -84,9 +84,9 @@ export async function videoUploadQuotaError(): Promise<string | null> {
  * Formular-Aktion (useActionState): liefert eine Meldung statt zu werfen.
  */
 export async function createTutorial(
-  _prev: { error: string } | null,
+  _prev: { error: string; title: string } | null,
   formData: FormData,
-): Promise<{ error: string } | null> {
+): Promise<{ error: string; title: string } | null> {
   const title = String(formData.get("title") ?? "").trim().slice(0, GUIDE_TITLE_MAX) || "Neue Anleitung";
   const categoryId = (String(formData.get("category_id") ?? "") || null) as string | null;
   const ctx = await requireAccount();
@@ -94,7 +94,7 @@ export async function createTutorial(
   // Alter Tab nach Org-Wechsel: sonst entstand die Anleitung still in der anderen Organisation,
   // samt Kategorie der vorigen (Lebenszyklus-Audit 24.09.).
   const switched = orgSwitchedError(formData.get("account_id"), ctx);
-  if (switched) return { error: switched };
+  if (switched) return { error: switched, title };
   const supabase = await createClient();
   if (categoryId) {
     const { data: cat } = await supabase
@@ -103,7 +103,7 @@ export async function createTutorial(
       .eq("id", categoryId)
       .eq("account_id", account.id)
       .maybeSingle();
-    if (!cat) return { error: "Diese Kategorie gibt es nicht mehr – bitte laden Sie die Seite neu." };
+    if (!cat) return { error: "Diese Kategorie gibt es nicht mehr – bitte laden Sie die Seite neu.", title };
   }
 
   if (await tutorialQuotaReached(supabase, account)) {
@@ -115,7 +115,8 @@ export async function createTutorial(
     .insert({ account_id: account.id, title, category_id: categoryId })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  // Als Meldung im Dialog statt Fehlerseite (Formular-Aktion, Runde 4).
+  if (error) return { error: "Die Anleitung konnte nicht angelegt werden. Bitte versuchen Sie es erneut.", title };
 
   revalidatePath("/app");
   redirect(`/app/tutorials/${data.id}`);
@@ -350,7 +351,9 @@ export const duplicateTutorial = withUserErrors(async function duplicateTutorial
       // Sichtbarkeit mitkopieren: sonst wurde aus einer „Nur Team“-Anleitung eine öffentliche
       // Kopie — ein Klick auf „Veröffentlichen“ brachte internen Inhalt auf die Hilfe-Seite.
       visibility: src.visibility,
-      in_lernen: src.in_lernen,
+      // „Schulung mit Nachweis“ gibt es ab Pro (DB-Regel 0046) — nach einem Herabstufen wird die
+      // Kopie eine normale Anleitung, statt dass das Duplizieren scheitert (Runde 4).
+      in_lernen: isPro(account) ? src.in_lernen : false,
       // Live-Führung/Extension-Matching: für welche Websites die Anleitung gilt.
       site_domains: src.site_domains ?? [],
     })

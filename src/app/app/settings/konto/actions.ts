@@ -5,6 +5,7 @@ import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/account";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
+import { passwordProblem } from "@/lib/password-rule";
 
 /**
  * Prüft das aktuelle Passwort per Wegwerf-Anmeldung (eigener Client ohne Cookies); deren
@@ -33,7 +34,8 @@ export async function changePassword(
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!currentPassword) return { ok: false, error: "Bitte geben Sie Ihr aktuelles Passwort ein." };
-  if (password.length < 8) return { ok: false, error: "Mindestens 8 Zeichen." };
+  const pwProblem = passwordProblem(password);
+  if (pwProblem) return { ok: false, error: pwProblem };
   const supabase = await createClient();
   const {
     data: { user },

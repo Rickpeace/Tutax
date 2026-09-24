@@ -72,6 +72,13 @@ export function SignupForm() {
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? "Konto wird erstellt …" : "Kostenlos registrieren"}
         </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          Hinweise zur Verarbeitung Ihrer Daten finden Sie in unserer{" "}
+          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+            Datenschutzerklärung
+          </a>
+          .
+        </p>
       </form>
 
       <p className="mt-6 text-sm text-muted-foreground">

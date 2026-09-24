@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { appBaseUrl } from "@/lib/url";
 
-// Sitemap: alle Account-Hubs (/h/{slug}) + veröffentlichte, eigene Tutorials
+// Sitemap: Account-Hubs mit sichtbaren Anleitungen (/h/{slug}) + veröffentlichte, eigene Tutorials
 // (/h/{acc}/{slug}). Bewusst simpel: nur echte Tutorials mit account_id — geteilte
 // Standard-Templates (account_id NULL) tauchen NICHT eigenständig auf.
 //
@@ -23,10 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .eq("visibility", "public")
         .not("slug", "is", null)
         .not("account_id", "is", null),
-      admin
-        .from("account_templates")
-        .select("template_id, enabled, forked_tutorial_id")
-        .not("forked_tutorial_id", "is", null),
+      admin.from("account_templates").select("account_id, template_id, enabled, forked_tutorial_id"),
       admin.from("tutorials").select("id").eq("is_template", true).is("account_id", null).eq("status", "published"),
     ]);
 
@@ -37,12 +34,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const livePublished = new Set((liveTemplates ?? []).map((t) => t.id as string));
   const hiddenForks = new Set(
     (forks ?? [])
-      .filter((f) => !f.enabled || !livePublished.has(f.template_id as string))
+      .filter((f) => f.forked_tutorial_id && (!f.enabled || !livePublished.has(f.template_id as string)))
       .map((f) => f.forked_tutorial_id as string),
   );
 
+  // Nur Hilfe-Seiten mit mindestens einer sichtbaren Anleitung melden (Runde 4: leere Seiten —
+  // Testkonten, Titel mit E-Mail-Adresse — standen sonst in der Sitemap).
+  const withContent = new Set<string>();
+  for (const t of tutorials ?? []) {
+    if (t.account_id && !hiddenForks.has(t.id as string)) withContent.add(t.account_id as string);
+  }
+  for (const f of forks ?? []) {
+    if (f.enabled && livePublished.has(f.template_id as string)) withContent.add(f.account_id as string);
+  }
+
   const hubEntries: MetadataRoute.Sitemap = (accounts ?? [])
-    .filter((a) => a.slug)
+    .filter((a) => a.slug && withContent.has(a.id as string))
     .map((a) => ({
       url: `${base}/h/${a.slug}`,
       changeFrequency: "weekly",

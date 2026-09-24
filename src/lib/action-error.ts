@@ -41,7 +41,8 @@ export function withUserErrors<A extends unknown[], R>(
 
 /** Client: Ergebnis einer `withUserErrors`-Action auspacken; Ablehnung → Error mit deutschem Text. */
 export function unwrap<R>(result: R | ActionFailure): R {
-  if (isActionFailure(result)) throw new Error(result.userError);
+  // Als UserError, damit Aufrufer eine inhaltliche Ablehnung von Netz-/Serverfehlern unterscheiden.
+  if (isActionFailure(result)) throw new UserError(result.userError);
   return result;
 }
 

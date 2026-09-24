@@ -16,7 +16,9 @@ export async function compressAndUpload(
   // 1400×12000-Bild wurde 186 px breit und unlesbar (Grenzfall-Audit 24.09.). Bei hohen Bildern
   // bestimmt die Breite (max. 1600), die Höhe darf bis 4800 px gehen.
   const orig = await readImageSize(file);
-  const tall = orig.height > orig.width;
+  // Erst ab 2:1 (Ganzseiten-Screenshots) — normale Hochkant-Bilder (Handy 1170×2532 ≈ 2,16 : 1
+  // zählt noch dazu, ein Hochformat-Foto nicht) bleiben bei 1600 px / 1 MB (Runde 4).
+  const tall = orig.height >= orig.width * 2;
   const longSide = tall
     ? Math.min(4800, Math.max(1600, Math.round(orig.height * Math.min(1, 1600 / Math.max(1, orig.width)))))
     : 1600;

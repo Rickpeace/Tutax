@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import {
@@ -65,6 +65,13 @@ export function NewTutorialButton({
   const [videoOpen, setVideoOpen] = useState(false);
   const { installed: extInstalled, version: extVersion } = useRecorderExtension();
   const [createState, createAction] = useActionState(createTutorial, null);
+  // Beim erneuten Öffnen keine alte Fehlermeldung zeigen (Runde 4): Stand beim Öffnen merken.
+  const [dismissed, setDismissed] = useState<typeof createState>(null);
+  const createError = createState && createState !== dismissed ? createState : null;
+  const createStateRef = useRef(createState);
+  useEffect(() => {
+    createStateRef.current = createState;
+  }, [createState]);
   const mobile = useMediaQuery(MOBILE_QUERY);
   const sofortCard = (
     <SofortAnleitungCard
@@ -77,7 +84,10 @@ export function NewTutorialButton({
 
   const openWith = (o: boolean) => {
     setOpen(o);
-    if (o) setMode("choice"); // beim Öffnen immer mit der Weiche starten
+    if (o) {
+      setMode("choice"); // beim Öffnen immer mit der Weiche starten
+      setDismissed(createState); // alte Fehlermeldung nicht wieder zeigen
+    }
   };
 
   // ⌘K „Neue Anleitung“: genau EIN Knopf (Kopfleiste) hört zu, damit nicht mehrere
@@ -86,6 +96,7 @@ export function NewTutorialButton({
     if (!openOnEvent) return;
     const onOpen = () => {
       setMode("choice");
+      setDismissed(createStateRef.current);
       setOpen(true);
     };
     window.addEventListener(openOnEvent, onOpen);
@@ -200,6 +211,9 @@ export function NewTutorialButton({
                 <div className="space-y-1.5">
                   <Label htmlFor="title">Titel</Label>
                   <Input
+                    // Nach einer Ablehnung den getippten Titel behalten (React leert das Formular).
+                    key={createError ? `err-${createError.error}` : "neu"}
+                    defaultValue={createError?.title ?? ""}
                     id="title"
                     name="title"
                     placeholder="z. B. SmartLogin einrichten"
@@ -208,9 +222,9 @@ export function NewTutorialButton({
                     maxLength={GUIDE_TITLE_MAX}
                   />
                 </div>
-                {createState?.error && (
+                {createError && (
                   <p role="alert" className="text-sm font-semibold text-destructive">
-                    {createState.error}
+                    {createError.error}
                   </p>
                 )}
                 <DialogFooter>

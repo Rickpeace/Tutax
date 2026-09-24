@@ -295,7 +295,8 @@ async function pruneStaleAudio(
   }
 }
 
-const AUDIO_BACKFILL_CAP = 30;
+// Klein halten: läuft in EINEM after() nach der Admin-Aktion (Zeitlimit der Funktion, Runde 4).
+const AUDIO_BACKFILL_CAP = 10;
 
 /**
  * Wechsel auf Business (Upgrade oder Wieder-Upgrade): Vorlese-Audio aller veröffentlichten,

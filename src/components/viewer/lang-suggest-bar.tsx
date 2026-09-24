@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Languages, X } from "lucide-react";
 import { t, type ExtraLang, type HubLang } from "@/lib/i18n-hub";
+import { TAP_AREA } from "@/lib/tap-target";
 
 /**
  * Browser-Sprach-Vorschlag (Welle 30) für die öffentliche Hilfe-Seite.
@@ -105,7 +106,7 @@ export function LangSuggestBar({
         onClick={dismiss}
         data-tx="lang-suggest-close"
         aria-label={t(target, "close")}
-        className="ml-1 grid size-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-black/5"
+        className={`relative ml-1 grid size-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-black/5 ${TAP_AREA}`}
       >
         <X className="size-3.5" />
       </button>

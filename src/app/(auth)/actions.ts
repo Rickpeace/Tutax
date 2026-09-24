@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { appBaseUrl, safeNext } from "@/lib/url";
 import { uebersetzeAuthFehler } from "@/lib/auth-errors";
 import { MEMBER_HOME, asRole } from "@/lib/roles";
+import { passwordProblem } from "@/lib/password-rule";
 
 /** `values`: Eingaben zurückgeben, damit das Formular nach einem Fehler nicht leer ist (Passwort nie). */
 export type AuthState = { error?: string; message?: string; values?: { email?: string; account_name?: string } };
@@ -62,8 +63,8 @@ export async function signUp(
     return { error: "Bitte E-Mail und Passwort eingeben.", values };
   if (!EMAIL_OK.test(email))
     return { error: "Bitte prüfen Sie die E-Mail-Adresse (z. B. name@firma.de).", values };
-  if (password.length < 8)
-    return { error: "Das Passwort muss mindestens 8 Zeichen haben.", values };
+  const pwProblem = passwordProblem(password);
+  if (pwProblem) return { error: pwProblem, values };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -98,6 +99,8 @@ export async function signInWithMagicLink(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { error: "Bitte E-Mail eingeben." };
+  // Tippfehler („a@x“) nicht still bestätigen — verrät nichts über bestehende Konten (Runde 4).
+  if (!EMAIL_OK.test(email)) return { error: "Bitte prüfen Sie die E-Mail-Adresse (z. B. name@firma.de)." };
 
   const supabase = await createClient();
   // shouldCreateUser: false — der Anmelde-Link ist KEINE Registrierung (Audit 23.09.: sonst
@@ -123,6 +126,7 @@ export async function requestPasswordReset(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { error: "Bitte E-Mail eingeben." };
+  if (!EMAIL_OK.test(email)) return { error: "Bitte prüfen Sie die E-Mail-Adresse (z. B. name@firma.de)." };
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${appUrl()}/auth/confirm?next=/reset`,
@@ -139,8 +143,8 @@ export async function updatePassword(
   formData: FormData,
 ): Promise<AuthState> {
   const password = String(formData.get("password") ?? "");
-  if (password.length < 8)
-    return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
+  const pwProblem = passwordProblem(password);
+  if (pwProblem) return { error: pwProblem };
   const supabase = await createClient();
   const {
     data: { user },

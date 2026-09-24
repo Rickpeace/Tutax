@@ -2,9 +2,10 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-/** Touch-Gerät (Finger statt Maus) ODER schmaler Bildschirm — dort gibt es keine Browser-
- * Erweiterung (Handy-Audit 24.09.2026: Aufnahme-Wege dort nicht als Empfehlung zeigen). */
-export const MOBILE_QUERY = "(pointer: coarse), (max-width: 639px)";
+/** Touch-Gerät (Finger statt Maus) — dort gibt es keine Browser-Erweiterung (Handy-Audit
+ * 24.09.2026: Aufnahme-Wege dort nicht als Empfehlung zeigen). Bewusst NICHT an der Breite
+ * festgemacht: ein schmales Desktop-Fenster (geteilter Bildschirm) kann aufnehmen (Runde 4). */
+export const MOBILE_QUERY = "(pointer: coarse)";
 /** Nur Touch-Gerät (Finger statt Maus). */
 export const COARSE_QUERY = "(pointer: coarse)";
 

@@ -26,6 +26,36 @@ export async function GET(request: NextRequest) {
   const code = sp.get("code");
   const next = sp.get("next") ?? "/app";
 
+  // Runde 4: Link-Scanner (Outlook Safe Links, Defender …) rufen Mail-Links vorab per GET auf.
+  // Das Einmal-Token wird darum NICHT beim Abruf eingelöst, sondern erst per Knopf auf der
+  // Zwischenseite /link (POST unten). PKCE-`code` ist ohne Browser-Cookie ohnehin wertlos.
+  if (tokenHash && type) {
+    const q = new URLSearchParams({ token_hash: tokenHash, type, next });
+    return NextResponse.redirect(new URL(`/link?${q.toString()}`, request.url));
+  }
+  return handle(request, { tokenHash: null, type: null, code, next });
+}
+
+/** Knopf auf /link: löst das Token ein (setzt die Session-Cookies) und leitet weiter. */
+export async function POST(request: NextRequest) {
+  const form = await request.formData().catch(() => null);
+  const str = (k: string) => {
+    const v = form?.get(k);
+    return typeof v === "string" && v ? v : null;
+  };
+  return handle(request, {
+    tokenHash: str("token_hash"),
+    type: str("type") as EmailOtpType | null,
+    code: null,
+    next: str("next") ?? "/app",
+  });
+}
+
+async function handle(
+  request: NextRequest,
+  { tokenHash, type, code, next }: { tokenHash: string | null; type: EmailOtpType | null; code: string | null; next: string },
+) {
+
   // Absolute (Same-Origin-)URL auf Pfad reduzieren, dann Open-Redirect-Schutz.
   let candidate = next;
   if (!next.startsWith("/")) {
@@ -37,7 +67,8 @@ export async function GET(request: NextRequest) {
     }
   }
   const redirectTo = safeNext(candidate, "/app");
-  const dest = (p: string) => NextResponse.redirect(new URL(p, request.url));
+  // 303: nach dem POST der Weiterleitung per GET folgen.
+  const dest = (p: string) => NextResponse.redirect(new URL(p, request.url), 303);
 
   if (tokenHash && type) {
     const supabase = await createClient();

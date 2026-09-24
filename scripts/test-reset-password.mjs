@@ -70,6 +70,8 @@ try {
       `${BASE}/auth/confirm?token_hash=${link.properties.hashed_token}&type=recovery&next=/reset`,
       { waitUntil: "domcontentloaded" },
     );
+    // Zwischenseite gegen Link-Scanner (Runde 4): Knopf drücken.
+    await page.locator('form[action="/auth/confirm"] button[type="submit"]').click();
     await page.waitForURL(/\/reset/, { timeout: 30_000 });
     await page.locator('input[name="password"]').first().fill(PW2);
     await page.locator('button[type="submit"]').first().click();

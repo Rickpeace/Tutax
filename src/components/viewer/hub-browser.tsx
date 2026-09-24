@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, Layers, ChevronRight, Loader2 } from "lucide-react";
 import { labelsFor, t as translate, type HubLabels, type HubLang } from "@/lib/i18n-hub";
 import { categoryColor, type CategoryColor } from "@/lib/category-colors";
+import { matchesQuery } from "@/lib/search-match";
 
 export type HubTutorial = {
   title: string;
@@ -50,19 +51,14 @@ export function HubBrowser({
   // Query-Suffix für Karten-Links (?lang=… bzw. leer).
   const suffix = langQuery ? `?${langQuery}` : "";
   const [q, setQ] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const groups = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const term = q.trim();
     // Kategoriename wird mitgesucht: er steht als Überschrift sichtbar auf der Seite,
     // wer ihn eintippt, erwartet die Anleitungen darunter (nicht „nichts gefunden“).
-    const filtered = term
-      ? items.filter(
-          (t) =>
-            t.title.toLowerCase().includes(term) ||
-            (t.description ?? "").toLowerCase().includes(term) ||
-            t.category.toLowerCase().includes(term),
-        )
-      : items;
+    // Umlaut-Schreibweisen + Wortreihenfolge egal (lib/search-match.ts, Runde 4).
+    const filtered = term ? items.filter((t) => matchesQuery(term, [t.title, t.description, t.category])) : items;
     const m = new Map<string, HubTutorial[]>();
     for (const t of filtered) {
       const l = m.get(t.category) ?? [];
@@ -123,7 +119,8 @@ export function HubBrowser({
       {/* Große Such-Pille (Design 3b) — Schattenfarbe CI-neutral aus der Ink. */}
       <div
         data-tx="search"
-        className="mx-auto mb-8 flex max-w-[520px] items-center gap-2.5 rounded-full border-2 px-5 py-3 sm:py-3.5"
+        onClick={() => searchRef.current?.focus()}
+        className="mx-auto mb-8 flex max-w-[520px] cursor-text items-center gap-2.5 rounded-full border-2 px-5 py-3 focus-within:ring-2 focus-within:ring-[var(--brand-accent)] sm:py-3.5"
         style={{
           background: "var(--brand-paper, #fff)",
           color: "var(--brand-ink)",
@@ -133,6 +130,7 @@ export function HubBrowser({
       >
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <input
+          ref={searchRef}
           type="search"
           aria-label={L.searchAria}
           value={q}
@@ -154,7 +152,10 @@ export function HubBrowser({
               {translate(lang, "noneFound", { q: q.trim() })}
             </p>
             <button
-              onClick={() => setQ("")}
+              onClick={() => {
+                setQ("");
+                searchRef.current?.focus(); // Fokus nicht auf <body> verlieren (Runde 4)
+              }}
               className="mt-3 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors hover:border-[var(--brand-accent)]"
               style={{
                 background: "var(--brand-paper, #fff)",

@@ -64,6 +64,16 @@ const path_ = (page) => new URL(page.url()).pathname;
 const confirmLink = (hash, type, next) =>
   `${BASE}/auth/confirm?token_hash=${hash}&type=${type}${next ? `&next=${encodeURIComponent(next)}` : ""}`;
 
+// Mail-Link öffnen wie ein Mensch: token_hash-Links landen seit Runde 4 auf der Zwischenseite /link
+// (Schutz vor Link-Scannern) — dort den Knopf drücken.
+async function openLink(page, url) {
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  if (new URL(page.url()).pathname === "/link") {
+    await page.locator('form[action="/auth/confirm"] button[type="submit"]').click();
+    await page.waitForLoadState("domcontentloaded");
+  }
+}
+
 const { chromium } = resolvePlaywright();
 const browser = await chromium.launch({ headless: true });
 const fresh = async () => (await browser.newContext()).newPage();
@@ -91,7 +101,7 @@ try {
     }
     await track(data.user.id);
     const page = await fresh();
-    await page.goto(form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "signup"), { waitUntil: "domcontentloaded" });
+    await openLink(page, form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "signup"));
     await page.waitForURL((u) => /\/(app|onboarding)/.test(u.pathname), { timeout: 45_000 }).catch(() => {});
     const { data: u } = await admin.auth.admin.getUserById(data.user.id);
     ok(!!u?.user?.email_confirmed_at && /\/(app|onboarding)/.test(path_(page)), `Registrierung (${form}-Link): bestätigt + eingeloggt → ${path_(page)}`);
@@ -105,7 +115,7 @@ try {
   for (const form of ["verify", "token_hash"]) {
     const { data } = await admin.auth.admin.generateLink({ type: "magiclink", email: ml.email, options: { redirectTo: `${BASE}/auth/confirm` } });
     const page = await fresh();
-    await page.goto(form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "magiclink"), { waitUntil: "domcontentloaded" });
+    await openLink(page, form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "magiclink"));
     await page.waitForURL((u) => u.pathname.startsWith("/app"), { timeout: 45_000 }).catch(() => {});
     ok(path_(page).startsWith("/app"), `Magic-Link (${form}): eingeloggt in der App → ${path_(page)}`);
     await page.context().close();
@@ -114,16 +124,29 @@ try {
     const { data } = await admin.auth.admin.generateLink({ type: "magiclink", email: ml.email, options: { redirectTo: `${BASE}/auth/confirm` } });
     const link = confirmLink(data.properties.hashed_token, "magiclink");
     const p1 = await fresh();
-    await p1.goto(link, { waitUntil: "domcontentloaded" });
+    await openLink(p1, link);
     await p1.waitForURL((u) => u.pathname.startsWith("/app"), { timeout: 45_000 }).catch(() => {});
     const p2 = await fresh();
-    await p2.goto(link, { waitUntil: "domcontentloaded" });
+    await openLink(p2, link);
     await p2.waitForURL((u) => u.pathname.startsWith("/login"), { timeout: 45_000 }).catch(() => {});
     await p2.getByText(/nur einmal|ungültig|abgelaufen/i).first().waitFor({ timeout: 15_000 }).catch(() => {});
     const txt = await p2.locator("body").innerText().catch(() => "");
     ok(path_(p2) === "/login" && /nur einmal|ungültig|abgelaufen/i.test(txt), "Magic-Link zweimal benutzt → Anmeldeseite mit deutscher Erklärung");
     await p1.context().close();
     await p2.context().close();
+  }
+
+  {
+    // Runde 4: Link-Scanner (Outlook Safe Links & Co.) rufen den Link vorab ohne Cookies ab —
+    // danach muss er für den Menschen noch funktionieren.
+    const { data } = await admin.auth.admin.generateLink({ type: "magiclink", email: ml.email, options: { redirectTo: `${BASE}/auth/confirm` } });
+    const link = confirmLink(data.properties.hashed_token, "magiclink");
+    const scan = await fetch(link, { redirect: "follow" });
+    const human = await fresh();
+    await openLink(human, link);
+    await human.waitForURL((u) => u.pathname.startsWith("/app"), { timeout: 45_000 }).catch(() => {});
+    ok(scan.ok && path_(human).startsWith("/app"), `Link-Scanner verbraucht den Link nicht (Scanner ${scan.status}, Mensch → ${path_(human)})`);
+    await human.context().close();
   }
 
   // ── 3. Passwort zurücksetzen ──
@@ -134,7 +157,7 @@ try {
   for (const form of ["verify", "token_hash"]) {
     const { data } = await admin.auth.admin.generateLink({ type: "recovery", email: rs.email, options: { redirectTo: `${BASE}/auth/confirm?next=/reset` } });
     const page = await fresh();
-    await page.goto(form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "recovery", "/reset"), { waitUntil: "domcontentloaded" });
+    await openLink(page, form === "verify" ? data.properties.action_link : confirmLink(data.properties.hashed_token, "recovery", "/reset"));
     await page.waitForURL((u) => u.pathname === "/reset", { timeout: 45_000 }).catch(() => {});
     const newPw = `Neu${++n}Passwort!${stamp}`;
     let set = false;
@@ -165,7 +188,7 @@ try {
     await page.locator('button[type="submit"]').first().click();
     await page.waitForURL((u) => /\/(app|onboarding)/.test(u.pathname), { timeout: 45_000 });
     for (const [label, r] of [["erster Link", cur], ["zweiter Link", nxt]]) {
-      await page.goto(confirmLink(r.data.properties.hashed_token, "email_change"), { waitUntil: "domcontentloaded" });
+      await openLink(page, confirmLink(r.data.properties.hashed_token, "email_change"));
       await page.getByTestId("email-notice").waitFor({ timeout: 30_000 }).catch(() => {});
       const notice = (await page.getByTestId("email-notice").innerText().catch(() => "")).replace(/\s+/g, " ");
       ok(path_(page) === "/app/settings/profil" && notice.length > 0 && !!path_(page) && !/ungültig oder abgelaufen/.test(notice), `E-Mail ändern (${label}): Profil mit klarer Meldung → ${path_(page)} („${notice.slice(0, 90)}“)`);

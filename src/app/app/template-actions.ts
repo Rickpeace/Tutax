@@ -12,6 +12,7 @@ import { removeTutorialAudio } from "@/lib/tts";
 import { removeUnusedPublicCopies } from "@/lib/public-images";
 import type { Step, StepBranch } from "@/lib/types";
 import { isSafeStorageKey } from "@/lib/storage-path";
+import { UserError, withUserErrors } from "@/lib/action-error";
 
 const PRIVATE_BUCKET = "tutorial-images";
 const PUBLIC_BUCKET = "tutorial-images-public";
@@ -73,7 +74,7 @@ export async function setTemplateEnabled(templateId: string, enabled: boolean) {
  * Fork beim Bearbeiten (§14): kopiert das Template in den Account (eigene Kopie),
  * verknüpft es und öffnet die Kopie im Editor. Ab jetzt „Angepasst".
  */
-export async function forkTemplate(templateId: string) {
+export const forkTemplate = withUserErrors(async function forkTemplate(templateId: string) {
   const { account } = await requireAccount();
   const supabase = await createClient();
 
@@ -153,6 +154,21 @@ export async function forkTemplate(templateId: string) {
     status: "published", // bleibt nahtlos sichtbar (UI ändert sich nicht, §14)
     slug: forkSlug,
   });
+  if (forkErr?.code === "23505") {
+    // Gleichzeitiges „Anpassen“ (zweiter Tab/zweite Person) mit derselben Adresse: auf die Kopie des
+    // anderen warten und dorthin wechseln statt „nicht geklappt“ (Runde 4).
+    for (let i = 0; i < 20; i++) {
+      const { data: w } = await admin
+        .from("account_templates")
+        .select("forked_tutorial_id")
+        .eq("account_id", account.id)
+        .eq("template_id", templateId)
+        .maybeSingle();
+      if (w?.forked_tutorial_id) redirect(`/app/tutorials/${w.forked_tutorial_id}`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new UserError("Diese Anleitung wird gerade schon angepasst – bitte laden Sie die Seite neu.");
+  }
   if (forkErr) throw new Error("Kopie der Vorlage konnte nicht angelegt werden: " + forkErr.message);
   const abandonFork = async (why: string): Promise<never> => {
     await admin.from("tutorials").delete().eq("id", forkId).eq("account_id", account.id);
@@ -257,7 +273,7 @@ export async function forkTemplate(templateId: string) {
   invalidateHubTag(account.slug);
   revalidatePath("/app");
   redirect(`/app/tutorials/${forkId}`);
-}
+});
 
 /** „Auf Standard zurücksetzen": eigene Kopie verwerfen, wieder zentrale Version. */
 export async function resetTemplate(templateId: string) {

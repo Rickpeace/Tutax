@@ -129,7 +129,7 @@
   --secondary: #f7f1e6; /* Beige-Fläche */
   --secondary-foreground: #33291f;
   --muted: #f7f1e6;
-  --muted-foreground: #8a7a63; /* Sekundärtext gedämpft */
+  --muted-foreground: #76674f; /* Sekundärtext gedämpft — ≥ 4,5:1 auch auf #fdf3ec (WCAG AA, Runde 4; vorher #8a7a63 = 3,8:1) */
   --faint: #b3a48c; /* Muted-Stufe 3 (Meta, Gruppenlabels) */
   --accent: #ffe8e2; /* Koralle-Pastell – Hover-/Badge-Fläche */
   --accent-foreground: #a8452e; /* Text auf Koralle-Pastell */

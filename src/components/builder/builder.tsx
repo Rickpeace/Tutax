@@ -18,7 +18,7 @@ import { RecordIntoDialog, type RecordTarget } from "@/components/builder/record
 import { ImproveTextsDialog, IMPROVE_TEXTS_EVENT } from "@/components/builder/improve-texts";
 import { buildRenderTree, flattenFlow } from "@/lib/builder/tree";
 import { appendAnchor, deleteRewireTarget, swapPair as findSwapPair, swapPlan } from "@/lib/builder/rewire";
-import { unwrap, isNavigationError } from "@/lib/action-error";
+import { unwrap, isNavigationError, UserError } from "@/lib/action-error";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { MOBILE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import type { Step, StepBranch, Highlight, StepCondition } from "@/lib/types";
@@ -171,7 +171,13 @@ export function Builder({
   // einer Abmeldung still auf /login bzw. offline auf die Fehlerseite, der Text war weg
   // (Grenzfall-Audit 24.09.).
   const reportSaveError = useCallback(
-    async (fn: () => Promise<unknown>, canRetry: boolean) => {
+    async (fn: () => Promise<unknown>, canRetry: boolean, err?: unknown) => {
+      // Inhaltliche Ablehnung (zu langer Text, Org gewechselt …): genau das sagen — „Erneut
+      // versuchen“ hülfe dort nie (Runde 4).
+      if (err instanceof UserError) {
+        toast.error(`Nicht gespeichert – ${err.message}`, { id: "builder-save-error", duration: 12_000 });
+        return;
+      }
       if (canRetry) failed.current.push(fn);
       let retried = false;
       const resync = () => {
@@ -236,7 +242,7 @@ export function Builder({
           setTimeout(() => window.location.reload(), 1800);
           return;
         }
-        void reportSaveError(fn, opts?.retry !== false);
+        void reportSaveError(fn, opts?.retry !== false, e);
       }).finally(() => {
         pending.current -= 1;
       });
@@ -255,7 +261,7 @@ export function Builder({
       // await -> wirft bei Fehler, damit der Aufrufer KEINEN Erfolg meldet (Toast/Nav).
       // Kein „Erneut versuchen“ in der Meldung: der Speichern-Knopf im Panel bleibt stehen
       // und IST der erneute Versuch (sonst bliebe das Panel trotz Erfolg „ungespeichert“).
-      await persist(() => updateStep(id, patch), { retry: false });
+      await persist(async () => unwrap(await updateStep(id, patch)), { retry: false });
     },
     [persist],
   );
@@ -640,7 +646,7 @@ export function Builder({
       );
       // Thumbnail neu laden lassen, auch wenn der Pfad identisch bleibt.
       setImgBust((m) => ({ ...m, [stepId]: (m[stepId] ?? 0) + 1 }));
-      persist(() => updateStep(stepId, highlights ? { ...img, highlights } : img));
+      persist(async () => unwrap(await updateStep(stepId, highlights ? { ...img, highlights } : img)));
       if (highlights) toast("Verpixelung vom vorigen Schritt übernommen – bitte prüfen");
     },
     [persist, steps, previousOf],
@@ -666,7 +672,7 @@ export function Builder({
         highlights: [] as Highlight[],
       };
       setSteps((p) => p.map((s) => (s.id === stepId ? { ...s, ...cleared } : s)));
-      const removal = persist(() => updateStep(stepId, cleared));
+      const removal = persist(async () => unwrap(await updateStep(stepId, cleared)));
       toast("Bild entfernt", {
         action: {
           label: "Rückgängig",
@@ -676,7 +682,7 @@ export function Builder({
             // Erst nach dem Entfernen schreiben (sonst könnte es das Wiederherstellen überholen).
             persist(async () => {
               await removal.catch(() => {});
-              await updateStep(stepId, snapshot);
+              unwrap(await updateStep(stepId, snapshot));
             });
           },
         },
@@ -690,7 +696,7 @@ export function Builder({
       setSteps((prev) =>
         prev.map((s) => (s.id === stepId ? { ...s, highlights } : s)),
       );
-      persist(() => updateStep(stepId, { highlights }));
+      persist(async () => unwrap(await updateStep(stepId, { highlights })));
     },
     [persist],
   );

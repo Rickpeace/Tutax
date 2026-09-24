@@ -13,6 +13,7 @@ export function AutoCi({
   endpoint = "/api/theme/analyze",
   successMsg = "CI übernommen! Farben aktualisiert.",
   inputLabel = "Adresse Ihrer Website",
+  onDone,
 }: {
   initialUrl: string;
   compact?: boolean;
@@ -20,6 +21,8 @@ export function AutoCi({
   successMsg?: string;
   /** Name des Eingabefelds für Screenreader und die Live-Führung (zwei Felder je Seite). */
   inputLabel?: string;
+  /** Statt die Seite neu zu laden (Aussehen-Editor: gewählte Grundlage + Eingaben bleiben). */
+  onDone?: () => void;
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, start] = useTransition();
@@ -36,7 +39,8 @@ export function AutoCi({
         if (!res.ok) throw new Error(data.error ?? "Fehler");
         if (data.ok) {
           toast.success(successMsg);
-          setTimeout(() => window.location.reload(), 900);
+          if (onDone) onDone();
+          else setTimeout(() => window.location.reload(), 900);
         } else if (data.message) {
           toast.message(data.message);
         } else {

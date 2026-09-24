@@ -16,6 +16,7 @@ import { HtmlLang } from "@/components/viewer/html-lang";
 import { resolveLang, labelsFor, t, isExtraLang, LANG_BCP47, type HubLang } from "@/lib/i18n-hub";
 import type { Step, StepBranch, Tutorial } from "@/lib/types";
 import { brandedTheme, isPro, planLanguages } from "@/lib/plan";
+import { publicAccountName } from "@/lib/public-name";
 
 // Öffentliche Druckansicht: gleiche gecachten Daten wie die Tutorial-Seite
 // (Cache Components -> 'use cache' + Hub-/Tutorial-Tags; Mutationen invalidieren).
@@ -32,6 +33,7 @@ async function load(accountSlug: string, tutorialSlug: string, lang: HubLang) {
     .eq("slug", accountSlug)
     .single();
   if (!account) return null;
+  account.name = publicAccountName(account.name as string | null); // nie eine E-Mail öffentlich
 
   const tutorialId = await resolveCustomerTutorial(admin, account.id, tutorialSlug);
   if (!tutorialId) return null;

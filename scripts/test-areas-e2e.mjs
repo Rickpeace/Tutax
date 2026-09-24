@@ -982,10 +982,12 @@ async function phaseG() {
     // Magic Link (per Admin erzeugt — keine echte Mail)
     const { data: ml } = await admin.auth.admin.generateLink({ type: "magiclink", email: u.email });
     await go(page, `/auth/confirm?token_hash=${ml.properties.hashed_token}&type=magiclink&next=/app/automationen`);
+    await Promise.all([page.waitForNavigation({ timeout: 30_000 }).catch(() => {}), page.locator('form[action="/auth/confirm"] button[type="submit"]').click()]).catch(() => {}); // Zwischenseite (Runde 4)
     check(/\/app\/automationen/.test(page.url()), "Magic Link meldet an und fuehrt zu next", "Magic Link fuehrt nicht in die App", page.url());
     // Derselbe Link ein zweites Mal -> verbraucht -> verstaendlicher Hinweis
     await go(page, "/logout");
     await go(page, `/auth/confirm?token_hash=${ml.properties.hashed_token}&type=magiclink`);
+    await Promise.all([page.waitForNavigation({ timeout: 30_000 }).catch(() => {}), page.locator('form[action="/auth/confirm"] button[type="submit"]').click()]).catch(() => {}); // Zwischenseite (Runde 4)
     t = await bodyText(page);
     info(`Verbrauchter Link -> ${page.url()}`);
     check(/ungültig|abgelaufen/i.test(t), "Verbrauchter Link: Hinweis auf der Anmeldeseite", "Abgelaufener/verbrauchter E-Mail-Link landet ohne jede Erklaerung auf der Anmeldeseite", `Seite ${page.url()}: ${t.slice(0, 160)}`);
@@ -998,6 +1000,7 @@ async function phaseG() {
     // Passwort zuruecksetzen per Link
     const { data: rec } = await admin.auth.admin.generateLink({ type: "recovery", email: u.email });
     await go(page, `/auth/confirm?token_hash=${rec.properties.hashed_token}&type=recovery&next=/reset`);
+    await Promise.all([page.waitForNavigation({ timeout: 30_000 }).catch(() => {}), page.locator('form[action="/auth/confirm"] button[type="submit"]').click()]).catch(() => {}); // Zwischenseite (Runde 4)
     check(/\/reset/.test(page.url()), "Zuruecksetzen-Link fuehrt zu /reset", "Zuruecksetzen-Link landet falsch", page.url());
     await page.locator("#password").fill("Neu12345!x");
     await page.locator("form").getByRole("button").last().click();
