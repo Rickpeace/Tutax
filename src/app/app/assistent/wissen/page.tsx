@@ -7,9 +7,13 @@ import { relativeDe } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { KbImport } from "@/components/app/kb-import";
 import { createArticle } from "./actions";
+import { isPro } from "@/lib/plan";
 
 export default async function KnowledgePage() {
   const { account } = await requireAccount();
+  // Gate auf der SEITE selbst (PPR-Layout-Gate-Falle: sonst gingen die Daten trotz Sperrkarte im
+  // Seiten-Payload mit, Runde 4). Die Sperrkarte zeigt das Layout.
+  if (!isPro(account)) return null;
   const supabase = await createClient();
   const [{ data: articles }, { data: theme }] = await Promise.all([
     supabase

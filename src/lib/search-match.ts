@@ -3,14 +3,12 @@
 // „portal passwort“ findet „Passwort im Portal ändern“. Clientsicher (keine Imports).
 
 const DIGRAPH: Record<string, string> = { ä: "ae", ö: "oe", ü: "ue", ß: "ss" };
+/** Kombinierende Akzentzeichen (nach NFD-Zerlegung). */
+const COMBINING = /[̀-ͯ]/g;
 
 /** Grundform: klein, ß→ss, Akzente/Umlaute weg (ü→u). */
 function base(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/ß/g, "ss")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+  return s.toLowerCase().replace(/ß/g, "ss").normalize("NFD").replace(COMBINING, "");
 }
 
 /** Umschreibung: klein, ä→ae, ö→oe, ü→ue, ß→ss, übrige Akzente weg. */
@@ -19,7 +17,7 @@ function digraph(s: string): string {
     .toLowerCase()
     .replace(/[äöüß]/g, (c) => DIGRAPH[c] ?? c)
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+    .replace(COMBINING, "");
 }
 
 /** Passt die Suchanfrage (alle Wörter, beliebige Reihenfolge) auf einen der Texte? */

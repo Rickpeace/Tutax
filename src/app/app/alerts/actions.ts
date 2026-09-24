@@ -14,6 +14,7 @@ import { translateStepDelta } from "@/lib/translate-jobs";
 import { ensureStepAudio } from "@/lib/tts";
 import { withUserErrors, UserError } from "@/lib/action-error";
 import { isPro, PRO_REQUIRED } from "@/lib/plan";
+import { bodyInfo } from "@/lib/guide-ai";
 
 function plainBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -82,6 +83,13 @@ export const applyDriftSuggestions = withUserErrors(async function applyDriftSug
       }) ?? null;
   }
   if (!target) throw new UserError("Passender Schritt nicht gefunden – bitte im Editor anpassen.");
+  // Formatierter Text (Links, Listen, Fett …) ginge beim Umschreiben als ein schlichter Absatz
+  // verloren — und die Änderung wäre sofort live (Runde 4). Dann lieber im Editor anpassen lassen.
+  if (!bodyInfo(target.body).simple) {
+    throw new UserError(
+      "Dieser Schritt enthält Formatierungen (z. B. Links oder Aufzählungen), die beim automatischen Übernehmen verloren gingen. Bitte passen Sie ihn im Editor an – der Hinweis bleibt so lange offen.",
+    );
+  }
 
   const punkte = selected
     .map((it, k) => `${k + 1}) Problem: ${it.problem ?? ""}\n   Korrektur: ${it.suggestion ?? ""}`)

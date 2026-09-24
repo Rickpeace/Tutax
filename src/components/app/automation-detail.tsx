@@ -85,7 +85,39 @@ export type AutomationRunView = {
   startedAt: string;
   finishedAt: string | null;
   detail: string | null;
+  /** Schritt, bei dem der Lauf zuletzt stand (für „bei Schritt N“). */
+  step?: number | null;
 };
+
+// Technische Gründe aus der Erweiterung → verständliche Sätze (Runde 4: vorher roh „werte-fehlen“).
+const RUN_DETAIL_DE: Record<string, string> = {
+  "werte-fehlen": "Es fehlten Angaben für den Lauf.",
+  "keine-startseite": "Die Startseite der Automation war nicht geöffnet.",
+  "kein-ziel-tab": "Der passende Browser-Tab war nicht mehr offen.",
+  "ablauf-fehler": "Der Ablauf wurde unerwartet unterbrochen.",
+  "no-start": "Die Startseite der Automation war nicht geöffnet.",
+  "no-tab": "Der passende Browser-Tab war nicht mehr offen.",
+  "option-not-found": "Die gewünschte Auswahl gab es auf der Seite nicht.",
+  "fill-error": "Ein Feld ließ sich nicht ausfüllen.",
+  "select-error": "Eine Auswahl ließ sich nicht setzen.",
+  "toggle-error": "Ein Kontrollkästchen ließ sich nicht umschalten.",
+  "not-fillable": "Ein Feld ließ sich nicht ausfüllen.",
+  "no-selector": "Ein Schritt hat kein ansteuerbares Element.",
+  "text-mismatch": "Eine Stelle auf der Seite wurde nicht gefunden.",
+  "ambiguous": "Eine Stelle auf der Seite war nicht eindeutig.",
+  "css-miss": "Eine Stelle auf der Seite wurde nicht gefunden.",
+  "file-missing": "Die hochzuladende Datei fehlte.",
+  "download-missing": "Die erwartete Datei wurde nicht heruntergeladen.",
+  "wait-login": "Die Anmeldung auf der Website wurde nicht abgeschlossen.",
+  "waiting-login": "Die Anmeldung auf der Website wurde nicht abgeschlossen.",
+};
+function runDetailText(detail: string): string {
+  const d = detail.trim();
+  if (RUN_DETAIL_DE[d]) return RUN_DETAIL_DE[d];
+  // Unbekannter Kurz-Code: nicht roh zeigen.
+  if (/^[a-z]+(-[a-z]+)+$/.test(d)) return "Der Lauf wurde mit einem Fehler beendet.";
+  return d;
+}
 
 // Wochentag-Auswahl. Werte folgen der JS-Konvention (0=Sonntag) — deckungsgleich mit
 // nextFireTime (getUTCDay) in der Extension.
@@ -129,8 +161,9 @@ const MODE_LABEL: Record<string, string> = {
   auto: "Automatisch",
 };
 
-function formatDuration(startedAt: string, finishedAt: string | null): string {
-  if (!finishedAt) return "läuft …";
+function formatDuration(startedAt: string, finishedAt: string | null, status?: string): string {
+  // Ohne Ende, aber nicht mehr „läuft“ (nie zurückgemeldet): nicht „läuft …“ zeigen (Runde 4).
+  if (!finishedAt) return status && status !== "running" ? "ohne Rückmeldung" : "läuft …";
   const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
   if (!Number.isFinite(ms) || ms < 0) return "–";
   const s = Math.round(ms / 1000);
@@ -240,7 +273,7 @@ export function AutomationDetail({
     setCurrentTitle(clean);
     startTransition(async () => {
       try {
-        await renameAutomation(id, clean);
+        unwrap(await renameAutomation(id, clean));
         toast.success("Umbenannt");
       } catch (e) {
         setCurrentTitle(title);
@@ -259,7 +292,7 @@ export function AutomationDetail({
   function saveParams() {
     startTransition(async () => {
       try {
-        await updateAutomationParams(id, paramState);
+        unwrap(await updateAutomationParams(id, paramState));
         setSavedParams(paramState);
         toast.success("Angaben gespeichert");
       } catch (e) {
@@ -273,7 +306,7 @@ export function AutomationDetail({
   function clearStepCondition(stepId: string) {
     startTransition(async () => {
       try {
-        await setAutomationStepCondition(id, stepId, null);
+        unwrap(await setAutomationStepCondition(id, stepId, null));
         toast.success("Bedingung entfernt — der Schritt läuft immer.");
         router.refresh();
       } catch (e) {
@@ -332,7 +365,7 @@ export function AutomationDetail({
     setDeleteOpen(false);
     startTransition(async () => {
       try {
-        await deleteAutomation(id);
+        unwrap(await deleteAutomation(id));
         toast.success("Gelöscht");
         router.push("/app/automationen");
       } catch (e) {
@@ -862,11 +895,12 @@ export function AutomationDetail({
                 <span className="font-bold text-ink-2">
                   {MODE_LABEL[r.mode] ?? r.mode}
                 </span>
-                <span className="text-faint">{formatDuration(r.startedAt, r.finishedAt)}</span>
+                <span className="text-faint">{formatDuration(r.startedAt, r.finishedAt, r.status)}</span>
                 <span className="text-faint">{relativeDe(r.startedAt)}</span>
-                {r.detail && (
+                {(r.detail || (r.status !== "success" && r.status !== "running" && r.step)) && (
                   <span className="w-full text-[12px] font-semibold text-muted-foreground">
-                    {r.detail}
+                    {r.status !== "success" && r.step ? `Bei Schritt ${r.step}: ` : ""}
+                    {r.detail ? runDetailText(r.detail) : ""}
                   </span>
                 )}
               </li>

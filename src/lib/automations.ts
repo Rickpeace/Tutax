@@ -371,7 +371,10 @@ export async function convertTutorialToAutomation(
       const secretHay = `${label} ${s.title ?? ""}`;
       // Gleich beschriftete Felder unterscheidbar machen („New Todo Input“ zweimal → „… (2)“),
       // sonst wusste man im Start-Dialog nicht, welches Feld welches ist (Erweiterungs-Audit 24.09.).
-      const sameLabel = params.filter((p) => p.label === label || p.label.startsWith(`${label} (`)).length;
+      // Nur genau gleiche bzw. schon nummerierte („E-Mail (2)“) zählen — nicht „E-Mail (privat)“.
+      const isNumbered = (l: string) =>
+        l.startsWith(`${label} (`) && /^\d+\)$/.test(l.slice(label.length + 2));
+      const sameLabel = params.filter((p) => p.label === label || isNumbered(p.label)).length;
       params.push({
         key,
         label: sameLabel ? `${label} (${sameLabel + 1})` : label,

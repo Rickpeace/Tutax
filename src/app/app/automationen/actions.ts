@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAccount } from "@/lib/account";
+import { canEdit } from "@/lib/roles";
 import {
   AUTOMATION_ERR_BRANCHING,
   AUTOMATION_ERR_NOT_FOUND,
@@ -20,6 +21,21 @@ import {
 import { validateStepCondition, validateStepJump } from "@/lib/guide";
 import { AUTOMATION_TITLE_MAX } from "@/lib/text-limits";
 import { withUserErrors, UserError } from "@/lib/action-error";
+
+/**
+ * Bearbeiter/Inhaber UND die Automation gehört zum aktiven Konto (Runde 4): vorher meldeten
+ * Umbenennen/Löschen/Zeitplan als Mitarbeiter oder nach fremdem Löschen „Erfolg“, obwohl RLS
+ * still 0 Zeilen traf.
+ */
+async function requireOwnAutomation(id: string) {
+  const { account, role } = await requireAccount();
+  if (!canEdit(role)) throw new UserError("Automationen bearbeiten dürfen nur Inhaber und Bearbeiter.");
+  const supabase = await createClient();
+  const { data } = await supabase.from("automations").select("id").eq("id", id).eq("account_id", account.id).maybeSingle();
+  if (!data) throw new UserError("Diese Automation gibt es nicht mehr – bitte laden Sie die Seite neu.");
+  return supabase;
+}
+
 
 // Server-Actions für den Automationen-Bereich (Welle 36). Alle Mutationen sind
 // konto-scoped: Lese-/Schreibrechte laufen über den Session-Client (RLS-Policy
@@ -66,10 +82,10 @@ export const createAutomationFromTutorial = withUserErrors(async function create
 });
 
 /** Automation umbenennen (konto-scoped via RLS). */
-export async function renameAutomation(id: string, title: string) {
+export const renameAutomation = withUserErrors(async function renameAutomation(id: string, title: string) {
   const clean = title.trim().slice(0, AUTOMATION_TITLE_MAX);
   if (!clean) return;
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(id);
   const { error } = await supabase
     .from("automations")
     .update({ title: clean, updated_at: new Date().toISOString() })
@@ -77,23 +93,30 @@ export async function renameAutomation(id: string, title: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/app/automationen");
   revalidatePath(`/app/automationen/${id}`);
-}
+});
 
 /**
  * Parameter-Definitionen einer Automation aktualisieren (label/type/required editierbar,
  * key read-only). Streng validiert (sanitizeParams); source nur 'manual'|'stored'.
  * WERTE gibt es hier nie — nur Definitionen. Konto-scoped via RLS.
  */
-export async function updateAutomationParams(id: string, params: unknown) {
+export const updateAutomationParams = withUserErrors(async function updateAutomationParams(id: string, params: unknown) {
+  // Leere Bezeichnung: sonst erschien der interne Schlüssel („e_mail_2“) im Start-Dialog (Runde 4).
+  if (
+    Array.isArray(params) &&
+    params.some((p) => p && typeof p === "object" && typeof (p as { label?: unknown }).label === "string" && !(p as { label: string }).label.trim())
+  ) {
+    throw new UserError("Bitte geben Sie jeder Angabe einen Namen.");
+  }
   const clean = sanitizeParams(params);
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(id);
   const { error } = await supabase
     .from("automations")
     .update({ params: clean, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${id}`);
-}
+});
 
 /**
  * Zeitplan einer Automation setzen/entfernen (Welle 41). `schedule = null` entfernt den
@@ -110,7 +133,7 @@ export const setAutomationSchedule = withUserErrors(async function setAutomation
   } catch (e) {
     throw asUserError(e);
   }
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(id);
   const { error } = await supabase
     .from("automations")
     .update({ schedule: clean, updated_at: new Date().toISOString() })
@@ -126,13 +149,13 @@ export const setAutomationSchedule = withUserErrors(async function setAutomation
  * wird tolerant validiert (validateStepCondition): kaputt/leer/null → null. Konto-scoped via RLS
  * (automation_id-Filter zusätzlich als Gürtel-und-Hosenträger). WERTE gibt es hier nie.
  */
-export async function setAutomationStepCondition(
+export const setAutomationStepCondition = withUserErrors(async function setAutomationStepCondition(
   automationId: string,
   stepId: string,
   condition: unknown,
 ) {
   const clean = validateStepCondition(condition) ?? null;
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(automationId);
   const { error } = await supabase
     .from("automation_steps")
     .update({ condition: clean })
@@ -140,7 +163,7 @@ export async function setAutomationStepCondition(
     .eq("automation_id", automationId);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/automationen/${automationId}`);
-}
+});
 
 /**
  * Bedingte Schritte (Welle 42, Nachtrag): einen Schritt NACHTRÄGLICH als „nur wenn vorhanden"
@@ -150,7 +173,7 @@ export async function setAutomationStepCondition(
  * Schritt keinen Selektor (reiner Hinweis-Schritt), wirft die Action sprechend. Konto-scoped.
  */
 export const markAutomationStepOptional = withUserErrors(async function markAutomationStepOptional(automationId: string, stepId: string) {
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(automationId);
   const { data: step, error: readErr } = await supabase
     .from("automation_steps")
     .select("selector")
@@ -188,7 +211,7 @@ export const setAutomationStepJump = withUserErrors(async function setAutomation
   stepId: string,
   jump: unknown,
 ) {
-  const supabase = await createClient();
+  const supabase = await requireOwnAutomation(automationId);
 
   // Sprung entfernen.
   if (jump === null || jump === undefined) {
@@ -247,9 +270,9 @@ export const setAutomationStepJump = withUserErrors(async function setAutomation
 });
 
 /** Automation löschen (kaskadiert Schritte + Läufe). Konto-scoped via RLS. */
-export async function deleteAutomation(id: string) {
-  const supabase = await createClient();
+export const deleteAutomation = withUserErrors(async function deleteAutomation(id: string) {
+  const supabase = await requireOwnAutomation(id);
   const { error } = await supabase.from("automations").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/app/automationen");
-}
+});

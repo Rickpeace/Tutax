@@ -3,6 +3,7 @@ import { requireAccount } from "@/lib/account";
 import { dateDe } from "@/lib/format";
 import { loadOpenGaps } from "@/lib/gaps";
 import { GapAction } from "@/components/app/gap-action";
+import { isPro } from "@/lib/plan";
 
 /**
  * Offene Fragen (Wissenslücken): unbeantwortete Chat-Fragen, die der Assistent nicht
@@ -12,6 +13,9 @@ import { GapAction } from "@/components/app/gap-action";
  */
 export default async function FragenPage() {
   const { account } = await requireAccount();
+  // Gate auf der SEITE selbst (PPR-Layout-Gate-Falle: sonst gingen die Daten trotz Sperrkarte im
+  // Seiten-Payload mit, Runde 4). Die Sperrkarte zeigt das Layout.
+  if (!isPro(account)) return null;
   const gaps = await loadOpenGaps(account.id, 25);
 
   return (

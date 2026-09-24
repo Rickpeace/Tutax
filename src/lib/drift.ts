@@ -124,7 +124,13 @@ export async function runDriftCheck(
       const m = text.match(/\{[\s\S]*\}/);
       result = JSON.parse(m ? m[0] : text);
     } catch {
-      /* unparsebar -> als nicht-stale behandeln */
+      // Unlesbar (z. B. abgeschnittene Antwort) ist ein FEHLER, kein „alles aktuell“: sonst
+      // schloss der Check still alle offenen Hinweise und setzte „ok“ (Runde 4). Alte Hinweise
+      // bleiben, drift_checked_at wird nicht gesetzt.
+      throw new Error("Die Prüfung lieferte keine lesbare Antwort. Bitte später erneut versuchen.");
+    }
+    if (typeof result.is_stale !== "boolean") {
+      throw new Error("Die Prüfung lieferte keine vollständige Antwort. Bitte später erneut versuchen.");
     }
 
     // Quellen mergen (Modell + echte Zitate), nach URL deduplizieren.

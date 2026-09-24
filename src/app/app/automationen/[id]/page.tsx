@@ -40,7 +40,7 @@ export default async function AutomationDetailPage({
       .order("position", { ascending: true }),
     supabase
       .from("automation_runs")
-      .select("id, status, mode, trigger, started_at, finished_at, detail")
+      .select("id, status, mode, trigger, started_at, finished_at, detail, current_step")
       .eq("automation_id", id)
       .order("started_at", { ascending: false })
       .limit(10),
@@ -93,6 +93,7 @@ export default async function AutomationDetailPage({
     startedAt: r.started_at as string,
     finishedAt: (r.finished_at as string | null) ?? null,
     detail: (r.detail as string | null) ?? null,
+    step: typeof r.current_step === "number" ? (r.current_step as number) : null,
   }));
 
   return (
