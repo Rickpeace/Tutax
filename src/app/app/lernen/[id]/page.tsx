@@ -18,7 +18,9 @@ export default async function LernenDetailPage({
   const { id } = await params;
   const { account, userId, memberships } = await requireAccount({ allowMember: true });
   const supabase = await createClient();
-  const isOwner = memberships.find((m) => m.id === account.id)?.role === "owner";
+  // Schulungsnachweis sehen Inhaber UND Bearbeiter (Richard 24.09.2026); Mitarbeiter nur den eigenen Stand.
+  const myRole = memberships.find((m) => m.id === account.id)?.role;
+  const canSeeRecord = myRole === "owner" || myRole === "editor";
 
   const { data: tutorial } = await supabase
     .from("tutorials")
@@ -68,7 +70,7 @@ export default async function LernenDetailPage({
   const imageUrls = await trainingImageUrls(account.id, steps ?? []);
 
   // Owner-Zusatz: Schulungsnachweis-Tabelle (alle Mitglieder + Status).
-  const trainingRecord = isOwner ? await loadTrainingRecord(account.id, id, admin) : [];
+  const trainingRecord = canSeeRecord ? await loadTrainingRecord(account.id, id, admin) : [];
 
   return (
     // Gleiche Breite wie die Live-/Vorschau-Ansicht (Schrittlisten-Sidebar ab lg).
@@ -93,7 +95,7 @@ export default async function LernenDetailPage({
         }}
       />
 
-      {isOwner && trainingRecord.length > 0 && (
+      {canSeeRecord && trainingRecord.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-faint">
             Schulungsnachweis
