@@ -102,6 +102,48 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
   Bearbeiter sehen „Allgemein“/„Tarif“ · gelöschte öffentliche Dateien ~1 h im Supabase-Cache
 - [ ] `CRON_SECRET` in Vercel prüfen — ohne ihn läuft die wöchentliche Business-Prüfung nie
 
+## Kunden-Audit 24.09.2026 (6 Prüfer aus Kundensicht, live; Erweiterung in echtem Chrome)
+
+Bereiche: Neukunde (Start → erste Anleitung) · Editor im Alltag · Hilfe-Seite für Endkunden ·
+Team/Schulungen/Assistent · Erweiterung (sichtbares Chrome) · Einstellungen/Design/Tarif.
+Regression: `test-editor-links`, `test-hub-contrast`, `test-hub-similarity`, `test-recorder-sensitive`,
+`test-guide-audit-panel`; Messung `measure-app-latency`.
+
+**Behoben (live):**
+- [x] 🔴 Links/Überschriften im Erklärtext gingen beim Speichern verloren, Schritt ließ den Editor
+  abstürzen (attrs ohne Prototyp über Server-Aktion) — auch Wissensartikel
+- [x] 🟠 Schritt einfügen nicht atomar (Abbruch = Rest der Anleitung unerreichbar) · zwei Tabs/Personen
+  zerschnitten den Ablauf (Umleitung jetzt serverseitig aus der DB) · Tippen während des Speicherns
+  ging verloren · Browser-Zurück ohne Rückfrage
+- [x] 🟠 Dunkles Kunden-Design machte die Hilfe-Seite unlesbar (Kontrast-Flächen), helle Akzente,
+  breite Logos, Vorschau = Hilfe-Seite
+- [x] 🟠 Erweiterung 2.19.4: Steuernummer/Steuer-ID/SV-Nr./Geburtsdatum u. a. im Klartext (jetzt
+  verpixelt + Server-Sicherheitsnetz) · Download am falschen Schritt · Bild bei neuem Tab ·
+  „Trennen“ nur lokal · Gratis-Video-Start · veraltete Listen · Feldnamen aus Überschriften ·
+  Auswahlliste ohne Wert · App-Adresse ohne https · Texte · Gratis-Vorwarnung
+- [x] 🟠 Schulungsnachweis: Zähler mit Ehemaligen/fremden Konten (Migration 0045 live)
+- [x] 🟡 Langsame Aktionen: Funktionen liefen in iad1 (USA), DB in eu-west-1 → `vercel.json`
+  regions dub1: Seiten 1,0–1,2 s → 0,36–0,63 s, Speichern 1,0 s → 0,53 s
+- [x] 🟡 Suche/„Meinten Sie“ ohne Mindest-Ähnlichkeit · Mischsprache in Vorschlägen/Chat ·
+  Chat 500 Zeichen still abgeschnitten · Kontaktbox PL/TR · Chat versprach Weiterleitung ·
+  Bots zählten als Aufrufe · „Steply“ im Tab-Titel ab Pro · Kategorie-Farben · ▶ trotz Ton aus
+- [x] 🟡 „Ich komme hier nicht weiter“ erreichte die Organisation nie → Insights „Hier kamen
+  Besucher nicht weiter“ · Wissenslücken zählen nur Unerledigte · Glocke/Hinweise/Team-Seite
+  nach Herabstufen stimmig · Rollenwechsel im Editor erkannt · Wissensartikel-Race
+- [x] 🟡 Neukunde: Formulare verloren Eingaben · „a@x“ als Adresse · Anmelden am Handy fehlte ·
+  leere Schritte veröffentlicht · Speichern-Knopf am Handy abgeschnitten · Einrichtung
+  „Mehr erfahren“ im Kreis · Website ungeprüft · QR-Download · Tarif-Seite für Business ·
+  falsche Angabe „Hosting in der EU“ entfernt · Logo-Upload prüft echte Bilder
+
+**Offen / Entscheidung Richard:**
+- [ ] **Support-Adresse** fehlt: `kontakt@steply.de` existiert nicht (Domain geparkt), Antworten
+  auf Mails gehen an noreply@dentdoc.de → echte Adresse festlegen (Startseite, Tarif, Reply-To)
+- [ ] **Organisationsname** optional → öffentliche Hilfe-Seite zeigt sonst E-Mail als Name, Adresse
+  wird aus der E-Mail gebildet (`handle_new_user`) → Pflichtfeld bzw. Adresse aus Name?
+- [ ] Unterbrochene Aufnahme nur Hinweis, kein Fortsetzen (IndexedDB) · „Bild ggf. ungenau“ wird
+  nicht hochgeladen (kein Feld) · /h-404 liefert HTTP 200 (PPR) · doppelte Feld-IDs auf
+  Anmelde-Seiten (versteckte Formulare) · Markierung umfärben / Verpixeln über vorhandener Form
+
 ## Voller Bug-Audit 23.09.2026 abends (6 Prüfer parallel, alles gegen live)
 
 Bereiche: Editor/Veröffentlichen · Erweiterung/Video/Automationen · KI + Tarif-Gates ·

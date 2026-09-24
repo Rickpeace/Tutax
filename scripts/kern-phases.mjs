@@ -1382,6 +1382,10 @@ export async function run(c) {
         actionHeaders = h;
       };
       page.on("request", grab);
+      // Seit 24.09. blockiert das Veröffentlichen VÖLLIG leere Schritte (kein Titel/Bild/Text) —
+      // den Schritten hier also einen Titel geben, damit „mit Schritten“ wirklich gilt.
+      await admin.from("steps").update({ title: "Beleg auswählen" }).eq("tutorial_id", leerId).eq("title", "");
+      await page.reload({ waitUntil: "domcontentloaded" });
       const pubBtn = page.getByTestId("publish-button");
       await pubBtn.waitFor({ timeout: 30_000 });
       await pubBtn.click();
