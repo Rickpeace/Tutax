@@ -32,6 +32,12 @@ Ergebnis als ein kaputtes. Berichte am Ende, welche Verifikationen mit welchem E
    werden, NACHDEM die zugehörige Migration auf der Live-DB angewandt ist — sonst gibt
    es 500er in Prod. Wellen-Agenten wenden Migrationen NICHT selbst an (Richard tut das);
    melde im Abschlussbericht klar, dass der Push bis zur Migration zurückzuhalten ist.
+7. **Push-Reihenfolge (Vercel).** Zuerst `main` pushen und warten, bis der Production-Build
+   erfolgreich ist (`gh api repos/Rickpeace/Tutax/commits/<sha>/status` = `success`), ERST
+   DANN `staging` auf denselben Stand ziehen und pushen. Beide direkt hintereinander ⇒
+   Vercel bricht den Production-Build ab bzw. überspringt ihn. Danach live per `curl` gegen
+   https://tutax-ivory.vercel.app prüfen. Hetzner-Teile (`video-worker/`) wirken erst nach
+   dem manuellen `deploy.sh` (siehe `video-worker/DEPLOY.md`).
 
 # Stack & Skills (autoritativ)
 

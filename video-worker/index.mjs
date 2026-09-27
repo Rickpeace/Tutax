@@ -707,7 +707,7 @@ async function processRenderJob(job) {
     }
 
     // 3) Rendern (reine Bausteine in render.mjs; deps = echte I/O).
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/[/*\s]+$/, "") || "https://steply.app"; // ANPASSEN falls andere Domain
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/[/*\s]+$/, "") || "https://tutax-ivory.vercel.app"; // Fallback = Live-App (steply.app gehört uns nicht)
     const { outFile, chaptersText } = await renderVideo(
       {
         runFfmpeg,

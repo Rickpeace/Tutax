@@ -5,7 +5,63 @@
 > Spezifikation: `../ARCHITEKTUR.md` · Infra/Deploy: `../INFRA.md`
 > **Design-Referenz NEU: `desing claude/` (README + SPEC-*.md, gitignored) — ersetzt prototyp-v4.jsx/§13-Farben.**
 
-Letztes Update: 2026-09-22 (Editor-Überarbeitung + KI-Texte + Eingaben, s. §7i; Details: REVIEW.md, offene Punkte: TODO.md)
+Letztes Update: 2026-09-27 (Audit + Bugsuch-Runden 1–5 vom 23./24.09., s. §7j; Details: REVIEW.md, offene Punkte: TODO.md)
+
+## 7j. Audit + Bugsuche Runden 1–5 (23./24.09.2026) — LIVE (main `f7dabd9`), Extension v2.19.9
+> Abhakbare Einzelbefunde: **REVIEW.md** (Abschnitte „Audit + Bugsuche 23.09.“ bis „Kunden-Runde 5“).
+> - **Sicherheit / DB-Schutz:** Migrationen **0042–0048** live (Speicherpfade nur im eigenen
+>   Konto + nur harmlose Zeichen `[A-Za-z0-9._/-]` ohne `..` → `src/lib/storage-path.ts`, DB 0047;
+>   REST-Schreib-/Lese-Grenzen 0043/0044; Schulungsnachweis-Wächter 0045; Härtung 0046
+>   (Kopie-Verknüpfung/KI-Index nur Server, öffentlicher Bucket nicht auflistbar); fremder Tarif
+>   nicht abfragbar 0048). Dazu: Erweiterungs-Brücke nur von echten Steply-Adressen (v2.19.2),
+>   Farben nur Hex, Skin-CSS ohne fremde Adressen, Logo wird neu kodiert, öffentlicher Player
+>   bekommt nur `toPublicStep` (`src/lib/public-step.ts`), sensible Abfrage-Parameter fliegen aus
+>   `page_url` (`src/lib/recorder.ts`), Fehlertexte über `src/lib/action-error.ts`.
+> - **Tarife serverseitig durchgesetzt (23.09.):** Gratis nutzt keine kostenpflichtige KI; Pro =
+>   Chat/Wissen/Offene Fragen/Logo+CI/Schulungen mit Nachweis/Video; Business = Sprachen, Vorlesen,
+>   KI-Design, „nur Team“, Video-Export (`src/lib/plan.ts`; Nachweis `test-pro-gates`, `test-business-e2e`).
+> - **Neu/umgebaut:** Einstellungen → Aussehen (Entwurf A, `components/app/appearance-editor.tsx`) ·
+>   Admin-Kundenverwaltung `/admin/kunden` (Liste, Details, Tarif-Wechsel, Support, Vorschau jeder
+>   Anleitung) · ein Mail-Design `src/lib/email/` (+ Willkommens-/Beitritts-Mail) · Mail-Links über
+>   Bestätigungsseite **`/link`** (`/auth/confirm` leitet GET dorthin um; erst der Knopf löst das
+>   Token ein → Link-Scanner verbrauchen es nicht) · Editor „Danach weiter mit“ (Antwort-Wege
+>   zusammenführen) · Hilfe-Adresse aus dem Kanzleinamen statt aus der E-Mail (Einrichtung) ·
+>   fehlende Anleitung zeigt Kanzlei-Hinweis `components/viewer/tutorial-missing.tsx` (inline
+>   gerendert; ein `not-found.tsx` im Segment griff unter PPR nicht, `f7dabd9`).
+> - **Richards Entscheidungen 24.09.:** Vorlesen startet erst nach ▶ (Wahl im Browser gemerkt) ·
+>   Cookie-Banner-Klicks werden automatisch „nur wenn vorhanden“ (Führung/Automation überspringen
+>   fehlende; v2.19.8) · Schulungsnachweis auch für Bearbeiter sichtbar (`app/lernen/[id]`) ·
+>   29 alte Test-Organisationen gelöscht (6 echte bleiben) · eigenes Impressum je Kunde vorerst
+>   nicht · **keine automatischen Tests in CI** (bestehendes Minimal-Gate `.github/workflows/ci.yml`
+>   = Typecheck + Lint bleibt).
+> - **Betrieb:** Vercel-Funktionen in **dub1** (neben Supabase eu-west-1, `vercel.json`) ·
+>   `sharp` = Nexts Version (sonst live alle /app-Aktionen 500) · weniger ISR-Writes: Schritt-
+>   Änderungen verwerfen nur noch den Cache DER Anleitung, nicht den ganzen Hub
+>   (`invalidateTutorialTags(…, { hub: false })`, Test `test-cache-step-edit`).
+> - **Erweiterung 2.19.3 → 2.19.9:** sensible Werte (Steuernummer/Steuer-ID/SV-Nr./IBAN …) verpixelt +
+>   Server-Sicherheitsnetz, Führung über Shadow DOM, Auswahllisten + Kontrollkästchen mit Zielzustand
+>   (auch in Automationen), Neu-laden-/Zurück-Schritte, kein Dateiname in Upload-Schritten,
+>   KI-Titel für Sofort-Anleitungen. Regression u. a. `test-consent-capture`, `test-exec-plan`,
+>   `test-recorder-sensitive`, `test-guide-typed-value`, `test-capture-gaps --strict`.
+>
+> **Offen — nur Richard kann das (Zugänge):**
+> 1. Supabase → Authentication: **„Secure password change“ + „Secure email change“** einschalten.
+> 2. Supabase → Authentication: **„Leaked password protection“** einschalten.
+> 3. **`CRON_SECRET` in Vercel** setzen (sonst 503 auf `/api/cron/drift`, Business-Aktualitätsprüfung läuft nie).
+> 4. **Video-Worker per `deploy.sh`** ausrollen — bis dahin wirken alle Worker-Änderungen seit dem
+>    letzten Deploy nicht, u. a. Runde 3 (Markierungen in Firmenfarbe) und Runde 4 (nur echte
+>    Video-Container, strengere Speicherpfade; die DB-Seite 0047 greift schon).
+> 5. **Chrome-Erweiterung auf v2.19.9 neu laden** (chrome://extensions → Aktualisieren).
+>
+> **Offene Produkt-Entscheidungen:** Datenschutzerklärung-Lücken → Anwalt (inkl. ob „Made in
+> Germany“ beworben werden darf; Betreiber-Angaben in Impressum/Datenschutz fehlen weiter) ·
+> Impressum je Kunde bewusst zurückgestellt · Schulungsnachweis: nur Mitarbeiter zählen? ·
+> DATEV-Vorlagen vs. generische Positionierung · keine CI-Tests (vorerst, Richard 24.09.).
+>
+> **Kontingente (24.09.):** Vercel (ISR-Writes/Funktionszeit) und Resend liegen nahe am Gratis-Limit →
+> große Prüfrunden lokal gegen `next build && next start` (`TEST_BASE=http://localhost:<port>`),
+> gegen live nur gezielte Smoke-Tests; **keine Test-Mails ohne Rückfrage** (Links per
+> `admin.auth.admin.generateLink` statt Versand); Cache-Invalidierung so eng wie möglich.
 
 ## 7i. Editor-Überarbeitung, Player, KI-Texte (21./22.09.2026, Wellen 48–54) — LIVE, Extension v2.18.3
 > - **Sofort-Aufnahme (W48–51):** Enter/Iframes/Hover/Varianten erfasst (`step.interaction`),
@@ -145,8 +201,11 @@ Schulungsnachweis.
 ```
 NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY,
 SUPABASE_JWKS_URL, SUPABASE_DB_URL (Session-Pooler!), NEXT_PUBLIC_APP_URL
-OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-4o Vision),
-                            Chatbot/RAG (gpt-4o-mini + text-embedding-3-small), Drift (gpt-4o-mini)
+OPENAI_API_KEY    = gesetzt (lokal + Vercel). Aktiviert ALLES: CI-Analyse, Chatbot/RAG, Drift,
+                    KI-Texte (Modelle in src/lib/ai.ts: gpt-5.4-mini + text-embedding-3-small,
+                    Vorlesen gpt-4o-mini-tts bzw. ElevenLabs)
+Weitere (nur Namen): RESEND_API_KEY, INVITE_FROM_EMAIL, ELEVENLABS_API_KEY,
+                    CRON_SECRET (← fehlt noch in Vercel, s. §7j)
 ```
 > KI-Entscheidung (vom Nutzer): ALLES über OpenAI. Zentrale Config `src/lib/ai.ts`
 > (aiConfigured()), Client `src/lib/openai.ts`, Prompts `src/lib/ai-prompts.ts`.
@@ -190,7 +249,15 @@ OPENAI_API_KEY    = LEER  ← EINZIGER KI-Key. Aktiviert ALLES: CI-Analyse (gpt-
   - Seeds/Pipelines: `seed-steply-help.mjs` (/h/steply-Doku), `shoot-steply-help.mjs <pw-dir>`
     (Screenshots + Auto-Markierungen), `backfill-tts.mjs <slug>` (Vorlesen für Bestand;
     mit `--experimental-strip-types` starten)
-  > Stand 2026-07-02: alle Live-Tests + Build + Lint(0) GRÜN. Lint ist in CI blockierend.
+  - **Seit 23./24.09.2026** (Auswahl; alle unter `scripts/`): `test-rest-guards` (REST-Grenzen,
+    u. a. 0043/0046), `test-db-guards` (0042), `test-storage-path` (Pfade inkl. Prozent-Kodierung),
+    `test-pro-gates` / `test-business-e2e` / `test-team-plans-e2e` (Tarife), `test-reset-password`,
+    `test-email-links` (Link-Scanner/`/link`), `test-video-container`, `test-search-match`,
+    `test-consent-capture`, `test-merge-branch`, `test-cache-step-edit`, `test-kern-durchlauf`
+    (Kern-Durchlauf in Phasen), `npm run test:capture` (Aufnahme-Muster, s. REVIEW-aufnahme-luecken.md).
+    ⚠️ Kontingente: große Läufe lokal gegen `next start`, Mail-Tests nur nach Rückfrage (s. §7j).
+  > Stand 2026-07-02: alle Live-Tests + Build + Lint(0) GRÜN. GitHub-Actions-Minimal-Gate
+  > (`.github/workflows/ci.yml`: Typecheck + Lint, blockierend) — automatische Tests in CI bewusst nicht (Richard 24.09.2026).
 
 ## 6. Architektur-Entscheidungen (mit Nutzer abgestimmt)
 - **Kapitel optional**: `steps.tutorial_id` direkt; `chapter_id` nullable (Schublade).
@@ -290,14 +357,13 @@ Kunden (Referenz-Modell, nicht Kopie). Fork erst beim Bearbeiten.
 
 ## 7e. KI scharf geschaltet (OPENAI_API_KEY gesetzt) — 2026-06-26
 - [x] Key lokal in `.env.local` gesetzt + verifiziert (text-embedding-3-small, 1536 Dim).
-      ⚠️ **Auch bei Vercel** eintragen, sonst hat die Live-Seite keine KI.
+      Auch in Vercel gesetzt (erledigt).
 - [x] **RAG-Backfill** `scripts/index-kb.mjs`: indexiert eigene Tutorials, Wissensartikel
       und aktivierte Standard-Templates (pro Account). End-to-end getestet (Frage→match_kb→gpt-4o-mini).
 - [x] `lib/kb.ts`: `indexTutorial`-Delete **account-scoped** (geteilte Templates sicher).
 - [x] `template-actions`: Aktivieren/Fork/Reset halten den Chatbot-Index automatisch in sync.
-- [x] **KI-Schritt-Assistent**: `/api/steps/suggest` (gpt-4o Vision) → Titel, Text, Markierung
-      aus Screenshot. Button im Builder (`step-panel.tsx`) übernimmt Vorschlag + Highlight.
-      Nur für eigene Tutorials (Templates haben account_id NULL → kein Upload-Pfad, s. §9).
+- [x] ~~**KI-Schritt-Assistent**: `/api/steps/suggest`~~ — am 02.07.2026 (Welle 20) wieder entfernt;
+      heute: „Texte mit KI verbessern“ im Editor + KI-Feinschliff nach der Sofort-Anleitung (`lib/guide-ai.ts`).
 
 ## 7f. Wellen-Ausbau 01.–02.07.2026 (Fable dirigiert, Opus baut in Worktrees) — ERLEDIGT
 > Vollständiges Protokoll: **REVIEW.md → „Erledigt in der Nachtschicht"-Block.** Kurzfassung:
@@ -335,14 +401,16 @@ Historische Spec-Lücken aus `ARCHITEKTUR.md`, die weiterhin offen sind:
 - [ ] Detail: Template-BILDER — bei Bild-Templates Upload-Pfad (account_id NULL) + Fork-Bildkopie nachziehen.
 
 ## 10. Datei-Landkarte
-- `src/app/(auth)/` — Login/Signup/Actions · `src/app/auth/confirm/route.ts`
-- `src/app/app/` — Dashboard, Layout, `actions.ts` (CRUD+Publish), `template-actions.ts` (Kunden-Templates), `tutorials/[id]/` (Editor+actions)
-- `src/app/admin/` — Admin-Bereich (Templates) · `src/lib/admin.ts` (checkAdmin/requireAdmin)
+- `src/app/(auth)/` — Login/Signup/Actions + `link/` (Bestätigungsseite für Mail-Links) · `src/app/auth/confirm/route.ts`
+- `src/app/app/` — Dashboard, Layout, `actions.ts` (CRUD+Publish), `template-actions.ts` (Kunden-Templates), `tutorials/[id]/` (Editor+actions), `automationen/`, `lernen/`, `assistent/`, `settings/`
+- `src/app/admin/` — Admin-Bereich (Templates, `kunden/` Kundenverwaltung, `technik/`) · `src/lib/admin.ts` (checkAdmin/requireAdmin)
+- `src/lib/email/` — ein Mail-Design (Layout, Texte, Versand über Resend) · `supabase/email-templates/` (Auth-Mails, von Richard einzukleben)
 - `src/lib/templates.ts` — getCatalog + resolveCustomerTutorial (§14) · `src/components/app/template-section.tsx`
 - `src/app/h/[account_slug]/` — Hub + `[tutorial_slug]/` Viewer
 - `src/app/api/upload-url/route.ts` — Signed Upload URL
 - `src/components/builder/` — builder, flow, step-panel, rich-text, image-field, crop-dialog, highlight-editor
-- `src/components/viewer/` — wizard, viewer-image, rich-text-view, hub-browser
-- `src/lib/` — supabase/{client,server,admin,proxy-session}, account, types, builder/tree, upload, theme, public-image, format
-- `supabase/migrations/` — 0001 schema, 0002 rls, 0003 storage
+- `src/components/viewer/` — wizard, viewer-image, rich-text-view, hub-browser, chat-widget, tutorial-missing
+- `src/lib/` — supabase/{client,server,admin,proxy-session}, account, types, builder/tree, upload, theme, public-image, format (Inventar aller Helfer: OVERVIEW.md §5)
+- `extension/` — Steply-Erweiterung (MV3, v2.19.9) · `video-worker/` — Hetzner-Worker (`deploy.sh`)
+- `supabase/migrations/` — 0001 schema, 0002 rls, 0003 storage … bis 0048 (Liste: OVERVIEW.md §6)
 - `scripts/` — Migrations-Runner + Live-Test-Skripte

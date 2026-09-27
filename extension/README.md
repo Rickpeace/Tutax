@@ -1,4 +1,23 @@
-# Steply Recorder (Browser-Extension, v2.4 — Side Panel)
+# Steply-Erweiterung (Browser-Erweiterung, Manifest V3, Seitenleiste) — aktuell v2.19.9
+
+> **Stand 27.09.2026.** Bis v2.19.8 hieß die Erweiterung „Steply Recorder"; seit v2.19.9 heißt
+> sie im Browser **„Steply-Erweiterung"**. Download-Dateien und interne Namen heißen weiter
+> `steply-recorder.zip`/`.json`, Code-Kommentare teils „Recorder". Die folgenden Kästen sind
+> der **Änderungsverlauf (neueste zuerst)**; ältere Kästen beschreiben den damaligen Stand —
+> wo sich seither etwas geändert hat, gilt der neuere Kasten bzw. der Abschnitt weiter unten.
+> Funktionsumfang heute: **Sofort-Anleitung** (Hauptweg), **Video mit Ton**, **Live-Führung**
+> („Auf der Seite zeigen", Welle 31), **„Steply lernen"**, **Automationen** inkl.
+> Datei-Brücke und Zeitplan (Wellen 36–41). Gesamtstand: `../STATUS.md`, `../REVIEW.md`.
+
+> **v2.19.5 – v2.19.9 — Runden 3–5, 24.09.2026.** Live-Führung auch in Shadow DOM
+> (Cookie-Banner), Kontrollkästchen-Knöpfe und Auswahllisten; Zurück-/Neu-laden-Schritte schalten
+> weiter (nur durch den geführten Tab, nicht durch das Laden des vorigen Links). Automationen
+> setzen bei Kontrollkästchen den **Zielzustand** (`checked`) statt blind umzuschalten;
+> Cookie-Banner-Klicks laufen „nur wenn vorhanden". Verpixelung: `bic`/`swift` nur als ganzes
+> Wort, Kontrollkästchen/Radio/Knöpfe nie. Datenschutz: Upload-Schritte heißen nur „Datei"
+> (kein echter Dateiname), sensible Abfrage-Parameter werden serverseitig aus `page_url`
+> entfernt (`scrubPageUrl` in `src/lib/recorder.ts`). Beschriftungen ohne Emoji; ein `<label>`
+> um ein `<select>` liefert nicht mehr alle Optionen als Namen. Name „Steply-Erweiterung".
 
 > **v2.19.4 — Audit 24.09.2026.** Sensible Felder erkennt die Sofort-Anleitung jetzt auch an
 > Steuer-/Personal-Kennungen (Steuernummer, Steuer-ID/IdNr, USt-IdNr, SV-/RV-/KV-Nummer,
@@ -109,7 +128,7 @@ Die Extension bietet **zwei Modi** (Wahl in der Seitenleiste):
 Solange der Chrome Web Store noch in Vorbereitung ist, ist die öffentliche Seite
 **`/extension`** der offizielle Weg (z. B. `https://tutax-ivory.vercel.app/extension`):
 
-1. **ZIP herunterladen** (Button „Extension herunterladen") und in einen festen Ordner
+1. **ZIP herunterladen** (Button „Steply-Erweiterung herunterladen") und in einen festen Ordner
    **entpacken** (nicht löschen — Chrome lädt die Extension von dort).
 2. `chrome://extensions` öffnen und oben rechts **Entwicklermodus** einschalten.
 3. **Entpackt laden** klicken und den entpackten Ordner wählen.
@@ -135,6 +154,12 @@ automatisiert getestet.
 3. Auf **Entpackt laden** klicken.
 4. Den Ordner `extension/` aus diesem Repo auswählen.
 5. Das Steply-Symbol erscheint in der Symbolleiste (ggf. anpinnen).
+
+Nach einer neuen Version: in `extension/manifest.json` die `version` erhöhen, dann
+`npm run build:extension` (= `node scripts/build-extension-zip.mjs`) — schreibt ZIP +
+`steply-recorder.json` (für den Update-Hinweis) nach `public/downloads/`. Bereits
+installierte Erweiterungen aktualisieren sich nicht selbst: in `chrome://extensions`
+„Neu laden" bzw. neues ZIP entpacken.
 
 Die Icons (`icons/icon16.png`, `48`, `128`) zeigen das Steply-Logo (weißes „S“ im
 Korallen-Kreis). Neu erzeugen (zusammen mit dem Favicon der App): `node scripts/make-brand-icons.mjs`.
@@ -235,13 +260,13 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 
 ## Roadmap (v3+)
 
-- **DOM-Selektoren nutzen:** seit v2.1 werden `{css,text,role}` pro Schritt **erfasst +
-  gespeichert** (`steps.selector`). Offen: sie zum robusten Schritt-Matching / für die
-  Live-Führung **auslesen** (aktuell reiner Vorbau).
+- ~~DOM-Selektoren nutzen~~ — **erledigt:** `steps.selector` wird von der Live-Führung
+  (`guide-resolve.js`, Welle 31) und den Automationen (`exec-plan.js`/`exec-run.js`) gelesen.
+- ~~Tastatur-Ereignisse~~ — **weitgehend erledigt** (Welle 48, v2.17): Enter, Tastenkürzel,
+  Rechts-/Doppelklick, Ziehen, Hover-Menüs, iframes/Shadow DOM (Feld `interaction`).
 - Klick-Erfassung über **Fenster-Grenzen** hinweg (aktuell ein Fenster).
-- Echtzeit-Aufbau des Tutorials **während** der Aufnahme.
-- Formular-Eingaben sind seit v2.1 als `type`-Schritt (blur) abgedeckt; offen:
-  **Scroll-/Tastatur-Ereignisse** (datenschutzbewusst).
+- Offene Einzelpunkte stehen abhakbar in `../REVIEW.md` (z. B. Datei-Upload in Automationen,
+  Checkbox-Selektor in Listen).
 
 ---
 
@@ -249,12 +274,18 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
 
 | Datei             | Zweck                                                         |
 | ----------------- | ------------------------------------------------------------ |
-| `manifest.json`   | MV3-Manifest (Berechtigungen inkl. `sidePanel`, `side_panel`, `background`, deklaratives Content-Script) |
-| `background.js`   | Service-Worker: öffnet die Seitenleiste beim Symbol-Klick (`setPanelBehavior`) + schluckt verwaiste Nachrichten |
-| `panel.html/.js`  | **Die Seitenleiste**: Verbinden, Modus-Wahl, Aufnahme (Video/Sofort), Upload/Download — alle Zustände in einem Dokument |
-| `content.js`      | Läuft passiv auf jeder Seite; erfasst Klicks nur bei Aufnahme |
-| `styles.css`      | Styling der Seitenleiste                                      |
+| `manifest.json`   | MV3-Manifest: Name „Steply-Erweiterung", Version; Rechte `activeTab`, `downloads`, `scripting`, `storage`, `sidePanel`, `alarms`, `notifications`; Host-Recht `<all_urls>`; deklaratives Content-Script (`guide-resolve.js` + `content.js`, alle Frames) |
+| `background.js`   | Service-Worker: öffnet die Seitenleiste beim Symbol-Klick (`setPanelBehavior`), macht die Screenshots (`steply-capture`, s. u.), prüft das Pairing (`steply-pair`), Symbol-Zähler „Für diese Seite", Wecker (`chrome.alarms`) für geplante Automationen |
+| `panel.html/.js`  | **Die Seitenleiste**: Verbinden, Reiter Aufnehmen/Anleitungen/Automationen, Aufnahme (Sofort/Video), Upload, Live-Führung, Automations-Läufe — alle Zustände in einem Dokument |
+| `content.js`      | Läuft passiv auf jeder Seite; erfasst Klicks/Eingaben nur bei Aufnahme; zeigt Overlay/Maus bei Führung und Automationen |
+| `guide-resolve.js`| Findet das aufgenommene Element auf der Live-Seite wieder (`steps.selector`) — Live-Führung + Automationen |
+| `site-match.js`   | Welche Anleitungen passen zur offenen Seite — rein lokal, die URL verlässt den Browser nicht |
+| `target-banner.js`| Anzeige-Logik für „Wird eingefügt in: …" (Aufnahme-Anker) |
+| `exec-plan.js` / `exec-run.js` | Automationen: Ablaufplan (pur, testbar) und Lauf-Motor |
+| `runner.html/.js` | Führt einen **geplanten** Automations-Lauf in einem inaktiven Tab aus |
+| `styles.css`, `fonts/` | Styling der Seitenleiste (Nunito lokal eingebunden) |
 | `icons/`          | `icon16/48/128.png`                                          |
+| `store/`          | Chrome-Web-Store-Texte (`LISTING.md`) — **nicht** Teil des ZIPs |
 
 ### Architektur v2.0 (Side Panel / Tango)
 
@@ -283,12 +314,14 @@ geladene Folge-Seite** (nach Navigation) sieht den laufenden Zustand sofort.
   Aufwachen im „recording"-Modus). `pagehide` stoppt beim Schließen zusätzlich die
   Streams und räumt `rec`.
 
-### Warum `host_permissions` für http/https nötig ist
+### Warum `host_permissions: ["<all_urls>"]` nötig ist
 
 Das Content-Script ist **deklarativ** registriert (`content_scripts` mit
-`matches: http/https`, `run_at: document_start`); dafür braucht die Extension
-`host_permissions: ["http://*/*", "https://*/*"]`. Dasselbe Recht deckt
-`captureVisibleTab` mit ab (kein zusätzliches `"tabs"`-Recht nötig). Das Script ist
+`matches: http/https`, `run_at: document_start`, `all_frames: true`,
+`match_about_blank: true`); dafür braucht die Extension Host-Rechte auf allen Seiten.
+Seit v2.0.1 steht dort `<all_urls>` (vorher `http://*/*` + `https://*/*`): der
+Screenshot läuft über `background.js`, und `captureVisibleTab` braucht dafür das volle
+Host-Recht (kein zusätzliches `"tabs"`-Recht nötig). Das Script ist
 standardmäßig **passiv** (es liest den Aufnahmezustand aus `chrome.storage.local`
 und erfasst Klicks nur während einer laufenden Aufnahme), sammelt also im
 Ruhezustand nichts.
@@ -305,11 +338,15 @@ Ruhezustand nichts.
 - **CORS `*` ist unkritisch**, weil kein Cookie/keine Session mitgeht: es gibt
   keine ambient authority. Nur wer den (widerrufbaren) Token hat, darf hochladen.
   Token in Steply erneuern = alter sofort ungültig.
+- Weitere Token-Routen unter `/api/recorder/` (seit v2.2 hinzugekommen): `me`,
+  `disconnect`, `guide-handshake`/`guide-complete`/`guide-event`, `tutorials` (+ `[id]`),
+  `categories`, `video-status`, `automations` (+ `[id]`), `automation-runs`.
 
 ### Verbinden (Ein-Klick-Pairing, v2.2) — Ablauf & Sicherheit
 
-Neue, **einzige zusätzliche** Route: `GET /api/recorder/me` mit
-`Authorization: Bearer <recorder_token>` → `200 { account, slug }` | `401`. Sie sagt nur,
+Neue Route (damals die einzige zusätzliche): `GET /api/recorder/me` mit
+`Authorization: Bearer <recorder_token>` → `200 { account, slug, videoAllowed, tutorialsLeft? }`
+| `401`. Sie sagt nur,
 zu welchem Konto ein Token gehört (dieselbe Token-Prüfung wie die Upload-Routen). Der
 Ein-Klick-Ablauf:
 
@@ -368,9 +405,11 @@ Vision-Pipeline.
    kein CSS-Text), den **Aktionstyp** (`click` | `type`), einen **Element-Selektor**
    (`css`/`text`/`role`, s. u.), `location.href` und `document.title`. **Eingaben** laufen
    separat über `blur` (s. „Eingaben & Selektoren").
-3. Pro Klick-Nachricht (aus **jedem** Tab des Fensters) macht das Panel **sofort**
-   `chrome.tabs.captureVisibleTab(panelWindowId, {format:"png"})` — der im Moment des
-   Klicks aktive/sichtbare Tab des Panel-Fensters. PNG → **WebP** (OffscreenCanvas,
+3. Pro Klick-Nachricht (aus **jedem** Tab des Fensters) fordert das Panel **sofort** einen
+   Screenshot an — über `background.js` (`steply-capture` → `chrome.tabs.captureVisibleTab`
+   im Fenster des Klicks; direkt aus dem Panel scheitert es an einem Chromium-Bug,
+   crbug.com/40916430; der Direktaufruf bleibt nur letzter Fallback). Aufgenommen wird der im
+   Moment des Klicks aktive/sichtbare Tab. PNG → **WebP** (OffscreenCanvas,
    Qualität 0,85, spart ~70 % Upload). Schritte sammeln sich im Speicher; **Live-Zähler**
    + **scrollende Schrittliste mit Thumbnail je Schritt** und **✕** zum Entfernen
    einzelner Schritte vor dem Upload.
@@ -379,17 +418,18 @@ Vision-Pipeline.
 
 **captureVisibleTab-Grenzen (bewusst behandelt):**
 
-- **Ratenlimit ~2/s** (`captureVisibleTab`): Captures werden über eine kleine **FIFO-
-  Warteschlange** (Kappe 4) **serialisiert** und auf ≥ 550 ms Abstand gedrosselt. So
-  gehen kurz aufeinanderfolgende Schritte (Eingabe + Klick) **nicht verloren**; bei
-  Überlauf fällt der älteste _wartende_ Schritt heraus (mit Hinweis). Treffen zwei
-  Schritte im ~300-ms-Fenster ein (Eingabe + direkt folgender Klick), **teilen sie sich
-  einen Screenshot** — der Klick-Schritt zeigt dann nicht schon die Folgeseite.
+- **Ratenlimit** (`captureVisibleTab`: Chromium erlaubt 2 Aufrufe je ~1-s-Fenster, seit
+  Welle 51 nachgebildet): Captures laufen über eine **FIFO-Warteschlange ohne Kappe** — zwei
+  schnelle Klicks bekommen sofort je einen eigenen Screenshot, **kein Schritt geht still
+  verloren**. Staut es sich, teilen sich die verspäteten Schritte einen Screenshot und
+  werden als **„Bild ggf. ungenau"** markiert (beim Prüfen sichtbar). Eingabe + direkt
+  folgender Klick (~300 ms) teilen sich bewusst einen Screenshot — der Klick-Schritt zeigt
+  dann die fertige Eingabe, nicht schon die Folgeseite.
 - **Sofortige Navigation:** `pointerdown` feuert früh genug, dass der Screenshot die
   Ausgangsseite zeigt; scheitert ein Einzel-Screenshot doch (Tab schon weiter), wird der
   Schritt still übersprungen und ein Hinweis gezeigt.
 - **Berechtigungen:** `captureVisibleTab` ist durch die vorhandenen
-  `host_permissions` (`http/https`) gedeckt — **kein** zusätzliches `"tabs"`-Recht nötig.
+  `host_permissions` (`<all_urls>`) gedeckt — **kein** zusätzliches `"tabs"`-Recht nötig.
 - **Nur mit Token + auf normalen `http(s)`-Seiten.** Ohne Token gibt es den Knopf
   nicht — die Seitenleiste zeigt den „Nicht verbunden"-Bildschirm.
 
@@ -417,9 +457,10 @@ Vision-Pipeline.
 **Eingabefelder** gilt: **niemals** der getippte Wert (`el.value`), bei `type=password`
 erst recht nichts Feldinhaltliches.
 
-**Element-Selektor (`{ css, text, role }`) — Vorbau.** Pro Schritt wird ein robuster
-Selektor miterfasst und in `steps.selector` (jsonb) gespeichert. Er wird **noch nirgends
-gelesen** (Vorbau für Live-Führung / Anleitungs-TÜV), ist **optional** (alte Extensions
+**Element-Selektor (`{ css, text, role }`).** Pro Schritt wird ein robuster
+Selektor miterfasst und in `steps.selector` (jsonb) gespeichert. Anfangs reiner Vorbau,
+**heute gelesen** von der Live-Führung und den Automationen (`guide-resolve.js`); er ist
+**optional** (alte Extensions
 bleiben gültig) und wird serverseitig **streng** validiert (Typen, Längen `css≤400`,
 `text≤80`, `role≤40`; unbekannte Keys verworfen; kaputt ⇒ gesäubert, **kein** Fehler):
 
@@ -467,7 +508,8 @@ die Pixel gebrannt** (`lib/redact.ts`). Ohne `sensitive` ist das Verhalten exakt
   streng gesäubert → `steps.selector`; `sensitive` optional + streng validiert → je Feld ein
   „blur“-Highlight mit `suggested:true`, s. u.), respektiert `FREE_TUTORIAL_LIMIT`
   und legt einen **Tutorial-Entwurf** an: Titel = übergeben oder „Anleitung vom {Datum}";
-  je Schritt Vorlagen-Titel/-Text, ein **Highlight-Rechteck** (`#3d4ee6`, rounded) aus
+  je Schritt Vorlagen-Titel/-Text, ein **Highlight-Rechteck** (`#ef6a4e` = Standard
+  „Firmenfarbe", `DEFAULT_HIGHLIGHT_COLOR` in `src/lib/highlight-color.ts`; rounded) aus
   `rect`, `image_path/width/height`; **lineare** null-Label-Branch-Kette + `root_step_id`
   (Verkabelung wie `scripts/seed-steply-help.mjs`). Danach via `after()` **ein** billiger,
   ausfallsicherer KI-Feinschliff der Texte (kein Vision, keine Bilder) — Fehler ⇒ die

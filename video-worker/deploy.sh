@@ -5,8 +5,21 @@
 set -euo pipefail
 cd "$(dirname "$0")"            # .../video-worker
 
-echo "→ git pull (Repo /opt/tutax, aktueller Branch)"
-git -C .. pull --ff-only
+# Der Telegram-Bot (agent-bridge) arbeitet im selben Checkout und lässt ihn nach einer Aufgabe
+# auf seinem agent/…-Branch stehen. Der Worker soll aber immer staging-Code fahren.
+branch="$(git -C .. rev-parse --abbrev-ref HEAD)"
+if [ "$branch" != "staging" ]; then
+  if [ -n "$(git -C .. status --porcelain)" ]; then
+    echo "✗ Checkout steht auf '$branch' mit offenen Änderungen — der Bot arbeitet vermutlich gerade."
+    echo "  Bitte warten, bis der Bot fertig ist, dann erneut ausführen."
+    exit 1
+  fi
+  echo "→ Checkout stand auf '$branch' — wechsle auf staging"
+  git -C .. checkout staging
+fi
+
+echo "→ git pull (Repo /opt/tutax, staging)"
+git -C .. pull --ff-only origin staging
 
 echo "→ npm install (video-worker)"
 npm install --omit=dev

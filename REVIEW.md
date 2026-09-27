@@ -104,14 +104,16 @@ bisher ungeprüfte Bereiche (103). **31 Fehler behoben:**
 
 ## Kunden-Runde 5 — 24.09.2026 (6 Prüfer als echte Nutzer; lokal gegen `next start`, Kontingente schonen)
 
-Regression: `test-merge-branch`, `test-cache-step-edit`, `test-consent-capture`, `test-exec-plan` (checked),
+Live seit 32d2dbd + f7dabd9 (Erweiterung 2.19.9; keine Migration, keine Worker-Änderung). Regression: `test-merge-branch`, `test-cache-step-edit`, `test-consent-capture`, `test-exec-plan` (checked),
 `test-recorder-sensitive` (page_url), `test-builder-rewire` (Schleifen-Join), `test-search-match` (Synonyme).
 
 - [x] Editor: „Danach weiter mit“ für normale Schritte (Antwort-Wege zusammenführen) · Diagramm bei Schleifen ·
   KI-Texte lassen Fragen/leere Texte in Ruhe · gleichzeitiges Anhängen in 2 Tabs · Link-Text wird nicht
   überschrieben · erster Schritt verliert Text nicht · übernommene/auto Verpixelung: „Passt“ + nur Angefasstes zählt ·
   „Ansehen“ nach Veröffentlichen · ⌘K umlaut-tolerant · Hub-Adresse aus Kanzleiname statt E-Mail (Einrichtung)
-- [x] Hilfe-Seite: eigene „Anleitung nicht gefunden“-Seite im Kanzlei-Design · Chat springt nicht mehr von selbst auf ·
+- [x] Hilfe-Seite: eigene „Anleitung nicht gefunden“-Seite im Kanzlei-Design (live erst mit f7dabd9: das
+  `not-found.tsx` im Segment griff unter PPR nicht → Anleitungs- und Druckseite rendern jetzt direkt
+  `src/components/viewer/tutorial-missing.tsx`) · Chat springt nicht mehr von selbst auf ·
   keine leeren Bild-Platzhalter · Vorladen/Abblenden bei langsamem Netz · Druck am Handy · hohe Bilder ≤ 60 % ·
   Kopf am Handy · sichtbarer Fokus · nach „Nein, nicht hilfreich“ Chat anbieten · Suche mit Synonymen
 - [x] Team: Einladung zurückziehen im alten Tab · Kontakt-Seite am Handy · „absolviert“ mit Fehlermeldung ·
@@ -126,9 +128,9 @@ Regression: `test-merge-branch`, `test-cache-step-edit`, `test-consent-capture`,
 - [ ] Offen: Automation trifft in Listen evtl. falsche Zeile (Checkbox-Selektor ohne Text) · Datei-Upload in
   Automationen (Datei-Angabe) · Schritt verschieben nicht atomar · Cookie-Überspringen erst nach 5 s ·
   Tab-Wechsel ohne Schritt · „Link teilen“ mit Schritt · Fortschritt bei Verzweigungen · Chat-Quelle manchmal unpassend
-- [ ] Richard: „Made in Germany“ · Datenschutzerklärung (Chat-Fragen, Fonts, Schulungsnachweis, Erweiterung) ·
+- [ ] Richard: „Made in Germany“ · Datenschutzerklärung (Chat-Fragen, Fonts, Schulungsnachweis, Erweiterung) → Anwalt ·
   DATEV-Vorlagen vs. generische Positionierung · Supabase „Leaked password protection“ · Schulungsnachweis nur
-  Mitarbeiter zählen?
+  Mitarbeiter zählen? · Erweiterung 2.19.9 neu laden (Stand 27.09.: alles offen)
 
 ## Bugsuche Runde 4 — 24.09.2026 nachmittags (6 Prüfer: Nebenwirkungen, Hilfe-Seite, Konto, KI/Automationen, Sicherheit, Erweiterung 2.19.6)
 

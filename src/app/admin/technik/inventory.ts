@@ -39,7 +39,7 @@ export const SERVICES: Service[] = [
       "Auth: E-Mail+Passwort, Magic Link, Passwort-Reset (Token-Hash-Flow über /auth/confirm).",
       "Storage-Buckets: tutorial-images (privat, signierte URLs), tutorial-images-public (beim Publish befüllt), tutorial-videos (privat, Worker-Input), dazu MP3s fürs Vorlesen.",
       "pgvector: Embeddings für Chatbot + Hub-Suche (match_kb).",
-      "Migrationen in supabase/migrations/ (0001–0038), angewandt per scripts/apply-migrations.mjs — kein Supabase-CLI.",
+      "Migrationen in supabase/migrations/ (0001–0048), angewandt per scripts/apply-migrations.mjs — kein Supabase-CLI.",
     ],
     code: ["src/lib/supabase/{server,client,admin,proxy-session}.ts", "supabase/migrations/", "src/proxy.ts"],
     env: [

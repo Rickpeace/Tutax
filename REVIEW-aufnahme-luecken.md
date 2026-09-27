@@ -1,4 +1,4 @@
-# Sofort-Aufnahme — Lückenliste (Stand: 22.09.2026, Extension v2.19.1)
+# Sofort-Aufnahme — Lückenliste (Stand: 27.09.2026, Extension v2.19.9; Befund-Tabellen vom 22.09.2026, v2.19.1)
 
 **Frage des Produktinhabers:** „Welche wichtigen Bedienvorgänge erfasst die Sofort-Aufnahme
 NICHT?"
@@ -20,6 +20,12 @@ node scripts/test-capture-gaps.mjs --only=3.  # einzelne Mustergruppe
 Fixtures: `scripts/fixtures/capture-controls.html`, `-keyboard.html`, `-scroll-nav.html`,
 `-widgets.html`. Ergebnis des Laufs vom 22.09.2026 **nach Welle 55** (v2.19.1):
 **68 erfasst · 3 teilweise · 5 nicht erfasst (76 Muster)** — vorher 45 · 6 · 11 (62 Muster).
+**Nachlauf 27.09.2026 mit v2.19.9** (`node scripts/test-capture-gaps.mjs`): unverändert
+**68 · 3 · 5** — die Änderungen der Runden 3–5 (Abschnitt 1c) haben kein Muster verschlechtert,
+L8–L12 sind weiter offen.
+
+> Zeilenangaben wie `content.js:2148` stammen aus v2.19.1 und sind inzwischen verschoben
+> (z. B. `keyboardActivate` steht heute bei ~2628) — im Zweifel nach dem Funktionsnamen suchen.
 
 Das Abschluss-Bild (L2, Variante A) entsteht im Panel und wird darum in
 `scripts/test-guide-flow-panel.mjs` bewiesen (dort läuft die echte `panel.js`).
@@ -78,6 +84,33 @@ Echte Alt-Schritte ohne Selektor behalten die bisherige Meldung („keine Markie
 Seite"), damit ein tatsächlicher Fehlschlag sichtbar bleibt. Der KI-Feinschliff kennt alle neuen Arten
 (`describeInteractionForAi`) und verwirft jede Umformulierung, die sie verliert
 (`keepsInteraction`); das Abschluss-Bild geht gar nicht erst an die KI.
+
+---
+
+## 1c. Seit v2.19.1: Änderungen an der Aufnahme aus den Prüfrunden 23./24.09.2026 (bis v2.19.9)
+
+Keine neuen Muster im Test-Harness, aber Verhalten, das die Aufnahme betrifft (Details: REVIEW.md,
+Abschnitte „Kunden-Audit 24.09.“ bis „Kunden-Runde 5“):
+
+- **Sensible Werte** (v2.19.4/2.19.5/2.19.7/2.19.9): Steuernummer, Steuer-ID (Strukturregel), SV-Nr.,
+  Geburtsdatum u. a. werden verpixelt und nie als Wert gesendet; Server-Sicherheitsnetz maskiert auch
+  Seitentitel/Dateinamen/Beschriftungen; BIC nur als ganzes Wort, keine Verpixelung von Kontrollkästchen;
+  Abfrage-Parameter mit sensiblen Namen/Werten fliegen aus `page_url` (`src/lib/recorder.ts`);
+  Upload-Schritte tragen keinen echten Dateinamen mehr. Test: `scripts/test-recorder-sensitive.mjs`.
+- **Kontrollkästchen mit Zielzustand** (v2.19.7, in Automationen v2.19.9): der Schritt merkt sich
+  „anhaken“/„abwählen“ (`interaction.checked`, `src/lib/guide.ts`) — Automationen schalten nicht mehr
+  blind um. Checkbox-Namen aus dem Text dahinter, Checkbox-Knöpfe (v2.19.6). Tests:
+  `test-guide-typed-value`, `test-exec-plan`.
+- **Auswahllisten**: per Tastatur = ein Schritt (v2.19.7), Titel „„X“ auswählen“, Führung prüft die
+  gewählte Option; Auswahlliste ohne Optionen im Namen (v2.19.9).
+- **Seitenwechsel-Schritte (L1)**: Zurück-/Neu-laden-Schritte schalten in der Führung weiter
+  (v2.19.6); ein Neu-laden-Schritt zählt nur für den geführten Tab und entsteht nicht mehr durch
+  einen vorigen Link-Klick (v2.19.7/2.19.9).
+- **Cookie-/Einwilligungs-Banner** (v2.19.8, Richards Entscheidung): Klicks darauf werden automatisch
+  „nur wenn vorhanden“ (`isConsentClick` in `content.js`); Führung und Automation überspringen den
+  Schritt, wenn das Banner fehlt. Im Panel abschaltbar. Test: `scripts/test-consent-capture.mjs`.
+- **KI-Feinschliff**: kennt die Elementart, erfindet keine verborgenen Werte, schlägt einen
+  Anleitungstitel statt „Anleitung vom …“ vor (v2.19.6/2.19.7).
 
 ---
 
@@ -161,3 +194,8 @@ Herkunft (durch `test-guide-capture-plus.mjs` abgedeckt).
 3. **L2 Variante C (Ergebnis-Bild je Schritt)** — größter Nutzen für die Lesequalität, aber echtes Projekt (Speicher, Ratenlimit, Panel-Queue). Vorher Konzept; das Abschluss-Bild deckt den häufigsten Fall (letzter Klick) bereits ab.
 4. **L8 klickbare Grafik ohne Rolle** — nur mit Messung, sonst Fehlalarme.
 5. **L11 Hover-Tooltip** — bewusst nur als manueller Knopf in der Seitenleiste, nie automatisch.
+
+**Aus der Kunden-Runde 5 (24.09.2026) dazugekommen, noch ohne Muster im Test-Harness**
+(abhakbar in REVIEW.md „Kunden-Runde 5“): **Tab-Wechsel** erzeugt keinen Schritt · in Listen
+kann eine Automation bei Kontrollkästchen ohne Text die falsche Zeile treffen (verwandt mit **L12**) ·
+Datei-Upload in Automationen braucht noch eine Datei-Angabe.

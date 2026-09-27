@@ -1,5 +1,13 @@
 # Steply — Übergabe (Stand 06.07.2026)
 
+> **HISTORISCH — nicht mehr aktuell (Hinweis vom 27.09.2026).** Diese Notiz war eine
+> einmalige Sitzungs-Übergabe vom 06.07.2026 und wird nicht mehr gepflegt. Versionen,
+> Migrationsstand, „Richard muss noch"-Liste und offene Entscheidungen sind überholt
+> (z. B. Erweiterung heute v2.19.9 „Steply-Erweiterung", Migrationen bis 0048, Live-Führung
+> und Automationen längst gebaut). Aktuell gilt: **`OVERVIEW.md`** (was es gibt),
+> **`STATUS.md`** (Stand), **`TODO.md`** / **`REVIEW.md`** (offene Punkte),
+> **`AGENTS.md`** (Regeln inkl. Push-Reihenfolge).
+
 > Schneller Einstieg für eine neue Session. Details: **OVERVIEW.md** (was es gibt),
 > **STATUS.md** (Stand), **REVIEW.md** (Wellen-Changelog), **TODO.md** (offene Punkte).
 > Live-Tests: `scripts/test-*-live.mjs`.

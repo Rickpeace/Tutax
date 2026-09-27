@@ -1,11 +1,30 @@
-# TODO — offene Punkte (Stand: 02.07.2026)
+# TODO — offene Punkte (Stand: 27.09.2026)
 
-> Kompakte Liste. Vollständiges Protokoll aller erledigten Punkte: [REVIEW.md](REVIEW.md).
+> Kompakte Liste. Vollständiges Protokoll aller erledigten Punkte: [REVIEW.md](REVIEW.md)
+> (Restpunkte der Bugsuch-Runden 3–5 vom 24.09. stehen dort abhakbar). Aktueller Gesamtstand: STATUS.md §7j.
 
 ## 🙋 Braucht RICHARD (niemand sonst kann das)
 
-- [ ] **SOFORT-AUFNAHME Welle 48 testen (Extension → v2.17.0, 21.09.2026; erst nach
-  Migration 0036 + Deploy):**
+**Aktuell zuerst (Stand 27.09.2026):**
+- [ ] Supabase → Authentication: **„Secure password change“ + „Secure email change“** einschalten.
+- [ ] Supabase → Authentication: **„Leaked password protection“** einschalten.
+- [ ] **`CRON_SECRET` in Vercel setzen** (s. unten).
+- [ ] **Video-Worker per `deploy.sh`** ausrollen (s. unten) — inkl. Runde 3 (Markierungen in
+  Firmenfarbe) + Runde 4 (nur echte Video-Container, strengere Speicherpfade).
+- [ ] **Chrome-Erweiterung auf v2.19.9 neu laden** (chrome://extensions → Aktualisieren). Die
+  Test-Checklisten weiter unten nennen die Version ihrer Welle — getestet wird immer mit der
+  aktuellen Erweiterung.
+- [ ] **Entscheidungen:** Datenschutzerklärung-Lücken mit Anwalt klären (Chat-Fragen, Fonts,
+  Schulungsnachweis, Erweiterung; dabei auch, ob „Made in Germany“ beworben werden darf) ·
+  Schulungsnachweis nur Mitarbeiter zählen? · DATEV-Vorlagen vs. generische Positionierung.
+  Bewusst zurückgestellt: eigenes Impressum je Kunde (24.09.); automatische Tests in CI (24.09.).
+- ⚠️ **Kontingente:** Vercel (ISR-Writes/Funktionszeit) und Resend nahe am Gratis-Limit → große
+  Testrunden lokal, keine Test-Mails ohne Rückfrage.
+
+**Ältere Test-Checklisten und Handgriffe:**
+
+- [ ] **SOFORT-AUFNAHME Welle 48 testen (damals Extension v2.17.0, 21.09.2026; Migration 0036
+  + Deploy sind erledigt):**
   1. Ablauf: Karte „Sofort-Anleitung“ → „Bereit“ (nimmt noch NICHT auf) → „Aufnahme starten“
      → ein paar Klicks → „Pause“ → woanders hinklicken (kein Schritt) → „Fortsetzen“ →
      „Stopp“ → Liste prüfen → „Anleitung erstellen“.
@@ -86,13 +105,17 @@
   sind bewusst ohne Markierung — reine Hinweis-/Panel-Schritte).
 
 - [ ] **`deploy.sh` ausführen + Test-Video** — schaltet auf Hetzner frei: Live-Aufbau,
-  Klick-Modus, Szenen-Erkennung, Fortschritt, Frame-Picker-Timestamps, alle Fixes.
+  Klick-Modus, Szenen-Erkennung, Fortschritt, Frame-Picker-Timestamps, alle Fixes
+  (zuletzt: Audit 23.09. Worker-Prüfungen, Runde 3 Firmenfarbe, Runde 4 Video-Container/Speicherpfade).
   ```
   ssh root@23.88.98.172 "su - tutax -c 'cd /opt/tutax/video-worker && bash deploy.sh'"
   ```
 - [ ] **`CRON_SECRET` in Vercel setzen** (Settings → Environment Variables, langer
   Zufallswert) — sonst bleibt der Aktualitäts-Autopilot bewusst aus (503, fail-closed).
-- [ ] **E-Mail-Audit (06.07.) — 4 Richard-Handgriffe:**
+- [ ] **E-Mail-Audit (06.07.) — 4 Richard-Handgriffe** (Stand 23.09.: Auth-Mails kamen live über
+  Resend als „Steply“ an → Punkt 1 wirkt erledigt, bitte bestätigen; offen laut REVIEW.md
+  „Team-Einladungen + E-Mails“: neue Supabase-Vorlagen einkleben (`supabase/email-templates/README.md`)
+  und `INVITE_FROM_EMAIL` in Vercel auf „Steply“):
   1. **Supabase-SMTP auf Resend stellen** (WICHTIGSTER Punkt): Ohne Custom-SMTP
      verschickt Supabase Magic-Link/Passwort-vergessen nur an Projekt-Teammitglieder
      (~2/h) — für KUNDEN kämen keine Auth-Mails an. Supabase-Dashboard → Project
@@ -112,7 +135,7 @@
      Redirect-Allowlist `https://tutax-ivory.vercel.app/auth/confirm` eintragen.
   4. Einmal echte **Team-Einladung** an eine Zweitadresse in Prod (prüft Punkt 2
      End-zu-End; Absender muss „Steply" heißen).
-- [ ] **Extension v2.7.0 in Chrome testen** (NEU LADEN). Stand: Welle 32
+- [ ] **Extension in Chrome testen** (NEU LADEN — aktuell v2.19.9; die Liste stammt aus v2.7.0). Stand: Welle 32
   (Eingabe-Schritte live führbar, Overlay auffälliger, Führen-Liste „Diese
   Seite + Live" mit Kategorien, Icon-Badge, „Bring mich hin") + Welle 33
   (Markierungen auf Panel-Screenshots pixelgenau, Overlay räumt sich nach
@@ -151,7 +174,10 @@
   hochladen, einreichen). Danach Store-Link auf /extension ergänzen → automatische
   Updates für alle Nutzer.
 - [ ] **Impressum + Datenschutz: echte Betreiber-Angaben** eintragen
-  (`[ANGABE FOLGT — Betreiber]`-Platzhalter in impressum/datenschutz-Seiten).
+  (`[ANGABE FOLGT — Betreiber]`-Platzhalter stehen weiter in `src/app/impressum/page.tsx` +
+  `src/app/datenschutz/page.tsx`, Stand 27.09.). Dazu die Datenschutz-Lücken → Anwalt (s. oben).
+- [ ] **Support-Adresse festlegen** (`kontakt@steply.de` existiert nicht; Antworten auf Mails
+  landen bei noreply@dentdoc.de — s. REVIEW.md „Kunden-Audit 24.09.“).
 - [ ] **LemonSqueezy-Konto** anlegen (Merchant of Record) — dann baue ich die
   Anbindung (Webhook setzt nur noch `accounts.plan`).
 - [ ] **Akzent-Verdikt**: neue dezente Hub-Karten behalten? (Revert: `git revert 61c371c`)
@@ -188,10 +214,12 @@
   Kategorienamen (name_i18n, Migration 0028), Druckansicht (?lang), Beschreibung
   im Delta-Sync, Wizard-/Fußzeilen-Reste, Chat antwortet in Besuchersprache.
   Bewusst offen: globale Admin-Vorlagen-Kategorien + Impressum/Datenschutz deutsch.
-- [ ] **Ton/Vorlesen** (Welle 14 LÄUFT): OpenAI-TTS beim Publish, ▶ im Wizard.
-  Offen danach: Stimme wählbar, Audio auch für Übersetzungen.
-- [ ] **Mitarbeiter-Zugang light** (vorgeschlagen): Lern-Rolle (sieht nur „Lernen")
-  + Team-Beitrittslink/QR statt Einzel-Einladungen, optional Domain-Filter.
+- [x] ~~**Ton/Vorlesen**~~ **GEBAUT** (Welle 14, Business): TTS beim Publish (ElevenLabs bzw.
+  OpenAI), ▶ im Wizard, nur deutsche Seiten; seit 24.09. startet es erst nach ▶ (Wahl gemerkt).
+  Offen: Stimme wählbar, Audio auch für Übersetzungen (→ TTS v2).
+- [ ] **Mitarbeiter-Zugang light**: Rolle **Mitarbeiter** (sieht nur „Schulungen“) ist GEBAUT
+  (Team-Rollen, Migrationen 0037/0039). Offen: Team-Beitrittslink/QR statt Einzel-Einladungen,
+  optional Domain-Filter.
 - [x] ~~Video-Export~~ **GEBAUT (02.07., Welle 18):** „Als Video exportieren" in ZWEI
   Stilen (Klassisch/Screencast, vergleichbar), Brand-Intro + QR-Outro, Untertitel,
   Kapitelmarken, Verzweigungen vollständig. ⚠️ Wirkt erst nach deploy.sh; auf dem
@@ -214,15 +242,18 @@
 - [x] ~~Tier-Gates~~ **GEBAUT (02.07., Fable):** plan 'business' (Migration 0024),
   Gates: Sprachen/KI-CI/Intern/TTS = Business (serverseitig), Admin-Schalter 3-stufig,
   neue Preistabelle 0/29/79 + FAQ. RichardTax + Muster GmbH = Business gesetzt.
-  → OFFEN: Video-Limit Free=3 serverseitig (video_jobs-Insert läuft klientseitig via
-  RLS — braucht Policy/Trigger, kommt mit der LemonSqueezy-Welle); Team-bis-5 ebenso.
+  → ~~OFFEN: Video-Limit Free=3 serverseitig; Team-bis-5 ebenso~~ **ERLEDIGT (22./23.09.):**
+  Video ist ab Pro (Gratis 0, serverseitig inkl. Worker; `video_jobs` per REST abgesichert 0043;
+  Gratis-Anleitungsgrenze zusätzlich als DB-Trigger 0043), Team-Grenze
+  Free 1 · Pro 5 · Business ∞ beim Einladen UND Annehmen (`teamLimit`, Einladungen nur Server, 0038).
+  Seit 23.09. setzt der Server ALLE Pro-/Business-Funktionen durch (`scripts/test-pro-gates.mjs`).
 - [x] ~~Live-Führung auf der echten Website~~ **GEBAUT (06.07., Wellen 31a–d,
   Extension v2.5.1):** Panel „Anleitung führen" + Koralle-Overlay auf dem echten
   Element (guide-resolve 3-stufig), Klick = weiter, Verzweigungen, Screenshot-
   Fallback + selector_miss-Drift-Signal; „📍 Für diese Seite" (lokales Domain-
   Matching, URLs verlassen nie den Browser) + Builder-Feld „Gilt für Website";
   Titel + Kategorie direkt im Sofort-Panel. Migration 0029 ist live.
-  → **Welle 32 LÄUFT** (Richards Test-Feedback): Eingabe-Schritt-Selektoren +
+  → **Welle 32 GEMERGED (v2.6.0)** (Richards Test-Feedback): Eingabe-Schritt-Selektoren +
   Weiter-bei-Eingabe, Overlay auffälliger, Führen-Liste gefiltert (Diese Seite/
   Live-Default, Kategorien-Gruppen), Banner nur im Anker-Modus, Icon-Badge,
   „Bring mich hin" (Tab zur Start-URL öffnen).
@@ -238,15 +269,21 @@
   konkreten kaputten Schritt. (Ausführen FÜR den Endkunden — Tango-Stil —
   bewusst verworfen: Haftung/Vertrauen/Zugangsdaten passen nicht zu unserem
   Endkunden-Markt.)
-- [ ] **Auto-Schwärzung bei der Aufnahme** (Tango „Automatic blurring", 05.07.):
-  Sofort-Modus erkennt sensible Felder (input type=password, E-Mail-/IBAN-Muster
-  im Screenshot-Bereich) und setzt Blur-Vorschläge automatisch; Nutzer bestätigt.
+- [x] ~~**Auto-Schwärzung bei der Aufnahme**~~ **GEBAUT** (v2.4, erweitert bis v2.19.9):
+  Passwort-/Key-/IBAN-Felder sowie Steuernummer/Steuer-ID/SV-Nr./Geburtsdatum u. a. werden
+  automatisch als Verpixelung vorgeschlagen („bitte prüfen“ im Editor) und nie als Wert gesendet
+  (+ Server-Sicherheitsnetz, `scripts/test-recorder-sensitive.mjs`).
 - [ ] i18n der Marketing-/Endkunden-Seiten (alles hart deutsch)
 
 ## 🧰 Klein / Technik (jederzeit nachziehbar)
 
-- [ ] M7: /reset nur mit frischem Recovery-Link nutzbar machen (Plan in REVIEW §F)
+- [x] ~~M7: /reset nur mit frischem Recovery-Link~~ ERLEDIGT 23.09. (altes Passwort bzw. frischer
+  Mail-Link; `scripts/test-reset-password.mjs`). Rest: Supabase „Secure password/email change“ (Richard, s. oben).
 - [ ] getClaims-Middleware (nur falls warme /app-Navigation zu träge wirkt)
-- [ ] Admin-Template-Publish invalidiert Kunden-Hub-Caches nicht (1h-Deckel greift)
+- [x] ~~Admin-Template-Publish invalidiert Kunden-Hub-Caches nicht~~ ERLEDIGT 23.09.
+  (`invalidateTemplateHubs` in `lib/cache-tags.ts`)
+- [ ] Restpunkte der Bugsuch-Runden 3–5 (u. a. Automation trifft in Listen evtl. falsche Zeile,
+  Datei-Upload in Automationen, Schritt verschieben nicht atomar, Cookie-Überspringen erst nach 5 s,
+  SSRF-DNS-Rebinding-Rest, KI-Kosten-Bremsen pro Konto) → abhakbar in REVIEW.md
 - [ ] Supabase Image-Transform für Endkunden-Bilder (braucht passenden Supabase-Plan)
 - [ ] Sentry/Error-Tracking (braucht DSN → Konto)
